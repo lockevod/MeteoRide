@@ -1,0 +1,1702 @@
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f0f4f8;
+  color: #243746;
+}
+
+/* Variables de ancho de columnas */
+:root {
+  --cw-first-col: 224px;   /* widen slightly to avoid truncation in non-collapsed view */
+  /* reduced to make generated columns narrower */
+  --cw-col-min: 64px;
+  --cw-col-ideal: 7.5vw;
+  --cw-col-max: 120px;
+}
+/* On very wide screens, compress a bit more */
+@media screen and (min-width: 1200px) {
+  :root {
+    --cw-col-min: 60px;
+    --cw-col-ideal: 6.5vw;
+    --cw-col-max: 110px;
+  }
+}
+@media screen and (max-width: 700px) {
+  :root {
+    --cw-first-col: 180px;
+    --cw-col-min: 72px;
+    --cw-col-ideal: 12vw;
+    --cw-col-max: 100px;
+  }
+}
+
+/* Header */
+header {
+  background: #1e40af;
+  color: white;
+  padding: 0.5rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+header h1 {
+  font-weight: 800;      /* más contraste frente a los toggles */
+  font-size: 1.7rem;     /* claramente mayor que los botones del nav */
+  margin: 0;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+nav button {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.92); /* atenuación ligera frente al título */
+  font-size: 0.95rem;            /* algo más pequeño que el título */
+  font-weight: 500;              /* menos peso que el header h1 */
+  height: auto;
+  cursor: pointer;
+  padding: 0.05rem 0.25rem;      /* menos espacio interno */
+  line-height: 1.2;      /* Para un mejor ajuste vertical */
+  min-width: 28px;
+  letter-spacing: 0.02em;        /* mejora legibilidad sin destacar demasiado */
+  border-radius: 6px;
+  transition: background-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+
+nav button:hover {
+  background-color: rgba(255,255,255,0.08);
+  transform: translateY(-1px);
+}
+
+/* Config, debug, menus */
+#configMenu {
+  position: absolute;
+  top: 3.5rem;
+  right: 1rem;
+  width: 360px;
+  background: #ffffff;
+  border: 1px solid #bdd7f6;
+  box-shadow: 0 10px 24px rgba(30, 64, 175, 0.18);
+  padding: 12px 14px 16px;
+  border-radius: 10px;
+  z-index: 10000;
+  resize: both;
+  overflow-y: auto;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#configMenu .config-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+#configMenu .config-row label {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+#configMenu .config-row select,
+#configMenu .config-row input[type="text"] {
+  flex: 1;
+}
+#configMenu .config-row button {
+  flex: 0 0 auto;
+}
+#configMenu .unit-pair {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#configMenu .unit-pair label {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+#configMenu .unit-pair select {
+  flex: 1;
+}
+#configMenu #closeConfig {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #555;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 6px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+#configMenu #closeConfig:hover {
+  background: rgba(30, 64, 175, 0.08);
+  color: #1e40af;
+}
+#configMenu label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 0.5rem 0;
+  color: #203050;
+  font-weight: 600;
+}
+#configMenu label *:last-child {
+  flex-grow: 0;
+  max-width: none;
+  margin-left: 0;
+}
+#configMenu select, #configMenu input[type="text"] {
+  appearance: none;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 6px 10px;
+  height: 32px;
+  font-size: 13px;
+  color: #1f2a44;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+#configMenu input[type="text"]::placeholder {
+  color: #94a3b8;
+}
+#configMenu select:hover,
+#configMenu input[type="text"]:hover {
+  border-color: #94b6f6;
+  background: #ffffff;
+}
+#configMenu select:focus,
+#configMenu input[type="text"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+  background: #ffffff;
+}
+
+#debugSection {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: #222;
+  color: white;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 1rem;
+  max-height: 180px;
+  width: 340px;
+  overflow: auto;
+  border-radius: 8px;
+  display: none;
+  z-index: 11000;
+}
+#debugConsole p {
+  margin: 0 0 0.33rem;
+}
+#debugConsole p.error {
+  color: #ff5555;
+}
+#debugConsole p.info {
+  color: #88ff88;
+}
+
+/* Main layout */
+main {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 3rem);
+  padding: 0.25rem 0.5rem; 
+  gap: 0.5rem;
+}
+
+#map {
+  flex: 1.8;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgb(100 150 250 / 0.5);
+  border: 1px solid #d1d5db;
+}
+
+#map {
+  min-height: 300px;   /* para que siempre sea visible */
+  max-height: 60vh;    /* limita altura en pantallas altas */
+}
+
+
+#controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 2rem;
+  font-size: 14px;
+}
+#controls label {
+  width: 180px;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+}
+#controls label input, #controls label select {
+  padding: 0.3rem 0.5rem;
+  box-sizing: border-box;
+  font-size: 1rem;
+  margin-top: 0.3rem;
+  width: 100%;
+  max-width: 180px;
+  text-align: center;
+}
+#loadRoute {
+  padding: 9px 24px;
+  font-weight: 600;
+  font-size: 1rem;
+  background-color: #2563eb;
+  color: white;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+#loadRoute:hover {
+  background-color: #1d4ed8;
+}
+
+.ruta-name {
+  /* reducido para eliminar espacio excesivo */
+  margin: 0.12rem 0; 
+  padding: 0; 
+  color: #264d73;
+  font-weight: 600;
+  font-size: 15px;   /* ligeramente más pequeño */
+  line-height: 1;    /* evita espacio extra vertical */
+  /* NEW: prevent text overflow */
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#rutaName {
+  margin: 0;          /* elimina margen sobrante */
+  padding: 0;         /* evita relleno interior */
+  font-weight: 700;
+  min-height: 18px;   /* reduce altura mínima */
+  display: block;
+  line-height: 16px;     /* coherencia con .ruta-name */
+  position: relative;
+  top: 0;             /* remove previous 2px offset */
+  height: 16px;       /* align with hint lane height */
+  margin-bottom: 0;
+  z-index: 4;        /* render above fades/hint if overlapping */
+  /* NEW: prevent text overflow */
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ocultar control file nativo y mostrar label-actuando-como-botón */
+input[type="file"] {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Label que actúa como botón para elegir fichero */
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2563eb;
+  color: #fff;
+  padding: 4px;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-right: 8px;
+  border: 1px solid rgba(0,0,0,0.06);
+  transition: background 120ms ease, transform 100ms ease;
+  user-select: none;
+  width: 28px;
+  height: 28px;
+}
+.file-btn:hover { background: #1d4ed8; transform: translateY(-1px); }
+.file-btn i,
+.file-btn {
+  font-size: 16px;
+}
+
+/* Nombre del fichero seleccionado */
+#fileInfo {
+  display: inline-block;
+  vertical-align: middle;
+  color: #264d73;
+  font-weight: 600;
+  margin-left: 6px;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bloque clima/tablas ------------------------------------------------------- */
+#weatherContainer {
+  background: white;
+  box-shadow: 0 5px 15px rgb(30 56 175 / 0.12);
+  border-radius: 10px;
+  margin-top: 8px;
+  /* altura adaptativa y scroll vertical contenido (no empujar el mapa) */
+  max-height: clamp(240px, 40vh, 420px);
+  overflow-x: auto;
+  overflow-y: auto;
+}
+#weatherTableContainer {
+  position: relative; /* needed for overlay hint */
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;           /* la barra horizontal queda contenida aquí */
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; /* scroll suave en iOS */
+  padding-top: 0 !important; /* override earlier 26px */
+}
+
+/* La tabla se adapta: llena el contenedor cuando hay pocas columnas
+   y crece (con scroll interno) cuando hay muchas */
+#weatherTable {
+  table-layout: fixed;        /* celdas de ancho predecible */
+  width: max-content;         /* crece sólo si hay muchas columnas */
+  /* sin min-width:100% para que con pocas columnas no se estire ni agrande celdas */
+}
+#weatherTable th, #weatherTable td {
+  padding: 8px 12px;
+  font-size: 14px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Primera columna sticky (sin cambios previos) */
+#weatherTable thead tr:first-child th:first-child,
+#weatherTable thead tr:not(.icon-row):not(:first-child) th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;                 /* por encima de celdas normales */
+  background: #e0ebff;
+  width: var(--cw-first-col);
+  min-width: var(--cw-first-col);
+  max-width: var(--cw-first-col);
+  box-shadow: 2px 0 0 rgba(0,0,0,0.04);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+
+/* Restore robust sticky first column across all rows (thead/tbody) */
+/* #weatherTable th:first-child,
+#weatherTable td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  width: var(--cw-first-col);
+  min-width: var(--cw-first-col);
+  max-width: var(--cw-first-col);
+  box-shadow: 2px 0 0 rgba(0,0,0,0.04);
+}
+#weatherTable thead th:first-child { z-index: 4; }
+#weatherTable tbody th:first-child,
+#weatherTable tbody td:first-child { background-color: #f7f7f7; }
+#weatherTable thead tr.icon-row th:first-child {
+  position: static !important;
+  left: auto !important;
+  z-index: auto !important;
+} */
+
+/* Ensure sticky column visually matches intended backgrounds */
+#weatherTable thead th:first-child { background-color: #e0ebff; }
+#weatherTable tbody th:first-child,
+#weatherTable tbody td:first-child { background-color: #f7f7f7; }
+
+/* Fila 2 (iconos): NO sticky y ancho igual al de columnas de datos */
+#weatherTable thead tr.icon-row th:first-child {
+  position: static;
+  left: auto;
+  z-index: auto;
+  background: inherit;  /* hereda el mismo fondo que el resto de la fila */
+  width: clamp(var(--cw-col-min), var(--cw-col-ideal), var(--cw-col-max));
+  min-width: var(--cw-col-min);
+  max-width: var(--cw-col-max);
+}
+
+/* Misma anchura para TODAS las celdas de la fila de iconos */
+#weatherTable thead tr.icon-row th {
+  width: clamp(var(--cw-col-min), var(--cw-col-ideal), var(--cw-col-max));
+  min-width: var(--cw-col-min);
+  max-width: var(--cw-col-max);
+}
+
+/* Asegura mismo fondo en toda la fila de iconos */
+#weatherTable thead tr.icon-row th {
+  background: #e3f0fd;
+  border-top: 0 !important;
+  border-bottom: 1px solid #bdd7f6;
+  text-align: center;
+}
+
+/* Limitar regla genérica de primera columna a TBODY únicamente (no toca THEAD) */
+#weatherTable tbody th:first-child, #weatherTable tbody th {
+  background: #f7f7f7;
+  color: #203050;
+  font-weight: 700;
+  text-align: left;
+}
+
+/* Evitar que pinte la 1ª celda de la fila de iconos en THEAD */
+#weatherTable thead tr:not(.icon-row) th:first-child, #weatherTable tbody th {
+  text-align: left;
+  max-width: var(--cw-first-col);
+  font-weight: 700;
+  background-color: #e0ebff;
+}
+
+/* Refuerzo: primera celda de la fila de iconos hereda el fondo de la fila */
+#weatherTable thead tr.icon-row th:first-child {
+  background: inherit !important;
+}
+
+/* Mantener cabecera unificada (sin línea entre fila 1 y 2) */
+#weatherTable thead tr:first-child th {
+  border-bottom: none !important;
+}
+#weatherTable thead tr.icon-row th {
+  background: #e3f0fd;
+  border-top: 0 !important;
+  border-bottom: 1px solid #bdd7f6;
+  text-align: center;
+}
+
+/* Ancho de columnas de datos (cabeceras y celdas) */
+#weatherTable th:not(:first-child),
+#weatherTable td {
+  width: clamp(var(--cw-col-min), var(--cw-col-ideal), var(--cw-col-max));
+  min-width: var(--cw-col-min);
+  max-width: var(--cw-col-max);
+  white-space: nowrap;
+}
+
+/* Tighten padding for generated columns to save space */
+#weatherTable thead th:not(:first-child),
+#weatherTable tbody td {
+  padding: 6px 8px; /* was 8px 12px globally */
+}
+
+/* Keep icon row the same width rules (already uses the vars) */
+/* Asegura mismo fondo en toda la fila de iconos */
+#weatherTable thead tr.icon-row th {
+  background: #e3f0fd;
+  border-top: 0 !important;
+  border-bottom: 1px solid #bdd7f6;
+  text-align: center;
+}
+
+/* Limitar regla genérica de primera columna a TBODY únicamente (no toca THEAD) */
+#weatherTable tbody th:first-child, #weatherTable tbody th {
+  background: #f7f7f7;
+  color: #203050;
+  font-weight: 700;
+  text-align: left;
+}
+
+/* Evitar que pinte la 1ª celda de la fila de iconos en THEAD */
+#weatherTable thead tr:not(.icon-row) th:first-child, #weatherTable tbody th {
+  text-align: left;
+  max-width: var(--cw-first-col);
+  font-weight: 700;
+  background-color: #e0ebff;
+}
+
+/* Refuerzo: primera celda de la fila de iconos hereda el fondo de la fila */
+#weatherTable thead tr.icon-row th:first-child {
+  background: inherit !important;
+}
+
+/* Mantener cabecera unificada (sin línea entre fila 1 y 2) */
+#weatherTable thead tr:first-child th {
+  border-bottom: none !important;
+}
+#weatherTable thead tr.icon-row th {
+  background: #e3f0fd;
+  border-top: 0 !important;
+  border-bottom: 1px solid #bdd7f6;
+  text-align: center;
+}
+
+/* Ancho de columnas de datos (cabeceras y celdas) */
+#weatherTable th:not(:first-child),
+#weatherTable td {
+  width: clamp(var(--cw-col-min), var(--cw-col-ideal), var(--cw-col-max));
+  min-width: var(--cw-col-min);
+  max-width: var(--cw-col-max);
+  white-space: nowrap;
+}
+
+/* Anteriormente afectaba también a thead: limitamos a tbody únicamente */
+#weatherTable tbody th {
+  background: #f7f7f7;
+  color: #203050;
+  font-weight: 700;
+  text-align: left;
+}
+
+/* Ajustes internos de las celdas compuestas para no forzar crecimiento */
+.cell-row { min-width: 0; }
+.time-dist-col { min-width: 0; }
+
+/* Header hour cells: keep icon to the left, center the whole block */
+.cell-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center; /* was flex-start */
+}
+.icon-col {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+/* Override generic centering for images inside these cells */
+.cell-row .icon-col img {
+  display: block;
+  margin: 0;                   /* no auto-centering */
+  max-height: 22px;            /* compact */
+  width: auto;
+}
+
+/* Center the first header row cells (except the sticky first column) */
+#weatherTable thead tr:first-child th:not(:first-child) {
+  text-align: center;
+}
+
+/* Sticky first column: allow wrap and reduce font to avoid ellipsis */
+#weatherTable thead tr:first-child th:first-child,
+#weatherTable thead tr:not(.icon-row):not(:first-child) th:first-child {
+  white-space: normal !important;   /* allow wrapping */
+  text-overflow: clip !important;   /* no ellipsis */
+  font-size: 12px;                  /* slightly smaller to fit */
+  line-height: 1.1;
+}
+
+/* Upload button label (already uses .small-file-btn in HTML) */
+.small-file-btn {
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+}
+
+/* Responsive: en pantallas pequeñas, permite algo más de densidad */
+@media screen and (max-width: 700px) {
+  #weatherTable thead tr th:not(:first-child),
+  #weatherTable thead tr td {
+    width: clamp(72px, 12vw, 100px);
+    min-width: 72px;
+    max-width: 100px;
+  }
+  #weatherTable thead tr th:first-child {
+    width: var(--cw-first-col);
+    min-width: var(--cw-first-col);
+    max-width: var(--cw-first-col);
+  }
+  #map { order: 2; }
+  #controlsPanel { order: 1; }
+  main { gap: 0.15rem; }
+  .wtc-wrap { padding-top: 4px !important; } /* was 8px: reduced by half */
+}
+
+#weatherTable thead th {
+  background: #e3f0fd;
+  color: #284062;
+  font-weight: bold;
+  text-transform: uppercase;
+  border-bottom: 1px solid #bdd7f6;
+}
+#weatherTable tr th:first-child, #weatherTable tbody th {
+  background: #f7f7f7;
+  color: #203050;
+  font-weight: 700;
+  text-align: left;
+}
+#weatherTable thead tr.icon-row th {
+  background: #e3f0fd;           /* igual que thead th */
+  border-top: 0 !important;      /* sin línea entre fila 1 y 2 */
+  border-bottom: 1px solid #bdd7f6; /* separador hacia el resto de filas */
+  text-align: center;            /* centra iconos */
+}
+#weatherTable .wi {
+  color: #29519b !important;
+  text-shadow: none;
+}
+#weatherTable thead th img {
+  display: block;
+  margin: 0 auto;
+  max-width: 26px;
+  max-height: 28px;
+}
+#weatherTable td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.icon-row i {
+  font-size: 26px;
+  display: block;
+  margin: 0 auto;
+  line-height: 1;
+}
+#weatherTable thead th:first-child, #weatherTable tbody th {
+  text-align: left;
+  max-width: var(--cw-first-col);
+  font-weight: 700;
+  background-color: #e0ebff;
+}
+.selected {
+  background-color: #bfdbfe !important;
+}
+.weather-icon, .weather-icon svg{
+  width: 26px;
+  height: 26px;
+}
+
+/* Sun times box */
+.sun-times {
+  margin: 6px 0 18px 0;
+  color: #29519b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Leaflet/map --------------------------------------------- */
+.leaflet-container {
+  cursor: crosshair;
+}
+.leaflet-control-zoom, .leaflet-control-layers { z-index: 1500 !important; }
+.leaflet-control-scale { z-index: 1500 !important; }
+.leaflet-marker-pane img { filter: drop-shadow(0 2px 3px rgb(40 67 90 / 0.25)); }
+.leaflet-control-zoom { box-shadow: 0 0 30px #3b82f6; }
+.leaflet-popup-content img { max-width: 60px !important; }
+.leaflet-div-icon {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.leaflet-pane .icon-row i { margin: 0; }
+
+/* Responsive */
+@media screen and (max-width: 900px) {
+  #weatherTable,
+  #weatherTable thead,
+  #weatherTable tbody,
+  #weatherTable tr,
+  #weatherTable th,
+  #weatherTable td {
+    font-size: 11px !important;
+    padding: 4px 6px !important;
+  }
+  #controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sun-times {
+    font-size: 12px;
+    padding: 4px;
+  }
+  #weatherContainer {
+    margin-top: 0;
+    max-height: 260px;
+    overflow-x: auto;
+  }
+
+  /* Añadido para mejorar el comportamiento del mapa */
+  #map {
+    min-height: 250px;      /* Evita que desaparezca */
+    max-height: 50vh;       /* Limita altura para que no sea excesivo */
+    margin-bottom: 1rem;    /* Espacio inferior */
+    border-radius: 5px;
+  }
+}
+
+@media screen and (max-width: 600px) {
+    header h1 {
+      font-size: 1.3rem;  /* sigue siendo mayor que los toggles en móviles */
+    }
+    main {
+    padding: 0.1rem 0.2rem;
+    gap: 0.15rem;
+  }
+    #weatherContainer, #map {
+      border-radius: 5px;
+    }
+    .ruta-name {
+      font-size: 12px;
+      margin: 0.08rem 0;
+    }
+
+    /* Ajustes para mapa en pantallas muy pequeñas */
+    #map {
+      min-height: 200px;   /* Permite mapita visible en móviles */
+      max-height: 40vh;
+    }
+  }
+
+  .wind-icon {
+    font-size: 28px;          /* tamaño original */
+    font-weight: bold;        /* para hacer la flecha más gruesa */
+    text-shadow:
+      1px 0 currentColor,
+      -1px 0 currentColor,
+      0 1px currentColor,
+      0 -1px currentColor;    /* efecto de grosor adicional sin alargar */
+    line-height: 1;
+    color: #000;              /* asegúrate que el color sea visible */
+    user-select: none;
+  }
+
+#sunTimes {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 14px;
+  color: #29519b;
+  font-weight: 500;
+}
+
+.sunTimes-line {
+  display: flex;
+  gap: 20px;
+  justify-content: flex-start;
+}
+
+.sunTimeItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.civil-mark {
+  font-size: 10px;
+  font-weight: bold;
+  vertical-align: super;
+  margin-left: 3px;
+  color: #1e40af; /* azul más oscuro para distinción */
+}
+/* Caja de cabecera solar (dentro del th de la primera fila) */
+.sunHeaderBox {
+  display: inline-flex;
+  gap: 14px;
+  align-items: center; /* center both columns so rows align vertically */
+  vertical-align: middle;
+}
+.sunCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;              /* separación entre sunrise y sunset (o civil) */
+}
+.sunRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: #29519b;        /* combina con tu paleta */
+  font-weight: 600;
+}
+.sunRow .wi {
+  color: #f59e0b;        /* dorado para sol */
+  font-size: 18px;
+  line-height: 1;
+}
+.civil-chip {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  color: #1e40af;
+  background: rgba(30,64,175,0.08);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+/* Lift civil (civil-chip + its time) slightly to align with sunrise/sunset */
+.sunHeaderBox .sunCol:last-child .sunRow {
+  transform: translateY(-2px); /* nudge up a couple of pixels for optical alignment */
+}
+.sunHeaderBox .sunRow .civil-chip,
+.sunHeaderBox .sunRow .civil-chip + span {
+  display: inline-block;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.rain-icon { font-size: 20px; line-height: 1; }
+
+/* Icono de viento SVG */
+.wind-divicon.wind-svg { background: transparent; border: 0; }
+.wind-divicon.wind-svg .wind-glyph {
+  width: var(--wind-font, 18px);   /* escala por zoom */
+  height: var(--wind-font, 18px);
+  display: block;
+}
+.wind-svg-wrap {
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+/* Mejora de legibilidad sobre trazos oscuros/claros */
+.wind-divicon .wind-glyph path,
+.wind-divicon .wind-glyph polygon {
+  paint-order: stroke fill;
+}
+
+.wind-speed, .wind-dir-icon {
+  font-weight: normal !important;
+  color: inherit !important;
+  font-size: 14px; /* puedes mantener tamaño igual o ajustar */
+}
+
+
+.wind-dir-icon {
+  color: #29519b;
+  font-size: 16px;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.leaflet-compass-orientation {
+  display: none !important;
+}
+
+.compass-alert {
+  display: none !important;
+}
+
+/* Celdas combinadas (viento / lluvia / temperatura) */
+.weather-combined {
+  display: inline-block;
+  text-align: center;
+  line-height: 1;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 48px;      /* ancho mínimo homogéneo */
+  max-width: 100%;      /* no exceder la celda */
+}
+/* Línea superior: número principal - tamaño uniforme */
+.weather-combined .combined-top {
+  display: block;
+  white-space: nowrap;       /* evita que la velocidad y la flecha se partan en varias líneas */
+  font-weight: 700;
+  font-size: 14px;           /* tamaño uniforme para todos los números principales */
+  line-height: 1;            /* mantener compactado */
+}
+/* Línea inferior: menor tamaño y color atenuado */
+.weather-combined .combined-bottom {
+  display: block;
+  font-size: 11.5px;         /* más pequeño que la línea superior */
+  color: #475569;            /* tono menos prominente para el valor entre paréntesis */
+  margin-top: 2px;
+}
+
+/* Pequeños ajustes para el icono de flecha (wind) */
+.wind-arrow {
+  display: inline-block;
+  transform-origin: 50% 50%;
+  line-height: 0.9;
+  font-size: 1.05em;
+}
+
+/* Nuevo: layout flex para el panel de controles y posicionado del file-area */
+#controlsPanel {
+  display: flex;
+  flex-direction: column; /* apilar: selectores arriba, nombre ruta abajo */
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+/* Agrupa los controles (fecha, velocidad, intervalo) ocupando la parte principal */
+#controlsPanel .params {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Forzar que el nombre de la ruta quede en la línea siguiente y alineado con la tabla */
+#rutaName {
+  margin-top: 6px;
+  align-self: flex-start;
+  width: 100%;
+  /* opcional: mantener un poco de separación y evitar que ocupe todo visualmente */
+  font-size: 0.95rem;
+  color: #264d73;
+  font-weight: 600;
+}
+
+/* Área del selector de fichero situada al final de la fila */
+#controlsPanel .file-area {
+  margin-left: auto;           /* empuja al final de la línea */
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Ajustes móviles: file-area pasa a ocupar toda la línea por debajo si no cabe */
+@media screen and (max-width: 700px) {
+  #controlsPanel {
+    align-items: flex-start;
+  }
+  #controlsPanel .file-area {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    margin-top: 6px;
+  }
+  #controlsPanel .params {
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  /* NEW: keep the scroll wrapper stretched even with align-items:flex-start */
+  #controlsPanel .wtc-wrap {
+    align-self: stretch;
+    width: 100% !important;
+    min-width: 0 !important;     /* ensure it can be narrower than content */
+  }
+  /* Reaffirm inner scroller sizing */
+  #weatherTableContainer {
+    max-width: 100% !important;
+  }
+}
+
+/* Quitar spinners del input[type=number] para evitar cambios por flechas */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
+}
+
+/* Small layout for speed + presets */
+.speed-wrap {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  align-items: stretch; /* igual altura entre input y select */
+}
+.speed-wrap input[type="number"],
+.speed-presets {
+  height: 22px;
+  padding: 2px 8px;
+  line-height: normal;
+}
+.speed-presets {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  font-weight: 600;
+}
+
+/* Igualar altura entre velocidad (input+presets) e intervalo */
+#cyclingSpeed,
+#speedPresets,
+#intervalSelect {
+  height: 22px;
+  padding: 2px 8px;    /* was 6px 8px */
+  font-size: 12px;     /* smaller text to fit */
+  line-height: 1.2;
+}
+
+/* Equalize sizes for speed and interval controls */
+#controlsPanel .params input[type="number"],
+#controlsPanel .params select {
+  box-sizing: border-box;
+  height: 22px;        /* keep 22px overall */
+  padding: 2px 8px;    /* was 6px 8px */
+  font-size: 12px;     /* fit inside 22px */
+  line-height: 1.2;
+}
+
+/* Make interval selector match the presets look-and-feel */
+#intervalSelect {
+  font-weight: 600;
+}
+
+/* Unidades en minúsculas dentro de cabecera (el thead está en uppercase) */
+#weatherTable thead th .unit-temp,
+#weatherTable thead th .unit-lower {
+  text-transform: lowercase !important;
+  letter-spacing: 0;
+}
+
+/* Resumen de ruta en th:first-child de la fila 2 */
+.route-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: normal;      /* anula nowrap del th para permitir multilínea */
+  /* NEW: prevent container overflow */
+  max-width: 100%;
+  min-width: 0;            /* allow flex shrinking */
+}
+.route-summary .rs-icon {
+  font-size: 26px;
+  line-height: 1;
+  color: #29519b;
+  flex: 0 0 auto;
+}
+.route-summary .rs-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;            /* allow text truncation */
+  flex: 1;                 /* grow to fill available space */
+}
+.route-summary .rs-line {
+  font-size: 12.5px;
+  color: #203050;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;     /* NEW: force single line for ellipsis */
+}
+
+/* Cabecera unificada: quitar línea entre fila 1 y 2 */
+#weatherTable thead tr:first-child th {
+  border-bottom: none !important;
+}
+
+/* Fila 2 (iconos): mismo fondo que fila 1, sin borde superior y con separador inferior normal */
+#weatherTable thead tr.icon-row th {
+  background: #e3f0fd;           /* igual que thead th */
+  border-top: 0 !important;      /* sin línea entre fila 1 y 2 */
+  border-bottom: 1px solid #bdd7f6; /* separador hacia el resto de filas */
+  text-align: center;            /* centra iconos */
+}
+
+/* Eliminar la regla anterior que afectaba a toda la 2ª fila del thead */
+/* #weatherTable thead tr:nth-child(2) th { ... } */
+#weatherTable thead tr:nth-child(2) th {
+  /* revertir efectos previos: no cambiar fondo/lineas aquí */
+  background: unset;
+  border-top: unset;
+}
+
+/* Unificar estilo visual del bloque solar con el del resumen */
+.sunHeaderBox .sunRow {
+  font-size: 12.5px;
+  line-height: 1.1;
+  color: #203050;
+}
+.sunHeaderBox .sunRow .wi {
+  color: #29519b;
+}
+
+/* First header row: make distance more discreet than time */
+#weatherTable thead tr:first-child .time-dist-col .time-cell {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.1;
+}
+#weatherTable thead tr:first-child .time-dist-col .m-cell .m-text {
+  font-size: 12px;
+  color: #475569;     /* muted */
+  opacity: 0.95;
+  text-transform: none; /* numbers unaffected; units handled via .unit-lower */
+}
+
+/* Scroll affordance: side fades (overlay) + prominent arrow hint */
+.wtc-wrap {
+  position: relative;
+  padding-top: 8px;          /* was 16px: reduced by half */
+  --fade-left: 0px;
+  --fade-right: 0px;
+  min-width: 0;              /* NEW: allow shrink inside flex containers */
+}
+/* Overlay fades on wrapper (don’t move when table scrolls) */
+.wtc-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  background-repeat: no-repeat;
+  background-position: left top, right top;
+  background-size: var(--fade-left) 100%, var(--fade-right) 100%;
+  background-image:
+    linear-gradient(to right, rgba(227, 240, 253, 0.95), rgba(227, 240, 253, 0)),
+    linear-gradient(to left,  rgba(227, 240, 253, 0.95), rgba(227, 240, 253, 0));
+}
+.wtc-wrap.can-scroll::before { opacity: 1; }
+
+/* Positions for fades depending on scroll state */
+.wtc-wrap.at-left { --fade-left: 0px;  --fade-right: 28px; }
+.wtc-wrap.mid     { --fade-left: 28px; --fade-right: 28px; }
+.wtc-wrap.at-right{ --fade-left: 28px; --fade-right: 0px;  }
+
+/* Always-visible, prominent arrow hint on wrapper (fit into 16px lane) */
+.wtc-wrap::after {
+  content: "⇆";
+  position: absolute;
+  top: -4px;                  /* was -2px: nudge a bit higher */
+  right: 10px;
+  background: rgba(30,64,175,0.96);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;        /* smaller text */
+  padding: 2px 8px;       /* 12 + 2*2 = 16px total height */
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  opacity: 0;
+  animation: none;        /* no blinking/animation */
+  pointer-events: none;
+  z-index: 3;
+}
+.wtc-wrap.can-scroll::after { opacity: 1; }
+
+/* Subtle left-right wiggle to draw attention */
+@keyframes cw-scroll-hint {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-3px); }
+  50%  { transform: translateX(0); }
+  75%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+
+/* Remove old state-based hiding */
+#weatherTableContainer.scrolled::after { opacity: 1; }
+#weatherTableContainer.hint-on::after  { opacity: 1; }
+
+/* Labels at 14px inside the params row */
+#controlsPanel .params label {
+  font-size: 14px;
+  line-height: 16px;
+}
+
+/* Small inline notice for horizon/fallback messages */
+#horizonNotice.notice {
+  background: #fff7ed;           /* warm light (orange-50) */
+  color: #7c2d12;                /* orange-900 */
+  border: 1px solid #fdba74;     /* orange-300 */
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+/* NEW: variants */
+#horizonNotice.notice.warn {
+  background: #fff7ed;
+  color: #7c2d12;
+  border-color: #fdba74;
+}
+#horizonNotice.notice.error {
+  background: #fee2e2;  /* red-100 */
+  color: #7f1d1d;       /* red-900 */
+  border-color: #fca5a5;/* red-300 */
+}
+
+/* Larger MeteoBlue API input for readability */
+#configMenu #apiKey {
+  height: 36px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  width: 65%; /* make it span the full panel width */
+}
+
+#configMenu #apiKeyOW {
+  height: 36px;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  width: 65%; /* make it span the full panel width */
+}
+
+/* Themed “Check API” button */
+#configMenu #checkApiKey {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #2563eb;
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 100ms ease, opacity 120ms ease;
+}
+
+#configMenu #checkApiKeyOW {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #2563eb;
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 100ms ease, opacity 120ms ease;
+}
+
+#configMenu #checkApiKey::before { content: "🔍"; }
+#configMenu #checkApiKey.testing::before { content: "⏳"; }
+#configMenu #checkApiKey:hover { background: #1d4ed8; transform: translateY(-1px); }
+#configMenu #checkApiKey:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+#configMenu #checkApiKeyOW::before { content: "🔍"; }
+#configMenu #checkApiKeyOW.testing::before { content: "⏳"; }
+#configMenu #checkApiKeyOW:hover { background: #1d4ed8; transform: translateY(-1px); }
+#configMenu #checkApiKeyOW:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* Inline status for API key test */
+#configMenu .key-status {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #203050;
+}
+#configMenu .key-status.ok {
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+#configMenu .key-status.warn {
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+#configMenu .key-status.error {
+  color: #7f1d1d;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+#configMenu .key-status.testing {
+  color: #1f2a44;
+  background: #e5e7eb;
+  border: 1px solid #cbd5e1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+/* Sun header: subtle downscale so it reads secondary vs summary */
+.combined-header .sun-wrap {
+  font-size: 0.9em;     /* downscale the whole sun block */
+}
+
+/* Tighten spacing and sizes inside the sun block */
+.sunHeaderBox { gap: 8px; }                      /* tighter overall spacing */
+.sunHeaderBox .sunRow {
+  font-size: 11px;                               /* same as civil */
+  gap: 5px;
+  line-height: 1.05;
+}
+.sunHeaderBox .sunRow .wi { font-size: 15px; }   /* compact icon */
+
+/* Force compact size specifically for sunrise/sunset icons */
+.sunHeaderBox .sunRow .wi.wi-sunrise,
+.sunHeaderBox .sunRow .wi.wi-sunset {
+  font-size: 15px !important;
+  color: #29519b; /* same tone used elsewhere in sun block */
+}
+
+/* Extra compact on small screens */
+@media screen and (max-width: 700px) {
+  .sunHeaderBox .sunRow { font-size: 10.5px; }
+  .sunHeaderBox .sunRow .wi,
+  .sunHeaderBox .sunRow .wi.wi-sunrise,
+  .sunHeaderBox .sunRow .wi.wi-sunset { font-size: 14px !important; }
+}
+
+/* Slight indent for the whole combined block in the sticky first column */
+#weatherTable thead tr:first-child th:first-child .combined-header {
+  padding-left: 8px; /* small right shift */
+}
+
+/* Keep horizontal scrolling inside the table container on small screens */
+html, body { overflow-x: hidden; }                 /* avoid page-wide horizontal scroll */
+
+/* confine overscroll to inner scroller */
+.wtc-wrap {
+  overscroll-behavior-x: contain;
+  /* touch-action removed here to not restrict descendants on some mobiles */
+}
+#weatherTableContainer {
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y; /* enable horizontal pan within the container */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Horizontal scroller UX */
+#weatherTableContainer { cursor: grab; }
+#weatherTableContainer.dragging {
+  cursor: grabbing;
+  user-select: none;
+  touch-action: none;
+}
+body.dragging { user-select: none; }
+
+/* Stronger override for very small screens */
+@media screen and (max-width: 700px) {
+  #controlsPanel { align-items: flex-start; } /* ...existing rule... */
+
+  /* NEW: keep the scroll wrapper stretched even with align-items:flex-start */
+  #controlsPanel .wtc-wrap {
+    align-self: stretch;
+    width: 100% !important;
+    min-width: 0 !important;     /* ensure it can be narrower than content */
+  }
+  /* Reaffirm inner scroller sizing */
+  #weatherTableContainer {
+    max-width: 100% !important;
+  }
+
+  /* Ajustes para mapa en pantallas muy pequeñas */
+  #map {
+    min-height: 200px;   /* Permite mapita visible en móviles */
+    max-height: 40vh;
+  }
+}
+
+/* NEW: extend the same override to <=900px */
+@media screen and (max-width: 900px) {
+  .wtc-wrap { touch-action: auto !important; }
+  #weatherTableContainer { touch-action: pan-x pan-y !important; }
+}
+
+/* Viewport badge (shown when Debug is ON) */
+#vpBadge {
+  position: fixed;
+  bottom: 8px;
+  left: 8px;
+  z-index: 20010;
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  font: 11px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  padding: 4px 6px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  pointer-events: none;
+  display: none; /* shown via Debug toggle */
+  white-space: nowrap;
+}
+
+/* Make generated columns clickable */
+#weatherTable [data-col] { cursor: pointer; }
+
+/* Clickable wind markers */
+.wind-divicon {
+  cursor: pointer;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* Remove previous scale-up on selection to avoid mismatch (keep rotation from inline style) */
+.wind-divicon.is-selected .wind-svg-wrap {
+  position: relative;
+  /* removed transform override to preserve arrow+halo rotation */
+  filter:
+    drop-shadow(0 0 8px rgba(245, 158, 11, 0.6))
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
+  transition: none;
+}
+
+/* Hide ellipse halo by default inside the SVG, show when selected */
+.wind-divicon .wm-halo { display: none; }
+.wind-divicon.is-selected .wm-halo { display: block; }
+
+/* First-column label icons and text */
+#weatherTable th .label-ico {
+  color: #29519b;
+  font-size: 18px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* Abbreviations: hidden by default, shown in small screens */
+#weatherTable th .label-abbrev {
+  display: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: #203050;
+}
+
+/* In small screens, hide full label text and show abbrev for provider cells */
+@media screen and (max-width: 700px) {
+  #weatherTable tbody th .label-text {
+    display: none !important;
+  }
+  #weatherTable tbody th .label-abbrev {
+    display: inline !important;
+  }
+  /* Slightly compact the label icon on small screens */
+  #weatherTable th .label-ico {
+    margin-right: 0;
+    font-size: 16px;
+  }
+}
+
+/* Compact summary overrides on small screens: keep sun to the right and avoid truncation */
+@media screen and (max-width: 700px) {
+  /* Force single-row layout: summary (left) + sun (right) */
+  #compactSummary.compact-summary .combined-header {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;   /* push sun block to the right */
+    gap: 10px;
+    flex-wrap: nowrap;                /* prevent sun from going below */
+    width: 100%;
+  }
+  /* Let the summary grow and wrap; remove artificial 60% cap */
+  #compactSummary .route-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none !important;       /* override previous 60% cap */
+  }
+  /* Allow text to wrap; remove ellipsis clipping in compact header */
+  #compactSummary .route-summary .rs-line {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+  /* Keep sun block on the right and sized to its content */
+  #compactSummary .sun-wrap {
+    flex: 0 0 auto;
+    min-width: max-content;
+    margin-left: 8px;
+  }
+}
+
+/* Compact summary (hidden by default) */
+.compact-summary {
+  display: none;              /* CHANGED: hide by default; shown via media query */
+  background: #e3f0fd;
+  border: 1px solid #bdd7f6;
+  color: #203050;
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 3px 8px rgba(30,64,175,0.12);
+}
+
+/* Horizontal layout on small screens: summary (left) + sun times (right) */
+@media screen and (max-width: 700px) {
+  #compactSummary.compact-summary { display: flex; }
+  #compactSummary.compact-summary .combined-header {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    /* NEW: prevent overflow */
+    max-width: 100%;
+    min-width: 0;
+  }
+  #compactSummary .route-summary { 
+    flex: 1 1 auto; 
+    min-width: 0;          /* allow shrinking for text truncation */
+    max-width: 60%;        /* leave space for sun times */
+  }
+  #compactSummary .sun-wrap     { flex: 0 0 auto; min-width: max-content; }
+  #compactSummary .sunHeaderBox .sunRow { font-size: 11px; }
+  #compactSummary .sunHeaderBox .sunRow .wi { font-size: 14px; }
+  
+  /* NEW: ensure route name truncation in compact mode */
+  #compactSummary .route-summary .rs-line {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Keep the large sticky combined-header hidden on small screens to avoid duplicate info */
+@media screen and (max-width: 700px) {
+  #weatherTable thead tr:first-child th:first-child .combined-header {
+    display: none !important;
+  }
+}
+
+/* Ensure first header row (hours/km) stays intact (no changes needed here) */
+
+/* Small-screen: collapse first column to icons only (keep hours/km row intact) */
+@media screen and (max-width: 700px) {
+  :root { --cw-first-col: 56px; } /* narrow sticky first column */
+
+  /* Show the compact summary and hide the large combined header inside the table */
+  #compactSummary.compact-summary { display: flex; }
+  #weatherTable thead tr:first-child th:first-child .combined-header {
+    display: none !important; /* do not remove the cell, just its content */
+  }
+
+  /* Hide label text ONLY in metric label rows (exclude 1st header row and the icon-row) */
+  #weatherTable thead tr:not(.icon-row):not(:first-child) th:first-child .label-text {
+    display: none !important;
+  }
+  /* If a tbody exists in future, hide label text there too */
+  #weatherTable tbody th .label-text {
+    display: none !important;
+  }
+
+  /* Center the icon within the narrow first column for metric rows */
+  #weatherTable thead tr:not(.icon-row):not(:first-child) th:first-child,
+  #weatherTable tbody th:first-child {
+    text-align: center;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  /* Keep the first header row (hours/km) left-aligned and unchanged */
+  #weatherTable thead tr:first-child th:first-child {
+    text-align: left;
+  }
+
+  /* Slightly compact the label icon on small screens */
+  #weatherTable th .label-ico {
+    margin-right: 0;
+    font-size: 16px;
+  }
+}
+
+@media screen and (max-width: 700px) {
+  /* Hide help text on small screens, keep only icon */
+  #toggleHelp .help-text { display: none; }
+
+  /* Robust: if JS writes plain text into the button (no span),
+     force button text invisible and show only the help emoji via pseudo-element. */
+  #toggleHelp {
+    font-size: 0;            /* hide any direct text node */
+    line-height: 1;
+    position: relative;
+  }
+  #toggleHelp::before {
+    content: "❓";
+    display: inline-block;
+    font-size: 0.95rem;      /* explicit size so it's visible despite parent font-size:0 */
+    line-height: 1;
+    vertical-align: middle;
+    margin: 0 .12rem 0 0;
+  }
+
+  /* Hide config label text on small screens, keep gear icon (in-DOM) */
+  #toggleConfig .config-text { display: none !important; }
+  /* If config-ico exists, hide it to avoid duplicate when using pseudo */
+  #toggleConfig .config-ico { display: none !important; }
+
+  /* Robust: hide any direct text nodes by zeroing button font-size,
+     but render the gear via a pseudo-element with its own font-size. */
+  #toggleConfig {
+    font-size: 0;               /* hide any plain text nodes */
+    line-height: 1;             /* keep button height sane */
+    position: relative;
+  }
+  #toggleConfig::before {
+    content: "⚙️";
+    display: inline-block;
+    font-size: 0.95rem;         /* explicit size so it's visible despite parent font-size:0 */
+    line-height: 1;
+    vertical-align: middle;
+    margin: 0 .12rem 0 0;
+  }
+
+  /* Improve help button visibility on small screens */
+  #toggleHelp {
+    background-color: rgba(255,255,255,0.15) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,0.3) !important;
+  }
+  
+  /* Make nav buttons more compact on mobile */
+  nav button {
+    padding: 0.25rem 0.5rem;
+    min-width: 32px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Fine-tune vertical alignment in compact summary (small screens) */
+@media screen and (max-width: 700px) {
+  #compactSummary.compact-summary .combined-header {
+    align-items: center; /* ensure centered alignment */
+  }
+  /* Nudge the left summary up for optical alignment with sun times (raised a couple of pixels) */
+  #compactSummary .route-summary {
+    transform: translateY(-3px); /* was -1px */
+  }
+  #compactSummary .route-summary .rs-icon {
+    transform: translateY(-3px); /* was -1px */
+  }
+}
+
+#configMenu .config-row label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Compare mode: provider first-column sticky + styled (match header bg) */
+#weatherTable.compare-mode tbody th.provider-cell {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  width: var(--cw-first-col);
+  min-width: var(--cw-first-col);
+  max-width: var(--cw-first-col);
+  background-color: #e0ebff !important;  /* match header's background */
+  color: #203050 !important;
+  font-weight: 700 !important;
+  text-align: left;
+  box-shadow: 2px 0 0 rgba(0,0,0,0.04);
+}
+
+/* Keep same style for any first th in tbody (fallback if class missing) */
+#weatherTable.compare-mode tbody th:first-child {
+  background-color: #e0ebff !important;  /* match header's background */
+  color: #203050 !important;
+  font-weight: 700 !important;
+}
+
+/* Additional override for all tbody th in compare mode to ensure consistency */
+#weatherTable.compare-mode tbody th {
+  background-color: #e0ebff !important;  /* match header's background */
+  color: #203050 !important;
+  font-weight: 700 !important;
+  text-align: left;
+}

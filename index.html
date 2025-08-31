@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeteoRide</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='sky' x1='0%25' y1='0%25' x2='0%25' y2='100%25'><stop offset='0%25' stop-color='%2387CEEB'/><stop offset='100%25' stop-color='%23E0F6FF'/></linearGradient><linearGradient id='bike' x1='0%25' y1='0%25' x2='100%25' y2='0%25'><stop offset='0%25' stop-color='%232563eb'/><stop offset='100%25' stop-color='%231d4ed8'/></linearGradient></defs><rect width='100' height='100' fill='url(%23sky)' rx='20'/><circle cx='25' cy='70' r='12' fill='%23374151' stroke='%23111827' stroke-width='2'/><circle cx='75' cy='70' r='12' fill='%23374151' stroke='%23111827' stroke-width='2'/><path d='M25 70 L40 50 L60 50 L75 70' fill='none' stroke='url(%23bike)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><path d='M40 50 L45 35 L55 35' fill='none' stroke='url(%23bike)' stroke-width='3' stroke-linecap='round'/><path d='M50 35 L50 45' fill='none' stroke='url(%23bike)' stroke-width='2' stroke-linecap='round'/><circle cx='30' cy='25' r='8' fill='%23FCD34D' stroke='%23F59E0B' stroke-width='1.5'/><path d='M22 25 L30 25 L38 25 M30 17 L30 25 L30 33' stroke='%23F59E0B' stroke-width='1.5' stroke-linecap='round'/><path d='M65 30 C68 30 70 32 70 35 C70 38 68 40 65 40 C62 40 60 38 60 35 C60 32 62 30 65 30' fill='%23E5E7EB' stroke='%23D1D5DB' stroke-width='1'/><path d='M80 20 C83 20 85 22 85 25 C85 28 83 30 80 30 C77 30 75 28 75 25 C75 22 77 20 80 20' fill='%23F3F4F6' stroke='%23D1D5DB' stroke-width='1'/></svg>"/>
+<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons-wind.min.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.css" />
+
+<!-- iOS PWA meta -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" /> <!-- NEW: recommended meta to silence deprecation warning -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+</head>
+<body>
+<header>
+<!-- traducible: título de la app -->
+<h1 data-i18n="title">🚴 MeteoRide</h1>
+<nav>
+<button id="toggleConfig" title="Configuración">
+  <span class="config-text" data-i18n="toggle_config">Configuración</span>
+  <span class="config-ico" aria-hidden="true">⚙️</span>
+</button>
+<button id="toggleHelp" data-i18n="toggle_help" title="Ayuda">
+  <span class="help-text">Ayuda</span> ❓
+</button>
+<button id="toggleDebug" data-i18n="toggle_debug" style="display: none;">Depuración 🐞</button>
+</nav>
+</header>
+
+<aside id="configMenu" style="display: none;">
+  <div class="config-panel">
+    <div class="config-row">
+    </div>
+
+    <!-- NEW: Notice verbosity option -->
+    <div class="config-row">
+      <label class="inline">
+        <input type="checkbox" id="noticeAll" checked />
+        <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
+      </label>
+    </div>
+
+    <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="api_key_init">API Key</h4>
+    <div class="config-row">
+      <label for="apiKey" data-i18n="api_key_label">MeteoBlue:</label>
+      <input type="text" id="apiKey" data-i18n-placeholder="api_key_placeholder" placeholder="Introduce la API Key MeteoBlue" />
+      <button type="button" id="checkApiKey" data-i18n="check_key">Check</button>
+    </div>
+    <div id="apiKeyStatus" class="key-status" aria-live="polite"></div>
+
+    <div class="config-row">
+      <label for="apiKeyOW" data-i18n="api_key_label_ow">OpenWeather:</label>
+      <input type="text" id="apiKeyOW" data-i18n-placeholder="api_key_placeholder" placeholder="Introduce la API Key OpenWeather" />
+      <button type="button" id="checkApiKeyOW" data-i18n="check_key">Check</button>
+    </div>
+    <div id="apiKeyStatusOW" class="key-status" aria-live="polite"></div>
+
+    <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="units_label">Localización</h4>
+    <div class="config-row">
+      <label for="language" data-i18n="language_label">Idioma:</label>
+      <select id="language">
+        <option value="es" selected>Español</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <div class="unit-pair">
+        <label for="windUnits" data-i18n="wind_units_label">Unidades viento:</label>
+        <select id="windUnits">
+          <option value="kmh" selected>Km/h</option>
+          <option value="ms">m/s</option>
+          <option value="mph">Mph</option>
+        </select>
+      </div>
+      <div class="unit-pair">
+        <label for="tempUnits" data-i18n="temp_units_label">Unidades temperatura:</label>
+        <select id="tempUnits">
+          <option value="C" selected>°C</option>
+          <option value="F">°F</option>
+        </select>
+      </div>
+    </div>
+   
+
+    <div class="config-row">
+      <div class="unit-pair">
+        <label for="distanceUnits" data-i18n="distance_units_label">Unidades distancia:</label>
+        <select id="distanceUnits">
+          <option value="km" selected>Km</option>
+          <option value="mi">Mi</option>
+        </select>
+      </div>
+      <div class="unit-pair">
+        <label for="precipUnits" data-i18n="precip_units_label">Unidades precipitación:</label>
+        <select id="precipUnits">
+          <option value="mm" selected>Mm</option>
+          <option value="in">In</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<section id="debugSection" hidden>
+  <div id="debugConsole" style="background:#222;color:#eee;font-family: monospace; font-size:12px; max-height:150px; overflow:auto; padding:10px;"></div>
+</section>
+
+<main>
+  <div id="map" style="height:60vh;"></div>
+  <div id="controlsPanel">
+    <div class="params">
+      <label for="datetimeRoute" data-i18n="route_datetime_label">Fecha y hora ruta:</label>
+      <input type="datetime-local" id="datetimeRoute" step="900"/>
+
+      <label for="cyclingSpeed" data-i18n="cycling_speed_label">Velocidad media (km/h):</label>
+      <div class="speed-wrap">
+        <input type="number" id="cyclingSpeed" value="20" min="5" max="60" />
+        <select id="speedPresets" class="speed-presets" aria-label="Presets speed">
+          <option value="" selected>—</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="12">12</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+
+      <label for="intervalSelect" data-i18n="interval_label">Intervalo (minutos):</label>
+      <select id="intervalSelect">
+        <option value="15" selected>15</option>
+        <option value="30">30</option>
+      </select>
+
+      <!-- Provider selector moved here (to the right of Interval) -->
+      <label for="apiSource" data-i18n="provider_label">Proveedor:</label>
+      <select id="apiSource">
+        <option value="meteoblue" selected>MeteoBlue</option>
+        <option value="openmeteo">OpenMeteo</option>
+        <option value="openweather">OpenWeather</option>
+        <option value="aromehd">Arome‑HD</option>
+        <!-- add compare option (no removals) -->
+        <option value="compare">Comp.</option>
+      </select>
+
+      <!-- archivo GPX justo a continuación del selector de intervalo -->
+      <label class="file-btn small-file-btn" for="gpxFile" title="Upload file">📁</label>
+      <input type="file" id="gpxFile" accept=".gpx" />
+    </div>
+
+    <!-- Nombre de la ruta: nueva línea, justo debajo de los selectores y antes de la tabla -->
+    <div id="rutaName" class="ruta-name" aria-live="polite"></div>
+
+    <!-- NEW: forecast horizon/fallback notice -->
+    <div id="horizonNotice" class="notice" hidden aria-live="polite"></div>
+
+    <!-- CHANGED: add wrapper so overlays don't scroll -->
+    <div class="wtc-wrap">
+      <div id="weatherTableContainer">
+        <table id="weatherTable"></table>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="loadingOverlay" data-i18n="loading_text" style=" position: fixed; z-index: 20000; inset: 0; background: rgba(255,255,255,0.7); display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; pointer-events: none; font-size: 1.5rem; color: #1e40af; font-weight: 700; user-select: none; ">
+    Loading...
+</div>
+
+<!-- NEW: live viewport badge -->
+<div id="vpBadge" aria-hidden="true"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/2.1.2/gpx.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<script src="utils.js"></script>
+<script src="map.js"></script>
+<script src="ui.js"></script>
+<script src="app.js"></script>
+<script src="gpx-ingest.js"></script>
+<!-- NEW: compare mode (loads after app to reuse hooks) -->
+<script src="compare.js"></script>
+<script>
+// Affordance for horizontal scroll on the weather table (always visible when needed)
+(function () {
+  const c = document.getElementById('weatherTableContainer'); // inner scroller
+  if (!c) return;
+  const w = c.parentElement; // .wtc-wrap (overlay host)
+
+  // Runtime safeguard for small screens (Edge/Safari/iOS quirks)
+  try {
+    const mq900 = window.matchMedia('(max-width: 900px)');
+    const mq700 = window.matchMedia('(max-width: 700px)');
+    const applyTA = () => {
+      if (mq900.matches) {
+        // <=900: enable inertial scrolling on iOS
+        c.style.webkitOverflowScrolling = 'touch';
+      }
+      // <=700: force horizontal pan-only to avoid vertical gesture stealing
+      if (mq700.matches) {
+        c.style.touchAction = 'pan-x';
+      } else if (mq900.matches) {
+        c.style.touchAction = 'pan-x pan-y';
+      } else {
+        c.style.touchAction = 'auto';
+      }
+    };
+    applyTA();
+    (mq900.addEventListener ? mq900.addEventListener('change', applyTA) : mq900.addListener(applyTA));
+    (mq700.addEventListener ? mq700.addEventListener('change', applyTA) : mq700.addListener(applyTA));
+  } catch (_) {}
+
+  function update() {
+    const table = c.querySelector('#weatherTable');
+    const innerWidth = table ? table.scrollWidth : c.scrollWidth;
+    const canScroll = (innerWidth - c.clientWidth) > 2;
+    w.classList.toggle('can-scroll', canScroll);
+    if (!canScroll) {
+      w.classList.remove('at-left','mid','at-right');
+      return;
+    }
+    const atLeft = c.scrollLeft <= 0;
+    const atRight = Math.ceil(c.scrollLeft + c.clientWidth) >= innerWidth;
+    w.classList.toggle('at-left', atLeft);
+    w.classList.toggle('at-right', atRight);
+    w.classList.toggle('mid', !atLeft && !atRight);
+  }
+
+  c.addEventListener('scroll', update);
+
+  // Wheel -> horizontal scroll helper (trackpads/mice)
+  c.addEventListener('wheel', (ev) => {
+    const table = c.querySelector('#weatherTable');
+    const innerWidth = table ? table.scrollWidth : c.scrollWidth;
+    const canScrollX = (innerWidth - c.clientWidth) > 2;
+    if (!canScrollX) return;
+    if (Math.abs(ev.deltaY) > Math.abs(ev.deltaX)) {
+      c.scrollLeft += ev.deltaY;
+      ev.preventDefault();
+    }
+  }, { passive: false });
+
+  // drag-to-scroll helper (click-safe with threshold)
+  let isDown = false, dragging = false, startX = 0, startLeft = 0;
+  const DRAG_THRESH = 6;
+
+  function begin(x) {
+    isDown = true;
+    dragging = false;
+    startX = x;
+    startLeft = c.scrollLeft;
+  }
+  function move(x, ev) {
+    if (!isDown) return;
+    const dx = x - startX;
+    if (!dragging && Math.abs(dx) > DRAG_THRESH) {
+      dragging = true;
+      c.classList.add('dragging');
+      document.body.classList.add('dragging');
+    }
+    if (dragging) {
+      c.scrollLeft = startLeft - dx;
+      if (ev) ev.preventDefault(); // only prevent default while dragging
+    }
+  }
+  function end() {
+    isDown = false;
+    if (dragging) {
+      dragging = false;
+      c.classList.remove('dragging');
+      document.body.classList.remove('dragging');
+    }
+  }
+
+  // Prefer Pointer Events when available (covers mouse + touch uniformly)
+  if (window.PointerEvent) {
+    c.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      begin(e.clientX);
+      // do NOT preventDefault here to allow clicks if no drag
+    }, { passive: true });
+    c.addEventListener('pointermove', (e) => move(e.clientX, e), { passive: false });
+    const endPtr = () => end();
+    c.addEventListener('pointerup', endPtr, { passive: true });
+    c.addEventListener('pointercancel', endPtr, { passive: true });
+    c.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') end(); }, { passive: true });
+  } else {
+    // Mouse fallback
+    c.addEventListener('mousedown', (e) => begin(e.clientX), { passive: true });
+    window.addEventListener('mousemove', (e) => move(e.clientX, e), { passive: false });
+    window.addEventListener('mouseup', end, { passive: true });
+    // Touch fallback
+    c.addEventListener('touchstart', (e) => {
+      if (!e.touches?.length) return;
+      begin(e.touches[0].clientX);
+      // do NOT preventDefault here
+    }, { passive: true });
+    c.addEventListener('touchmove', (e) => {
+      if (!e.touches?.length) return;
+      move(e.touches[0].clientX, e);
+    }, { passive: false });
+    c.addEventListener('touchend', end, { passive: true });
+    c.addEventListener('touchcancel', end, { passive: true });
+  }
+
+  // ResizeObserver: update on container resize (debounced)
+  let resizeTimeout;
+  const resizeObserver = new ResizeObserver(() => {
+    if (resizeTimeout) clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(update, 150);
+  });
+  resizeObserver.observe(c);
+
+  // MutationObserver: detect table changes (for GPX load + interval changes)
+  const mutObserver = new MutationObserver(update);
+  mutObserver.observe(document.getElementById('weatherTable'), { childList: true, subtree: true });
+
+  // Initial load / timeout fallback
+  setTimeout(update, 3000);
+})();
+</script>
+</body>
+</html>
