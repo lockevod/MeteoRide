@@ -23,7 +23,7 @@
       upload_label: "Cargar fichero",
       // añadimos emoji para mantener los iconos del header
       toggle_config: "Configuración ⚙️",
-      toggle_debug: "Depuración 🐞",
+      toggle_debug: "🐞",
       toggle_help: "Ayuda ❓",
       close: "Cerrar",
       title: "🚴‍♂️ MeteoRide",
@@ -88,7 +88,7 @@
       upload_label: "Upload file",
       // añadimos emoji también para la versión en inglés
       toggle_config: "Config ⚙️",
-      toggle_debug: "Debug 🐞",
+      toggle_debug: "🐞",
       toggle_help: "Help ❓",
       close: "Close",
       title: "🚴‍♂️ MeteoRide",
