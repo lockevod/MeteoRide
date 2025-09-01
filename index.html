@@ -324,6 +324,54 @@
 })();
 </script>
 <script>
+// --- BEGIN: console → debugConsole bridge ---
+(function(){
+  function toText(v){
+    if (v == null) return String(v);
+    if (typeof v === 'string') return v;
+    try { return JSON.stringify(v); } catch(e) { return String(v); }
+  }
+  function ensureEl(){ return document.getElementById('debugConsole'); }
+  window.logdebug = function(...args){
+    try {
+      const el = ensureEl();
+      if (!el) return;
+      const line = args.map(toText).join(' ');
+      const row = document.createElement('div');
+      row.textContent = `[${new Date().toISOString()}] ${line}`;
+      el.appendChild(row);
+      el.scrollTop = el.scrollHeight;
+    } catch(e) { /* ignore */ }
+  };
+  const orig = {
+    log: console.log.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+    info: console.info.bind(console),
+    debug: console.debug ? console.debug.bind(console) : console.log.bind(console)
+  };
+  ['log','warn','error','info','debug'].forEach(fn => {
+    console[fn] = function(...args){
+      try { orig[fn](...args); } catch(_){ }
+      try { window.logdebug(...args); } catch(_){ }
+    };
+  });
+
+  // Optional: toggle debug panel if the button exists
+  try {
+    const btn = document.getElementById('toggleDebug');
+    const sec = document.getElementById('debugSection');
+    if (btn && sec) {
+      btn.addEventListener('click', () => {
+        const hidden = sec.hasAttribute('hidden');
+        if (hidden) sec.removeAttribute('hidden'); else sec.setAttribute('hidden','');
+      });
+    }
+  } catch(_){}
+})();
+// --- END: console → debugConsole bridge ---
+</script>
+<script>
 // --- BEGIN: client-only GPX injection helpers (sessionStorage + direct) ---
 // Provides a stable same-origin channel that survives reloads without relying on cross-site window.name.
 // Scriptable (or any injector) can call window.cwInjectGPXFromText(text, name?) directly.
