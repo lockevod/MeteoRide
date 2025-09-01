@@ -17,6 +17,7 @@
 - **Local Caching**: Stores provider responses in localStorage for ~30 minutes per step/hour to speed up reloads and reduce API calls.
 - **Settings**: API key management with check buttons, units (wind: km/h/m/s/mph; temperature: °C/°F; distance: km/mi; precipitation: mm/in), and language support (English/Spanish).
 - **Privacy-Focused**: Runs entirely on your device; no data sent to external servers. Only shares coordinates, dates, and API keys with weather providers.
+- **Progressive Web App (PWA)**: Installable on mobile and desktop devices for a native app-like experience.
 - **Open Source**: MIT licensed, available on GitHub for contributions.
 
 ## Howto use
@@ -30,6 +31,8 @@ You can use directly in a web (it's the same code published by github pages dire
 3. **Adjust Speed**: Enter average speed or use presets (5, 10, 12, 15, 20 km/h).
 4. **Select Interval**: Choose weather data every 15 or 30 minutes.
 5. **Pick Provider**: Select a weather source and enable comparison if needed.
+
+For more detailed information, see the [User Guide (English)](help_en.html) or [Guía de Usuario (Español)](help.html).
 
 ## Limitations and Tips
 
@@ -52,6 +55,38 @@ MeteoRide operates locally in your browser. Data shared with providers includes 
 ## Installation
 
 No installation required—run directly in your browser (downloaded or by web directly)
+
+### Installing as a Progressive Web App (PWA)
+
+MeteoRide can be installed as a PWA for a native app-like experience.
+
+#### Android
+1. Open MeteoRide in Chrome.
+2. Tap the menu (three dots) in the top right.
+3. Select "Add to Home screen".
+4. Confirm by tapping "Add".
+
+#### iOS (iPhone/iPad)
+1. Open MeteoRide in Safari.
+2. Tap the Share button (square with arrow).
+3. Select "Add to Home Screen".
+4. Tap "Add" in the top right.
+
+#### Chrome on Desktop
+1. Open MeteoRide in Chrome.
+2. Click the install icon in the address bar or the menu.
+3. Click "Install".
+
+#### Edge on Desktop
+1. Open MeteoRide in Edge.
+2. Click the install icon in the address bar.
+3. Click "Install".
+
+#### Safari on Mac
+1. Open MeteoRide in Safari.
+2. Go to File > Add to Dock.
+3. Or, click the Share button and select "Add to Dock".
+
 For local development:
 1. Clone the repo: `git clone https://github.com/lockevod/MeteoRide.git`
 2. Open `index.html` in your browser.
@@ -73,6 +108,12 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 Contributions are welcome! Fork the repo, report issues, suggest features, translate to new languages, or improve docs. Visit [GitHub Issues](https://github.com/lockevod/MeteoRide/issues) for support.
 
 Developed by [Lockevod](https://github.com/lockevod).
+
+## Support
+
+If you find MeteoRide useful, consider supporting the project with a donation:
+
+[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/enderthor)
 
 ---
 
