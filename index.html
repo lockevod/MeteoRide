@@ -330,7 +330,6 @@
       const d = ev.data || {};
       if (d && d.type === 'cw-gpx') {
         console.log('cw-gpx received', d.name, d.gpx && d.gpx.length);
-        // Mostrar un pequeño panel de estado (debug)
         const id = 'cw-gpx-status';
         let el = document.getElementById(id);
         if (!el) {
@@ -345,6 +344,12 @@
       console.error('cw-gpx handler error', e);
     }
   }, false);
+
+  // Señal para indicar que el listener está listo (Shortcuts puede comprobarla)
+  try {
+    window.__cw_gpx_ready = true;
+    console.log('cw-gpx listener ready');
+  } catch (e) {}
 })();
 </script>
 </body>
