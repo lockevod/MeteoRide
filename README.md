@@ -1,6 +1,6 @@
 # MeteoRide
 
-🚴‍♂️ **MeteoRide** is a web application designed for cyclists to plan routes with detailed weather forecasts. Load GPX files, select your cycling speed, and get comprehensive weather data along your path, including temperature, wind, precipitation, humidity, cloudiness, luminosity, and UV index.
+🚴‍♂️ **MeteoRide** is a web application designed for cyclists to forecast detailed weather in a route. Load GPX files, select your cycling speed, and get comprehensive weather data along your path, including temperature, wind, precipitation, humidity, cloudiness, luminosity, and UV index.
 
 ## Features
 
@@ -19,6 +19,10 @@
 - **Privacy-Focused**: Runs entirely on your device; no data sent to external servers. Only shares coordinates, dates, and API keys with weather providers.
 - **Open Source**: MIT licensed, available on GitHub for contributions.
 
+## Howto use
+You can use in your own computer, only download the code and open index.html in your computer.
+You can use directly in a web (it's the same code published by github pages directly). You can use https://app.meteoride.cc
+
 ## Getting Started
 
 1. **Load a GPX Route**: Click the 📁 button or use URL parameters.
@@ -29,7 +33,7 @@
 
 ## Limitations and Tips
 
-- **Time Horizons**: Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (5 days).
+- **Time Horizons**: Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (5 days). Implemented a fallback with Meteoblue and openweathermap (more than standard days fallback to open-meteo)
 - **Accuracy**: Forecasts less reliable beyond 3-4 days.
 - **Free APIs**: Monthly limits for MeteoBlue and OpenWeather; Open-Meteo has no limits.
 - **Best Practices**: Use routes up to 100-200 km, plan 1-2 days ahead, combine sources, have a backup plan, and carry rain gear.
@@ -43,11 +47,12 @@
 
 ## Privacy and Data
 
-MeteoRide operates locally in your browser. Data shared with providers includes only coordinates, dates, and API keys. Local storage includes settings, encrypted API keys, preferences, and temporary weather cache (30 minutes).
+MeteoRide operates locally in your browser. Data shared with providers includes only coordinates, dates, and API keys. Local storage includes settings, encrypted API keys, preferences, and temporary weather cache. This is for donwloaded code and with code in github pages (https://app.meteoride.cc)
 
 ## Installation
 
-No installation required—run directly in your browser. For local development:
+No installation required—run directly in your browser (downloaded or by web directly)
+For local development:
 1. Clone the repo: `git clone https://github.com/lockevod/MeteoRide.git`
 2. Open `index.html` in your browser.
 
