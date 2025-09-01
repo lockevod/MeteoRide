@@ -204,6 +204,10 @@ nav button:hover {
 #debugConsole p.info {
   color: #88ff88;
 }
+#debugConsole {
+  resize: both;
+  overflow: auto;
+}
 
 /* Main layout */
 main {
