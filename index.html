@@ -356,7 +356,6 @@
 <script>
 (function(){
   function toB64(s){
-    // aceptar base64 url-safe y arreglar padding
     s = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
     while (s.length % 4) s += '=';
     return s;
@@ -370,15 +369,31 @@
       return null;
     }
   }
-  function debugDocCounts(gpxStr){
+
+  // Remove default xmlns declarations and namespace prefixes which can
+  // make some GPX parsers fail to find trk/rte/wpt. This keeps tag names.
+  function stripNamespaces(gpxStr){
+    if (!gpxStr) return gpxStr;
+    // remove xmlns declarations (default + prefixed)
+    let s = gpxStr.replace(/\s+xmlns(:\w+)?="[^"]*"/g, '');
+    // remove xsi:type or other namespaced attributes (optional)
+    s = s.replace(/\s+\w+:\w+="[^"]*"/g, '');
+    // remove namespace prefixes from element names: <ns:trkpt ...> -> <trkpt ...>
+    s = s.replace(/<\s*\/?\s*\w+:(\w+)/g, (m, p1) => m[1] === '/' ? `</${p1}` : `<${p1}`);
+    // A safer approach for prefixes: replace occurrences like "<ns:tag" and "</ns:tag"
+    s = s.replace(/<\s*\/\s*([a-zA-Z0-9_-]+):/g, '</$1');
+    s = s.replace(/<\s*([a-zA-Z0-9_-]+):/g, '<$1');
+    return s;
+  }
+
+  function debugDocCounts(gpxStr, note){
     try {
-      const doc = new DOMParser().parseFromString(gpxStr, 'application/xml');
+      const doc = new DOMParser().parseFromString(gpxStr || '', 'application/xml');
       const trk = doc.getElementsByTagName('trk').length;
       const rte = doc.getElementsByTagName('rte').length;
       const wpt = doc.getElementsByTagName('wpt').length;
-      console.log('[cw] parsed GPX counts', { trk, rte, wpt });
-      // also print first 300 chars for quick inspection
-      console.log('[cw] gpx snippet:', gpxStr.substring(0, 300).replace(/\s+/g,' '));
+      console.log('[cw] parsed GPX counts' + (note ? ' ('+note+')' : ''), { trk, rte, wpt });
+      console.log('[cw] gpx snippet' + (note ? ' ('+note+')' : '') + ':', (gpxStr||'').substring(0, 300).replace(/\s+/g,' '));
       return { doc, trk, rte, wpt };
     } catch (e) {
       console.error('[cw] XML parse error', e);
@@ -400,29 +415,27 @@
         return;
       }
 
-      // debug / sanity checks
-      const info = debugDocCounts(gpx);
-      if (!info) {
-        console.error('[cw] debug parse failed');
-      }
+      // Debug original
+      debugDocCounts(gpx, 'original');
+
+      // Clean namespaces and debug again
+      const cleaned = stripNamespaces(gpx);
+      debugDocCounts(cleaned, 'cleaned');
 
       // Prefer calling app loader directly if exposed (no postMessage race)
       if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
         try {
-          console.log('[cw] calling cwLoadGPXFromString(name,len)', name, gpx.length);
-          window.cwLoadGPXFromString(gpx, name);
+          console.log('[cw] calling cwLoadGPXFromString(name,len) with cleaned GPX', name, cleaned.length);
+          window.cwLoadGPXFromString(cleaned, name);
         } catch (err) {
           console.error('[cw] cwLoadGPXFromString threw', err);
-          // fallback to postMessage so existing handler can pick it up
-          window.postMessage({ type: 'cw-gpx', name, gpx }, '*');
+          window.postMessage({ type: 'cw-gpx', name, gpx: cleaned }, '*');
         }
       } else {
-        // fallback by posting the message the page already handles
-        console.log('[cw] posting cw-gpx via postMessage (fallback)');
-        window.postMessage({ type: 'cw-gpx', name, gpx }, '*');
+        console.log('[cw] posting cw-gpx via postMessage (fallback, cleaned)');
+        window.postMessage({ type: 'cw-gpx', name, gpx: cleaned }, '*');
       }
 
-      // avoid reprocessing on reload/navigation
       try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
 
     } catch (e) {
@@ -430,11 +443,8 @@
     }
   }
 
-  // run now and on hashchange
   try { processHashGPX(); } catch(_) {}
   window.addEventListener('hashchange', processHashGPX, false);
-
-  // expose helper to manually trigger from console
   window.__cw_processHashGPX = processHashGPX;
 })();
 </script>
