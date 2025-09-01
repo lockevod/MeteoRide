@@ -322,5 +322,30 @@
   setTimeout(update, 3000);
 })();
 </script>
+<script>
+(function(){
+  // Listener para recibir GPX desde Shortcuts (window.postMessage)
+  window.addEventListener('message', (ev) => {
+    try {
+      const d = ev.data || {};
+      if (d && d.type === 'cw-gpx') {
+        console.log('cw-gpx received', d.name, d.gpx && d.gpx.length);
+        // Mostrar un pequeño panel de estado (debug)
+        const id = 'cw-gpx-status';
+        let el = document.getElementById(id);
+        if (!el) {
+          el = document.createElement('div');
+          el.id = id;
+          el.style = 'position:fixed;right:12px;bottom:12px;z-index:99999;background:#fff;padding:10px;border:1px solid #ccc;border-radius:8px;max-width:80vw;max-height:40vh;overflow:auto;font-size:13px';
+          document.body.appendChild(el);
+        }
+        el.innerHTML = `<strong>GPX recibido</strong><div>Nombre: ${String(d.name||'(sin nombre)')}</div><div>Longitud: ${(d.gpx||'').length} caracteres</div><pre style="white-space:pre-wrap;margin-top:.5rem">${(d.gpx||'').substring(0,1000)}</pre>`;
+      }
+    } catch (e) {
+      console.error('cw-gpx handler error', e);
+    }
+  }, false);
+})();
+</script>
 </body>
 </html>
