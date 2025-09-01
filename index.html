@@ -333,6 +333,44 @@
   }
   function ensureEl(){ return document.getElementById('debugConsole'); }
   window.logdebug = function(...args){
+      // ensure toolbar
+      try {
+        const sec = document.getElementById('debugSection');
+        const con = document.getElementById('debugConsole');
+        if (sec && con && !document.getElementById('debugToolbar')) {
+          const bar = document.createElement('div');
+          bar.id = 'debugToolbar';
+          bar.style.cssText = 'display:flex;gap:8px;align-items:center;background:#111;color:#eee;padding:6px 8px;border-bottom:1px solid #333;position:sticky;top:0;';
+          const btn = document.createElement('button');
+          btn.textContent = 'Clear';
+          btn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #444;background:#222;color:#eee;';
+          btn.addEventListener('click', () => { con.textContent = ''; });
+          const label = document.createElement('label');
+          label.style.cssText = 'font:12px -apple-system,system-ui;display:inline-flex;gap:6px;align-items:center;';
+          const ck = document.createElement('input');
+          ck.type = 'checkbox';
+          ck.id = 'debugAutoOpen';
+          ck.checked = (sessionStorage.getItem('cw_debug_auto_open') ?? '1') !== '0';
+          ck.addEventListener('change', () => sessionStorage.setItem('cw_debug_auto_open', ck.checked ? '1' : '0'));
+          const sp = document.createElement('span');
+          sp.textContent = 'Auto-open';
+          label.appendChild(ck); label.appendChild(sp);
+          bar.appendChild(btn); bar.appendChild(label);
+          sec.insertBefore(bar, sec.firstChild);
+        }
+      } catch(_) {}
+
+      // helpers to open/close debug panel
+      try {
+        window.openDebug = function(){
+          const sec = document.getElementById('debugSection');
+          if (sec && sec.hasAttribute('hidden')) sec.removeAttribute('hidden');
+        };
+        window.closeDebug = function(){
+          const sec = document.getElementById('debugSection');
+          if (sec && !sec.hasAttribute('hidden')) sec.setAttribute('hidden','');
+        };
+      } catch(_) {}
     try {
       const el = ensureEl();
       if (!el) return;
@@ -342,6 +380,11 @@
       el.appendChild(row);
       el.scrollTop = el.scrollHeight;
     } catch(e) { /* ignore */ }
+    // auto-open debug panel on first log if pref enabled
+    try {
+      const auto = (sessionStorage.getItem('cw_debug_auto_open') ?? '1') !== '0';
+      if (auto) window.openDebug && window.openDebug();
+    } catch(_) {}
   };
   const orig = {
     log: console.log.bind(console),
@@ -407,6 +450,7 @@
       // Feed it to the facade
       window.cwInjectGPXFromText(pending, routeName);
       console.log('[cw] loaded GPX from sessionStorage');
+      if (window.openDebug) window.openDebug();
     }
   } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
 })();
