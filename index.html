@@ -177,6 +177,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/2.1.2/gpx.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 <script src="utils.js"></script>
 <script src="ui.js"></script>
 <script src="app.js"></script>
@@ -323,82 +324,248 @@
 })();
 </script>
 <script>
+// --- BEGIN: client-only GPX injection helpers (sessionStorage + direct) ---
+// Provides a stable same-origin channel that survives reloads without relying on cross-site window.name.
+// Scriptable (or any injector) can call window.cwInjectGPXFromText(text, name?) directly.
 (function(){
-  // Listener para recibir GPX desde Shortcuts (window.postMessage)
-  window.addEventListener('message', (ev) => {
+  // Unified GPX loader facade. Uses your existing cwLoadGPXFromString(name?) when available; falls back to postMessage.
+  window.cwInjectGPXFromText = function(gpxText, routeName){
     try {
-      const d = ev.data || {};
-      if (d && d.type === 'cw-gpx') {
-        console.log('cw-gpx received', d.name, d.gpx && d.gpx.length);
-        const id = 'cw-gpx-status';
-        let el = document.getElementById(id);
-        if (!el) {
-          el = document.createElement('div');
-          el.id = id;
-          el.style = 'position:fixed;right:12px;bottom:12px;z-index:99999;background:#fff;padding:10px;border:1px solid #ccc;border-radius:8px;max-width:80vw;max-height:40vh;overflow:auto;font-size:13px';
-          document.body.appendChild(el);
-        }
-        el.innerHTML = `<strong>GPX recibido</strong><div>Nombre: ${String(d.name||'(sin nombre)')}</div><div>Longitud: ${(d.gpx||'').length} caracteres</div><pre style="white-space:pre-wrap;margin-top:.5rem">${(d.gpx||'').substring(0,1000)}</pre>`;
+      const name = routeName || 'Shared route';
+      if (typeof window.cwLoadGPXFromString === 'function') {
+        window.cwLoadGPXFromString(String(gpxText || ''), name);
+        return true;
       }
-    } catch (e) {
-      console.error('cw-gpx handler error', e);
+      // Fallback: broadcast so late-loaded scripts can pick it up
+      window.postMessage({ type: 'cw-gpx', name, gpx: String(gpxText || '') }, '*');
+      return true;
+    } catch(e){
+      console.error('[cw] cwInjectGPXFromText error', e);
+      return false;
     }
-  }, false);
+  };
 
-  // Señal para indicar que el listener está listo (Shortcuts puede comprobarla)
+  // Same-origin transient handoff: sessionStorage
   try {
-    window.__cw_gpx_ready = true;
-    console.log('cw-gpx listener ready');
-  } catch (e) {}
+    const KEY = 'cw_gpx_text';
+    const KEY_NAME = 'cw_gpx_name';
+    const ss = window.sessionStorage;
+    const pending = ss ? ss.getItem(KEY) : null;
+    if (pending) {
+      const routeName = ss.getItem(KEY_NAME) || 'Shared route';
+      // Clear before use to avoid loops
+      ss.removeItem(KEY);
+      ss.removeItem(KEY_NAME);
+      // Feed it to the facade
+      window.cwInjectGPXFromText(pending, routeName);
+      console.log('[cw] loaded GPX from sessionStorage');
+    }
+  } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
 })();
-</script>
-</body>
-<script>
+// --- END: client-only GPX injection helpers ---
+    console.log('window.name on load:', window.name);
+  console.log('window.name len:', (window.name||'').length);
 (function(){
-  function toB64(s){
-    s = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
-    while (s.length % 4) s += '=';
-    return s;
+  console.log('>>> DIAGNÓSTICO window.name');
+  const w = String(window.name || '');
+  console.log('window.name length:', w.length);
+  console.log('window.name preview:', w.substring(0,400));
+  if (!w) { console.warn('window.name vacío → el Shortcut no puso el payload'); return; }
+
+  // ¿Parece XML ya?
+  if (/^\s*(<\?xml|<gpx)/i.test(w)) {
+    console.log('window.name parece XML directo. preview:', w.substring(0,1000));
+    return;
   }
-  function decodeHashGPX(enc){
+
+  // Intento: percent-decode -> restore '+' -> base64 -> utf-8 text
+  try {
+    const pct = decodeURIComponent(w);
+    console.log('percent-decoded preview:', pct.substring(0,400));
+    const b64 = String(pct).replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g,'');
+    let s = b64;
+    while (s.length % 4) s += '=';
+    const bin = atob(s);
+    // convertir a string UTF-8 con TextDecoder
+    const bytes = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
     try {
-      const clean = decodeURIComponent(enc);
-      return atob(toB64(clean));
+      const txt = new TextDecoder('utf-8').decode(bytes);
+      console.log('decoded text (utf-8) preview:', txt.substring(0,1500));
+      console.log('decoded text length:', txt.length);
+      return;
+    } catch(e){
+      console.warn('TextDecoder utf-8 falló, mostrando raw atob preview');
+      console.log(bin.substring(0,1500));
+      return;
+    }
+  } catch (e) {
+    console.error('Error al intentar decodificar window.name:', e);
+  }
+
+  console.warn('No se pudo reconocer/decodificar window.name. Revisar Shortcut (variable insertada y URL-encode).');
+})();
+
+  (  async function(){
+
+  function toB64(s){
+    return String(s || '').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g,'');
+  }
+
+  function base64UrlToUint8Array(s){
+    if (!s) return null;
+    s = toB64(s);
+    while (s.length % 4) s += '=';
+    try {
+      const bin = atob(s);
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
     } catch (e) {
-      console.error('decodeHashGPX error', e);
+      console.error('[cw] base64 decode failed', e);
       return null;
     }
   }
 
-  // Remove default xmlns declarations and namespace prefixes which can
-  // make some GPX parsers fail to find trk/rte/wpt. This keeps tag names.
+  function decodeHashGPX(enc){
+    if (!enc) return null;
+    let input = enc;
+    try { input = decodeURIComponent(enc); } catch(_){}
+    const bytes = base64UrlToUint8Array(input);
+    if (!bytes) return null;
+    console.log('[cw] decoded bytes length:', bytes.length);
+    console.log('[cw] first 20 bytes hex:', bytes.slice(0,20).map(b => b.toString(16).padStart(2,'0')).join(' '));
+
+    // gzip (0x1f 0x8b) or zlib (0x78) detection -> use pako if available
+    if (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b && window.pako?.ungzip){
+      try { console.log('[cw] detected gzip, decompressing'); return window.pako.ungzip(bytes, { to: 'string' }); }
+      catch(e){ console.warn('[cw] gzip decompress failed', e); }
+    }
+    if (bytes.length > 2 && bytes[0] === 0x78 && window.pako?.inflate){
+      try { console.log('[cw] detected zlib/deflate, decompressing'); return window.pako.inflate(bytes, { to: 'string' }); }
+      catch(e){ console.warn('[cw] zlib decompress failed', e); }
+    }
+
+    // Heuristic UTF-16 detection (lots of NULs in even/odd positions)
+    try {
+      let zerosEven = 0, zerosOdd = 0, limit = Math.min(bytes.length, 2000);
+      for (let i = 0; i < limit; i++){
+        if (bytes[i] === 0) { if ((i & 1) === 0) zerosEven++; else zerosOdd++; }
+      }
+      if (zerosEven > zerosOdd && zerosEven > limit * 0.2) {
+        try { return new TextDecoder('utf-16le').decode(bytes); } catch(e){}
+      } else if (zerosOdd > zerosEven && zerosOdd > limit * 0.2) {
+        try { return new TextDecoder('utf-16be').decode(bytes); } catch(e){}
+      }
+    } catch(e){
+      console.warn('[cw] utf16 detection failed', e);
+    }
+
+    try {
+      return new TextDecoder('utf-8').decode(bytes);
+    } catch (e) {
+      console.error('[cw] TextDecoder utf-8 error', e);
+      try { return atob(toB64(input)); } catch(_) { return null; }
+    }
+  }
+
+  // Improved: remove namespaced attributes (xsi:...) before removing xmlns, then strip prefixes
   function stripNamespaces(gpxStr){
     if (!gpxStr) return gpxStr;
+    let s = gpxStr;
+    // remove attributes with prefixes like xsi:schemaLocation="..."
+    s = s.replace(/\s+[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+="[^"]*"/g, '');
     // remove xmlns declarations (default + prefixed)
-    let s = gpxStr.replace(/\s+xmlns(:\w+)?="[^"]*"/g, '');
-    // remove xsi:type or other namespaced attributes (optional)
-    s = s.replace(/\s+\w+:\w+="[^"]*"/g, '');
-    // remove namespace prefixes from element names: <ns:trkpt ...> -> <trkpt ...>
-    s = s.replace(/<\s*\/?\s*\w+:(\w+)/g, (m, p1) => m[1] === '/' ? `</${p1}` : `<${p1}`);
-    // A safer approach for prefixes: replace occurrences like "<ns:tag" and "</ns:tag"
+    s = s.replace(/\s+xmlns(:\w+)?="[^"]*"/g, '');
+    // collapse namespaced attributes (ns:attr="v" -> attr="v")
+    s = s.replace(/\s+[a-zA-Z0-9_-]+:([a-zA-Z0-9_-]+)=/g, ' $1=');
+    // remove namespace prefixes from element names: <ns:tag ...> -> <tag ...>, </ns:tag> -> </tag>
     s = s.replace(/<\s*\/\s*([a-zA-Z0-9_-]+):/g, '</$1');
     s = s.replace(/<\s*([a-zA-Z0-9_-]+):/g, '<$1');
     return s;
   }
 
+  // Remove sections that contain many non-printable/binary chars (e.g. broken <author>)
+  function stripBinarySections(gpxStr){
+    if (!gpxStr) return gpxStr;
+    return gpxStr.replace(/<([a-zA-Z0-9_-]+)(\b[^>]*)?>([\s\S]*?)<\/\1>/g, (full, tag, attrs, inner) => {
+      const nonPrintable = (inner.match(/[^\u0009\u000A\u000D\u0020-\u007E\u00A0-\uD7FF\uE000-\uFFFD]/g) || []).length;
+      if (nonPrintable > 10 || inner.indexOf('\u0000') !== -1) {
+        console.log('[cw] removing binary content from tag', tag, 'nonPrintable=', nonPrintable);
+        return `<${tag}${attrs||''}></${tag}>`;
+      }
+      return full;
+    });
+  }
+
+  // Remove chars not allowed by XML 1.0
+  function sanitizeXml(gpxStr){
+    if (!gpxStr) return gpxStr;
+    return gpxStr.replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]/g, '');
+  }
+
   function debugDocCounts(gpxStr, note){
     try {
       const doc = new DOMParser().parseFromString(gpxStr || '', 'application/xml');
+      const parserError = doc.getElementsByTagName('parsererror');
+      if (parserError && parserError.length) {
+        console.warn('[cw] DOMParser parsererror' + (note ? ' ('+note+')' : '') + ':', parserError[0].textContent.slice(0,400));
+      }
       const trk = doc.getElementsByTagName('trk').length;
       const rte = doc.getElementsByTagName('rte').length;
       const wpt = doc.getElementsByTagName('wpt').length;
       console.log('[cw] parsed GPX counts' + (note ? ' ('+note+')' : ''), { trk, rte, wpt });
-      console.log('[cw] gpx snippet' + (note ? ' ('+note+')' : '') + ':', (gpxStr||'').substring(0, 300).replace(/\s+/g,' '));
-      return { doc, trk, rte, wpt };
+      console.log('[cw] gpx snippet' + (note ? ' ('+note+')' : '') + ':', (gpxStr||'').substring(0, 800).replace(/\s+/g,' '));
+      return { doc, trk, rte, wpt, parserError: parserError && parserError.length ? parserError[0].textContent : null };
     } catch (e) {
       console.error('[cw] XML parse error', e);
       return null;
     }
+  }
+
+  // Try to ingest payload left in window.name (sender sets it and then navigates here)
+  async function tryWindowNameIngest() {
+    try {
+      const w = (window.name || '').trim();
+      if (!w) return false;
+      if (w.length < 40) return false;
+      console.log('[cw] window.name payload preview:', w.substring(0,200));
+      const enc = String(w).replace(/ /g, '+');
+      const gpxText = decodeHashGPX(enc);
+      if (!gpxText) { console.warn('[cw] window.name decode failed'); return false; }
+      const cleaned = stripNamespaces(gpxText);
+      const binStripped = stripBinarySections(cleaned);
+      const sanitized = sanitizeXml(binStripped);
+      try { window.name = ''; } catch(e){}
+      const name = 'Shared route';
+      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
+        window.cwLoadGPXFromString(sanitized, name);
+      } else {
+        window.postMessage({ type: 'cw-gpx', name, gpx: sanitized }, '*');
+      }
+      console.log('[cw] loaded GPX from window.name');
+      return true;
+    } catch (e) {
+      console.error('[cw] tryWindowNameIngest error', e);
+      return false;
+    }
+  }
+
+  async function waitForMap(timeoutMs = 5000) {
+    if (window.map && typeof window.map.addLayer === 'function') return window.map;
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const iv = setInterval(() => {
+        if (window.map && typeof window.map.addLayer === 'function') {
+          clearInterval(iv);
+          resolve(window.map);
+        } else if (Date.now() - start > timeoutMs) {
+          clearInterval(iv);
+          reject(new Error('map not ready'));
+        }
+      }, 100);
+    });
   }
 
   async function processHashGPX(){
@@ -406,46 +573,101 @@
       const hash = (location.hash || '').replace(/^#/, '');
       if (!hash) return;
       const params = new URLSearchParams(hash);
-      const enc = params.get('gpx');
-      if (!enc) return;
+      const rawEnc = params.get('gpx');
+      if (!rawEnc) return;
+
+      // Restore '+' that URL parsers may have turned into spaces
+      const encRestoredPlus = String(rawEnc).replace(/ /g, '+');
+
+      // small preview logging
+      try {
+        const PREVIEW_LEN = 600;
+        const TAIL_LEN = 120;
+        const raw = String(rawEnc);
+        const head = raw.substring(0, PREVIEW_LEN);
+        const tail = raw.length > TAIL_LEN ? '...' + raw.slice(-TAIL_LEN) : '';
+        let decodedURIComponentPreview = head;
+        try { decodedURIComponentPreview = decodeURIComponent(String(rawEnc)).substring(0, PREVIEW_LEN); } catch(_){}
+        console.log('[cw] raw gpx param (b64) head:', head);
+        if (tail) console.log('[cw] raw gpx param (b64) tail:', tail);
+        console.log('[cw] decodeURIComponent head preview:', decodedURIComponentPreview);
+        console.log('[cw] restored "+" preview head (spaces->+):', String(encRestoredPlus).substring(0, PREVIEW_LEN));
+        try {
+          const previewBytes = base64UrlToUint8Array(encRestoredPlus);
+          if (previewBytes && previewBytes.length) {
+            const nz = previewBytes.slice(0, 64);
+            console.log('[cw] decoded bytes preview (hex):', nz.map(b=>b.toString(16).padStart(2,'0')).join(' '), '... (len=' + previewBytes.length + ')');
+          }
+        } catch (e) {
+          console.warn('[cw] could not convert preview to bytes', e);
+        }
+      } catch (e) { /* ignore preview errors */ }
+
       const name = params.get('name') ? decodeURIComponent(params.get('name')) : 'Shared route';
-      const gpx = decodeHashGPX(enc);
+      const gpx = decodeHashGPX(encRestoredPlus);
       if (!gpx) {
         console.error('[cw] could not decode GPX from hash');
         return;
       }
 
-      // Debug original
       debugDocCounts(gpx, 'original');
 
-      // Clean namespaces and debug again
       const cleaned = stripNamespaces(gpx);
       debugDocCounts(cleaned, 'cleaned');
 
-      // Prefer calling app loader directly if exposed (no postMessage race)
+      const binStripped = stripBinarySections(cleaned);
+      debugDocCounts(binStripped, 'binary-stripped');
+
+      const sanitized = sanitizeXml(binStripped);
+      debugDocCounts(sanitized, 'sanitized');
+
+      const payload = sanitized;
+
+      // wait for map to be ready to avoid addLayer errors
+      try {
+        await waitForMap(5000);
+      } catch (err) {
+        console.warn('[cw] map not ready after timeout, will try to load anyway', err);
+      }
+
       if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
         try {
-          console.log('[cw] calling cwLoadGPXFromString(name,len) with cleaned GPX', name, cleaned.length);
-          window.cwLoadGPXFromString(cleaned, name);
+          console.log('[cw] calling cwLoadGPXFromString(name,len) with sanitized GPX', name, payload.length);
+          window.cwLoadGPXFromString(payload, name);
         } catch (err) {
           console.error('[cw] cwLoadGPXFromString threw', err);
-          window.postMessage({ type: 'cw-gpx', name, gpx: cleaned }, '*');
+          window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
         }
       } else {
-        console.log('[cw] posting cw-gpx via postMessage (fallback, cleaned)');
-        window.postMessage({ type: 'cw-gpx', name, gpx: cleaned }, '*');
+        console.log('[cw] posting cw-gpx via postMessage (fallback, sanitized)');
+        window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
       }
 
       try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
-
     } catch (e) {
       console.error('[cw] processHashGPX error', e);
     }
   }
 
-  try { processHashGPX(); } catch(_) {}
+  // Try window.name first (awaitable because IIFE is async)
+  try { await tryWindowNameIngest(); } catch(_) {}
+
+  // Then process any #gpx fragment
+  try { await processHashGPX(); } catch(_) {}
+
   window.addEventListener('hashchange', processHashGPX, false);
   window.__cw_processHashGPX = processHashGPX;
+
 })();
+
+// Allow external injector to stage large payload via sessionStorage and reload same-origin safely
+window.__cw_stageAndReload = function(gpxText, routeName){
+  try {
+    sessionStorage.setItem('cw_gpx_text', String(gpxText||''));
+    if (routeName) sessionStorage.setItem('cw_gpx_name', String(routeName));
+    location.reload();
+    return true;
+  } catch(e){ console.error('stageAndReload failed', e); return false; }
+};
 </script>
 </html>
