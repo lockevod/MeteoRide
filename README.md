@@ -32,7 +32,7 @@ You can use directly in a web (it's the same code published by github pages dire
 4. **Select Interval**: Choose weather data every 15 or 30 minutes.
 5. **Pick Provider**: Select a weather source and enable comparison if needed.
 
-For more detailed information, see the [User Guide (English)](help_en.html) or [Guía de Usuario (Español)](help.html).
+For more detailed information, see the [User Guide (English)](https://app.meteoride.cc/help_en.html) or [Guía de Usuario (Español)](https://app.meteoride.cc/help.html).
 
 ## Limitations and Tips
 
