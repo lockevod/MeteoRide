@@ -113,7 +113,7 @@ Developed by [Lockevod](https://github.com/lockevod).
 
 If you find MeteoRide useful, consider supporting the project with a donation:
 
-[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://www.buymeacoffee.com/enderthor)
+<a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 ---
 
