@@ -353,4 +353,89 @@
 })();
 </script>
 </body>
+<script>
+(function(){
+  function toB64(s){
+    // aceptar base64 url-safe y arreglar padding
+    s = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return s;
+  }
+  function decodeHashGPX(enc){
+    try {
+      const clean = decodeURIComponent(enc);
+      return atob(toB64(clean));
+    } catch (e) {
+      console.error('decodeHashGPX error', e);
+      return null;
+    }
+  }
+  function debugDocCounts(gpxStr){
+    try {
+      const doc = new DOMParser().parseFromString(gpxStr, 'application/xml');
+      const trk = doc.getElementsByTagName('trk').length;
+      const rte = doc.getElementsByTagName('rte').length;
+      const wpt = doc.getElementsByTagName('wpt').length;
+      console.log('[cw] parsed GPX counts', { trk, rte, wpt });
+      // also print first 300 chars for quick inspection
+      console.log('[cw] gpx snippet:', gpxStr.substring(0, 300).replace(/\s+/g,' '));
+      return { doc, trk, rte, wpt };
+    } catch (e) {
+      console.error('[cw] XML parse error', e);
+      return null;
+    }
+  }
+
+  async function processHashGPX(){
+    try {
+      const hash = (location.hash || '').replace(/^#/, '');
+      if (!hash) return;
+      const params = new URLSearchParams(hash);
+      const enc = params.get('gpx');
+      if (!enc) return;
+      const name = params.get('name') ? decodeURIComponent(params.get('name')) : 'Shared route';
+      const gpx = decodeHashGPX(enc);
+      if (!gpx) {
+        console.error('[cw] could not decode GPX from hash');
+        return;
+      }
+
+      // debug / sanity checks
+      const info = debugDocCounts(gpx);
+      if (!info) {
+        console.error('[cw] debug parse failed');
+      }
+
+      // Prefer calling app loader directly if exposed (no postMessage race)
+      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
+        try {
+          console.log('[cw] calling cwLoadGPXFromString(name,len)', name, gpx.length);
+          window.cwLoadGPXFromString(gpx, name);
+        } catch (err) {
+          console.error('[cw] cwLoadGPXFromString threw', err);
+          // fallback to postMessage so existing handler can pick it up
+          window.postMessage({ type: 'cw-gpx', name, gpx }, '*');
+        }
+      } else {
+        // fallback by posting the message the page already handles
+        console.log('[cw] posting cw-gpx via postMessage (fallback)');
+        window.postMessage({ type: 'cw-gpx', name, gpx }, '*');
+      }
+
+      // avoid reprocessing on reload/navigation
+      try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+
+    } catch (e) {
+      console.error('[cw] processHashGPX error', e);
+    }
+  }
+
+  // run now and on hashchange
+  try { processHashGPX(); } catch(_) {}
+  window.addEventListener('hashchange', processHashGPX, false);
+
+  // expose helper to manually trigger from console
+  window.__cw_processHashGPX = processHashGPX;
+})();
+</script>
 </html>
