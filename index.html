@@ -437,14 +437,30 @@
     warn: console.warn.bind(console),
     error: console.error.bind(console),
     info: console.info.bind(console),
-    debug: console.debug ? console.debug.bind(console) : console.log.bind(console)
+    debug: console.debug ? console.debug.bind(console) : console.log.bind(console),
+    trace: console.trace ? console.trace.bind(console) : console.log.bind(console),
+    group: console.group ? console.group.bind(console) : console.log.bind(console),
+    groupEnd: console.groupEnd ? console.groupEnd.bind(console) : () => {},
+    table: console.table ? console.table.bind(console) : console.log.bind(console),
+    assert: console.assert ? console.assert.bind(console) : () => {}
   };
-  ['log','warn','error','info','debug'].forEach(fn => {
+  // Override all console methods to also log to debug
+  ['log','warn','error','info','debug','trace','group','groupEnd','table','assert'].forEach(fn => {
     console[fn] = function(...args){
       try { orig[fn](...args); } catch(_){ }
       try { window.logdebug(...args); } catch(_){ }
     };
   });
+
+  // Capture uncaught errors
+  window.onerror = function(message, source, lineno, colno, error) {
+    try { window.logdebug('Uncaught Error:', message, 'at', source + ':' + lineno + ':' + colno, error); } catch(_){ }
+  };
+
+  // Capture unhandled promise rejections
+  window.onunhandledrejection = function(event) {
+    try { window.logdebug('Unhandled Promise Rejection:', event.reason); } catch(_){ }
+  };
 
   // Optional: toggle debug panel if the button exists
   try {
@@ -880,7 +896,9 @@
   }
 
   // Then process any incoming GPX via query or hash
-  try { await processIncomingGPX(); } catch(_) {}
+  (async () => {
+    try { await processIncomingGPX(); } catch(_) {}
+  })();
 
   // react to future changes (hash/popstate)
   window.addEventListener('hashchange', processIncomingGPX, false);
