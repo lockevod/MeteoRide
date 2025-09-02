@@ -1433,6 +1433,17 @@ function buildCombinedHeaderHTML(summaryHTML, sunHTML) {
 }
 
 function renderWeatherTable() {
+  // NEW: no-op when no route/data loaded (align with interval change behavior)
+  // Do not build headers/rows if there is no track or weatherData yet.
+  if (!Array.isArray(weatherData) || weatherData.length === 0 || !trackLayer) {
+    const table = document.getElementById("weatherTable");
+    if (table) table.innerHTML = "";
+    // Optional: clear compact summary content if present
+    const cs = document.getElementById("compactSummary");
+    if (cs) cs.innerHTML = "";
+    return;
+  }
+
   // If in compare mode, trigger compare render instead
   const sel = document.getElementById("apiSource");
   if (sel && sel.value === "compare") {

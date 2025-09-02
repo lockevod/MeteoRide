@@ -28,7 +28,11 @@
 <button id="toggleHelp" data-i18n="toggle_help" title="Ayuda">
   <span class="help-text">Ayuda</span> ❓
 </button>
-<button id="toggleDebug" data-i18n="toggle_debug">🐞</button>
+<!-- CHANGED: icono + texto para igualar ocupación/altura como los otros -->
+<button id="toggleDebug" data-i18n="toggle_debug" title="Debug">
+  <span class="debug-ico" aria-hidden="true">🐞</span>
+  <span class="debug-text" data-i18n="toggle_debug_label">Debug</span>
+</button>
 </nav>
 </header>
 
@@ -389,10 +393,10 @@
           ck.type = 'checkbox';
           ck.id = 'debugAutoOpen';
           ck.checked = (sessionStorage.getItem('cw_debug_auto_open') ?? '1') !== '0';
-          ck.addEventListener('change', () => sessionStorage.setItem('cw_debug_auto_open', ck.checked ? '1' : '0'));
+          ck.addEventListener('change', () => sessionStorage.setItem('cw_debug_auto_open', ck.checked ? '0' : '0'));
           const sp = document.createElement('span');
           sp.textContent = 'Auto-open';
-          label.appendChild(ck); label.appendChild(sp);
+          //label.appendChild(ck); label.appendChild(sp);
 
           bar.appendChild(clearBtn);
           bar.appendChild(copyBtn);
@@ -528,10 +532,6 @@
   }
 } catch(_) {}
 
-
-
-
-
 })();
 // --- END: console → debugConsole bridge ---
 </script>
@@ -618,8 +618,6 @@
 
   console.warn('No se pudo reconocer/decodificar window.name. Revisar Shortcut (variable insertada y URL-encode).');
 })();
-
-  (  async function(){
 
   function toB64(s){
     return String(s || '').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g,'');
@@ -962,6 +960,6 @@
   window.addEventListener('popstate', processIncomingGPX, false);
   window.__cw_processHashGPX = processIncomingGPX;
   // --- END REPLACED ---
-  // ...existing code continues...
 </script>
-<!-- ...existing code... -->
+</body>
+</html>

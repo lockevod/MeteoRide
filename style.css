@@ -1750,3 +1750,35 @@ body.dragging { user-select: none; }
 }
 #debugToolbar button:hover { background: #2a2a2a; }
 #debugToolbar label { font: 12px -apple-system, system-ui; display:inline-flex; gap:6px; align-items:center; }
+
+/* Alinear y escalar el botón de debug como los otros del nav */
+#toggleDebug {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 32px;     /* coherente con nav button */
+  height: 28px;        /* misma altura visual que .small-file-btn */
+  padding: 0.05rem 0.35rem;
+  line-height: 1;
+}
+#toggleDebug .debug-ico {
+  font-size: 1.05rem;  /* el emoji rinde algo más pequeño: ligero boost */
+  line-height: 1;
+  display: inline-block;
+}
+#toggleDebug .debug-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* En móviles: igualar a los otros (solo icono) */
+@media screen and (max-width: 700px) {
+  #toggleDebug {
+    height: 28px;
+    padding: 0.25rem 0.5rem;
+  }
+  #toggleDebug .debug-text { display: none !important; }
+  #toggleDebug .debug-ico   { font-size: 0.95rem; }
+}
