@@ -576,48 +576,6 @@
   } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
 })();
 // --- END: client-only GPX injection helpers ---
-    console.log('window.name on load:', window.name);
-  console.log('window.name len:', (window.name||'').length);
-(function(){
-  console.log('>>> DIAGNÓSTICO window.name');
-  const w = String(window.name || '');
-  console.log('window.name length:', w.length);
-  console.log('window.name preview:', w.substring(0,400));
-  if (!w) { console.warn('window.name vacío → el Shortcut no puso el payload'); return; }
-
-  // ¿Parece XML ya?
-  if (/^\s*(<\?xml|<gpx)/i.test(w)) {
-    console.log('window.name parece XML directo. preview:', w.substring(0,1000));
-    return;
-  }
-
-  // Intento: percent-decode -> restore '+' -> base64 -> utf-8 text
-  try {
-    const pct = decodeURIComponent(w);
-    console.log('percent-decoded preview:', pct.substring(0,400));
-    const b64 = String(pct).replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g,'');
-    let s = b64;
-    while (s.length % 4) s += '=';
-    const bin = atob(s);
-    // convertir a string UTF-8 con TextDecoder
-    const bytes = new Uint8Array(bin.length);
-    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-    try {
-      const txt = new TextDecoder('utf-8').decode(bytes);
-      console.log('decoded text (utf-8) preview:', txt.substring(0,1500));
-      console.log('decoded text length:', txt.length);
-      return;
-    } catch(e){
-      console.warn('TextDecoder utf-8 falló, mostrando raw atob preview');
-      console.log(bin.substring(0,1500));
-      return;
-    }
-  } catch (e) {
-    console.error('Error al intentar decodificar window.name:', e);
-  }
-
-  console.warn('No se pudo reconocer/decodificar window.name. Revisar Shortcut (variable insertada y URL-encode).');
-})();
 
   function toB64(s){
     return String(s || '').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g,'');
@@ -732,34 +690,6 @@
     } catch (e) {
       console.error('[cw] XML parse error', e);
       return null;
-    }
-  }
-
-  // Try to ingest payload left in window.name (sender sets it and then navigates here)
-  async function tryWindowNameIngest() {
-    try {
-      const w = (window.name || '').trim();
-      if (!w) return false;
-      if (w.length < 40) return false;
-      console.log('[cw] window.name payload preview:', w.substring(0,200));
-      const enc = String(w).replace(/ /g, '+');
-      const gpxText = decodeHashGPX(enc);
-      if (!gpxText) { console.warn('[cw] window.name decode failed'); return false; }
-      const cleaned = stripNamespaces(gpxText);
-      const binStripped = stripBinarySections(cleaned);
-      const sanitized = sanitizeXml(binStripped);
-      try { window.name = ''; } catch(e){}
-      const name = 'Shared route';
-      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
-        window.cwLoadGPXFromString(sanitized, name);
-      } else {
-        window.postMessage({ type: 'cw-gpx', name, gpx: sanitized }, '*');
-      }
-      console.log('[cw] loaded GPX from window.name');
-      return true;
-    } catch (e) {
-      console.error('[cw] tryWindowNameIngest error', e);
-      return false;
     }
   }
 
@@ -948,9 +878,6 @@
       throw err;
     }
   }
-
-  // Try window.name first (awaitable because IIFE is async)
-  try { await tryWindowNameIngest(); } catch(_) {}
 
   // Then process any incoming GPX via query or hash
   try { await processIncomingGPX(); } catch(_) {}
