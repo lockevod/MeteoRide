@@ -341,10 +341,48 @@
           const bar = document.createElement('div');
           bar.id = 'debugToolbar';
           bar.style.cssText = 'display:flex;gap:8px;align-items:center;background:#111;color:#eee;padding:6px 8px;border-bottom:1px solid #333;position:sticky;top:0;';
-          const btn = document.createElement('button');
-          btn.textContent = 'Clear';
-          btn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #444;background:#222;color:#eee;';
-          btn.addEventListener('click', () => { con.textContent = ''; });
+
+          const clearBtn = document.createElement('button');
+          clearBtn.textContent = 'Clear';
+          clearBtn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #444;background:#222;color:#eee;';
+          clearBtn.addEventListener('click', () => { con.textContent = ''; });
+
+          const copyBtn = document.createElement('button');
+          copyBtn.textContent = 'Copy';
+          copyBtn.style.cssText = clearBtn.style.cssText;
+          copyBtn.addEventListener('click', async () => {
+            const text = con.innerText || '';
+            try {
+              await navigator.clipboard.writeText(text);
+              console.log('[debug] Copiado al portapapeles');
+            } catch(err) {
+              try {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.setAttribute('readonly','');
+                ta.style.position='absolute'; ta.style.left='-9999px';
+                document.body.appendChild(ta); ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                console.log('[debug] Copiado (fallback)');
+              } catch(e){ console.error('No se pudo copiar:', e); }
+            }
+          });
+
+          const resetBtn = document.createElement('button');
+          resetBtn.textContent = 'Reset';
+          resetBtn.style.cssText = clearBtn.style.cssText;
+          resetBtn.addEventListener('click', () => {
+            const secEl = document.getElementById('debugSection');
+            if (secEl) {
+              secEl.style.width = '380px';
+              secEl.style.height = '220px';
+            }
+            try {
+              sessionStorage.removeItem('cw_debug_w');
+              sessionStorage.removeItem('cw_debug_h');
+            } catch(_) {}
+          });
+
           const label = document.createElement('label');
           label.style.cssText = 'font:12px -apple-system,system-ui;display:inline-flex;gap:6px;align-items:center;';
           const ck = document.createElement('input');
@@ -355,7 +393,11 @@
           const sp = document.createElement('span');
           sp.textContent = 'Auto-open';
           label.appendChild(ck); label.appendChild(sp);
-          bar.appendChild(btn); bar.appendChild(label);
+
+          bar.appendChild(clearBtn);
+          bar.appendChild(copyBtn);
+          bar.appendChild(resetBtn);
+          bar.appendChild(label);
           sec.insertBefore(bar, sec.firstChild);
         }
       } catch(_) {}
@@ -411,6 +453,85 @@
       });
     }
   } catch(_){}
+  // Resizer (JS-driven, iOS/desktop)
+  try {
+  const sec = document.getElementById('debugSection');
+  if (sec && !document.getElementById('debugResizerLeft') && !document.getElementById('debugResizerRight')) {
+    const leftGrip = document.createElement('div');
+    leftGrip.id = 'debugResizerLeft';
+    const rightGrip = document.createElement('div');
+    rightGrip.id = 'debugResizerRight';
+    sec.appendChild(leftGrip);
+    sec.appendChild(rightGrip);
+
+    // restore saved size
+    const w = sessionStorage.getItem('cw_debug_w');
+    const h = sessionStorage.getItem('cw_debug_h');
+    if (w) sec.style.width = w; if (h) sec.style.height = h;
+
+    const start = {x:0,y:0,w:0,h:0};
+
+    const onMoveLeft = (e)=>{
+      const px = e.touches ? e.touches[0].clientX : e.clientX;
+      const py = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = (start.x - px);   // drag left => wider
+      const dy = (py - start.y);   // drag down => taller
+      const nw = Math.max(280, Math.round(start.w + dx));
+      const nh = Math.max(140, Math.round(start.h + dy));
+      sec.style.width = nw + 'px';
+      sec.style.height = nh + 'px';
+    };
+    const onMoveRight = (e)=>{
+      const px = e.touches ? e.touches[0].clientX : e.clientX;
+      const py = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = (px - start.x);   // drag right => wider
+      const dy = (py - start.y);   // drag down  => taller
+      const nw = Math.max(280, Math.round(start.w + dx));
+      const nh = Math.max(140, Math.round(start.h + dy));
+      sec.style.width = nw + 'px';
+      sec.style.height = nh + 'px';
+    };
+    const onUp = ()=>{
+      document.removeEventListener('mousemove', onMoveLeft);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMoveLeft);
+      document.removeEventListener('touchend', onUp);
+      document.removeEventListener('mousemove', onMoveRight);
+      document.removeEventListener('touchmove', onMoveRight);
+      try { sessionStorage.setItem('cw_debug_w', sec.style.width); sessionStorage.setItem('cw_debug_h', sec.style.height); } catch(_){ }
+    };
+    const onDown = (moveHandler)=>(e)=>{
+      e.preventDefault();
+      start.x = e.touches ? e.touches[0].clientX : e.clientX;
+      start.y = e.touches ? e.touches[0].clientY : e.clientY;
+      const rect = sec.getBoundingClientRect();
+      start.w = rect.width; start.h = rect.height;
+      document.addEventListener('mousemove', moveHandler);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', moveHandler, {passive:false});
+      document.addEventListener('touchend', onUp, {passive:false});
+    };
+
+    const resetSize = () => {
+      sec.style.width = '380px';
+      sec.style.height = '220px';
+      try { sessionStorage.removeItem('cw_debug_w'); sessionStorage.removeItem('cw_debug_h'); } catch(_) {}
+    };
+
+    leftGrip.addEventListener('mousedown', onDown(onMoveLeft));
+    leftGrip.addEventListener('touchstart', onDown(onMoveLeft), {passive:false});
+    leftGrip.addEventListener('dblclick', resetSize);
+
+    rightGrip.addEventListener('mousedown', onDown(onMoveRight));
+    rightGrip.addEventListener('touchstart', onDown(onMoveRight), {passive:false});
+    rightGrip.addEventListener('dblclick', resetSize);
+  }
+} catch(_) {}
+
+
+
+
+
 })();
 // --- END: console → debugConsole bridge ---
 </script>
@@ -741,25 +862,106 @@
     }
   }
 
+  // --- REPLACED: processHashGPX -> processIncomingGPX (handles ?gpx= as well as #gpx= and gpx_url) ---
+  async function processIncomingGPX(){
+    try {
+      // Prefer search params (query string) over hash (allows shorter/cleaner URLs)
+      const searchParams = new URLSearchParams(location.search || '');
+      const hashParams = new URLSearchParams((location.hash || '').replace(/^#/,''));
+      // check for a direct remote URL first (gpx_url)
+      const remoteUrl = searchParams.get('gpx_url') || hashParams.get('gpx_url') || null;
+      if (remoteUrl) {
+        try {
+          await fetchAndLoadGPX(remoteUrl, searchParams.get('name') || hashParams.get('name') || 'Shared route');
+        } catch (e) {
+          console.error('[cw] fetch remote GPX failed', e);
+        }
+        // clear state for cleanliness if possible
+        try { history.replaceState(null,'', location.pathname + location.search); } catch(_) {}
+        return;
+      }
+
+      // then look for encoded GPX in query or hash (query wins)
+      const rawEnc = searchParams.get('gpx') || hashParams.get('gpx');
+      if (!rawEnc) return;
+
+      const name = searchParams.get('name') ? decodeURIComponent(searchParams.get('name')) : (hashParams.get('name') ? decodeURIComponent(hashParams.get('name')) : 'Shared route');
+      const encRestoredPlus = String(rawEnc).replace(/ /g, '+');
+      console.log('[cw] incoming gpx param preview (head):', encRestoredPlus.substring(0,600));
+
+      const gpx = decodeHashGPX(encRestoredPlus);
+      if (!gpx) {
+        console.error('[cw] could not decode GPX from param');
+        return;
+      }
+
+      debugDocCounts(gpx, 'original');
+
+      const cleaned = stripNamespaces(gpx);
+      debugDocCounts(cleaned, 'cleaned');
+
+      const binStripped = stripBinarySections(cleaned);
+      debugDocCounts(binStripped, 'binary-stripped');
+
+      const sanitized = sanitizeXml(binStripped);
+      debugDocCounts(sanitized, 'sanitized');
+
+      const payload = sanitized;
+
+      // wait for map readiness but keep trying if not ready
+      try { await waitForMap(5000); } catch (err) { console.warn('[cw] map not ready after timeout, will try to load anyway', err); }
+
+      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
+        try {
+          console.log('[cw] calling cwLoadGPXFromString(name,len) with sanitized GPX', name, payload.length);
+          window.cwLoadGPXFromString(payload, name);
+        } catch (err) {
+          console.error('[cw] cwLoadGPXFromString threw', err);
+          window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
+        }
+      } else {
+        console.log('[cw] posting cw-gpx via postMessage (fallback, sanitized)');
+        window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
+      }
+
+      // clean URL/hash to avoid reprocessing
+      try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+    } catch (e) {
+      console.error('[cw] processIncomingGPX error', e);
+    }
+  }
+
+  async function fetchAndLoadGPX(url, name='Shared route') {
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      // try parse & feed
+      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
+        window.cwLoadGPXFromString(text, name);
+      } else {
+        window.postMessage({ type: 'cw-gpx', name, gpx: text }, '*');
+      }
+      console.log('[cw] loaded GPX from remote URL', url);
+      if (window.openDebug) window.openDebug();
+      return true;
+    } catch (err) {
+      console.error('[cw] fetchAndLoadGPX error', err);
+      throw err;
+    }
+  }
+
   // Try window.name first (awaitable because IIFE is async)
   try { await tryWindowNameIngest(); } catch(_) {}
 
-  // Then process any #gpx fragment
-  try { await processHashGPX(); } catch(_) {}
+  // Then process any incoming GPX via query or hash
+  try { await processIncomingGPX(); } catch(_) {}
 
-  window.addEventListener('hashchange', processHashGPX, false);
-  window.__cw_processHashGPX = processHashGPX;
-
-})();
-
-// Allow external injector to stage large payload via sessionStorage and reload same-origin safely
-window.__cw_stageAndReload = function(gpxText, routeName){
-  try {
-    sessionStorage.setItem('cw_gpx_text', String(gpxText||''));
-    if (routeName) sessionStorage.setItem('cw_gpx_name', String(routeName));
-    location.reload();
-    return true;
-  } catch(e){ console.error('stageAndReload failed', e); return false; }
-};
+  // react to future changes (hash/popstate)
+  window.addEventListener('hashchange', processIncomingGPX, false);
+  window.addEventListener('popstate', processIncomingGPX, false);
+  window.__cw_processHashGPX = processIncomingGPX;
+  // --- END REPLACED ---
+  // ...existing code continues...
 </script>
-</html>
+<!-- ...existing code... -->

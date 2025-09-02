@@ -1,0 +1,15 @@
+function normalizeAndDecodeB64(raw) {
+  if (!raw) return null;
+  // 1) try decodeURIComponent (if was url-encoded)
+  try { raw = decodeURIComponent(raw); } catch(_) {}
+  // 2) remove any whitespace/newlines inserted by transports
+  raw = String(raw).replace(/\s+/g, '');
+  // 3) if spaces were used instead of '+', restore them (some URL handlers turn + -> space)
+  raw = raw.replace(/ /g, '+');
+  // 4) convert base64url -> base64 (if used)
+  raw = raw.replace(/-/g, '+').replace(/_/g, '/');
+  // 5) pad to multiple of 4
+  while (raw.length % 4) raw += '=';
+  // 6) decode
+  try { const bin = atob(raw); return bin; } catch(e) { console.error('b64 decode failed', e); return null; }
+}
