@@ -143,14 +143,17 @@
     return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : ""));
   }
   function logDebug(msg, isError = false) {
+    const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
     const d = document.getElementById("debugConsole");
-    if (!d) return;
-    const p = document.createElement("p");
-    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    p.className = isError ? "error" : "info";
-    d.appendChild(p);
-    d.scrollTop = d.scrollHeight;
-    if (isError) console.error(msg); else console.log(msg);
+    if (d) {
+      const p = document.createElement("p");
+      p.textContent = line;
+      p.className = isError ? "error" : "info";
+      d.appendChild(p);
+      d.scrollTop = d.scrollHeight;
+    }
+    // Always log to console as fallback
+    if (isError) console.error(line); else console.log(line);
   }
   function saveSettings() {
     const settings = {
@@ -399,7 +402,7 @@
     const providers = (Array.isArray(timestamps) ? timestamps : []).map(ts => resolveProviderForTimestamp(chainIdOrProvider, ts, now, coords));
 
     // Debug: log chosen providers per timestamp
-    try { window.logDebug && window.logDebug(`requestWeatherByChain: providers per timestamp = ${JSON.stringify(providers)}`); } catch(e){}
+    try { window.logDebug && window.logDebug(`requestWeatherByChain providers=${JSON.stringify(providers)}`); } catch(e){ console.log('providers debug', providers); }
 
     // Group indices by provider
     const groups = {};
@@ -409,7 +412,7 @@
       groups[prov].times.push(timestamps[idx]);
     });
 
-    try { window.logDebug && window.logDebug(`requestWeatherByChain: groups = ${JSON.stringify(Object.keys(groups))}`); } catch(e){}
+    try { window.logDebug && window.logDebug(`requestWeatherByChain groups=${JSON.stringify(Object.keys(groups))}`); } catch(e){ console.log('groups debug', Object.keys(groups)); }
 
     const results = {};
     for (const prov of Object.keys(groups)) {

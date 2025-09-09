@@ -100,6 +100,7 @@
     })();
 
     const provs = getCompareProviders();
+    const baseProvs = provs.filter(p => p !== 'ow2_arome_openmeteo'); // NEW: exclude chain from direct fetch
     // Simple key to avoid redundant work triggered by our own DOM changes
     const k0 = steps[0]?.time ? new Date(steps[0].time).toISOString() : "";
     const k1 = steps[steps.length - 1]?.time ? new Date(steps[steps.length - 1].time).toISOString() : "";
@@ -121,7 +122,7 @@
       const daysAhead = (timeAt - now) / MS_PER_DAY;
       const hoursAhead = (timeAt - now) / MS_PER_HOUR;
 
-      for (const prov of provs) {
+      for (const prov of baseProvs) { // CHANGED: use baseProvs
         // Respect horizons
         if ((prov === "meteoblue"   && daysAhead > (horizons.METEOBLUE_MAX_DAYS   || 7))  ||
             (prov === "openweather" && daysAhead > (horizons.OPENWEATHER_MAX_DAYS || 2))  ||
@@ -203,10 +204,45 @@
       }
     }
 
+    // NEW: local fallback resolver if app-level one missing
+    function localChainResolve(chainId, ts, nowRef, loc) {
+      if (chainId !== 'ow2_arome_openmeteo') return null;
+      const diffH = (new Date(ts) - nowRef) / MS_PER_HOUR;
+      if (diffH <= 2) return 'openweather';
+      if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
+      return 'openmeteo';
+    }
+
+    // NEW: Build chain row (ow2_arome_openmeteo) AFTER base providers fetched (always attempt if present in provs)
+    const chainId = 'ow2_arome_openmeteo';
+    if (provs.includes(chainId)) {
+      const resolverExternal = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp || null;
+      const resolver = resolverExternal || localChainResolve;
+      const chainsExternal = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
+      const chainEnabled = chainsExternal[chainId] || chainId === 'ow2_arome_openmeteo';
+      if (resolver && chainEnabled) {
+        const arr = [];
+        for (let i=0;i<steps.length;i++) {
+          const base = steps[i];
+          let effProv = resolver(chainId, base.time, now, { lat: base.lat, lon: base.lon }) || 'openmeteo';
+          if (!compareData[effProv] || !compareData[effProv][i]) effProv = 'openmeteo';
+          const src = (compareData[effProv] && compareData[effProv][i]) ? compareData[effProv][i] : null;
+          if (src && src.temp != null) {
+            const clone = { ...src, provider: chainId, _effProv: effProv };
+            arr.push(clone);
+            hasAny[chainId] = true;
+          } else {
+            arr.push(blankStep(chainId, base));
+          }
+        }
+        compareData[chainId] = arr;
+      }
+    }
+
     // Filter providers without any usable data
-    const order = ["openmeteo","aromehd","meteoblue","openweather"];
+    const order = ["openmeteo","aromehd","ow2_arome_openmeteo","meteoblue","openweather"];
     const filtered = {};
-    order.forEach(k => { if (compareData[k] && hasAny[k]) filtered[k] = compareData[k]; });
+    order.forEach(k => { if (compareData[k] && (hasAny[k] || k === 'ow2_arome_openmeteo')) filtered[k] = compareData[k]; });
 
     // Baseline for summary (prefer OM). Markers are disabled in compare mode.
     const baseline = filtered.openmeteo || filtered.aromehd || filtered.meteoblue || filtered.openweather || [];
@@ -229,7 +265,11 @@
     const hasMB  = ((document.getElementById("apiKey")?.value || "").trim().length >= 5);
     const hasOWM = ((document.getElementById("apiKeyOW")?.value || "").trim().length >= 5);
     if (hasMB)  provs.push("meteoblue");
-    if (hasOWM) provs.push("openweather");
+    if (hasOWM) {
+      provs.push("openweather");
+      // NEW: include chain id when OpenWeather key present
+      provs.push("ow2_arome_openmeteo");
+    }
     return provs;
   }
 
@@ -397,16 +437,13 @@
 
   function buildCompareCell(step) {
     if (!step || step.temp == null) return "-";
+    // Support chain: underlying effective provider stored in _effProv
     const prov = step.provider;
-    // Use derived category for AROME‑HD to avoid borrowing Open‑Meteo codes
-    const iconClass =
-      prov === "meteoblue"
-        ? (window.cw.icons?.mb ? window.cw.icons.mb(step.weatherCode, step.isDaylight) : "")
-        : prov === "openweather"
-        ? (window.cw.icons?.ow ? window.cw.icons.ow(step.weatherCode, step.isDaylight) : "")
-        : (prov === "aromehd" && step._derivedCat)
-        ? categoryToIconClass(step._derivedCat, step.isDaylight)
-        : (window.cw.icons?.om ? window.cw.icons.om(step.weatherCode, step.isDaylight) : "");
+    const eff = step._effProv || prov;
+    let iconClass = "";
+    if (eff === "meteoblue") iconClass = (window.cw.icons?.mb ? window.cw.icons.mb(step.weatherCode, step.isDaylight) : "");
+    else if (eff === "openweather") iconClass = (window.cw.icons?.ow ? window.cw.icons.ow(step.weatherCode, step.isDaylight) : "");
+    else iconClass = (window.cw.icons?.om ? window.cw.icons.om(step.weatherCode, step.isDaylight) : "");
 
     const tempTxt = (step.temp != null && Number.isFinite(Number(step.temp))) ? `${Math.round(Number(step.temp))}º` : "-";
     const ws = (step.windSpeed != null) ? Number(step.windSpeed).toFixed(1) : "-";
@@ -459,7 +496,6 @@
     const table = document.getElementById("weatherTable");
     if (!table) return;
     table.innerHTML = "";
-    // Mark table for compare-specific styling
     table.classList.add("compare-mode");
 
     const thead = document.createElement("thead");
@@ -475,16 +511,13 @@
     const lon = baseline[0]?.lon ?? 0;
     const rawTime = baseline[0]?.time;
     const dateStr = (rawTime instanceof Date ? rawTime : new Date(rawTime || Date.now())).toISOString().substring(0,10);
-    // Compare mode: do not render route summary in the sticky first cell
     const summaryHTML = "";
-    // Always include civil dawn/dusk as well as sunrise/sunset in compare mode
     const sunHTML = buildSunHeaderFull(lat, lon, dateStr);
     firstCell.innerHTML = window.cw.summary && window.cw.summary.buildCombinedHeaderHTML
       ? window.cw.summary.buildCombinedHeaderHTML(summaryHTML, sunHTML)
       : (summaryHTML + sunHTML);
     row.appendChild(firstCell);
 
-    // Small screens: ensure compact summary exists and show ONLY sun block in compare mode
     (function upsertCompactSummarySunOnly() {
       try {
         const panel = document.getElementById("controlsPanel");
@@ -495,7 +528,7 @@
         if (!cs) {
           cs = document.createElement("div");
           cs.id = "compactSummary";
-          cs.className = "compact-summary";
+            cs.className = "compact-summary";
           cs.innerHTML = html;
           panel.insertBefore(cs, wrap);
         } else {
@@ -516,18 +549,15 @@
       let distText = "";
       if (Number.isFinite(m)) {
         const convertedM = distanceUnit === "mi" ? m * 0.000621371 : m;
-        if (Math.round(m) === 0) distText = `0 ${unitKm}`;
-        else if (i === baseline.length - 1) {
+        if (Math.round(m) === 0) distText = `0 ${unitKm}`; else if (i === baseline.length - 1) {
           distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
-        } else if (convertedM < 1000) distText = `${convertedM.toFixed(1)} ${unitM}`;
-        else distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
+        } else if (convertedM < 1000) distText = `${convertedM.toFixed(1)} ${unitM}`; else distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
       }
       const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
       const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
       let iconHtml = "";
       if (Number.isFinite(m)) {
-        if (Math.round(m) === 0) iconHtml = `<img src="${startIconUrl}" class="start-icon" alt="" />`;
-        else if (Math.round(m) === Math.round(maxM)) iconHtml = `<img src="${endIconUrl}" class="end-icon" alt="" />`;
+        if (Math.round(m) === 0) iconHtml = `<img src="${startIconUrl}" class="start-icon" alt="" />`; else if (Math.round(m) === Math.round(maxM)) iconHtml = `<img src="${endIconUrl}" class="end-icon" alt="" />`;
       }
       th.innerHTML = `
         <div class="cell-row${iconHtml ? '' : ' no-icon'}">
@@ -544,13 +574,12 @@
     thead.appendChild(row);
 
     const tbody = document.createElement("tbody");
-    const provOrder = ["openmeteo","aromehd","meteoblue","openweather"].filter(p => compareData[p]);
+    const provOrder = ["openmeteo","aromehd","ow2_arome_openmeteo","meteoblue","openweather"].filter(p => compareData[p]);
     provOrder.forEach((prov) => {
       const r = document.createElement("tr");
       const th = document.createElement("th");
-      // Match metric label styling: icon + label text + abbrev
       th.innerHTML = `<i class="wi wi-cloud label-ico" aria-hidden="true"></i> <span class="label-text">${labelForProvider(prov)}</span><span class="label-abbrev">${getProviderAbbrev(prov)}</span>`;
-      th.classList.add("provider-cell"); // enables sticky/background styling in compare mode
+      th.classList.add("provider-cell");
       th.scope = "row";
       r.appendChild(th);
       const arr = compareData[prov] || [];
@@ -567,7 +596,6 @@
     table.appendChild(thead);
     table.appendChild(tbody);
 
-    // Ensure minimum width consistent with CSS variables
     (function ensureMinWidth() {
       const root = getComputedStyle(document.documentElement);
       const toPx = (v) => parseFloat(v) || 0;
@@ -582,6 +610,7 @@
   function labelForProvider(p) {
     if (p === "openmeteo") return "Open‑Meteo";
     if (p === "aromehd")   return "AROME‑HD";
+    if (p === "ow2_arome_openmeteo") return "OPW→AROME"; // NEW chain label
     if (p === "meteoblue") return "MeteoBlue";
     if (p === "openweather") return "OpenWeather";
     return String(p || "");
@@ -590,6 +619,7 @@
   function getProviderAbbrev(p) {
     if (p === "openmeteo") return "OMT";
     if (p === "aromehd")   return "ARM";
+    if (p === "ow2_arome_openmeteo") return "OARM"; // NEW chain abbrev
     if (p === "meteoblue") return "MTB";
     if (p === "openweather") return "OWM";
     return String(p || "").substring(0, 3).toUpperCase();

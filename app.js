@@ -410,8 +410,8 @@ function segmentRouteByTime(geojson) {
   }
 
   //const dateISO = startDateTime.toISOString().substring(0, 10);
-  console.log("steps ejemplo:", steps[0]);
-  console.log("weatherData ejemplo:", weatherData[0]);
+  //console.log("steps ejemplo:", steps[0]);
+  // console.log("weatherData ejemplo:", weatherData[0]);
 
   fetchWeatherForSteps(steps, timeSteps);
 }
@@ -480,9 +480,32 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
       let prov = apiSource;
 
+      // NEW: resolve chain provider (e.g. ow2_arome_openmeteo) per timestamp
+      try {
+        const chains = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
+        const isChain = !!chains[String(apiSource || '').toLowerCase()];
+        if (isChain) {
+          const resolver = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp;
+          if (typeof resolver === 'function') {
+            const eff = resolver(apiSource, timeAt, now, { lat: p.lat, lon: p.lon });
+            if (eff) prov = eff;
+          }
+        }
+      } catch(e){ console.warn('chain resolve error', e); }
+
+      // Determine API key for this effective provider (chain-aware)
+      const stepApiKey = (prov === 'meteoblue') ? (getVal('apiKey') || '') : (prov === 'openweather') ? (getVal('apiKeyOW') || '') : '';
+      const hasKeyProv = stepApiKey.trim().length >= 5;
+
+      // store provider on step so later processing knows real source (may still change if fallback)
+      p.provider = prov;
+      if (i === 0) logDebug(`chainMode=${apiSource} -> first provider=${prov}`);
+      logDebug(`step ${i+1}/${steps.length} effectiveProv(pre)=${prov} t=${timeAt.toISOString()}`);
+
       // Hard-fail skip for MB
       if (prov === "meteoblue" && providerHardFailCode) {
         prov = "openmeteo";
+        p.provider = prov;
         usedFallback = true;
         usedFallbackError = true;
         if (!hardFailLogged) {
@@ -493,28 +516,31 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       // Hard-fail skip for OWM
       if (prov === "openweather" && providerHardFailCodeOWM) {
         prov = "openmeteo";
+        p.provider = prov;
         usedFallback = true;
         usedFallbackError = true;
         logDebug(t("provider_disabled_after_errors", { prov: "OpenWeather" }), true);
       }
 
-      // Missing key fallback
-      if ((prov === "meteoblue" || prov === "openweather") && !hasKey) {
+      // Missing key fallback (chain-aware)
+      if ((prov === "meteoblue" || prov === "openweather") && !hasKeyProv) {
         prov = "openmeteo";
+        p.provider = prov;
         missingKeyFallback = true;
       }
 
       // NEW: AROME‑HD policy — within 48h AND within coverage; otherwise fallback to Open‑Meteo
-      // (calls isAromeHdCovered defined above)
       if (prov === "aromehd") {
         if (hoursAhead > AROMEHD_MAX_HOURS || !isAromeHdCovered(p.lat, p.lon)) {
           prov = "openmeteo";
+          p.provider = prov;
         }
       }
 
       // Horizon checks
       if (prov === "meteoblue" && daysAhead > METEOBLUE_MAX_DAYS) {
         prov = "openmeteo";
+        p.provider = prov;
         usedFallback = true;
         usedFallbackHorizon = true;
         horizonDaysUsed = METEOBLUE_MAX_DAYS;
@@ -525,6 +551,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       }
       if (prov === "openweather" && daysAhead > OPENWEATHER_MAX_DAYS) {
         prov = "openmeteo";
+        p.provider = prov;
         usedFallback = true;
         usedFallbackHorizon = true;
         horizonDaysUsed = OPENWEATHER_MAX_DAYS;
@@ -545,6 +572,9 @@ async function fetchWeatherForSteps(steps, timeSteps) {
         continue;
       }
 
+      // After all fallbacks, update provider on step before cache/fetch
+      p.provider = prov;
+
       const keyPrim = `cw_weather_${prov}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
       const cachedPrim = getCache(keyPrim);
       if (cachedPrim) {
@@ -556,60 +586,38 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       let res, json, ok = false;
 
       try {
-        const urlPrim = buildProviderUrl(prov, p, timeAt, apiKeyFinal, windUnit, tempUnit);
+        const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit);
         res = await fetch(urlPrim);
         if (res.ok) {
           json = await res.json();
-          // AROME‑HD often lacks precip_probability, weathercode, cloud_cover and uv_index.
-          // Fetch best_match (default Open‑Meteo) and backfill those arrays.
           if (prov === "aromehd") {
             try {
-              const urlStd = buildProviderUrl("openmeteo", p, timeAt, apiKeyFinal, windUnit, tempUnit);
+              const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
               const resStd = await fetch(urlStd);
               if (resStd.ok) {
                 const std = await resStd.json();
                 const stdH = std?.hourly || {};
-                const mergeKeys = [
-                  "precipitation_probability",
-                  "weathercode",
-                  "cloud_cover",
-                  "uv_index",
-                  "is_day",
-                ];
+                const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
                 json.hourly = json.hourly || {};
-                mergeKeys.forEach((k) => {
-                  if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k];
-                });
-                if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) {
-                  json.hourly.time = stdH.time;
-                }
+                mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
+                if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
               }
-            } catch (_) { /* ignore */ }
-
-            // NEW: If AROME‑HD payload looks invalid (outside domain), fallback to Open‑Meteo
+            } catch (_) {}
             if (aromeResponseLooksInvalid(json)) {
               const prov2 = "openmeteo";
               const key2 = `cw_weather_${prov2}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
               const cached2 = getCache(key2);
-              if (cached2) {
-                weatherData.push({ ...p, provider: prov2, weather: cached2 });
-                continue;
-              }
-              const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
+              if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
+              const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
               const res2 = await fetch(url2);
-              if (res2.ok) {
-                const json2 = await res2.json();
-                weatherData.push({ ...p, provider: prov2, weather: json2 });
-                setCache(key2, json2);
-                continue;
-              } else {
-                weatherData.push({ ...p, provider: prov2, weather: null });
-                continue;
-              }
+              if (res2.ok) { const json2 = await res2.json(); weatherData.push({ ...p, provider: prov2, weather: json2 }); setCache(key2, json2); logDebug(`AROME invalido paso ${i+1}, fallback OM`); continue; }
+              weatherData.push({ ...p, provider: prov2, weather: null });
+              continue;
             }
           }
           ok = true;
         } else {
+          // existing error handling left unchanged
           const bodyText = await res.text().catch(() => "");
           const code = classifyProviderError(prov, res.status, bodyText);
 
@@ -736,9 +744,10 @@ async function fetchWeatherForSteps(steps, timeSteps) {
         logDebug(`Datos recibidos paso ${i + 1} (${prov})`);
         await new Promise(r => setTimeout(r, 70));
       } else {
-        // store empty if nothing worked
         weatherData.push({ ...p, provider: prov, weather: null });
       }
+
+      logDebug(`step ${i+1}/${steps.length} effectiveProv(final)=${prov}`);
     }
 
 

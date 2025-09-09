@@ -127,7 +127,7 @@
           sel.value = firstValid.value;
           apiSource = firstValid.value;
           saveSettings();
-          try { window.setNotice && window.setNotice(t('api_provider_changed', { prov: firstValid.text }), 'info'); } catch(_){}
+          // Removed provider change notice
         }
       }
     } catch (e) { console.warn('updateProviderOptions error', e); }
@@ -436,7 +436,6 @@
         el.addEventListener("change", () => {
           if (id === "apiSource") {
             window.apiSource = el.value;
-            window.logDebug(window.t("api_provider_changed", { prov: window.apiSource }));
 
             if ((window.apiSource === "meteoblue" || window.apiSource === "openweather") && !window.getVal("apiKey") && !window.getVal("apiKeyOW")) {
               const provName = window.apiSource === "openweather" ? "OpenWeather" : "MeteoBlue";
@@ -534,10 +533,7 @@
         try {
           apiSource = sel.value;
           saveSettings();
-          // Only notify user about provider switch when weather data/table is present
-          if (window.weatherData && Array.isArray(window.weatherData) && window.weatherData.length) {
-            window.setNotice(t('api_provider_changed', { prov: sel.options[sel.selectedIndex].text }), 'info');
-          }
+          // Provider change notice suppressed intentionally
         } catch(e){ console.warn(e); }
       });
     }
