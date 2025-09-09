@@ -314,33 +314,27 @@
   }
 
   // Provider chain utilities: choose provider based on time distance from NOW (not route start)
-  // Chain spec example: { id: 'ow2_arome_openmeteo', steps: [ { provider:'openweathermap', fromNowHours:0, toNowHours:2 }, { provider:'arome', fromNowHours:2, toNowHours:36 }, { provider:'openmeteo', fromNowHours:36, toNowHours: Infinity } ] }
+  // Chain spec example: { id: 'ow2_arome_openmeteo', steps: [ { provider:'openweather', fromNowHours:0, toNowHours:2 }, { provider:'aromehd', fromNowHours:2, toNowHours:36 }, { provider:'openmeteo', fromNowHours:36, toNowHours: Infinity } ] }
   const providerChains = {
-    // OpenWeatherMap for first 0-2h, Arome for 2-36h, OpenMeteo afterwards
+    // OpenWeatherMap for first 0-2h, Arome-HD for 2-36h, OpenMeteo afterwards
     ow2_arome_openmeteo: {
       id: 'ow2_arome_openmeteo',
       label: 'OWM 0–2h → Arome 2–36h → OpenMeteo',
       steps: [
-        { provider: 'openweathermap', fromNowHours: 0, toNowHours: 2 },
-        { provider: 'arome', fromNowHours: 2, toNowHours: 36 },
+        { provider: 'openweather', fromNowHours: 0, toNowHours: 2 },
+        { provider: 'aromehd', fromNowHours: 2, toNowHours: 36 },
         { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
       ]
     },
-    // Existing Arome -> OpenMeteo chain (Arome near-term, OpenMeteo beyond)
+    // Arome-HD -> OpenMeteo chain (Arome near-term, OpenMeteo beyond)
     arome_openmeteo: {
       id: 'arome_openmeteo',
       label: 'Arome 0–36h → OpenMeteo 36h+',
       steps: [
-        { provider: 'arome', fromNowHours: 0, toNowHours: 36 },
+        { provider: 'aromehd', fromNowHours: 0, toNowHours: 36 },
         { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
       ]
     }
-  };
-
-  // Aliases so UI option names can map to chain IDs
-  const providerAliases = {
-    // the old 'aromehd' selector behaves as the 'arome_openmeteo' chain
-    aromehd: 'arome_openmeteo'
   };
 
   // Map an array of timestamps to providers for the given chainId (measured from nowDate)
@@ -369,33 +363,30 @@
 
   // Resolve provider for a given chainId or plain provider id. Returns a provider id string.
   function resolveProviderForTimestamp(chainOrProvider, timestamp, nowDate, coords) {
-    // accept aliases from UI (e.g. 'aromehd')
     if (!chainOrProvider) return null;
-    let s = String(chainOrProvider).toLowerCase();
-    if (providerAliases[s]) s = providerAliases[s];
-    // continue with existing logic using s
+    const s = String(chainOrProvider).toLowerCase();
+
+    // If it's a known chain, pick the provider for this timestamp (steps use canonical provider ids)
     if (providerChains[s]) {
       const candidate = getProviderForTimestamp(s, timestamp, nowDate);
       // If candidate is operational at coords, return it.
       if (isProviderOperational(candidate, coords?.lat, coords?.lon, timestamp)) return candidate;
-      // Try to find an alternative step in the chain that covers the same timestamp and is operational
+      // Otherwise try other steps in the chain for availability
       const chain = providerChains[s];
       for (const step of chain.steps) {
         const prov = step.provider;
-        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) {
-          const h = hoursFromNow(timestamp, nowDate);
-          const from = Number(step.fromNowHours || 0);
-          const to = Number(step.toNowHours || Infinity);
-          if (h >= from && h < to) return prov;
-        }
+        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) return prov;
       }
+      // fallback
       return 'openmeteo';
     }
-    // plain provider id: if not operational, fallback to openmeteo
-    if (s === 'openweathermap' && !getVal('apiKeyOW')) {
-      if (isProviderOperational('arome', coords?.lat, coords?.lon, timestamp)) return 'arome';
+
+    // Plain provider id: special-case OpenWeather without key -> force fallback to Arome/OpenMeteo
+    if (s === 'openweather' && !getVal('apiKeyOW')) {
+      if (isProviderOperational('aromehd', coords?.lat, coords?.lon, timestamp)) return 'aromehd';
       return 'openmeteo';
     }
+
     if (isProviderOperational(s, coords?.lat, coords?.lon, timestamp)) return s;
     return 'openmeteo';
   }

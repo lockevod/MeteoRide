@@ -115,7 +115,7 @@
         if (opt) opt.disabled = !!disabled;
       }
       // OpenWeather-dependent options
-      setDisabled('openweathermap', !hasOW);
+      setDisabled('openweather', !hasOW);
       setDisabled('ow2_arome_openmeteo', !hasOW);
       // MeteoBlue option (if exists)
       setDisabled('meteoblue', !hasMB);
