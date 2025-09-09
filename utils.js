@@ -423,6 +423,56 @@
     return { groups, results };
   }
 
+  // Helper: hours difference from now
+  function hoursFromNow(timestamp, nowDate) {
+    const now = nowDate instanceof Date ? nowDate : new Date(nowDate || Date.now());
+    const t = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    return (t.getTime() - now.getTime()) / (1000 * 60 * 60);
+  }
+
+  // Basic AROME-HD coverage (same bbox as app.js)
+  function isAromeHdCoveredLatLon(lat, lon) {
+    if (lat == null || lon == null) return false;
+    const la = Number(lat);
+    const lo = Number(lon);
+    return la >= 39.0 && la <= 52.5 && lo >= -10.5 && lo <= 16.5;
+  }
+
+  // Simple operational availability checker used by resolver
+  function isProviderOperational(providerId, lat, lon, timestamp, nowDate) {
+    const pid = String(providerId || '').toLowerCase();
+    // AROME-HD: limited bbox + short horizon
+    if (pid === 'aromehd') {
+      const h = hoursFromNow(timestamp, nowDate);
+      if (h < 0) return false;
+      const withinHours = h <= 48; // app policy
+      return withinHours && isAromeHdCoveredLatLon(lat, lon);
+    }
+    // OpenWeather/OpenMeteo/MeteoBlue: assume operational (network/key checks elsewhere)
+    return true;
+  }
+
+  // Determine provider for a single timestamp given a chain id
+  function getProviderForTimestamp(chainId, timestamp, nowDate) {
+    if (!chainId) return null;
+    const cid = String(chainId).toLowerCase();
+    const chain = providerChains[cid];
+    if (!chain || !Array.isArray(chain.steps) || chain.steps.length === 0) return String(chainId).toLowerCase();
+    const h = hoursFromNow(timestamp, nowDate);
+    for (const step of chain.steps) {
+      const from = Number(step.fromNowHours || 0);
+      const to = Number(step.toNowHours || Infinity);
+      if (h >= from && h < to) return String(step.provider).toLowerCase();
+    }
+    // fallback to last step provider
+    return String(chain.steps[chain.steps.length - 1].provider).toLowerCase();
+  }
+
+  // Alias for convenience
+  function assignProvidersToTimestamps(chainId, timestamps, nowDate) {
+    return pickProvidersForRoute(chainId, timestamps, nowDate);
+  }
+
   // Expose globally for compatibility
   window.t = t;
   window.logDebug = logDebug;
