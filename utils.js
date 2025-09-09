@@ -398,6 +398,9 @@
     // Determine provider for each timestamp (pass coords so availability checks work)
     const providers = (Array.isArray(timestamps) ? timestamps : []).map(ts => resolveProviderForTimestamp(chainIdOrProvider, ts, now, coords));
 
+    // Debug: log chosen providers per timestamp
+    try { window.logDebug && window.logDebug(`requestWeatherByChain: providers per timestamp = ${JSON.stringify(providers)}`); } catch(e){}
+
     // Group indices by provider
     const groups = {};
     providers.forEach((prov, idx) => {
@@ -405,6 +408,8 @@
       groups[prov].indices.push(idx);
       groups[prov].times.push(timestamps[idx]);
     });
+
+    try { window.logDebug && window.logDebug(`requestWeatherByChain: groups = ${JSON.stringify(Object.keys(groups))}`); } catch(e){}
 
     const results = {};
     for (const prov of Object.keys(groups)) {

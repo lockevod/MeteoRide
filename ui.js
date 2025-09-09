@@ -531,8 +531,14 @@
     const sel = document.getElementById('apiSource');
     if (sel) {
       sel.addEventListener('change', function(ev){
-        try { apiSource = sel.value; saveSettings(); window.setNotice(t('api_provider_changed', { prov: sel.options[sel.selectedIndex].text }), 'info'); }
-        catch(e){ console.warn(e); }
+        try {
+          apiSource = sel.value;
+          saveSettings();
+          // Only notify user about provider switch when weather data/table is present
+          if (window.weatherData && Array.isArray(window.weatherData) && window.weatherData.length) {
+            window.setNotice(t('api_provider_changed', { prov: sel.options[sel.selectedIndex].text }), 'info');
+          }
+        } catch(e){ console.warn(e); }
       });
     }
 
