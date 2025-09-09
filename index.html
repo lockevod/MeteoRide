@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons-wind.min.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.css" />
+<link rel="manifest" href="manifest.json" />
 
 <!-- iOS PWA meta -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -376,6 +377,58 @@
     })();
   })();
   // --- END: client-only GPX handoff (trimmed) ---
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // Handle shared GPX from service worker
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('shared')) {
+      loadSharedGPX();
+    }
+
+    // Listen for messages from service worker
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'cw-shared-gpx') {
+        loadSharedGPX();
+      }
+    });
+
+    async function loadSharedGPX() {
+      try {
+        const db = await openIndexedDB();
+        const tx = db.transaction('files', 'readonly');
+        const store = tx.objectStore('files');
+        const request = store.get('gpx');
+        request.onsuccess = () => {
+          const data = request.result;
+          if (data && data.text) {
+            // Parse and load the GPX
+            if (window.cw && window.cw.loadGPXFromText) {
+              window.cw.loadGPXFromText(data.text, data.name || 'shared.gpx');
+            } else {
+              console.warn('GPX loader not available');
+            }
+            // Clear the shared data
+            const delTx = db.transaction('files', 'readwrite');
+            delTx.objectStore('files').delete('gpx');
+          }
+        };
+        request.onerror = () => console.error('Failed to load shared GPX');
+      } catch (e) {
+        console.error('Error loading shared GPX:', e);
+      }
+    }
+
+    function openIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('cw_shared_db', 1);
+        request.onupgradeneeded = (e) => {
+          e.target.result.createObjectStore('files');
+        };
+        request.onsuccess = (e) => resolve(e.target.result);
+        request.onerror = (e) => reject(e);
+      });
+    }
+  });
 </script>
 </body>
 </html>
