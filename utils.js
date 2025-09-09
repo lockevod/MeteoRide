@@ -316,22 +316,22 @@
   // Provider chain utilities: choose provider based on time distance from NOW (not route start)
   // Chain spec example: { id: 'ow2_arome_openmeteo', steps: [ { provider:'openweather', fromNowHours:0, toNowHours:2 }, { provider:'aromehd', fromNowHours:2, toNowHours:36 }, { provider:'openmeteo', fromNowHours:36, toNowHours: Infinity } ] }
   const providerChains = {
-    // OpenWeatherMap for first 0-2h, Arome-HD for 2-36h, OpenMeteo afterwards
-    ow2_arome_openmeteo: {
-      id: 'ow2_arome_openmeteo',
-      label: 'OWM 0–2h → Arome 2–36h → OpenMeteo',
+    // AromeHD -> OpenMeteo chain (AromeHD near-term, OpenMeteo beyond)
+    aromehd: {
+      id: 'aromehd',
+      label: 'AromeHD',
       steps: [
-        { provider: 'openweather', fromNowHours: 0, toNowHours: 2 },
-        { provider: 'aromehd', fromNowHours: 2, toNowHours: 36 },
+        { provider: 'aromehd', fromNowHours: 0, toNowHours: 36 },
         { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
       ]
     },
-    // Arome-HD -> OpenMeteo chain (Arome near-term, OpenMeteo beyond)
-    arome_openmeteo: {
-      id: 'arome_openmeteo',
-      label: 'Arome 0–36h → OpenMeteo 36h+',
+    // OpenWeather -> AromeHD -> OpenMeteo
+    ow2_arome_openmeteo: {
+      id: 'ow2_arome_openmeteo',
+      label: 'OPW → AromeHD',
       steps: [
-        { provider: 'aromehd', fromNowHours: 0, toNowHours: 36 },
+        { provider: 'openweather', fromNowHours: 0, toNowHours: 2 },
+        { provider: 'aromehd', fromNowHours: 2, toNowHours: 36 },
         { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
       ]
     }

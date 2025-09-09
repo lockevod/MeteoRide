@@ -90,19 +90,18 @@
       const sel = document.getElementById('apiSource');
       if (!sel) return;
       // Ensure new chain option exists
-      const exists = !!Array.from(sel.options).find(o => o.value === 'ow2_arome_openmeteo');
-      if (!exists) {
+      const hasAromeOpt = !!Array.from(sel.options).find(o => o.value === 'aromehd');
+      if (!hasAromeOpt) {
         const opt = document.createElement('option');
-        opt.value = 'ow2_arome_openmeteo';
-        opt.text = 'OpenWeather 0-2h → Arome 2-36h → OpenMeteo';
+        opt.value = 'aromehd';
+        opt.text = 'AromeHD';
         sel.add(opt);
       }
-      // Ensure arome_openmeteo option exists
-      const exists2 = !!Array.from(sel.options).find(o => o.value === 'arome_openmeteo');
-      if (!exists2) {
+      const hasOwArome = !!Array.from(sel.options).find(o => o.value === 'ow2_arome_openmeteo');
+      if (!hasOwArome) {
         const opt2 = document.createElement('option');
-        opt2.value = 'arome_openmeteo';
-        opt2.text = 'Arome 0-36h → OpenMeteo';
+        opt2.value = 'ow2_arome_openmeteo';
+        opt2.text = 'OPW + AromeHD';
         sel.add(opt2);
       }
 
