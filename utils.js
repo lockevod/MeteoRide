@@ -337,82 +337,65 @@
     }
   };
 
-  // Heuristics for provider operational areas (tunable). These are conservative bounding boxes.
-  const providerOperationalAreas = {
-    // AROME: regional model; approximate bounding box covering mainland France + Corsica
-    arome: [
-      { minLat: 41.0, maxLat: 51.5, minLon: -5.5, maxLon: 10.5 }, // mainland France
-      { minLat: 41.5, maxLat: 43.0, minLon: 8.5, maxLon: 10.5 }   // Corsica (approx)
-    ]
-    // Other providers assumed global by default (openmeteo, openweathermap)
+  // Aliases so UI option names can map to chain IDs
+  const providerAliases = {
+    // the old 'aromehd' selector behaves as the 'arome_openmeteo' chain
+    aromehd: 'arome_openmeteo'
   };
 
-  function isPointInBoxes(lat, lon, boxes) {
-    if (!boxes || !Array.isArray(boxes)) return false;
-    for (const b of boxes) {
-      if (lat >= b.minLat && lat <= b.maxLat && lon >= b.minLon && lon <= b.maxLon) return true;
-    }
-    return false;
+  // Map an array of timestamps to providers for the given chainId (measured from nowDate)
+  function pickProvidersForRoute(chainId, timestamps, nowDate) {
+    if (!Array.isArray(timestamps)) return [];
+    return timestamps.map(ts => getProviderForTimestamp(chainId, ts, nowDate));
   }
 
-  // Check if a provider is operational at given coords and optional timestamp.
-  // By default openmeteo and openweathermap are treated as global; arome uses bounding boxes.
-  function isProviderOperational(providerId, lat, lon, _timestamp) {
-    if (!providerId) return false;
-    const pid = String(providerId).toLowerCase();
-    if (!lat && !lon) {
-      // No location provided -> assume operational (defer to fetchers to fail if not)
-      return true;
+  // Summarize consecutive provider assignments into segments [{provider, fromIndex, toIndex, fromTime, toTime}]
+  function summarizeProviderSegments(providerList, timestamps) {
+    const segs = [];
+    if (!Array.isArray(providerList) || providerList.length === 0) return segs;
+    let curProv = providerList[0];
+    let startIdx = 0;
+    for (let i = 1; i < providerList.length; i++) {
+      if (providerList[i] !== curProv) {
+        segs.push({ provider: curProv, fromIndex: startIdx, toIndex: i - 1, fromTime: timestamps[startIdx], toTime: timestamps[i - 1] });
+        curProv = providerList[i];
+        startIdx = i;
+      }
     }
-    const nLat = Number(lat);
-    const nLon = Number(lon);
-    if (!Number.isFinite(nLat) || !Number.isFinite(nLon)) return true;
-
-    if (pid === 'arome') {
-      return isPointInBoxes(nLat, nLon, providerOperationalAreas.arome);
-    }
-    // Default: assume available
-    return true;
+    // final
+    segs.push({ provider: curProv, fromIndex: startIdx, toIndex: providerList.length - 1, fromTime: timestamps[startIdx], toTime: timestamps[providerList.length - 1] });
+    return segs;
   }
 
-  // Update resolveProviderForTimestamp to accept optional coords and perform availability + API-key fallback.
+  // Resolve provider for a given chainId or plain provider id. Returns a provider id string.
   function resolveProviderForTimestamp(chainOrProvider, timestamp, nowDate, coords) {
+    // accept aliases from UI (e.g. 'aromehd')
     if (!chainOrProvider) return null;
-    const s = String(chainOrProvider);
-    // If it's a known chain, find the candidate provider first
+    let s = String(chainOrProvider).toLowerCase();
+    if (providerAliases[s]) s = providerAliases[s];
+    // continue with existing logic using s
     if (providerChains[s]) {
+      const candidate = getProviderForTimestamp(s, timestamp, nowDate);
+      // If candidate is operational at coords, return it.
+      if (isProviderOperational(candidate, coords?.lat, coords?.lon, timestamp)) return candidate;
+      // Try to find an alternative step in the chain that covers the same timestamp and is operational
       const chain = providerChains[s];
-      const h = hoursFromNow(timestamp, nowDate);
-      // find the primary step index for this timestamp
-      let stepIdx = chain.steps.findIndex(step => {
-        const from = Number(step.fromNowHours || 0);
-        const to = Number(step.toNowHours || Infinity);
-        return h >= from && h < to;
-      });
-      if (stepIdx === -1) stepIdx = 0;
-
-      // Try forward from the ideal step to find an operational and API-key-capable provider
-      for (let i = stepIdx; i < chain.steps.length; i++) {
-        const prov = chain.steps[i].provider;
-        // if OpenWeather selected but no API key, skip
-        if (prov === 'openweathermap' && !getVal('apiKeyOW')) continue;
-        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) return prov;
+      for (const step of chain.steps) {
+        const prov = step.provider;
+        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) {
+          const h = hoursFromNow(timestamp, nowDate);
+          const from = Number(step.fromNowHours || 0);
+          const to = Number(step.toNowHours || Infinity);
+          if (h >= from && h < to) return prov;
+        }
       }
-      // If none found after, try backward from the ideal step
-      for (let i = stepIdx - 1; i >= 0; i--) {
-        const prov = chain.steps[i].provider;
-        if (prov === 'openweathermap' && !getVal('apiKeyOW')) continue;
-        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) return prov;
-      }
-      // No suitable provider in chain -> fallback to OpenMeteo
       return 'openmeteo';
     }
-    // plain provider id: if it's OpenWeather but api key missing, try arome then openmeteo
+    // plain provider id: if not operational, fallback to openmeteo
     if (s === 'openweathermap' && !getVal('apiKeyOW')) {
       if (isProviderOperational('arome', coords?.lat, coords?.lon, timestamp)) return 'arome';
       return 'openmeteo';
     }
-    // otherwise, check operational availability
     if (isProviderOperational(s, coords?.lat, coords?.lon, timestamp)) return s;
     return 'openmeteo';
   }
