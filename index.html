@@ -15,6 +15,92 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" /> <!-- NEW: recommended meta to silence deprecation warning -->
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+<!-- Minor visual fixes: align header buttons and normalize speed input/presets styling -->
+<style>
+    /* Header/nav buttons: align icon + text vertically */
+    header nav button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+    }
+    /* Ensure the emoji/icon inside debug button is baseline-aligned and not taller */
+    #toggleDebug .debug-ico,
+    #toggleConfig .config-ico,
+    #toggleHelp .help-text {
+      display: inline-block;
+      line-height: 1;
+      vertical-align: middle;
+      transform: translateY(0);
+      font-size: 1em;
+    }
+    #toggleDebug .debug-text,
+    #toggleConfig .config-text {
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+
+    /* Speed input and presets: match the select style (soft grey bg, rounded border, consistent height) */
+    .speed-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .speed-wrap input[type="number"],
+    .speed-wrap .speed-presets {
+      background: var(--input-bg, #f3f4f6);
+      border: 1px solid var(--input-border, #cbd5e1);
+      border-radius: 6px;
+      padding: 6px 8px;
+      height: 36px;
+      box-sizing: border-box;
+      color: inherit;
+      font: inherit;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    /* Reduce number field spinner visual noise on WebKit while keeping functionality */
+    .speed-wrap input[type="number"]::-webkit-outer-spin-button,
+    .speed-wrap input[type="number"]::-webkit-inner-spin-button {
+      margin: 0;
+      opacity: 0.6;
+      -webkit-appearance: none;
+    }
+
+    /* Ensure small-file-btn / file label aligns with the controls */
+    .file-btn.small-file-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 36px;
+      padding: 0 8px;
+      border-radius: 6px;
+      border: 1px solid var(--input-border, #cbd5e1);
+      background: var(--input-bg, #f3f4f6);
+      cursor: pointer;
+    }
+
+    /* On very small screens, slightly reduce paddings to avoid wrapping */
+    @media (max-width: 520px) {
+      header nav button { padding: 6px 8px; gap: 4px; }
+      .speed-wrap input[type="number"],
+      .speed-wrap .speed-presets,
+      .file-btn.small-file-btn {
+        height: 34px;
+        padding: 5px 7px;
+        border-radius: 6px;
+      }
+      /* Ensure debug emoji doesn't push the line height on iOS */
+      #toggleDebug .debug-ico { font-size: 0.98em; }
+    }
+  </style>
 </head>
 <body>
 <header>
@@ -186,725 +272,109 @@
 <script src="ui.js"></script>
 <script src="app.js"></script>
 <script src="gpx-ingest.js"></script>
-<!-- NEW: compare mode (loads after app to reuse hooks) -->
 <script src="compare.js"></script>
+<script src="ui_weather.js"></script>
+<script src="console_debug.js"></script>
 <script>
-// Affordance for horizontal scroll on the weather table (always visible when needed)
-(function () {
-  const c = document.getElementById('weatherTableContainer'); // inner scroller
-  if (!c) return;
-  const w = c.parentElement; // .wtc-wrap (overlay host)
-
-  // Runtime safeguard for small screens (Edge/Safari/iOS quirks)
-  try {
-    const mq900 = window.matchMedia('(max-width: 900px)');
-    const mq700 = window.matchMedia('(max-width: 700px)');
-    const applyTA = () => {
-      if (mq900.matches) {
-        // <=900: enable inertial scrolling on iOS
-        c.style.webkitOverflowScrolling = 'touch';
-      }
-      // <=700: force horizontal pan-only to avoid vertical gesture stealing
-      if (mq700.matches) {
-        c.style.touchAction = 'pan-x';
-      } else if (mq900.matches) {
-        c.style.touchAction = 'pan-x pan-y';
-      } else {
-        c.style.touchAction = 'auto';
-      }
-    };
-    applyTA();
-    (mq900.addEventListener ? mq900.addEventListener('change', applyTA) : mq900.addListener(applyTA));
-    (mq700.addEventListener ? mq700.addEventListener('change', applyTA) : mq700.addListener(applyTA));
-  } catch (_) {}
-
-  function update() {
-    const table = c.querySelector('#weatherTable');
-    const innerWidth = table ? table.scrollWidth : c.scrollWidth;
-    const canScroll = (innerWidth - c.clientWidth) > 2;
-    w.classList.toggle('can-scroll', canScroll);
-    if (!canScroll) {
-      w.classList.remove('at-left','mid','at-right');
-      return;
-    }
-    const atLeft = c.scrollLeft <= 0;
-    const atRight = Math.ceil(c.scrollLeft + c.clientWidth) >= innerWidth;
-    w.classList.toggle('at-left', atLeft);
-    w.classList.toggle('at-right', atRight);
-    w.classList.toggle('mid', !atLeft && !atRight);
-  }
-
-  c.addEventListener('scroll', update);
-
-  // Wheel -> horizontal scroll helper (trackpads/mice)
-  c.addEventListener('wheel', (ev) => {
-    const table = c.querySelector('#weatherTable');
-    const innerWidth = table ? table.scrollWidth : c.scrollWidth;
-    const canScrollX = (innerWidth - c.clientWidth) > 2;
-    if (!canScrollX) return;
-    if (Math.abs(ev.deltaY) > Math.abs(ev.deltaX)) {
-      c.scrollLeft += ev.deltaY;
-      ev.preventDefault();
-    }
-  }, { passive: false });
-
-  // drag-to-scroll helper (click-safe with threshold)
-  let isDown = false, dragging = false, startX = 0, startLeft = 0;
-  const DRAG_THRESH = 6;
-
-  function begin(x) {
-    isDown = true;
-    dragging = false;
-    startX = x;
-    startLeft = c.scrollLeft;
-  }
-  function move(x, ev) {
-    if (!isDown) return;
-    const dx = x - startX;
-    if (!dragging && Math.abs(dx) > DRAG_THRESH) {
-      dragging = true;
-      c.classList.add('dragging');
-      document.body.classList.add('dragging');
-    }
-    if (dragging) {
-      c.scrollLeft = startLeft - dx;
-      if (ev) ev.preventDefault(); // only prevent default while dragging
-    }
-  }
-  function end() {
-    isDown = false;
-    if (dragging) {
-      dragging = false;
-      c.classList.remove('dragging');
-      document.body.classList.remove('dragging');
-    }
-  }
-
-  // Prefer Pointer Events when available (covers mouse + touch uniformly)
-  if (window.PointerEvent) {
-    c.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 && e.pointerType === 'mouse') return;
-      begin(e.clientX);
-      // do NOT preventDefault here to allow clicks if no drag
-    }, { passive: true });
-    c.addEventListener('pointermove', (e) => move(e.clientX, e), { passive: false });
-    const endPtr = () => end();
-    c.addEventListener('pointerup', endPtr, { passive: true });
-    c.addEventListener('pointercancel', endPtr, { passive: true });
-    c.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') end(); }, { passive: true });
-  } else {
-    // Mouse fallback
-    c.addEventListener('mousedown', (e) => begin(e.clientX), { passive: true });
-    window.addEventListener('mousemove', (e) => move(e.clientX, e), { passive: false });
-    window.addEventListener('mouseup', end, { passive: true });
-    // Touch fallback
-    c.addEventListener('touchstart', (e) => {
-      if (!e.touches?.length) return;
-      begin(e.touches[0].clientX);
-      // do NOT preventDefault here
-    }, { passive: true });
-    c.addEventListener('touchmove', (e) => {
-      if (!e.touches?.length) return;
-      move(e.touches[0].clientX, e);
-    }, { passive: false });
-    c.addEventListener('touchend', end, { passive: true });
-    c.addEventListener('touchcancel', end, { passive: true });
-  }
-
-  // ResizeObserver: update on container resize (debounced)
-  let resizeTimeout;
-  const resizeObserver = new ResizeObserver(() => {
-    if (resizeTimeout) clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(update, 150);
-  });
-  resizeObserver.observe(c);
-
-  // MutationObserver: detect table changes (for GPX load + interval changes)
-  const mutObserver = new MutationObserver(update);
-  mutObserver.observe(document.getElementById('weatherTable'), { childList: true, subtree: true });
-
-  // Initial load / timeout fallback
-  setTimeout(update, 3000);
-})();
-</script>
-<script>
-// --- BEGIN: console → debugConsole bridge ---
-(function(){
-  function toText(v){
-    if (v == null) return String(v);
-    if (typeof v === 'string') return v;
-    try { return JSON.stringify(v); } catch(e) { return String(v); }
-  }
-  function ensureEl(){ return document.getElementById('debugConsole'); }
-  window.logdebug = function(...args){
-      // ensure toolbar
-      try {
-        const sec = document.getElementById('debugSection');
-        const con = document.getElementById('debugConsole');
-        if (sec && con && !document.getElementById('debugToolbar')) {
-          const bar = document.createElement('div');
-          bar.id = 'debugToolbar';
-          bar.style.cssText = 'display:flex;gap:8px;align-items:center;background:#111;color:#eee;padding:6px 8px;border-bottom:1px solid #333;position:sticky;top:0;';
-
-          const clearBtn = document.createElement('button');
-          clearBtn.textContent = 'Clear';
-          clearBtn.style.cssText = 'padding:2px 8px;border-radius:4px;border:1px solid #444;background:#222;color:#eee;';
-          clearBtn.addEventListener('click', () => { con.textContent = ''; });
-
-          const copyBtn = document.createElement('button');
-          copyBtn.textContent = 'Copy';
-          copyBtn.style.cssText = clearBtn.style.cssText;
-          copyBtn.addEventListener('click', async () => {
-            const text = con.innerText || '';
-            try {
-              await navigator.clipboard.writeText(text);
-              console.log('[debug] Copiado al portapapeles');
-            } catch(err) {
-              try {
-                const ta = document.createElement('textarea');
-                ta.value = text; ta.setAttribute('readonly','');
-                ta.style.position='absolute'; ta.style.left='-9999px';
-                document.body.appendChild(ta); ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                console.log('[debug] Copiado (fallback)');
-              } catch(e){ console.error('No se pudo copiar:', e); }
-            }
-          });
-
-          const resetBtn = document.createElement('button');
-          resetBtn.textContent = 'Reset';
-          resetBtn.style.cssText = clearBtn.style.cssText;
-          resetBtn.addEventListener('click', () => {
-            const secEl = document.getElementById('debugSection');
-            if (secEl) {
-              secEl.style.width = '380px';
-              secEl.style.height = '220px';
-            }
-            try {
-              sessionStorage.removeItem('cw_debug_w');
-              sessionStorage.removeItem('cw_debug_h');
-            } catch(_) {}
-          });
-
-          const label = document.createElement('label');
-          label.style.cssText = 'font:12px -apple-system,system-ui;display:inline-flex;gap:6px;align-items:center;';
-          const ck = document.createElement('input');
-          ck.type = 'checkbox';
-          ck.id = 'debugAutoOpen';
-          ck.checked = (sessionStorage.getItem('cw_debug_auto_open') ?? '1') !== '0';
-          ck.addEventListener('change', () => sessionStorage.setItem('cw_debug_auto_open', ck.checked ? '0' : '0'));
-          const sp = document.createElement('span');
-          sp.textContent = 'Auto-open';
-          //label.appendChild(ck); label.appendChild(sp);
-
-          bar.appendChild(clearBtn);
-          bar.appendChild(copyBtn);
-          bar.appendChild(resetBtn);
-          bar.appendChild(label);
-          sec.insertBefore(bar, sec.firstChild);
-        }
-      } catch(_) {}
-
-      // helpers to open/close debug panel
-      try {
-        window.openDebug = function(){
-          const sec = document.getElementById('debugSection');
-          if (sec && sec.hasAttribute('hidden')) sec.removeAttribute('hidden');
-        };
-        window.closeDebug = function(){
-          const sec = document.getElementById('debugSection');
-          if (sec && !sec.hasAttribute('hidden')) sec.setAttribute('hidden','');
-        };
-      } catch(_) {}
-    try {
-      const el = ensureEl();
-      if (!el) return;
-      const line = args.map(toText).join(' ');
-      const row = document.createElement('div');
-      row.textContent = `[${new Date().toISOString()}] ${line}`;
-      el.appendChild(row);
-      el.scrollTop = el.scrollHeight;
-    } catch(e) { /* ignore */ }
-    // auto-open debug panel on first log if pref enabled
-    try {
-      const auto = (sessionStorage.getItem('cw_debug_auto_open') ?? '1') !== '0';
-      if (auto) window.openDebug && window.openDebug();
-    } catch(_) {}
-  };
-  const orig = {
-    log: console.log.bind(console),
-    warn: console.warn.bind(console),
-    error: console.error.bind(console),
-    info: console.info.bind(console),
-    debug: console.debug ? console.debug.bind(console) : console.log.bind(console),
-    trace: console.trace ? console.trace.bind(console) : console.log.bind(console),
-    group: console.group ? console.group.bind(console) : console.log.bind(console),
-    groupEnd: console.groupEnd ? console.groupEnd.bind(console) : () => {},
-    table: console.table ? console.table.bind(console) : console.log.bind(console),
-    assert: console.assert ? console.assert.bind(console) : () => {}
-  };
-  // Override all console methods to also log to debug
-  ['log','warn','error','info','debug','trace','group','groupEnd','table','assert'].forEach(fn => {
-    console[fn] = function(...args){
-      try { orig[fn](...args); } catch(_){ }
-      try { window.logdebug(...args); } catch(_){ }
-    };
-  });
-
-  // Capture uncaught errors
-  window.onerror = function(message, source, lineno, colno, error) {
-    try { window.logdebug('Uncaught Error:', message, 'at', source + ':' + lineno + ':' + colno, error); } catch(_){ }
-  };
-
-  // Capture unhandled promise rejections
-  window.onunhandledrejection = function(event) {
-    try { window.logdebug('Unhandled Promise Rejection:', event.reason); } catch(_){ }
-  };
-
-  // Optional: toggle debug panel if the button exists
-  try {
-    const btn = document.getElementById('toggleDebug');
-    const sec = document.getElementById('debugSection');
-    if (btn && sec) {
-      btn.addEventListener('click', () => {
-        const hidden = sec.hasAttribute('hidden');
-        if (hidden) sec.removeAttribute('hidden'); else sec.setAttribute('hidden','');
+  // --- BEGIN: client-only GPX handoff (trimmed) ---
+  // Keep only SW registration, unified loader facade and IDB/sessionStorage handoff.
+  (function(){
+    // Register service worker so Shortcuts can POST the GPX and SW can persist it to IndexedDB.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+        console.warn('[cw] sw register failed', err);
+      });
+      // Optional fast path: when SW notifies a client that a GPX arrived, try to read it immediately.
+      navigator.serviceWorker.addEventListener && navigator.serviceWorker.addEventListener('message', (ev) => {
+        try {
+          if (ev.data && ev.data.type === 'cw-shared-gpx') {
+            readSharedGPXFromIDB().then(payload => {
+              if (payload && payload.text) {
+                window.cwInjectGPXFromText(payload.text, payload.name || ev.data.name);
+              }
+            }).catch(()=>{});
+          }
+        } catch(_) {}
       });
     }
-  } catch(_){}
-  // Resizer (JS-driven, iOS/desktop)
-  try {
-  const sec = document.getElementById('debugSection');
-  if (sec && !document.getElementById('debugResizerLeft') && !document.getElementById('debugResizerRight')) {
-    const leftGrip = document.createElement('div');
-    leftGrip.id = 'debugResizerLeft';
-    const rightGrip = document.createElement('div');
-    rightGrip.id = 'debugResizerRight';
-    sec.appendChild(leftGrip);
-    sec.appendChild(rightGrip);
 
-    // restore saved size
-    const w = sessionStorage.getItem('cw_debug_w');
-    const h = sessionStorage.getItem('cw_debug_h');
-    if (w) sec.style.width = w; if (h) sec.style.height = h;
-
-    const start = {x:0,y:0,w:0,h:0};
-
-    const onMoveLeft = (e)=>{
-      const px = e.touches ? e.touches[0].clientX : e.clientX;
-      const py = e.touches ? e.touches[0].clientY : e.clientY;
-      const dx = (start.x - px);   // drag left => wider
-      const dy = (py - start.y);   // drag down => taller
-      const nw = Math.max(280, Math.round(start.w + dx));
-      const nh = Math.max(140, Math.round(start.h + dy));
-      sec.style.width = nw + 'px';
-      sec.style.height = nh + 'px';
-    };
-    const onMoveRight = (e)=>{
-      const px = e.touches ? e.touches[0].clientX : e.clientX;
-      const py = e.touches ? e.touches[0].clientY : e.clientY;
-      const dx = (px - start.x);   // drag right => wider
-      const dy = (py - start.y);   // drag down  => taller
-      const nw = Math.max(280, Math.round(start.w + dx));
-      const nh = Math.max(140, Math.round(start.h + dy));
-      sec.style.width = nw + 'px';
-      sec.style.height = nh + 'px';
-    };
-    const onUp = ()=>{
-      document.removeEventListener('mousemove', onMoveLeft);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchmove', onMoveLeft);
-      document.removeEventListener('touchend', onUp);
-      document.removeEventListener('mousemove', onMoveRight);
-      document.removeEventListener('touchmove', onMoveRight);
-      try { sessionStorage.setItem('cw_debug_w', sec.style.width); sessionStorage.setItem('cw_debug_h', sec.style.height); } catch(_){ }
-    };
-    const onDown = (moveHandler)=>(e)=>{
-      e.preventDefault();
-      start.x = e.touches ? e.touches[0].clientX : e.clientX;
-      start.y = e.touches ? e.touches[0].clientY : e.clientY;
-      const rect = sec.getBoundingClientRect();
-      start.w = rect.width; start.h = rect.height;
-      document.addEventListener('mousemove', moveHandler);
-      document.addEventListener('mouseup', onUp);
-      document.addEventListener('touchmove', moveHandler, {passive:false});
-      document.addEventListener('touchend', onUp, {passive:false});
-    };
-
-    const resetSize = () => {
-      sec.style.width = '380px';
-      sec.style.height = '220px';
-      try { sessionStorage.removeItem('cw_debug_w'); sessionStorage.removeItem('cw_debug_h'); } catch(_) {}
-    };
-
-    leftGrip.addEventListener('mousedown', onDown(onMoveLeft));
-    leftGrip.addEventListener('touchstart', onDown(onMoveLeft), {passive:false});
-    leftGrip.addEventListener('dblclick', resetSize);
-
-    rightGrip.addEventListener('mousedown', onDown(onMoveRight));
-    rightGrip.addEventListener('touchstart', onDown(onMoveRight), {passive:false});
-    rightGrip.addEventListener('dblclick', resetSize);
-  }
-} catch(_) {}
-
-})();
-// --- END: console → debugConsole bridge ---
-</script>
-<script>
-// --- BEGIN: client-only GPX injection helpers (sessionStorage + direct) ---
-// Provides a stable same-origin channel that survives reloads without relying on cross-site window.name.
-// Scriptable (or any injector) can call window.cwInjectGPXFromText(text, name?) directly.
-(function(){
-  // Unified GPX loader facade. Uses your existing cwLoadGPXFromString(name?) when available; falls back to postMessage.
-  window.cwInjectGPXFromText = function(gpxText, routeName){
-    try {
-      const name = routeName || 'Shared route';
-      if (typeof window.cwLoadGPXFromString === 'function') {
-        window.cwLoadGPXFromString(String(gpxText || ''), name);
+    // Facade: prefer cwLoadGPXFromString when available, otherwise postMessage fallback.
+    window.cwInjectGPXFromText = function(gpxText, routeName){
+      try {
+        const name = routeName || 'Shared route';
+        if (typeof window.cwLoadGPXFromString === 'function') {
+          window.cwLoadGPXFromString(String(gpxText || ''), name);
+          return true;
+        }
+        window.postMessage({ type: 'cw-gpx', name, gpx: String(gpxText || '') }, '*');
         return true;
+      } catch(e){
+        console.error('[cw] cwInjectGPXFromText error', e);
+        return false;
       }
-      // Fallback: broadcast so late-loaded scripts can pick it up
-      window.postMessage({ type: 'cw-gpx', name, gpx: String(gpxText || '') }, '*');
-      return true;
-    } catch(e){
-      console.error('[cw] cwInjectGPXFromText error', e);
-      return false;
-    }
-  };
+    };
 
-  // Same-origin transient handoff: sessionStorage
-  try {
-    const KEY = 'cw_gpx_text';
-    const KEY_NAME = 'cw_gpx_name';
-    const ss = window.sessionStorage;
-    const pending = ss ? ss.getItem(KEY) : null;
-    if (pending) {
-      const routeName = ss.getItem(KEY_NAME) || 'Shared route';
-      // Clear before use to avoid loops
-      ss.removeItem(KEY);
-      ss.removeItem(KEY_NAME);
-      // Feed it to the facade
-      window.cwInjectGPXFromText(pending, routeName);
-      console.log('[cw] loaded GPX from sessionStorage');
-      if (window.openDebug) window.openDebug();
-    }
-  } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
-})();
-// --- END: client-only GPX injection helpers ---
-
-  function toB64(s){
-    return String(s || '').replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g,'');
-  }
-
-  function base64UrlToUint8Array(s){
-    if (!s) return null;
-    s = toB64(s);
-    while (s.length % 4) s += '=';
+    // sessionStorage handoff (keeps existing behavior for open-in from other pages)
     try {
-      const bin = atob(s);
-      const len = bin.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
-      return bytes;
-    } catch (e) {
-      console.error('[cw] base64 decode failed', e);
-      return null;
-    }
-  }
-
-  function decodeHashGPX(enc){
-    if (!enc) return null;
-    let input = enc;
-    try { input = decodeURIComponent(enc); } catch(_){}
-    const bytes = base64UrlToUint8Array(input);
-    if (!bytes) return null;
-    console.log('[cw] decoded bytes length:', bytes.length);
-    console.log('[cw] first 20 bytes hex:', bytes.slice(0,20).map(b => b.toString(16).padStart(2,'0')).join(' '));
-
-    // gzip (0x1f 0x8b) or zlib (0x78) detection -> use pako if available
-    if (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b && window.pako?.ungzip){
-      try { console.log('[cw] detected gzip, decompressing'); return window.pako.ungzip(bytes, { to: 'string' }); }
-      catch(e){ console.warn('[cw] gzip decompress failed', e); }
-    }
-    if (bytes.length > 2 && bytes[0] === 0x78 && window.pako?.inflate){
-      try { console.log('[cw] detected zlib/deflate, decompressing'); return window.pako.inflate(bytes, { to: 'string' }); }
-      catch(e){ console.warn('[cw] zlib decompress failed', e); }
-    }
-
-    // Heuristic UTF-16 detection (lots of NULs in even/odd positions)
-    try {
-      let zerosEven = 0, zerosOdd = 0, limit = Math.min(bytes.length, 2000);
-      for (let i = 0; i < limit; i++){
-        if (bytes[i] === 0) { if ((i & 1) === 0) zerosEven++; else zerosOdd++; }
+      const KEY = 'cw_gpx_text';
+      const KEY_NAME = 'cw_gpx_name';
+      const ss = window.sessionStorage;
+      const pending = ss ? ss.getItem(KEY) : null;
+      if (pending) {
+        const routeName = ss.getItem(KEY_NAME) || 'Shared route';
+        ss.removeItem(KEY);
+        ss.removeItem(KEY_NAME);
+        window.cwInjectGPXFromText(pending, routeName);
+        console.log('[cw] loaded GPX from sessionStorage');
+        if (window.openDebug) window.openDebug();
       }
-      if (zerosEven > zerosOdd && zerosEven > limit * 0.2) {
-        try { return new TextDecoder('utf-16le').decode(bytes); } catch(e){}
-      } else if (zerosOdd > zerosEven && zerosOdd > limit * 0.2) {
-        try { return new TextDecoder('utf-16be').decode(bytes); } catch(e){}
-      }
-    } catch(e){
-      console.warn('[cw] utf16 detection failed', e);
+    } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
+
+    // Read GPX stored by the Service Worker in IndexedDB (one-time read)
+    async function readSharedGPXFromIDB() {
+      if (typeof indexedDB === 'undefined') return null;
+      return new Promise((resolve) => {
+        const req = indexedDB.open('cw_shared_db', 1);
+        req.onupgradeneeded = (evt) => {
+          try { evt.target.result.createObjectStore('files'); } catch(_) {}
+        };
+        req.onsuccess = (evt) => {
+          try {
+            const db = evt.target.result;
+            const tx = db.transaction('files', 'readwrite');
+            const store = tx.objectStore('files');
+            const gt = store.get('gpx');
+            gt.onsuccess = () => {
+              const val = gt.result || null;
+              if (val) {
+                // remove stored item so it's one-time
+                store.delete('gpx');
+              }
+              tx.oncomplete = () => { try { db.close(); } catch(_) {} ; resolve(val); };
+            };
+            gt.onerror = () => { try { db.close(); } catch(_) {} ; resolve(null); };
+          } catch (err) { resolve(null); }
+        };
+        req.onerror = () => resolve(null);
+      });
     }
 
-    try {
-      return new TextDecoder('utf-8').decode(bytes);
-    } catch (e) {
-      console.error('[cw] TextDecoder utf-8 error', e);
-      try { return atob(toB64(input)); } catch(_) { return null; }
-    }
-  }
-
-  // Improved: remove namespaced attributes (xsi:...) before removing xmlns, then strip prefixes
-  function stripNamespaces(gpxStr){
-    if (!gpxStr) return gpxStr;
-    let s = gpxStr;
-    // remove attributes with prefixes like xsi:schemaLocation="..."
-    s = s.replace(/\s+[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+="[^"]*"/g, '');
-    // remove xmlns declarations (default + prefixed)
-    s = s.replace(/\s+xmlns(:\w+)?="[^"]*"/g, '');
-    // collapse namespaced attributes (ns:attr="v" -> attr="v")
-    s = s.replace(/\s+[a-zA-Z0-9_-]+:([a-zA-Z0-9_-]+)=/g, ' $1=');
-    // remove namespace prefixes from element names: <ns:tag ...> -> <tag ...>, </ns:tag> -> </tag>
-    s = s.replace(/<\s*\/\s*([a-zA-Z0-9_-]+):/g, '</$1');
-    s = s.replace(/<\s*([a-zA-Z0-9_-]+):/g, '<$1');
-    return s;
-  }
-
-  // Remove sections that contain many non-printable/binary chars (e.g. broken <author>)
-  function stripBinarySections(gpxStr){
-    if (!gpxStr) return gpxStr;
-    return gpxStr.replace(/<([a-zA-Z0-9_-]+)(\b[^>]*)?>([\s\S]*?)<\/\1>/g, (full, tag, attrs, inner) => {
-      const nonPrintable = (inner.match(/[^\u0009\u000A\u000D\u0020-\u007E\u00A0-\uD7FF\uE000-\uFFFD]/g) || []).length;
-      if (nonPrintable > 10 || inner.indexOf('\u0000') !== -1) {
-        console.log('[cw] removing binary content from tag', tag, 'nonPrintable=', nonPrintable);
-        return `<${tag}${attrs||''}></${tag}>`;
-      }
-      return full;
-    });
-  }
-
-  // Remove chars not allowed by XML 1.0
-  function sanitizeXml(gpxStr){
-    if (!gpxStr) return gpxStr;
-    return gpxStr.replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]/g, '');
-  }
-
-  function debugDocCounts(gpxStr, note){
-    try {
-      const doc = new DOMParser().parseFromString(gpxStr || '', 'application/xml');
-      const parserError = doc.getElementsByTagName('parsererror');
-      if (parserError && parserError.length) {
-        console.warn('[cw] DOMParser parsererror' + (note ? ' ('+note+')' : '') + ':', parserError[0].textContent.slice(0,400));
-      }
-      const trk = doc.getElementsByTagName('trk').length;
-      const rte = doc.getElementsByTagName('rte').length;
-      const wpt = doc.getElementsByTagName('wpt').length;
-      console.log('[cw] parsed GPX counts' + (note ? ' ('+note+')' : ''), { trk, rte, wpt });
-      console.log('[cw] gpx snippet' + (note ? ' ('+note+')' : '') + ':', (gpxStr||'').substring(0, 800).replace(/\s+/g,' '));
-      return { doc, trk, rte, wpt, parserError: parserError && parserError.length ? parserError[0].textContent : null };
-    } catch (e) {
-      console.error('[cw] XML parse error', e);
-      return null;
-    }
-  }
-
-  async function waitForMap(timeoutMs = 5000) {
-    if (window.map && typeof window.map.addLayer === 'function') return window.map;
-    return new Promise((resolve, reject) => {
-      const start = Date.now();
-      const iv = setInterval(() => {
-        if (window.map && typeof window.map.addLayer === 'function') {
-          clearInterval(iv);
-          resolve(window.map);
-        } else if (Date.now() - start > timeoutMs) {
-          clearInterval(iv);
-          reject(new Error('map not ready'));
-        }
-      }, 100);
-    });
-  }
-
-  async function processHashGPX(){
-    try {
-      const hash = (location.hash || '').replace(/^#/, '');
-      if (!hash) return;
-      const params = new URLSearchParams(hash);
-      const rawEnc = params.get('gpx');
-      if (!rawEnc) return;
-
-      // Restore '+' that URL parsers may have turned into spaces
-      const encRestoredPlus = String(rawEnc).replace(/ /g, '+');
-
-      // small preview logging
+    // On load try to read any GPX the SW might have stored
+    (async () => {
       try {
-        const PREVIEW_LEN = 600;
-        const TAIL_LEN = 120;
-        const raw = String(rawEnc);
-        const head = raw.substring(0, PREVIEW_LEN);
-        const tail = raw.length > TAIL_LEN ? '...' + raw.slice(-TAIL_LEN) : '';
-        let decodedURIComponentPreview = head;
-        try { decodedURIComponentPreview = decodeURIComponent(String(rawEnc)).substring(0, PREVIEW_LEN); } catch(_){}
-        console.log('[cw] raw gpx param (b64) head:', head);
-        if (tail) console.log('[cw] raw gpx param (b64) tail:', tail);
-        console.log('[cw] decodeURIComponent head preview:', decodedURIComponentPreview);
-        console.log('[cw] restored "+" preview head (spaces->+):', String(encRestoredPlus).substring(0, PREVIEW_LEN));
-        try {
-          const previewBytes = base64UrlToUint8Array(encRestoredPlus);
-          if (previewBytes && previewBytes.length) {
-            const nz = previewBytes.slice(0, 64);
-            console.log('[cw] decoded bytes preview (hex):', nz.map(b=>b.toString(16).padStart(2,'0')).join(' '), '... (len=' + previewBytes.length + ')');
+        const payload = await readSharedGPXFromIDB();
+        if (payload && payload.text) {
+          console.log('[cw] loaded GPX from IndexedDB (service-worker handoff)', payload.name || '');
+          if (typeof window.cwInjectGPXFromText === 'function') {
+            window.cwInjectGPXFromText(payload.text, payload.name || 'Shared route');
+          } else {
+            window.postMessage({ type: 'cw-gpx', name: payload.name || 'Shared route', gpx: payload.text }, '*');
           }
-        } catch (e) {
-          console.warn('[cw] could not convert preview to bytes', e);
         }
-      } catch (e) { /* ignore preview errors */ }
-
-      const name = params.get('name') ? decodeURIComponent(params.get('name')) : 'Shared route';
-      const gpx = decodeHashGPX(encRestoredPlus);
-      if (!gpx) {
-        console.error('[cw] could not decode GPX from hash');
-        return;
-      }
-
-      debugDocCounts(gpx, 'original');
-
-      const cleaned = stripNamespaces(gpx);
-      debugDocCounts(cleaned, 'cleaned');
-
-      const binStripped = stripBinarySections(cleaned);
-      debugDocCounts(binStripped, 'binary-stripped');
-
-      const sanitized = sanitizeXml(binStripped);
-      debugDocCounts(sanitized, 'sanitized');
-
-      const payload = sanitized;
-
-      // wait for map to be ready to avoid addLayer errors
-      try {
-        await waitForMap(5000);
-      } catch (err) {
-        console.warn('[cw] map not ready after timeout, will try to load anyway', err);
-      }
-
-      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
-        try {
-          console.log('[cw] calling cwLoadGPXFromString(name,len) with sanitized GPX', name, payload.length);
-          window.cwLoadGPXFromString(payload, name);
-        } catch (err) {
-          console.error('[cw] cwLoadGPXFromString threw', err);
-          window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
-        }
-      } else {
-        console.log('[cw] posting cw-gpx via postMessage (fallback, sanitized)');
-        window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
-      }
-
-      try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
-    } catch (e) {
-      console.error('[cw] processHashGPX error', e);
-    }
-  }
-
-  // --- REPLACED: processHashGPX -> processIncomingGPX (handles ?gpx= as well as #gpx= and gpx_url) ---
-  async function processIncomingGPX(){
-    try {
-      // Prefer search params (query string) over hash (allows shorter/cleaner URLs)
-      const searchParams = new URLSearchParams(location.search || '');
-      const hashParams = new URLSearchParams((location.hash || '').replace(/^#/,''));
-      // check for a direct remote URL first (gpx_url)
-      const remoteUrl = searchParams.get('gpx_url') || hashParams.get('gpx_url') || null;
-      if (remoteUrl) {
-        try {
-          await fetchAndLoadGPX(remoteUrl, searchParams.get('name') || hashParams.get('name') || 'Shared route');
-        } catch (e) {
-          console.error('[cw] fetch remote GPX failed', e);
-        }
-        // clear state for cleanliness if possible
-        try { history.replaceState(null,'', location.pathname + location.search); } catch(_) {}
-        return;
-      }
-
-      // then look for encoded GPX in query or hash (query wins)
-      const rawEnc = searchParams.get('gpx') || hashParams.get('gpx');
-      if (!rawEnc) return;
-
-      const name = searchParams.get('name') ? decodeURIComponent(searchParams.get('name')) : (hashParams.get('name') ? decodeURIComponent(hashParams.get('name')) : 'Shared route');
-      const encRestoredPlus = String(rawEnc).replace(/ /g, '+');
-      console.log('[cw] incoming gpx param preview (head):', encRestoredPlus.substring(0,600));
-
-      const gpx = decodeHashGPX(encRestoredPlus);
-      if (!gpx) {
-        console.error('[cw] could not decode GPX from param');
-        return;
-      }
-
-      debugDocCounts(gpx, 'original');
-
-      const cleaned = stripNamespaces(gpx);
-      debugDocCounts(cleaned, 'cleaned');
-
-      const binStripped = stripBinarySections(cleaned);
-      debugDocCounts(binStripped, 'binary-stripped');
-
-      const sanitized = sanitizeXml(binStripped);
-      debugDocCounts(sanitized, 'sanitized');
-
-      const payload = sanitized;
-
-      // wait for map readiness but keep trying if not ready
-      try { await waitForMap(5000); } catch (err) { console.warn('[cw] map not ready after timeout, will try to load anyway', err); }
-
-      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
-        try {
-          console.log('[cw] calling cwLoadGPXFromString(name,len) with sanitized GPX', name, payload.length);
-          window.cwLoadGPXFromString(payload, name);
-        } catch (err) {
-          console.error('[cw] cwLoadGPXFromString threw', err);
-          window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
-        }
-      } else {
-        console.log('[cw] posting cw-gpx via postMessage (fallback, sanitized)');
-        window.postMessage({ type: 'cw-gpx', name, gpx: payload }, '*');
-      }
-
-      // clean URL/hash to avoid reprocessing
-      try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
-    } catch (e) {
-      console.error('[cw] processIncomingGPX error', e);
-    }
-  }
-
-  async function fetchAndLoadGPX(url, name='Shared route') {
-    try {
-      const res = await fetch(url, { mode: 'cors' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const text = await res.text();
-      // try parse & feed
-      if (window.cwLoadGPXFromString && typeof window.cwLoadGPXFromString === 'function') {
-        window.cwLoadGPXFromString(text, name);
-      } else {
-        window.postMessage({ type: 'cw-gpx', name, gpx: text }, '*');
-      }
-      console.log('[cw] loaded GPX from remote URL', url);
-      if (window.openDebug) window.openDebug();
-      return true;
-    } catch (err) {
-      console.error('[cw] fetchAndLoadGPX error', err);
-      throw err;
-    }
-  }
-
-  // Then process any incoming GPX via query or hash
-  (async () => {
-    try { await processIncomingGPX(); } catch(_) {}
+      } catch (e) { console.warn('[cw] readSharedGPXFromIDB error', e); }
+    })();
   })();
-
-  // react to future changes (hash/popstate)
-  window.addEventListener('hashchange', processIncomingGPX, false);
-  window.addEventListener('popstate', processIncomingGPX, false);
-  window.__cw_processHashGPX = processIncomingGPX;
-  // --- END REPLACED ---
+  // --- END: client-only GPX handoff (trimmed) ---
 </script>
 </body>
 </html>

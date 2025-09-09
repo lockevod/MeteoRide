@@ -994,6 +994,56 @@ input[type="file"] {
   }
 }
 
+/* Apply soft input/select styling (same as .speed-wrap controls) to controls and config panels.
+   Do NOT change .file-btn (keeps its blue color). */
+#controlsPanel .params input[type="number"],
+#controlsPanel .params input[type="text"],
+#controlsPanel .params select,
+#configMenu select,
+#configMenu input[type="text"],
+#configMenu input[type="number"] {
+  background: var(--input-bg, #f3f4f6);
+  border: 1px solid var(--input-border, #cbd5e1);
+  border-radius: 6px;
+  padding: 6px 8px;
+  height: 36px;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Reduce visual noise on WebKit number inputs inside those areas */
+#controlsPanel .params input[type="number"]::-webkit-outer-spin-button,
+#controlsPanel .params input[type="number"]::-webkit-inner-spin-button,
+#configMenu input[type="number"]::-webkit-outer-spin-button,
+#configMenu input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  opacity: 0.6;
+  -webkit-appearance: none;
+}
+
+/* Keep select dropdown arrow native but ensure visuals match */
+#controlsPanel .params select,
+#configMenu select {
+  padding-right: 28px; /* leave space for native arrow */
+}
+
+/* Small-screen adjustments: mirror the reduction used for .speed-wrap in index.html */
+@media screen and (max-width: 700px) {
+  #controlsPanel .params input[type="number"],
+  #controlsPanel .params input[type="text"],
+  #controlsPanel .params select,
+  #configMenu select,
+  #configMenu input[type="text"],
+  #configMenu input[type="number"] {
+    height: 34px;
+    padding: 5px 7px;
+    border-radius: 6px;
+  }
+}
+
 /* Quitar spinners del input[type=number] para evitar cambios por flechas */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

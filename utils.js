@@ -313,6 +313,142 @@
     return s;
   }
 
+  // Provider chain utilities: choose provider based on time distance from NOW (not route start)
+  // Chain spec example: { id: 'ow2_arome_openmeteo', steps: [ { provider:'openweathermap', fromNowHours:0, toNowHours:2 }, { provider:'arome', fromNowHours:2, toNowHours:36 }, { provider:'openmeteo', fromNowHours:36, toNowHours: Infinity } ] }
+  const providerChains = {
+    // OpenWeatherMap for first 0-2h, Arome for 2-36h, OpenMeteo afterwards
+    ow2_arome_openmeteo: {
+      id: 'ow2_arome_openmeteo',
+      label: 'OWM 0–2h → Arome 2–36h → OpenMeteo',
+      steps: [
+        { provider: 'openweathermap', fromNowHours: 0, toNowHours: 2 },
+        { provider: 'arome', fromNowHours: 2, toNowHours: 36 },
+        { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
+      ]
+    },
+    // Existing Arome -> OpenMeteo chain (Arome near-term, OpenMeteo beyond)
+    arome_openmeteo: {
+      id: 'arome_openmeteo',
+      label: 'Arome 0–36h → OpenMeteo 36h+',
+      steps: [
+        { provider: 'arome', fromNowHours: 0, toNowHours: 36 },
+        { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
+      ]
+    }
+  };
+
+  // Heuristics for provider operational areas (tunable). These are conservative bounding boxes.
+  const providerOperationalAreas = {
+    // AROME: regional model; approximate bounding box covering mainland France + Corsica
+    arome: [
+      { minLat: 41.0, maxLat: 51.5, minLon: -5.5, maxLon: 10.5 }, // mainland France
+      { minLat: 41.5, maxLat: 43.0, minLon: 8.5, maxLon: 10.5 }   // Corsica (approx)
+    ]
+    // Other providers assumed global by default (openmeteo, openweathermap)
+  };
+
+  function isPointInBoxes(lat, lon, boxes) {
+    if (!boxes || !Array.isArray(boxes)) return false;
+    for (const b of boxes) {
+      if (lat >= b.minLat && lat <= b.maxLat && lon >= b.minLon && lon <= b.maxLon) return true;
+    }
+    return false;
+  }
+
+  // Check if a provider is operational at given coords and optional timestamp.
+  // By default openmeteo and openweathermap are treated as global; arome uses bounding boxes.
+  function isProviderOperational(providerId, lat, lon, _timestamp) {
+    if (!providerId) return false;
+    const pid = String(providerId).toLowerCase();
+    if (!lat && !lon) {
+      // No location provided -> assume operational (defer to fetchers to fail if not)
+      return true;
+    }
+    const nLat = Number(lat);
+    const nLon = Number(lon);
+    if (!Number.isFinite(nLat) || !Number.isFinite(nLon)) return true;
+
+    if (pid === 'arome') {
+      return isPointInBoxes(nLat, nLon, providerOperationalAreas.arome);
+    }
+    // Default: assume available
+    return true;
+  }
+
+  // Update resolveProviderForTimestamp to accept optional coords and perform availability + API-key fallback.
+  function resolveProviderForTimestamp(chainOrProvider, timestamp, nowDate, coords) {
+    if (!chainOrProvider) return null;
+    const s = String(chainOrProvider);
+    // If it's a known chain, find the candidate provider first
+    if (providerChains[s]) {
+      const chain = providerChains[s];
+      const h = hoursFromNow(timestamp, nowDate);
+      // find the primary step index for this timestamp
+      let stepIdx = chain.steps.findIndex(step => {
+        const from = Number(step.fromNowHours || 0);
+        const to = Number(step.toNowHours || Infinity);
+        return h >= from && h < to;
+      });
+      if (stepIdx === -1) stepIdx = 0;
+
+      // Try forward from the ideal step to find an operational and API-key-capable provider
+      for (let i = stepIdx; i < chain.steps.length; i++) {
+        const prov = chain.steps[i].provider;
+        // if OpenWeather selected but no API key, skip
+        if (prov === 'openweathermap' && !getVal('apiKeyOW')) continue;
+        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) return prov;
+      }
+      // If none found after, try backward from the ideal step
+      for (let i = stepIdx - 1; i >= 0; i--) {
+        const prov = chain.steps[i].provider;
+        if (prov === 'openweathermap' && !getVal('apiKeyOW')) continue;
+        if (isProviderOperational(prov, coords?.lat, coords?.lon, timestamp)) return prov;
+      }
+      // No suitable provider in chain -> fallback to OpenMeteo
+      return 'openmeteo';
+    }
+    // plain provider id: if it's OpenWeather but api key missing, try arome then openmeteo
+    if (s === 'openweathermap' && !getVal('apiKeyOW')) {
+      if (isProviderOperational('arome', coords?.lat, coords?.lon, timestamp)) return 'arome';
+      return 'openmeteo';
+    }
+    // otherwise, check operational availability
+    if (isProviderOperational(s, coords?.lat, coords?.lon, timestamp)) return s;
+    return 'openmeteo';
+  }
+
+  // Ensure requestWeatherByChain passes coords when resolving providers
+  async function requestWeatherByChain(chainIdOrProvider, lat, lon, timestamps, options = {}, fetcherRegistry = {}) {
+    const now = options.nowDate || new Date();
+    const coords = { lat, lon };
+    // Determine provider for each timestamp (pass coords so availability checks work)
+    const providers = (Array.isArray(timestamps) ? timestamps : []).map(ts => resolveProviderForTimestamp(chainIdOrProvider, ts, now, coords));
+
+    // Group indices by provider
+    const groups = {};
+    providers.forEach((prov, idx) => {
+      if (!groups[prov]) groups[prov] = { indices: [], times: [] };
+      groups[prov].indices.push(idx);
+      groups[prov].times.push(timestamps[idx]);
+    });
+
+    const results = {};
+    for (const prov of Object.keys(groups)) {
+      const g = groups[prov];
+      const fetcher = fetcherRegistry[prov];
+      if (typeof fetcher === 'function') {
+        try {
+          results[prov] = await fetcher({ lat, lon, timestamps: g.times, indices: g.indices, options });
+        } catch (err) {
+          results[prov] = { error: String(err && err.message ? err.message : err) };
+        }
+      } else {
+        results[prov] = { meta: g };
+      }
+    }
+    return { groups, results };
+  }
+
   // Expose globally for compatibility
   window.t = t;
   window.logDebug = logDebug;
@@ -342,31 +478,38 @@
   // Also via window.cw for modularity
   window.cw = window.cw || {};
   window.cw.utils = {
-    cacheTTL,
-    i18n,
-    t,
-    logDebug,
-    saveSettings,
-    loadSettings,
-    getVal,
-    getCache,
-    setCache,
-    getValidatedDateTime,
-    roundToNextQuarterISO,
-    roundUpToNextQuarterDate,
-    setupDateLimits,
-    haversine,
-    formatTime,
-    isValidDate,
-    fmtSafe,
-    updateUnits,
-    safeNum,
-    normalUnit,
-    clamp01,
-    findClosestIndex,
-    offsetLatLng,
-    beaufortIntensity,
-    windToUnits,
-    windIntensityValue,
-  };
-})();
+     cacheTTL,
+     i18n,
+     t,
+     logDebug,
+     saveSettings,
+     loadSettings,
+     getVal,
+     getCache,
+     setCache,
+     getValidatedDateTime,
+     roundToNextQuarterISO,
+     roundUpToNextQuarterDate,
+     setupDateLimits,
+     haversine,
+     formatTime,
+     isValidDate,
+     fmtSafe,
+     updateUnits,
+     safeNum,
+     normalUnit,
+     clamp01,
+     findClosestIndex,
+     offsetLatLng,
+     beaufortIntensity,
+     windToUnits,
+     windIntensityValue,
+     providerChains,
+     getProviderForTimestamp,
+     assignProvidersToTimestamps,
+     pickProvidersForRoute,
+     summarizeProviderSegments,
+     resolveProviderForTimestamp,
+     requestWeatherByChain
+   };
+ })();

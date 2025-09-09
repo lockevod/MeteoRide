@@ -336,6 +336,50 @@
     </div>
 
     <div class="section">
+        <h2>📤 Share GPX via iOS Shortcut</h2>
+        <p>Use an iOS Shortcut to send a full GPX file to MeteoRide without trimming or encoding on the URL. This requires the app to be served over HTTPS and that the Service Worker (service-worker.js) is deployed at the same origin (root) as index.html.</p>
+
+        <h3>Shortcut: "Share GPX to MeteoRide" (From Files)</h3>
+        <ol>
+            <li><strong>Get File</strong> — pick the GPX file (or set as "Shortcut Input" when using Share Sheet). Enable "Show Document Picker" if needed.</li>
+            <li><strong>Get Contents of URL</strong>
+              <ul>
+                <li>URL: https://your-domain.example/share</li>
+                <li>Method: POST</li>
+                <li>Request Body: File (choose the File variable from the Get File step or "Shortcut Input")</li>
+                <li>Headers: add <code>Content-Type: application/gpx+xml</code> (or <code>text/xml</code>)</li>
+                <li>(Optional) add header <code>x-gpx-name</code> with the file name to preserve the route name.</li>
+              </ul>
+            </li>
+            <li><strong>Open URLs</strong> — URL: https://your-domain.example/index.html
+              <p>This opens the app; the service worker stores the posted GPX into IndexedDB and index.html will read it and load the route automatically.</p>
+            </li>
+        </ol>
+
+        <h3>Shortcut: "Share" from Files / Share Sheet (alternate)</h3>
+        <p>If you want the shortcut available in the Share Sheet:</p>
+        <ol>
+          <li>Create a Shortcut with input accepted from "Files" or "Share Sheet".</li>
+          <li>Use the provided "Shortcut Input" as the body for <em>Get Contents of URL</em> (POST) and set the same headers as above.</li>
+          <li>Finish with <em>Open URLs</em> to open index.html.</li>
+        </ol>
+
+        <h3>Notes & tips</h3>
+        <ul>
+          <li>Make sure your site is served via HTTPS. Service workers and IndexedDB require secure contexts on iOS/Safari.</li>
+          <li>If the Shortcut performs the POST and you open index.html afterwards, the app will read the stored GPX and load it (no manual paste required).</li>
+          <li>If you want to preserve the original filename, include a header such as <code>x-gpx-name: route.gpx</code> in the POST; the service worker saves it into IndexedDB and index.html uses it as the route name.</li>
+        </ul>
+
+        <h3>Example (for testing from a terminal)</h3>
+        <pre><code>curl -X POST --data-binary @route.gpx \
+  -H "Content-Type: application/gpx+xml" \
+  -H "x-gpx-name: route.gpx" \
+  -L https://your-domain.example/share</code></pre>
+        <p>The <code>-L</code> follows the redirect the service worker returns (to index.html).</p>
+      </div>
+
+    <div class="section">
         <h2>🐛 Troubleshooting</h2>
         
         <h3>❌ Common Issues</h3>

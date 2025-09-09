@@ -86,23 +86,52 @@
 
   // Provider options update
   function updateProviderOptions() {
-    const sel = document.getElementById("apiSource");
-    if (!sel) return;
-    const hasMB  = ((window.getVal("apiKey")  || "").trim().length >= 5);
-    const hasOWM = ((window.getVal("apiKeyOW") || "").trim().length >= 5);
-    const mbOpt  = sel.querySelector('option[value="meteoblue"]');
-    const owmOpt = sel.querySelector('option[value="openweather"]');
-    if (mbOpt)  { mbOpt.hidden = !hasMB;  mbOpt.disabled = !hasMB; }
-    if (owmOpt) { owmOpt.hidden = !hasOWM; owmOpt.disabled = !hasOWM; }
+    try {
+      const sel = document.getElementById('apiSource');
+      if (!sel) return;
+      // Ensure new chain option exists
+      const exists = !!Array.from(sel.options).find(o => o.value === 'ow2_arome_openmeteo');
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = 'ow2_arome_openmeteo';
+        opt.text = 'OpenWeather 0-2h → Arome 2-36h → OpenMeteo';
+        sel.add(opt);
+      }
+      // Ensure arome_openmeteo option exists
+      const exists2 = !!Array.from(sel.options).find(o => o.value === 'arome_openmeteo');
+      if (!exists2) {
+        const opt2 = document.createElement('option');
+        opt2.value = 'arome_openmeteo';
+        opt2.text = 'Arome 0-36h → OpenMeteo';
+        sel.add(opt2);
+      }
 
-    const current = sel.value;
-    if ((current === "meteoblue" && !hasMB) || (current === "openweather" && !hasOWM)) {
-      sel.value = "openmeteo";
-      window.apiSource = "openmeteo";
-      window.saveSettings();
-      window.clearNotice();
-      window.reloadFull();
-    }
+      // Disable options that require API keys when keys missing
+      const hasOW = !!getVal('apiKeyOW');
+      const hasMB = !!getVal('apiKey');
+      // Helper to set disabled state
+      function setDisabled(val, disabled) {
+        const opt = Array.from(sel.options).find(o => o.value === val);
+        if (opt) opt.disabled = !!disabled;
+      }
+      // OpenWeather-dependent options
+      setDisabled('openweathermap', !hasOW);
+      setDisabled('ow2_arome_openmeteo', !hasOW);
+      // MeteoBlue option (if exists)
+      setDisabled('meteoblue', !hasMB);
+
+      // If the currently selected option is disabled, pick first non-disabled option
+      const curOpt = sel.options[sel.selectedIndex];
+      if (curOpt && curOpt.disabled) {
+        const firstValid = Array.from(sel.options).find(o => !o.disabled);
+        if (firstValid) {
+          sel.value = firstValid.value;
+          apiSource = firstValid.value;
+          saveSettings();
+          try { window.setNotice && window.setNotice(t('api_provider_changed', { prov: firstValid.text }), 'info'); } catch(_){}
+        }
+      }
+    } catch (e) { console.warn('updateProviderOptions error', e); }
   }
 
   // Inline status helper for API key check
@@ -499,6 +528,23 @@
 
     const chkOW = document.getElementById("checkApiKeyOW");
     if (chkOW) chkOW.addEventListener("click", testOpenWeatherKey);
+
+    const sel = document.getElementById('apiSource');
+    if (sel) {
+      sel.addEventListener('change', function(ev){
+        try { apiSource = sel.value; saveSettings(); window.setNotice(t('api_provider_changed', { prov: sel.options[sel.selectedIndex].text }), 'info'); }
+        catch(e){ console.warn(e); }
+      });
+    }
+
+    // Update options when API keys change so options can be enabled/disabled live
+    const apiKeyEl = document.getElementById('apiKey');
+    const apiKeyOWEl = document.getElementById('apiKeyOW');
+    if (apiKeyEl) apiKeyEl.addEventListener('input', () => { updateProviderOptions(); });
+    if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); });
+
+    // Call update once to inject new options
+    updateProviderOptions();
   }
 
   // Expose globally

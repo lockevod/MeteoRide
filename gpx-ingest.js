@@ -59,6 +59,64 @@
     return s;
   }
 
+  // Convert URL-safe base64 (or normal) into Uint8Array
+  function base64UrlToUint8Array(s) {
+    try {
+      const norm = normalizeB64(s);
+      const bin = atob(norm);
+      const len = bin.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    } catch (e) {
+      L.warn("base64->Uint8Array failed:", e && e.message);
+      return null;
+    }
+  }
+
+  // Try to decode an encoded GPX that may be compressed (gzip/zlib) or plain text.
+  // Returns string GPX or null.
+  function decodeHashGPX(enc) {
+    if (!enc) return null;
+    let input = enc;
+    try { input = decodeURIComponent(enc); } catch (_) { /* ignore */ }
+    // If it already looks like XML, return early
+    if (looksLikeXmlText(input)) return tryDecodeText(input);
+
+    const bytes = base64UrlToUint8Array(input);
+    if (!bytes) return null;
+
+    // gzip magic 0x1f 0x8b
+    if (bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b && window.pako?.ungzip) {
+      try { L.info("Detected gzip bytes, attempting ungzip"); return window.pako.ungzip(bytes, { to: "string" }); }
+      catch (e) { L.warn("gzip ungzip failed:", e && e.message); }
+    }
+    // zlib/deflate (starts often with 0x78)
+    if (bytes.length > 2 && bytes[0] === 0x78 && window.pako?.inflate) {
+      try { L.info("Detected zlib/deflate bytes, attempting inflate"); return window.pako.inflate(bytes, { to: "string" }); }
+      catch (e) { L.warn("zlib inflate failed:", e && e.message); }
+    }
+
+    // Heuristic UTF-16 detection (lots of NULs)
+    try {
+      let zerosEven = 0, zerosOdd = 0, limit = Math.min(bytes.length, 2000);
+      for (let i = 0; i < limit; i++) {
+        if (bytes[i] === 0) { if ((i & 1) === 0) zerosEven++; else zerosOdd++; }
+      }
+      if (zerosEven > zerosOdd && zerosEven > limit * 0.2) {
+        try { L.info("Heuristic UTF-16LE detected"); return new TextDecoder("utf-16le").decode(bytes); } catch(e){}
+      } else if (zerosOdd > zerosEven && zerosOdd > limit * 0.2) {
+        try { L.info("Heuristic UTF-16BE detected"); return new TextDecoder("utf-16be").decode(bytes); } catch(e){}
+      }
+    } catch (e) { L.warn("UTF-16 heuristic failed", e && e.message); }
+
+    // Fallback to UTF-8 decode
+    try { return new TextDecoder("utf-8").decode(bytes); } catch (e) { L.warn("TextDecoder utf-8 failed", e && e.message); }
+
+    // Last resort: atob decode (should match base64->string)
+    try { return atob(normalizeB64(input)); } catch (_) { return null; }
+  }
+
   // NEW: unwrap common Shortcut wrappers and data URIs
   function sanitizeGpxParam(s) {
     let v = String(s || "").trim();
@@ -91,16 +149,21 @@
   }
 
   function tryDecodeBase64(b64) {
+    // Improved: try compressed-aware decode first
     try {
+      const out = decodeHashGPX(b64);
+      if (out) {
+        L.info("Smart base64 decode succeeded, len:", out.length);
+        return out;
+      }
+      // fallback: try atob->utf8
       const norm = normalizeB64(b64);
-      const txt = atob(norm);
-      // decode as UTF‑8
-      const bytes = Uint8Array.from(txt, c => c.charCodeAt(0));
-      const out = new TextDecoder("utf-8").decode(bytes);
-      L.info("Base64 decoded length:", out.length);
-      return out;
+      const bin = atob(norm);
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      const out2 = new TextDecoder("utf-8").decode(bytes);
+      return out2;
     } catch (e) {
-      L.warn("Base64 decode failed:", e && e.message);
+      L.warn("tryDecodeBase64 failed:", e && e.message);
       return null;
     }
   }
@@ -178,17 +241,16 @@
       L.info("Processing inline gpx param…");
       const gpxClean = sanitizeGpxParam(gpx);
 
-      let decoded = null;
-      if (looksLikeXmlText(gpxClean)) {
-        L.info("gpx looks like XML or URL-encoded XML; trying text path");
+      // Prefer the smart decoder that handles gzip/zlib/base64/utf16/urlencoded
+      let decoded = decodeHashGPX(gpxClean);
+      if (!decoded || !decoded.includes("<gpx")) {
+        // If decodeHashGPX failed, try plain text decode (URL decode)
         decoded = tryDecodeText(gpxClean);
-      } else {
-        L.info("gpx does not look like XML; trying Base64 path");
+      }
+
+      // As last fallback, try simple base64 decode path (already covered by decodeHashGPX usually)
+      if ((!decoded || !decoded.includes("<gpx")) && !looksLikeXmlText(gpxClean)) {
         decoded = tryDecodeBase64(gpxClean);
-        if (!decoded || !decoded.includes("<gpx")) {
-          L.info("Base64 path did not yield XML; trying text decode as fallback");
-          decoded = tryDecodeText(gpxClean);
-        }
       }
 
       if (!decoded || !decoded.includes("<gpx")) {
@@ -222,10 +284,69 @@
     }
   }
 
-  // Run once on load; Shortcuts usually open the URL with hash/query
-  if (document.readyState === "complete" || document.readyState === "interactive") {
-    loadFromParams();
-  } else {
-    window.addEventListener("DOMContentLoaded", loadFromParams, { once: true });
-  }
-})();
+  // expose decoder for debug / UI usage
+  window.decodeHashGPX = decodeHashGPX;
+
+  // Console utilities: inspect an encoded GPX string and optionally copy decoded GPX to clipboard.
+  (function exposeConsoleUtils(){
+    window.cw = window.cw || {};
+    window.cw.utils = window.cw.utils || {};
+
+    // Inspect encoded payload: returns details useful for debugging Shortcuts/URL payloads.
+    window.cw.utils.inspectEncodedGPX = function (enc) {
+      try {
+        const orig = String(enc || "");
+        const triedDecodeURI = (() => { try { return decodeURIComponent(orig); } catch(_) { return orig; } })();
+        const normalized = triedDecodeURI.replace(/\s+/g, "");
+        const bytes = base64UrlToUint8Array(normalized);
+        const hex = bytes ? Array.from(bytes.slice(0,20)).map(b => b.toString(16).padStart(2,'0')).join(' ') : null;
+        const isGzip = !!(bytes && bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b);
+        const isZlib = !!(bytes && bytes.length > 2 && bytes[0] === 0x78);
+        const utf16Heuristic = (() => {
+          if (!bytes) return false;
+          let zerosEven = 0, zerosOdd = 0, lim = Math.min(bytes.length, 2000);
+          for (let i=0;i<lim;i++){ if (bytes[i]===0) { if ((i&1)===0) zerosEven++; else zerosOdd++; } }
+          return (zerosEven>zerosOdd && zerosEven>lim*0.2) || (zerosOdd>zerosEven && zerosOdd>lim*0.2);
+        })();
+        const decoded = decodeHashGPX(orig) || null;
+        const isXml = !!(decoded && /<gpx\b/i.test(decoded));
+        const parseable = !!(decoded && /<trk\b|<rte\b|<wpt\b/i.test(decoded));
+        return {
+          inputPreview: orig.slice(0,400),
+          triedDecodeURI: triedDecodeURI.slice(0,400),
+          bytesLength: bytes ? bytes.length : null,
+          hexPreview: hex,
+          isGzip,
+          isZlib,
+          utf16Heuristic,
+          decodedLength: decoded ? decoded.length : null,
+          decodedSnippet: decoded ? decoded.slice(0,800) : null,
+          isXml,
+          parseable
+        };
+      } catch (e) {
+        return { error: String(e && e.message ? e.message : e) };
+      }
+    };
+
+    // Copy decoded GPX to clipboard (returns Promise). Useful to quickly inspect result.
+    window.cw.utils.copyDecodedGPXToClipboard = async function(enc) {
+      try {
+        const info = window.cw.utils.inspectEncodedGPX(enc);
+        if (!info.decodedSnippet) throw new Error("no_decoded_gpx");
+        if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("clipboard_not_supported");
+        await navigator.clipboard.writeText(info.decodedSnippet);
+        return { ok: true, message: "decoded copied" };
+      } catch (err) {
+        return { ok: false, error: err && err.message ? err.message : String(err) };
+      }
+    };
+  })();
+
+   // Run once on load; Shortcuts usually open the URL with hash/query
+   if (document.readyState === "complete" || document.readyState === "interactive") {
+     loadFromParams();
+   } else {
+     window.addEventListener("DOMContentLoaded", loadFromParams, { once: true });
+   }
+ })();
