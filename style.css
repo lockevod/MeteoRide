@@ -74,8 +74,8 @@ header nav button {
   cursor: pointer;
 }
 
-/* On very small screens, slightly reduce paddings to avoid wrapping */
-@media (max-width: 520px) {
+/* On very small screens, slightly reduce paddings to avoid wrapping antes 520*/
+@media (max-width: 420px) {
   header nav button { padding: 6px 8px; gap: 4px; }
   .speed-wrap input[type="number"],
   .speed-wrap .speed-presets,
@@ -258,47 +258,6 @@ nav button:hover {
     overflow-y: auto;
     border-radius: 8px;
     padding: 12px;
-  }
-  /* Extra-narrow screens (phones, very small viewports): stack label above control and make inputs full width
-     This fixes alignment issues where the fixed label column pushed controls off or made them appear shifted. */
-  @media screen and (max-width: 420px) {
-    #configMenu {
-      padding: 10px;
-      left: 6px;
-      right: 6px;
-    }
-    #configMenu .config-row {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      align-items: stretch;
-      padding: 6px 0;
-    }
-    /* Put the label above the control and allow it to wrap */
-    #configMenu .config-row > label,
-    #configMenu .unit-pair label {
-      flex: none;
-      width: auto;
-      min-width: 0;
-      margin: 0;
-      font-size: 13px;
-    }
-    /* Make form controls expand to the available width */
-    #configMenu .config-row select,
-    #configMenu .config-row input[type="text"],
-    #configMenu .config-row .file-btn.small-file-btn,
-    #configMenu .unit-pair select,
-    #configMenu .unit-pair input[type="text"] {
-      width: 100%;
-      flex: none;
-      box-sizing: border-box;
-    }
-    /* Unit pairs stack vertically on very small screens */
-    #configMenu .unit-pair {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 6px;
-    }
   }
   /* Use a compact, wrapping row layout on narrow screens so the panel
      doesn't become unnecessarily tall — keep label+control on the
@@ -526,14 +485,6 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Minimal small-screen refinement: allow labels to wrap naturally without forcing full column stacking */
-@media screen and (max-width: 420px) {
-  #controlsPanel .param-row > label,
-  #controlsPanel .interval-row > label {
-    white-space: normal;
-  }
 }
 
 /* Ocultar control file nativo y mostrar label-actuando-como-botón */
@@ -968,7 +919,7 @@ input[type="file"] {
   }
 }
 
-@media screen and (max-width: 600px) {
+@media screen and (max-width: 700px) {
     header h1 {
       font-size: 1.3rem;  /* sigue siendo mayor que los toggles en móviles */
     }
@@ -1181,6 +1132,13 @@ input[type="file"] {
   flex-wrap: nowrap; /* try to keep label and control together */
 }
 
+/* Slightly lower the provider selector so it visually aligns with interval */
+.param-row > label[for="apiSource"],
+.param-row > #apiSource {
+  position: relative;
+  top: 2px; /* adjust vertical alignment */
+}
+
 @media screen and (max-width: 700px) {
   /* Keep label+control paired horizontally so pairs flow on the same line.
      Reduce the label width so multiple pairs can fit. */
@@ -1198,49 +1156,31 @@ input[type="file"] {
     text-align: left;
     margin-right: 6px;
   }
-  /* When using .param-row on small screens, keep label next to its control unless extremely narrow */
+  /* But when using .param-row, the label should not stretch to fill the line
+     — keep it tight next to its control so the selector doesn't get pushed away. */
   .param-row > label {
-    flex: 0 0 110px;
-    min-width: 110px;
-    text-align: left;
-    margin-right: 6px;
-  }
-}
-
-/* Under very small widths, stack param rows vertically so labels sit above controls
-   and selects/inputs expand to full width (fix alignment on iPhone-sized viewports) */
-@media screen and (max-width: 420px) {
-  .param-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    align-items: stretch;
-  }
-  #controlsPanel .params > label,
-  #controlsPanel .params > .param-row > label {
-    width: 100%;
-    flex: none;
+    flex: 0 0 auto;
     min-width: 0;
-    margin: 0 0 4px 0;
+    width: auto;
+    margin-right: 6px;
+    text-align: left;
+    white-space: nowrap;
   }
-  /* Make form controls fill the available width */
-  #controlsPanel .param-row select,
-  #controlsPanel .param-row input[type="number"],
-  #controlsPanel .param-row input[type="text"],
-  #controlsPanel .param-row .speed-wrap,
-  #controlsPanel .param-row .file-btn.small-file-btn {
-    width: 100%;
-    box-sizing: border-box;
-  }
-  /* Interval row stacks similarly */
-  .interval-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    align-items: stretch;
-    margin-top: 6px;
-  }
-  .interval-row > select { width: 100%; box-sizing: border-box; }
+  /* Under very small widths, stack the pair vertically for readability 
+  @media screen and (max-width: 420px) {
+    .param-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: stretch;
+    }
+    #controlsPanel .params > label,
+    #controlsPanel .params > .param-row > label {
+      width: 100%;
+      flex: none;
+      min-width: 0;
+    }
+  } */
 }
 
 /* Utility element to force a wrap in the params flex flow on narrow screens */
