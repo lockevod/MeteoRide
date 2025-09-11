@@ -98,15 +98,15 @@
 </head>
 <body>
     <div class="header">
-        <a href="#" id="backBtn" class="back-button" style="display: none;">← Back to App</a>
+        <a href="#" id="backBtn" class="back-button" style="display: none;">← Return to App</a>
         <h1>🚴‍♂️ MeteoRide - User Guide</h1>
-        <p>Plan your cycling routes with detailed weather information</p>
+        <p>Plan your routes with detailed weather information</p>
     </div>
 
     <div class="section">
         <h2>🚀 Introduction</h2>
         <p>MeteoRide is a web application designed for cyclists that allows loading GPX routes and obtaining detailed weather forecasts along the route.</p>
-        <p>The app automatically calculates route steps based on the selected cycling speed and retrieves data from various weather providers to display temperature, wind, precipitation, humidity, cloudiness, luminosity, and more.</p>
+        <p>The app automatically calculates route steps based on the selected cycling speed and retrieves data from various weather providers to display temperature, wind, precipitation, humidity, cloudiness, luminosity and more.</p>
         <p>It includes automatic fallback options to ensure data even if a provider fails, and allows comparing forecasts from different sources.</p>
         <p>It's ideal for planning safe and weather-prepared routes.</p>
     </div>
@@ -116,15 +116,15 @@
         
         <div class="step">
             <h3>1. Load a GPX Route</h3>
-            <p>Click the <strong>📁</strong> button to select your GPX file. MeteoRide supports standard tracks, routes, and waypoints.</p>
+            <p>Click the <strong>📁</strong> button to select your GPX file. MeteoRide supports standard tracks, routes and waypoints.</p>
             <div class="tip">
-                <strong>💡 Tip:</strong> You can also use direct URLs with parameters like <code>?gpx_url=</code> to load routes automatically. For details on sharing routes from iOS or Android, please see the project website on GitHub.
+                <strong>💡 Tip:</strong> You can also use direct URLs with parameters like <code>?gpx_url=</code> to load routes automatically. For details about sharing routes from iOS or Android check the project page on GitHub.
             </div>
         </div>
 
         <div class="step">
             <h3>2. Configure Date and Time</h3>
-            <p>Select when you plan to do the route. The system automatically adjusts to 15-minute intervals.</p>
+            <p>Select when you plan to do the route. The system adjusts automatically to 15-minute intervals.</p>
         </div>
 
         <div class="step">
@@ -134,7 +134,7 @@
 
         <div class="step">
             <h3>4. Choose Interval</h3>
-            <p>Select every how many minutes you want to see the weather information (15 or 30 minutes).</p>
+            <p>Select how often you want weather information (15 or 30 minutes).</p>
         </div>
         <div class="step">
             <h3>5. Choose Weather Provider</h3>
@@ -143,19 +143,19 @@
             <li><strong>Open-Meteo:</strong> Free, no API key required, up to 14 days forecast</li>
             <li><strong>MeteoBlue:</strong> Requires API key, up to 7 days, very accurate</li>
             <li><strong>OpenWeather:</strong> Requires API key, up to 5 days, detailed data</li>
-            <li><strong>Arome-HD:</strong> High-resolution model from MeteoFrance, accessible via Open-Meteo. Only available for Europe (approx. 39-52°N, 10.5°W-16.5°E) and within 48 hours (outside these hours it switches directly to the best provider offered by Open-Meteo for that location). It is especially useful for short-term wind and precipitation.</li>
+            <li><strong>Arome-HD:</strong> High-resolution model from MeteoFrance, accessible via Open-Meteo. Only available for Europe (approx. 39-52°N, 10.5°W-16.5°E) and within 48 hours (outside of these hours it falls back to the best provider available through Open-Meteo for that location). Especially useful for wind and short-term precipitation.</li>
             <li><strong>Compare (Comp.):</strong> Activate comparison mode to evaluate differences between providers.</li>
         </ul>
          <div class="tip">
-            <strong>💡 Automatic Fallback:</strong> If your primary provider fails or has no data, MeteoRide automatically switches to Open-Meteo. MeteoRide will notify you via a message about this situation (as long as it is selected in Settings)
+            <strong>💡 Automatic Fallback:</strong> If your primary provider fails or has no data, MeteoRide automatically switches to Open-Meteo. MeteoRide will notify you with a message about this situation (if notifications are enabled in Settings)
         </div>
         </div>
 
     </div>
 
     <div class="section">
-        <h2>� Installing as an App</h2>
-        <p>MeteoRide can be installed as a Progressive Web App (PWA) on your device for a native app-like experience.</p>
+        <h2>🏁 Install as App</h2>
+        <p>MeteoRide can be installed as a Progressive Web App (PWA) on your device for an app-like experience.</p>
         
         <h3>Android</h3>
         <ol>
@@ -176,7 +176,7 @@
         <h3>Chrome on Desktop</h3>
         <ol>
             <li>Open MeteoRide in Chrome.</li>
-            <li>Click the install icon in the address bar or the menu.</li>
+            <li>Click the install icon in the address bar or in the menu.</li>
             <li>Click "Install".</li>
         </ol>
         
@@ -190,13 +190,13 @@
         <h3>Safari on Mac</h3>
         <ol>
             <li>Open MeteoRide in Safari.</li>
-            <li>Go to File > Add to Dock.</li>
+            <li>Go to File &gt; Add to Dock.</li>
             <li>Or, click the Share button and select "Add to Dock".</li>
         </ol>
     </div>
 
     <div class="section">
-        <h2>�🛠️ Settings</h2>
+        <h2>⚙️ Settings</h2>
 
         <h3>🔑 API Keys</h3>
         <p>For MeteoBlue and OpenWeather you need to register and obtain a free API key:</p>
@@ -204,22 +204,21 @@
             <li><strong>MeteoBlue:</strong> <a href="https://meteoblue.com/weather-api" target="_blank">meteoblue.com/weather-api</a></li>
             <li><strong>OpenWeather (One Call API):</strong> <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></li>
         </ul>
-        <p>Use the <strong>🔍 Check</strong> button to verify that your API key works correctly.</p>
+        <p>Use the <strong>🔍 Check</strong> button to verify your API key works correctly.</p>
 
        
-    
-        <h3>🔑 API Keys Test and Notifications</h3>
+        <h3>🔑 API Key Tests and Notices</h3>
         <p>
-        In the settings panel there are <code>Check</code> buttons for MeteoBlue and OpenWeather. When pressed,
-        a simple request is made and the status is displayed next to the field (valid / invalid / quota / HTTP).
+        In the settings panel there are <code>Check</code> buttons for MeteoBlue and OpenWeather. When pressed
+        the app makes a simple request and the status is shown next to the field (valid / invalid / quota / HTTP).
         </p>
         <p>
-        Additionally, there is the checkbox <strong>Show non-critical notifications</strong> that controls the verbosity of notifications:
-        if activated you will see informative banners when fallbacks occur due to time horizon, quota, or API errors;
-        if deactivated only critical errors are shown.
+        Additionally there is a checkbox <strong>Show non-critical notices</strong> which controls the verbosity of notifications:
+        if enabled you will see informational banners when fallbacks occur due to horizon limits, quota or API errors;
+        if disabled only critical errors are shown.
         </p>
         <p class="small">
-        When a provider exceeds its horizon or fails repeatedly, the app automatically falls back to Open-Meteo only for the affected steps.
+        When a provider exceeds its horizon or fails repeatedly, the app falls back to Open‑Meteo only for the affected steps.
         This is indicated with a brief notice in the header.
         </p>
          <h3>📏 Units</h3>
@@ -231,18 +230,18 @@
         </ul>
 
         <h3>🌐 Languages</h3>
-        <p>The application supports Spanish and English. Select your preferred language in the settings to change the interface language and messages.</p>
+        <p>The application supports Spanish and English. Select your preferred language in the settings to change the interface and messages.</p>
     </div>
 
     <div class="section">
         <h2>📊 Interpreting the Data</h2>
         
         <h3>🌤️ Weather Table</h3>
-        <p>The table shows hourly information:</p>
+        <p>The table shows information per time step:</p>
         <ul>
-            <li><strong>First row:</strong> Time and accumulated distance</li>
+            <li><strong>First row:</strong> Time and cumulative distance</li>
             <li><strong>Second row:</strong> Weather icons</li>
-            <li><strong>Temperature:</strong> In degrees Celsius or Fahrenheit</li>
+            <li><strong>Temperature:</strong> In Celsius or Fahrenheit</li>
             <li><strong>Wind:</strong> Speed + direction arrow (gusts in parentheses)</li>
             <li><strong>Rain:</strong> Amount in mm/h (probability in parentheses)</li>
             <li><strong>Humidity:</strong> Relative humidity percentage</li>
@@ -256,12 +255,12 @@
             <li><strong>Blue arrows:</strong> Light wind (&lt;12 km/h)</li>
             <li><strong>Red arrows:</strong> Strong wind (30-50 km/h)</li>
             <li><strong>Purple arrows:</strong> Very strong wind (&gt;50 km/h)</li>
-            <li><strong>Drops 💧:</strong> Expected precipitation</li>
-            <li><strong>Green/red markers:</strong> Route start and end</li>
+            <li><strong>Droplets 💧:</strong> Expected precipitation</li>
+            <li><strong>Green/Red markers:</strong> Route start and end</li>
         </ul>
 
         <div class="tip">
-            <strong>💡 Interactivity:</strong> Click on any column in the table or arrow on the map to see specific details for that point.
+            <strong>💡 Interactivity:</strong> Click any table column or a wind arrow on the map to see details for that point.
         </div>
     </div>
 
@@ -270,29 +269,29 @@
         
         <h3>🔄 Horizontal Scrolling</h3>
         <p>
-            The weather table is interactive and adapted for touch screens:
+            The weather table is interactive and touch-friendly:
             </p>
             <ul>
-            <li>Drag horizontally on the table or use the mouse wheel to scroll columns (gestures and "drag-to-scroll").</li>
-            <li>Click on any column (or any cell with <code>data-col</code>) to select that column; the row and map will be highlighted.</li>
-            <li>The map centers on the selected point if you click on a wind arrow or the column.</li>
-            <li>If the penultimate column is less than 5 minutes from the last, the app hides it to avoid visual duplicates.</li>
+            <li>Drag the table horizontally or use the mouse wheel to scroll columns (gestures and "drag‑to‑scroll").</li>
+            <li>Click any column (or any cell with <code>data-col</code>) to select that column; the row and the map will be highlighted.</li>
+            <li>The map recenters on the selected point if you click a wind arrow or the column.</li>
+            <li>If the penultimate column is less than 5 minutes away from the last one, the app hides it to avoid visual duplicates.</li>
             </ul>
-            <p class="small">Tip: use the small ⇆ icon that appears to indicate that the table has more columns available when scrolling.</p>
-        
+            <p class="small">Tip: use the small ⇆ icon that appears to indicate the table has more columns available when scrolling.</p>
+
         <h3>🌅 Solar Information</h3>
         <p>The app automatically shows:</p>
         <ul>
             <li>Sunrise and sunset times</li>
             <li>Civil twilight (marked with "c")</li>
-            <li>Real luminosity calculation based on time and conditions</li>
+            <li>Calculated luminosity according to time and conditions</li>
         </ul>
 
         <h3>🎯 Smart Fallbacks</h3>
         <p>MeteoRide automatically handles:</p>
         <ul>
             <li>Switch to Open-Meteo if your provider exceeds its time horizon</li>
-            <li>Retries when there are temporary errors</li>
+            <li>Retries for temporary errors</li>
             <li>Clear notifications about data limitations</li>
         </ul>
 
@@ -304,90 +303,46 @@
             <li><code>?datetime=2024-03-15T10:00</code></li>
             <li><code>?speed=25</code></li>
         </ul>
-        <h3>💾 Local Cache and Performance</h3>
+        <h3>💾 Local cache and performance</h3>
             <p>
             Provider responses are stored in <code>localStorage</code> for ~30 minutes per step/hour.
-            This speeds up frequent reloads and reduces requests to APIs with limits. You can clear the cache from your browser tools.
+            This speeds up frequent reloads and reduces requests to rate-limited APIs. You can clear the cache from your browser devtools.
             </p>
     </div>
 
     <div class="section">
-        <h2>⚠️ Limitations and Tips</h2>
+        <h2>⚠️ Limitations and Advice</h2>
         
         <div class="warning">
-            <h3>🚨 Important Limitations</h3>
+            <h3>🚨 Important Limits</h3>
             <ul>
                 <li><strong>Time horizon:</strong> Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (2 days)</li>
-                <li><strong>Accuracy:</strong> Forecasts are less reliable from day 3-4 onwards</li>
-                <li><strong>Free APIs:</strong> MeteoBlue and OpenWeatherMap APIs have free tiers (Open-Meteo does not require an API) so they have monthly usage limits</li>
+                <li><strong>Accuracy:</strong> Forecasts become less reliable after day 3-4</li>
+                <li><strong>APIs free tiers:</strong> MeteoBlue and OpenWeather free tiers have usage limits (Open-Meteo does not require an API key)</li>
             </ul>
         </div>
 
         <div class="tip">
             <h3>✅ Best Practices</h3>
             <ul>
-                <li>Use routes of maximum 100-200 km for better performance</li>
-                <li>Plan 1-2 days in advance for greater accuracy</li>
-                <li>Combine information from multiple sources for important decisions</li>
+                <li>Use routes up to 100-200 km for better performance</li>
+                <li>Plan 1-2 days ahead for better accuracy</li>
+                <li>Combine multiple sources for important decisions</li>
                 <li>Always have a plan B for adverse conditions</li>
-                <li>Carry rain gear even if the probability is low</li>
+                <li>Carry rain gear even if probability is low</li>
             </ul>
         </div>
     </div>
-
-    <div class="section">
-        <h2>📤 Share GPX via iOS Shortcut</h2>
-        <p>Use an iOS Shortcut to send a full GPX file to MeteoRide without trimming or encoding on the URL. This requires the app to be served over HTTPS and that the Service Worker (service-worker.js) is deployed at the same origin (root) as index.html.</p>
-
-        <h3>Shortcut: "Share GPX to MeteoRide" (From Files)</h3>
-        <ol>
-            <li><strong>Get File</strong> — pick the GPX file (or set as "Shortcut Input" when using Share Sheet). Enable "Show Document Picker" if needed.</li>
-            <li><strong>Get Contents of URL</strong>
-              <ul>
-                <li>URL: https://your-domain.example/share</li>
-                <li>Method: POST</li>
-                <li>Request Body: File (choose the File variable from the Get File step or "Shortcut Input")</li>
-                <li>Headers: add <code>Content-Type: application/gpx+xml</code> (or <code>text/xml</code>)</li>
-                <li>(Optional) add header <code>x-gpx-name</code> with the file name to preserve the route name.</li>
-              </ul>
-            </li>
-            <li><strong>Open URLs</strong> — URL: https://your-domain.example/index.html
-              <p>This opens the app; the service worker stores the posted GPX into IndexedDB and index.html will read it and load the route automatically.</p>
-            </li>
-        </ol>
-
-        <h3>Shortcut: "Share" from Files / Share Sheet (alternate)</h3>
-        <p>If you want the shortcut available in the Share Sheet:</p>
-        <ol>
-          <li>Create a Shortcut with input accepted from "Files" or "Share Sheet".</li>
-          <li>Use the provided "Shortcut Input" as the body for <em>Get Contents of URL</em> (POST) and set the same headers as above.</li>
-          <li>Finish with <em>Open URLs</em> to open index.html.</li>
-        </ol>
-
-        <h3>Notes & tips</h3>
-        <ul>
-          <li>Make sure your site is served via HTTPS. Service workers and IndexedDB require secure contexts on iOS/Safari.</li>
-          <li>If the Shortcut performs the POST and you open index.html afterwards, the app will read the stored GPX and load it (no manual paste required).</li>
-          <li>If you want to preserve the original filename, include a header such as <code>x-gpx-name: route.gpx</code> in the POST; the service worker saves it into IndexedDB and index.html uses it as the route name.</li>
-        </ul>
-
-        <h3>Example (for testing from a terminal)</h3>
-        <pre><code>curl -X POST --data-binary @route.gpx \
-  -H "Content-Type: application/gpx+xml" \
-  -H "x-gpx-name: route.gpx" \
-  -L https://your-domain.example/share</code></pre>
-        <p>The <code>-L</code> follows the redirect the service worker returns (to index.html).</p>
-      </div>
 
     <div class="section">
         <h2>🐛 Troubleshooting</h2>
         
         <h3>❌ Common Issues</h3>
         <ul>
-            <li><strong>GPX doesn't load:</strong> Verify that the file contains valid tracks</li>
+            <li><strong>GPX won't load:</strong> Verify that the file contains valid tracks</li>
             <li><strong>No weather data:</strong> Check your API key or use Open-Meteo</li>
             <li><strong>Date out of range:</strong> Reduce the time horizon</li>
-            <li><strong>Empty table:</strong> Make sure the route has sufficient length</li>
+            <li><strong>Empty table:</strong> Ensure the route has sufficient length</li>
         </ul>
 
     </div>
@@ -396,33 +351,33 @@
         <h2>🔒 Privacy and Data</h2>
         
         <div class="privacy">
-            <h3>🛡️ Protecting Your Privacy</h3>
-            <p><strong>MeteoRide works completely on your device.</strong> All settings, preferences, and data are stored only in your local browser via localStorage.</p>
+            <h3>🛡️ Protection of your Privacy</h3>
+            <p><strong>MeteoRide runs completely on your device.</strong> All settings, preferences and data are stored only in your browser localStorage.</p>
             
             <ul>
-                <li><strong>No own servers:</strong> The application does not send data to any MeteoRide server</li>
+                <li><strong>No own servers:</strong> The app does not send data to any MeteoRide servers</li>
                 <li><strong>No registration:</strong> You don't need to create an account or provide personal data</li>
                 <li><strong>Full control:</strong> You can delete all data from your browser settings</li>
-                <li><strong>Open source:</strong> You can inspect all source code on GitHub</li>
+                <li><strong>Open source:</strong> You can inspect the full source code on GitHub</li>
             </ul>
         </div>
 
         <h3>🌐 Data Shared with Weather Providers</h3>
         <p>To obtain weather forecasts, MeteoRide shares only:</p>
         <ul>
-            <li><strong>Geographic coordinates</strong> of the points on your route</li>
+            <li><strong>Geographic coordinates</strong> of the points in your route</li>
             <li><strong>Dates and times</strong> for which you need the forecast</li>
-            <li><strong>Your API Key</strong> (if using MeteoBlue or OpenWeather)</li>
+            <li><strong>Your API Key</strong> (if you use MeteoBlue or OpenWeather)</li>
         </ul>
-        
+
         <div class="tip">
-            <strong>💡 Important:</strong> Weather providers (Open-Meteo, MeteoBlue, OpenWeather) have their own privacy policies. MeteoRide only acts as an intermediary to request the weather data you need.
+            <strong>💡 Note:</strong> Weather providers (Open-Meteo, MeteoBlue, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting the forecast data you need.
         </div>
 
         <h3>🗂️ What is Stored Locally</h3>
         <ul>
             <li>Units and language settings</li>
-            <li>API Keys (encrypted in your browser)</li>
+            <li>API Keys (stored in your browser)</li>
             <li>Speed and interval preferences</li>
             <li>Temporary weather data cache (30 minutes)</li>
         </ul>
@@ -433,7 +388,7 @@
         
         <h3>👨‍💻 Developer</h3>
         <p><strong>MeteoRide</strong> has been developed by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer"><strong>Lockevod</strong></a>.</p>
-        
+
         <h3>📝 License</h3>
         <p>This project is licensed under the <strong>MIT License</strong>, which means:</p>
         <ul>
@@ -442,9 +397,9 @@
             <li>✅ You can distribute your own version</li>
             <li>✅ For personal and commercial use</li>
         </ul>
-        
+
         <div class="tip">
-            <strong>📋 Source Code:</strong> The complete code is available on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. Contributions are welcome!
+            <strong>📋 Source Code:</strong> The full source is available on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. Contributions are welcome!
         </div>
 
         <h3>🙏 Technologies and Services</h3>
@@ -457,7 +412,7 @@
         </ul>
 
         <h3>⚖️ Disclaimer</h3>
-        <p>MeteoRide is a planning tool. Weather data are estimates and may not be completely accurate. Always use your judgment and verify conditions before going out. The developer is not responsible for decisions based on this information.</p>
+        <p>MeteoRide is a planning tool. Weather forecasts are estimates and may not be completely accurate. Always use your judgement and verify conditions before heading out. The developer is not responsible for decisions based on this information.</p>
     </div>
 
     <div class="section">
@@ -465,10 +420,10 @@
         <h3>🐛 Report Issues</h3>
         <ul>
             <li>Visit the <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">GitHub repository</a></li>
-            <li>Activate debug mode (🐞) to get technical information</li>
-            <li>Include details about your device and browser</li>
+            <li>Enable debug mode (🐞) to get technical details</li>
+            <li>Include device and browser details</li>
         </ul>
-        
+
         <h3>🤝 Contribute to the Project</h3>
         <ul>
             <li>Fork the repository on GitHub</li>
@@ -476,11 +431,11 @@
             <li>Translate to new languages</li>
             <li>Improve the documentation</li>
         </ul>
-        
+
         <div class="tip">
-            <strong>💡 Final tip:</strong> Weather can change quickly! Use MeteoRide as a guide, but stay flexible and safe on your routes.
+            <strong>💡 Final tip:</strong> Weather can change quickly! Use MeteoRide as a guide, but stay flexible and safe on your rides.
         </div>
-        
+
         <h3>💰 Support the Project</h3>
         <p>If you find MeteoRide useful, consider supporting the project with a donation:</p>
         <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
@@ -488,29 +443,28 @@
 
     <script>
         // Auto-detect language and show return button if needed
-        const urlParams = new URLSearchParams(window.location.search);
-        const shouldShowReturn = urlParams.get('return') === 'true';
-        
-        if (shouldShowReturn) {
-            const backBtn = document.getElementById('backBtn');
-            if (backBtn) {
-                backBtn.style.display = 'inline-block';
-                backBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (window.history.length > 1) {
-                        window.history.back();
-                    } else {
-                        window.location.href = 'index.html';
-                    }
-                });
+        (function(){
+            const urlParams = new URLSearchParams(window.location.search);
+            const shouldShowReturn = urlParams.get('return') === 'true';
+            if (shouldShowReturn) {
+                const backBtn = document.getElementById('backBtn');
+                if (backBtn) {
+                    backBtn.style.display = 'inline-block';
+                    backBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        if (window.history.length > 1) {
+                            window.history.back();
+                        } else {
+                            window.location.href = 'index.html';
+                        }
+                    });
+                }
             }
-        }
-
-        const lang = navigator.language || navigator.userLanguage;
-        if (lang.startsWith('en')) {
-            document.title = 'Help - MeteoRide';
-            // Could add English translations here in the future
-        }
+            const lang = navigator.language || navigator.userLanguage;
+            if (lang && lang.startsWith('es')) {
+                document.title = 'Ayuda - MeteoRide';
+            }
+        })();
     </script>
 </body>
 </html>
