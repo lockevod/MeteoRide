@@ -99,8 +99,8 @@
 <body>
     <div class="header">
         <a href="#" id="backBtn" class="back-button" style="display: none;">← Volver a la App</a>
-        <h1>🚴‍♂️ MeteoRide - Guía de Usuario</h1>
-        <p>Planifica tus rutas en bicicleta con información meteorológica detallada</p>
+        <h1>🚴‍♂️ MeteoRide </h1>
+        <p>Planifica tus rutas  con información meteorológica detallada</p>
     </div>
 
     <div class="section">
@@ -118,7 +118,7 @@
             <h3>1. Cargar una Ruta GPX</h3>
             <p>Haz clic en el botón <strong>📁</strong> para seleccionar tu archivo GPX. MeteoRide soporta tracks, rutas y waypoints estándar.</p>
             <div class="tip">
-                <strong>💡 Consejo:</strong> También puedes usar URLs directas con parámetros como <code>?gpx_url=</code> para cargar rutas automáticamente. Para información detallada sobre cómo compartir rutas desde iOS o Android consulta la página del proyecto en GitHub.
+                <strong>💡 Consejo:</strong> También puedes usar URLs directas con parámetros como <code>?gpx_url=</code> para cargar rutas automáticamente. Para información detallada sobre cómo compartir rutas desde iOS o Android consulta la página del proyecto en <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </div>
         </div>
 
@@ -140,19 +140,17 @@
             <h3>5. Elegir Proveedor Meteorológico</h3>
             <p>Selecciona el proveedor meteorológico que deseas utilizar para obtener los datos.</p>
             <ul>
-            <li><strong>Open-Meteo:</strong> Gratuito, no requiere API key, hasta 14 días de previsión</li>
-            <li><strong>MeteoBlue:</strong> Requiere API key, hasta 7 días, muy preciso</li>
-            <li><strong>OpenWeather:</strong> Requiere API key, hasta 5 días, datos detallados</li>
-            <li><strong>Arome-HD:</strong> Modelo de alta resolución de MeteoFrance, accesible vía Open-Meteo. Solo disponible para Europa (aprox. 39-52°N, 10.5°W-16.5°E) y dentro de 48 horas (fuera de estas horas conmuta directamente al mejor provedor que provee Open-Meteo para esa localización). Es especialmente útil para viento y precipitaciones a corto plazo.</li>
-            <li><strong>Comparar (Comp.):</strong> Activa el modo de comparación para evaluar diferencias entre proveedores.</li>
-        </ul>
-         <div class="tip">
+                <li><strong>Open-Meteo:</strong> Gratuito, no requiere API key, hasta 14 días de previsión</li>
+                <li><strong>MeteoBlue:</strong> Requiere API key, hasta 7 días, muy preciso</li>
+                <li><strong>OpenWeather:</strong> Requiere API key, hasta 5 días, datos detallados</li>
+                <li><strong>AromeHD:</strong> Modelo de alta resolución de MeteoFrance, accesible vía Open-Meteo. Solo disponible para Europa (aprox. 39-52°N, 10.5°W-16.5°E) y dentro de 48 horas (fuera de estas horas conmuta directamente al mejor provedor que provee Open-Meteo para esa localización). Es especialmente útil para viento y precipitaciones a corto plazo.</li>
+                <li><strong>OpenWeather - AromeHD</strong> Utilizar Openweather para las dos primeras hora,luego hasta las 36 horas OpenMeteo. Rutas fuera de este periodo se calculan con OpenMeteo. Solo disponible si hay key de Openweather</li>
+                <li><strong>Comparar (Comp.):</strong> Activa el modo de comparación para evaluar diferencias entre proveedores.</li>
+            </ul>
+            <div class="tip">
             <strong>💡 Fallback Automático:</strong> Si tu proveedor principal falla o no tiene datos, MeteoRide cambia automáticamente a Open-Meteo. Meteoride notificará mediante un mensaje esta situación (siempre que esté seleccionado en Configuración)
-        </div>
+            </div>
 
-        <div class="tip">
-            <strong>📌 Nueva opción de proveedor:</strong> "OpenWeather 0–2h → Arome 2–36h → OpenMeteo" combina OpenWeather (cercano), Arome (corto/medio plazo) y Open‑Meteo como fallback. OpenWeather requiere una API Key: si no la has proporcionado, esa opción no estará disponible en el selector. Además, los tramos de validez de la cadena se calculan desde la hora actual (ahora), no desde la hora elegida de inicio de la ruta.
-        </div>
         </div>
 
     </div>
@@ -200,7 +198,7 @@
     </div>
 
     <div class="section">
-        <h2>�🛠️ Configuración</h2>
+        <h2>🛠️ Configuración</h2>
 
         <h3>🔑 API Keys</h3>
         <p>Para MeteoBlue y OpenWeather necesitas registrarte y obtener una API key gratuita:</p>
@@ -278,7 +276,7 @@
             </p>
             <ul>
             <li>Arrastra horizontalmente la tabla o usa la rueda del ratón para desplazar columnas (gestos y "drag‑to‑scroll").</li>
-            <li>Haz clic en cualquier columna (o cualquier celda con <code>data-col</code>) para seleccionar esa columna; la fila y el mapa se resaltarán.</li>
+            <li>Haz clic en cualquier columna (o cualquier celda para seleccionar esa columna) la fila y el mapa se resaltarán.</li>
             <li>El mapa se centra en el punto seleccionado si haces clic en una flecha de viento o en la columna.</li>
             <li>Si la penúltima columna queda a menos de 5 minutos de la última, la app la oculta para evitar duplicados visuales.</li>
             </ul>
@@ -357,10 +355,9 @@
         
         <div class="privacy">
             <h3>🛡️ Protección de tu Privacidad</h3>
-            <p><strong>MeteoRide funciona completamente en tu dispositivo.</strong> Toda la configuración, preferencias y datos se almacenan únicamente en tu navegador local mediante localStorage.</p>
-            
+            <p><strong>MeteoRide funciona completamente en tu dispositivo.</strong> Toda la configuración, preferencias y datos se almacenan únicamente en tu navegador local mediante localStorage. Solamente en el caso de utilizar shortcuts para compartir un GPX se enviará este fichero en cloudflare. Esto es impprescindible para el uso con shorcuts de IOS que solo aceptan POST (si no abres el fichero directamente desde Meteoride entonces no se enviará ya que se procesa en local). En cualquier caso, el fichero GPX se borra automáticamente en un periodo máximo de dos minutos.</p>
+
             <ul>
-                <li><strong>No hay servidores propios:</strong> La aplicación no envía datos a ningún servidor de MeteoRide</li>
                 <li><strong>Sin registro:</strong> No necesitas crear cuenta ni proporcionar datos personales</li>
                 <li><strong>Control total:</strong> Puedes borrar todos los datos desde la configuración de tu navegador</li>
                 <li><strong>Código abierto:</strong> Puedes inspeccionar todo el código fuente en GitHub</li>
