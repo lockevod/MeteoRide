@@ -39,6 +39,69 @@
     }
   }
 
+  // Parse GPX text and return a small summary object for easier debugging
+  function parseGPXSummary(gpxText) {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(String(gpxText || ''), 'application/xml');
+      const parseError = doc.getElementsByTagName('parsererror');
+      if (parseError && parseError.length) return { error: 'invalid-xml' };
+
+      const getText = (el, sel) => {
+        try { const n = el.querySelector(sel); return n ? (n.textContent || '').trim() : null; } catch(_) { return null; }
+      };
+
+      const name = getText(doc, 'name') || getText(doc, 'metadata > name') || null;
+      const wpts = doc.getElementsByTagName('wpt').length || 0;
+      const trkpts = doc.getElementsByTagName('trkpt').length || 0;
+
+      // times
+      const times = Array.from(doc.getElementsByTagName('time')).map(n => (n.textContent || '').trim()).filter(Boolean);
+      const firstTime = times.length ? times[0] : null;
+      const lastTime = times.length ? times[times.length - 1] : null;
+
+      // bbox from trkpt or wpt
+      let minLat=90, minLon=180, maxLat=-90, maxLon=-180, found=false;
+      const pts = doc.getElementsByTagName('trkpt');
+      if (pts.length === 0) {
+        // fallback to waypoints
+        const w = doc.getElementsByTagName('wpt');
+        for (let i=0;i<w.length;i++){
+          const el = w[i];
+          const lat = parseFloat(el.getAttribute('lat')||NaN);
+          const lon = parseFloat(el.getAttribute('lon')||NaN);
+          if (!isNaN(lat) && !isNaN(lon)) { found=true; minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); minLon=Math.min(minLon,lon); maxLon=Math.max(maxLon,lon); }
+        }
+      } else {
+        for (let i=0;i<pts.length;i++){
+          const el = pts[i];
+          const lat = parseFloat(el.getAttribute('lat')||NaN);
+          const lon = parseFloat(el.getAttribute('lon')||NaN);
+          if (!isNaN(lat) && !isNaN(lon)) { found=true; minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat); minLon=Math.min(minLon,lon); maxLon=Math.max(maxLon,lon); }
+        }
+      }
+
+      const bbox = found ? { minLat, minLon, maxLat, maxLon } : null;
+
+      return { name, wpts, trkpts, firstTime, lastTime, bbox };
+    } catch (e) {
+      return { error: 'parse-failed' };
+    }
+  }
+
+  function logGPXSummary(gpxText, name){
+    try {
+      const s = parseGPXSummary(gpxText);
+      const title = name || s.name || 'shared.gpx';
+      const out = ['GPX:', title, 'trkpts=' + (s.trkpts ?? 0), 'wpts=' + (s.wpts ?? 0)];
+      if (s.firstTime) out.push('start=' + s.firstTime);
+      if (s.lastTime) out.push('end=' + s.lastTime);
+      if (s.bbox) out.push('bbox=' + [s.bbox.minLat.toFixed(5), s.bbox.minLon.toFixed(5), s.bbox.maxLat.toFixed(5), s.bbox.maxLon.toFixed(5)].join(','));
+      if (window.logdebug) window.logdebug(out.join(' | ')); else console.log(out.join(' | '));
+      return s;
+    } catch(_) { if (window.logdebug) window.logdebug('GPX: (unreadable)'); else console.log('GPX: (unreadable)'); }
+  }
+
   // Read GPX stored by the Service Worker in IndexedDB (one-time read)
   function readSharedGPXFromIDB() {
     if (typeof indexedDB === 'undefined') return Promise.resolve(null);

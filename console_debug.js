@@ -102,6 +102,45 @@
       if (auto) window.openDebug && window.openDebug();
     } catch(_) {}
   };
+  // Simple user-agent parser to produce human-friendly browser name/version
+  function parseUserAgent(ua){
+    if (!ua) return { name: 'unknown', version: '' };
+    ua = String(ua);
+    let m;
+    if (m = ua.match(/Edg\/([\d\.]+)/)) return { name: 'Edge', version: m[1] };
+    if (m = ua.match(/OPR\/([\d\.]+)/)) return { name: 'Opera', version: m[1] };
+    if (/Chrome\//.test(ua) && !/Chromium/.test(ua) && !/OPR\//.test(ua) && !/Edg\//.test(ua)) {
+      m = ua.match(/Chrome\/([\d\.]+)/); return { name: 'Chrome', version: m ? m[1] : '' };
+    }
+    if (m = ua.match(/Firefox\/([\d\.]+)/)) return { name: 'Firefox', version: m[1] };
+    if (m = ua.match(/Version\/([\d\.]+).*Safari/)) return { name: 'Safari', version: m[1] };
+    if (/MSIE |Trident\//.test(ua)) return { name: 'IE', version: '' };
+    return { name: 'Browser', version: '' };
+  }
+
+  function logClientInfo(){
+    try {
+      const ua = navigator.userAgent || '';
+      const parsed = parseUserAgent(ua);
+      const client = {
+        browser: parsed.name + (parsed.version ? (' ' + parsed.version) : ''),
+        platform: navigator.platform || '',
+        language: navigator.language || '',
+        viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
+        screen: { w: screen.width, h: screen.height }
+      };
+      if (window.logdebug) {
+        window.logdebug('--- CLIENT INFO ---');
+        window.logdebug('Browser:', client.browser, '| UA:', ua);
+        window.logdebug('Platform:', client.platform, '| Lang:', client.language);
+        window.logdebug('Viewport:', JSON.stringify(client.viewport), 'Screen:', JSON.stringify(client.screen));
+        try { const tz = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : ''; window.logdebug('Timezone:', tz || 'unknown'); } catch(_){}
+        window.logdebug('-------------------');
+      } else {
+        console.log('CLIENT:', client);
+      }
+    } catch(_){}
+  }
   const orig = {
     log: console.log.bind(console),
     warn: console.warn.bind(console),
