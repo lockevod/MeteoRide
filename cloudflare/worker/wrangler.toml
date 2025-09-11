@@ -1,0 +1,17 @@
+name = "meteoride-share"
+main = "index.js"
+compatibility_date = "2025-09-11"
+type = "javascript"
+
+# Set your Cloudflare account id here or supply it via the CF_ACCOUNT_ID secret in CI.
+account_id = "<YOUR_ACCOUNT_ID>"
+
+# If you want to deploy to workers.dev during development set workers_dev = true
+workers_dev = false
+
+# If you want to publish to a route on your domain, set it here or use the dashboard to bind the worker
+# route = "yourdomain.com/share"
+
+[[kv_namespaces]]
+binding = "SHARED_GPX"
+id = "<YOUR_KV_NAMESPACE_ID>"

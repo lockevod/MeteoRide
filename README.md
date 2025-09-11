@@ -103,9 +103,65 @@ The repository includes a Shortcuts export with an example iOS recipe in `SHORTC
 
 For detailed, up-to-date step-by-step instructions (including Shortcuts recipes and helper scripts), please visit the project website on GitHub.
 
+## Recommended Production setup for POST handoff (Cloudflare Pages + Worker)
+
+If you want the POST handoff to work reliably (required for iOS Shortcuts POST flows), the app's service worker and the POST endpoint must be served from the same origin. GitHub Pages cannot host a dynamic POST endpoint. The quickest production-ready option is Cloudflare Pages + Worker (KV) which lets you host the static site and run a small Worker at the same origin.
+
+Quick summary of steps:
+
+1. Create a Cloudflare account and add your project repository to Cloudflare Pages (connect via GitHub). Set the build directory to the repo root (no build step needed for this static site).
+2. Create a Workers KV namespace (Workers → KV → Create Namespace). Name the binding e.g. `SHARED_GPX`.
+3. In Cloudflare Workers, create a new Worker and paste the code from `cloudflare/worker/index.js` in this repository.
+	 - In the Worker settings add a KV binding: `SHARED_GPX` → select the namespace created.
+4. Route the Worker so `/share` and `/shared/*` are handled by the Worker on the same domain where Pages serves the site. Alternatively deploy the Worker under the same custom domain.
+5. Deploy Pages (the repo) — each push to the configured branch will auto-deploy the static site.
+6. Test the flow:
+
+Local test commands (after deployment):
+
+1) POST handoff using curl (simulates iOS Shortcut):
+
+```bash
+curl -v -X POST --data-binary @teialada.gpx \
+	-H "Content-Type: application/gpx+xml" \
+	-H "x-gpx-name: teialada.gpx" \
+	-L https://your-site.example/share
+```
+
+The Worker will store the GPX in KV (TTL 120s) and redirect to `/?shared=1&shared_id=<id>` on the same origin. The app will then read it and load the route.
+
+Notes & tips:
+- Make sure your site is served over HTTPS and the Worker is bound to the same origin.
+- The Worker code stores GPX for 120 seconds; adjust `expirationTtl` in `cloudflare/worker/index.js` if you need longer.
+- If you prefer Vercel or Netlify instead, implement a serverless function that stores GPX temporarily (Redis/Upstash or similar) and return the same redirect flow.
+
+If you want, I can also add a small GitHub Actions workflow that deploys the Worker via Wrangler on push. Tell me if you want that and I will add the workflow and instructions to create an API token.
+
+### Deployment checklist
+
+- [ ] Create a Cloudflare account and add your domain or use workers.dev.
+- [ ] Create a Workers KV namespace and name it (binding: `SHARED_GPX`).
+- [ ] In Cloudflare Dashboard, create a new Worker and paste `cloudflare/worker/index.js`.
+- [ ] In the Worker's settings, add a KV binding: `SHARED_GPX` -> select the namespace.
+- [ ] Configure routing so `/share` and `/shared/*` are handled by the Worker on the same origin as your Pages site.
+- [ ] (Optional) Create a Cloudflare Pages project and point it to this GitHub repository.
+- [ ] (Optional) Add the following GitHub Secrets to enable CI deploy via Wrangler: `CF_API_TOKEN`, `CF_ACCOUNT_ID`.
+
+### iOS Shortcuts (example)
+
+Use the Shortcuts app to create a shortcut that POSTS GPX to the share endpoint instead of saving a file. Example steps:
+
+1. "Get Contents of URL" – set Method to POST, URL to https://your-site.example/share
+2. Request Body: Set to "File" and select the GPX file (or set "Text" and paste GPX)
+3. Add Header: Content-Type = application/gpx+xml
+4. (Optional) Add Header: x-gpx-name = <desired filename>
+5. Run Shortcut. The endpoint will respond with a redirect to the app URL where the app reads the GPX from KV and loads it.
+
+This avoids the Shortcuts auto-download behavior and lets the app receive the GPX directly.
+
 ## Privacy and Data
 
-MeteoRide operates locally in your browser. Data shared with providers includes only coordinates, dates, and API keys. Local storage includes settings, encrypted API keys, preferences, and temporary weather cache. This is for donwloaded code and with code in vercel pages (https://app.meteoride.cc)
+MeteoRide operates locally in your browser. Data shared with providers includes only coordinates, dates, and API keys. Local storage includes settings, encrypted API keys, preferences, and temporary weather cache. This is for donwloaded code and with code in cloudflare pages (https://app.meteoride.cc)
 If you use share GPX option (IOS shortcut) then you'll upload the GPX to server, this GPX will be erased automatically 2 minutes later (you don't need to use it, you can open the GPX directly and no data be stored in the server).
 You've detailed instructions to share GPS to this app. Sharing with an IOS shortcut needs to upload the server because IOS doesn't allow to share information directly to a PWA. If you use android you can share directly and this isn't applicable ( no GPX is uploaded).
 
@@ -115,7 +171,7 @@ You've detailed instructions to share GPS to this app. Sharing with an IOS short
 - **Weather Data**: Open-Meteo, MeteoBlue, OpenWeather
 - **Icons**: Weather Icons by Erik Flowers
 - **Libraries**: Leaflet.js, SunCalc, GPX parser
-- **Hosting**: GitHub Pages (optional)
+- **Hosting**: Cloudfare Pages (only if you use web)
 
 ## License
 
