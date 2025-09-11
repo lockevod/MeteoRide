@@ -259,6 +259,47 @@ nav button:hover {
     border-radius: 8px;
     padding: 12px;
   }
+  /* Extra-narrow screens (phones, very small viewports): stack label above control and make inputs full width
+     This fixes alignment issues where the fixed label column pushed controls off or made them appear shifted. */
+  @media screen and (max-width: 420px) {
+    #configMenu {
+      padding: 10px;
+      left: 6px;
+      right: 6px;
+    }
+    #configMenu .config-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: stretch;
+      padding: 6px 0;
+    }
+    /* Put the label above the control and allow it to wrap */
+    #configMenu .config-row > label,
+    #configMenu .unit-pair label {
+      flex: none;
+      width: auto;
+      min-width: 0;
+      margin: 0;
+      font-size: 13px;
+    }
+    /* Make form controls expand to the available width */
+    #configMenu .config-row select,
+    #configMenu .config-row input[type="text"],
+    #configMenu .config-row .file-btn.small-file-btn,
+    #configMenu .unit-pair select,
+    #configMenu .unit-pair input[type="text"] {
+      width: 100%;
+      flex: none;
+      box-sizing: border-box;
+    }
+    /* Unit pairs stack vertically on very small screens */
+    #configMenu .unit-pair {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+  }
   /* Use a compact, wrapping row layout on narrow screens so the panel
      doesn't become unnecessarily tall — keep label+control on the
      same line when there's room, but allow wrapping when needed. */
