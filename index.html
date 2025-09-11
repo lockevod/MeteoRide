@@ -4,7 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MeteoRide</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='sky' x1='0%25' y1='0%25' x2='0%25' y2='100%25'><stop offset='0%25' stop-color='%2387CEEB'/><stop offset='100%25' stop-color='%23E0F6FF'/></linearGradient><linearGradient id='bike' x1='0%25' y1='0%25' x2='100%25' y2='0%25'><stop offset='0%25' stop-color='%232563eb'/><stop offset='100%25' stop-color='%231d4ed8'/></linearGradient></defs><rect width='100' height='100' fill='url(%23sky)' rx='20'/><circle cx='25' cy='70' r='12' fill='%23374151' stroke='%23111827' stroke-width='2'/><circle cx='75' cy='70' r='12' fill='%23374151' stroke='%23111827' stroke-width='2'/><path d='M25 70 L40 50 L60 50 L75 70' fill='none' stroke='url(%23bike)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><path d='M40 50 L45 35 L55 35' fill='none' stroke='url(%23bike)' stroke-width='3' stroke-linecap='round'/><path d='M50 35 L50 45' fill='none' stroke='url(%23bike)' stroke-width='2' stroke-linecap='round'/><circle cx='30' cy='25' r='8' fill='%23FCD34D' stroke='%23F59E0B' stroke-width='1.5'/><path d='M22 25 L30 25 L38 25 M30 17 L30 25 L30 33' stroke='%23F59E0B' stroke-width='1.5' stroke-linecap='round'/><path d='M65 30 C68 30 70 32 70 35 C70 38 68 40 65 40 C62 40 60 38 60 35 C60 32 62 30 65 30' fill='%23E5E7EB' stroke='%23D1D5DB' stroke-width='1'/><path d='M80 20 C83 20 85 22 85 25 C85 28 83 30 80 30 C77 30 75 28 75 25 C75 22 77 20 80 20' fill='%23F3F4F6' stroke='%23D1D5DB' stroke-width='1'/></svg>"/>
+<!-- Legacy/favicon.ico fallback (cache-busted) -->
+<link rel="icon" href="/favicon.ico?v=2" />
+<link rel="shortcut icon" href="/favicon.ico?v=2" />
 <link rel="stylesheet" href="style.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons-wind.min.css" />
@@ -16,97 +18,18 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" /> <!-- NEW: recommended meta to silence deprecation warning -->
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<!-- iOS and theme helpers -->
+<meta name="apple-mobile-web-app-title" content="MeteoRide" />
+<meta name="theme-color" content="#1e40af" />
+<!-- Provide an apple-touch-icon so iOS uses a PNG for Add to Home Screen -->
+<link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
 
-<!-- Minor visual fixes: align header buttons and normalize speed input/presets styling -->
-<style>
-    /* Header/nav buttons: align icon + text vertically */
-    header nav button {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      font: inherit;
-      color: inherit;
-    }
-    /* Ensure the emoji/icon inside debug button is baseline-aligned and not taller */
-    #toggleDebug .debug-ico,
-    #toggleConfig .config-ico,
-    #toggleHelp .help-text {
-      display: inline-block;
-      line-height: 1;
-      vertical-align: middle;
-      transform: translateY(0);
-      font-size: 1em;
-    }
-    #toggleDebug .debug-text,
-    #toggleConfig .config-text {
-      display: inline-block;
-      vertical-align: middle;
-      line-height: 1;
-    }
-
-    /* Speed input and presets: match the select style (soft grey bg, rounded border, consistent height) */
-    .speed-wrap {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .speed-wrap input[type="number"],
-    .speed-wrap .speed-presets {
-      background: var(--input-bg, #f3f4f6);
-      border: 1px solid var(--input-border, #cbd5e1);
-      border-radius: 6px;
-      padding: 6px 8px;
-      height: 36px;
-      box-sizing: border-box;
-      color: inherit;
-      font: inherit;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    /* Reduce number field spinner visual noise on WebKit while keeping functionality */
-    .speed-wrap input[type="number"]::-webkit-outer-spin-button,
-    .speed-wrap input[type="number"]::-webkit-inner-spin-button {
-      margin: 0;
-      opacity: 0.6;
-      -webkit-appearance: none;
-    }
-
-    /* Ensure small-file-btn / file label aligns with the controls */
-    .file-btn.small-file-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: 36px;
-      padding: 0 8px;
-      border-radius: 6px;
-      border: 1px solid var(--input-border, #cbd5e1);
-      background: var(--input-bg, #f3f4f6);
-      cursor: pointer;
-    }
-
-    /* On very small screens, slightly reduce paddings to avoid wrapping */
-    @media (max-width: 520px) {
-      header nav button { padding: 6px 8px; gap: 4px; }
-      .speed-wrap input[type="number"],
-      .speed-wrap .speed-presets,
-      .file-btn.small-file-btn {
-        height: 34px;
-        padding: 5px 7px;
-        border-radius: 6px;
-      }
-      /* Ensure debug emoji doesn't push the line height on iOS */
-      #toggleDebug .debug-ico { font-size: 0.98em; }
-    }
-  </style>
+<!-- Styles moved to style.css to keep HTML clean -->
 </head>
 <body>
 <header>
 <!-- traducible: título de la app -->
-<h1 data-i18n="title">🚴 MeteoRide</h1>
+<h1 id="appTitle" data-i18n="title"><img src="/icon.svg" alt="MeteoRide" class="app-logo" />MeteoRide</h1>
 <nav>
 <button id="toggleConfig" title="Configuración">
   <span class="config-text" data-i18n="toggle_config">Configuración</span>
@@ -139,14 +62,14 @@
     <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="api_key_init">API Key</h4>
     <div class="config-row">
       <label for="apiKey" data-i18n="api_key_label">MeteoBlue:</label>
-      <input type="text" id="apiKey" data-i18n-placeholder="api_key_placeholder" placeholder="Introduce la API Key MeteoBlue" />
+  <input type="text" id="apiKey" placeholder="" />
       <button type="button" id="checkApiKey" data-i18n="check_key">Check</button>
     </div>
     <div id="apiKeyStatus" class="key-status" aria-live="polite"></div>
 
     <div class="config-row">
       <label for="apiKeyOW" data-i18n="api_key_label_ow">OpenWeather:</label>
-      <input type="text" id="apiKeyOW" data-i18n-placeholder="api_key_placeholder" placeholder="Introduce la API Key OpenWeather" />
+  <input type="text" id="apiKeyOW" placeholder="" />
       <button type="button" id="checkApiKeyOW" data-i18n="check_key">Check</button>
     </div>
     <div id="apiKeyStatusOW" class="key-status" aria-live="polite"></div>
@@ -155,16 +78,16 @@
     <div class="config-row">
       <label for="language" data-i18n="language_label">Idioma:</label>
       <select id="language">
-        <option value="es" selected>Español</option>
-        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="en" selected>English</option>
       </select>
     </div>
-    <div class="config-row">
+  <div class="config-row units-row">
       <div class="unit-pair">
         <label for="windUnits" data-i18n="wind_units_label">Unidades viento:</label>
         <select id="windUnits">
-          <option value="kmh" selected>Km/h</option>
-          <option value="ms">m/s</option>
+          <option value="kmh">Km/h</option>
+          <option value="ms" selected>m/s</option>
           <option value="mph">Mph</option>
         </select>
       </div>
@@ -178,7 +101,7 @@
     </div>
    
 
-    <div class="config-row">
+  <div class="config-row units-row">
       <div class="unit-pair">
         <label for="distanceUnits" data-i18n="distance_units_label">Unidades distancia:</label>
         <select id="distanceUnits">
@@ -205,43 +128,54 @@
   <div id="map" style="height:60vh;"></div>
   <div id="controlsPanel">
     <div class="params">
-      <label for="datetimeRoute" data-i18n="route_datetime_label">Fecha y hora ruta:</label>
-      <input type="datetime-local" id="datetimeRoute" step="900"/>
+      <div class="param-row">
+        <label for="datetimeRoute" data-i18n="route_datetime_label">Fecha y hora ruta:</label>
+        <input type="datetime-local" id="datetimeRoute" step="900"/>
+      </div>
 
-      <label for="cyclingSpeed" data-i18n="cycling_speed_label">Velocidad media (km/h):</label>
-      <div class="speed-wrap">
-        <input type="number" id="cyclingSpeed" value="20" min="5" max="60" />
-        <select id="speedPresets" class="speed-presets" aria-label="Presets speed">
-          <option value="" selected>—</option>
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="12">12</option>
-          <option value="15">15</option>
-          <option value="20">20</option>
+      <div class="param-row">
+        <label for="cyclingSpeed" data-i18n="cycling_speed_label">Velocidad media (km/h):</label>
+        <div class="speed-wrap">
+          <input type="number" id="cyclingSpeed" value="20" min="5" max="60" />
+          <select id="speedPresets" class="speed-presets" aria-label="Presets speed">
+            <option value="" selected>—</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="12">12</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+  </div>
+
+  
+  <div class="wrap-break" aria-hidden="true"></div>
+
+  <div class="param-row interval-row">
+        <label for="intervalSelect" data-i18n="interval_label">Intervalo (minutos):</label>
+        <select id="intervalSelect">
+          <option value="15" selected>15</option>
+          <option value="30">30</option>
         </select>
       </div>
 
-      <label for="intervalSelect" data-i18n="interval_label">Intervalo (minutos):</label>
-      <select id="intervalSelect">
-        <option value="15" selected>15</option>
-        <option value="30">30</option>
-      </select>
+      <div class="param-row">
+        <label for="apiSource" data-i18n="provider_label">Proveedor:</label>
+        <select id="apiSource">
+          <option value="meteoblue">MeteoBlue</option>
+          <option value="openmeteo" selected>OpenMeteo</option>
+          <option value="openweather">OpenWeather</option>
+          <option value="aromehd">AromeHD</option>
+          <option value="ow2_arome_openmeteo">OPW - AromeHD</option>
+          <!-- add compare option (no removals) -->
+          <option value="compare">Comp.</option>
+        </select>
+      </div>
 
-      <!-- Provider selector moved here (to the right of Interval) -->
-      <label for="apiSource" data-i18n="provider_label">Proveedor:</label>
-      <select id="apiSource">
-        <option value="meteoblue" selected>MeteoBlue</option>
-        <option value="openmeteo">OpenMeteo</option>
-        <option value="openweather">OpenWeather</option>
-        <option value="ow2_arome_openmeteo">OPW → AromeHD</option>
-        <option value="aromehd">Arome‑HD</option>
-        <!-- add compare option (no removals) -->
-        <option value="compare">Comp.</option>
-      </select>
-
-      <!-- archivo GPX justo a continuación del selector de intervalo -->
-      <label class="file-btn small-file-btn" for="gpxFile" title="Upload file">📁</label>
-      <input type="file" id="gpxFile" accept=".gpx" />
+      <div class="param-row">
+        <label class="file-btn small-file-btn" for="gpxFile" title="Upload file">📁</label>
+        <input type="file" id="gpxFile" accept=".gpx" />
+      </div>
     </div>
 
     <!-- Nombre de la ruta: nueva línea, justo debajo de los selectores y antes de la tabla -->
@@ -361,6 +295,24 @@
       });
     }
 
+    // Localize header title and ensure logo adapts to header height
+    (function(){
+      try {
+        const h = document.getElementById('appTitle');
+        const img = h && h.querySelector('.app-logo');
+        // If translation helper exists, replace the text node with localized title
+        if (window.t && h) {
+          // remove existing text nodes (keep the img)
+          for (const n of Array.from(h.childNodes)) {
+            if (n.nodeType === Node.TEXT_NODE) n.remove();
+          }
+          const txt = document.createTextNode(window.t('title'));
+          h.appendChild(txt);
+        }
+        if (img && window.t) img.alt = window.t('title');
+      } catch (e){ console.warn('[cw] header localize failed', e); }
+    })();
+
     // On load try to read any GPX the SW might have stored
     (async () => {
       try {
@@ -429,6 +381,28 @@
       });
     }
   });
+
+  // Auto-load GPX from server share_id parameter
+  (async function(){
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const sid = urlParams.get('shared_id');
+      if (!sid) return;
+      const shareUrl = `/shared/${encodeURIComponent(sid)}`;
+      const resp = await fetch(shareUrl, { credentials: 'omit' });
+      if (!resp.ok) return;
+      const gpxText = await resp.text();
+      if (gpxText && gpxText.length > 0) {
+        if (typeof window.cwInjectGPXFromText === 'function') {
+          window.cwInjectGPXFromText(gpxText, `shared_${sid}.gpx`);
+        } else {
+          window.postMessage({ type: 'cw-gpx', name: `shared_${sid}.gpx`, gpx: gpxText }, '*');
+        }
+        // Try to delete server copy to minimize retention
+        try { await fetch(shareUrl, { method: 'DELETE' }); } catch (_) {}
+      }
+    } catch (e) { console.warn('shared_id load failed', e); }
+  })();
 </script>
 </body>
 </html>

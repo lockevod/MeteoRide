@@ -77,18 +77,31 @@ self.addEventListener('fetch', event => {
 
 async function handleSharePost(request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file');
-    if (file && (file.type === 'application/gpx+xml' || file.name.endsWith('.gpx'))) {
-      const text = await file.text();
-      const base64 = btoa(unescape(encodeURIComponent(text)));
-      const redirectUrl = `/?gpx_data=${encodeURIComponent(base64)}`;
-      const html = `<!DOCTYPE html><html><head><title>Sharing GPX...</title></head><body><script>window.location.href='${redirectUrl}';</script></body></html>`;
-      return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+    const text = await request.text();
+    if (text && text.trim().length > 0) {
+      // Store in IndexedDB
+      const db = await openIndexedDB();
+      const tx = db.transaction('files', 'readwrite');
+      const store = tx.objectStore('files');
+      store.put({ text: text, name: 'shared.gpx', ts: Date.now() }, 'gpx');
+      tx.oncomplete = () => db.close();
+      // Redirect to index.html
+      return Response.redirect('/index.html?shared=1', 303);
     } else {
-      return new Response('Invalid file', { status: 400 });
+      return new Response('No GPX content', { status: 400 });
     }
   } catch (e) {
-    return new Response('Error processing file', { status: 500 });
+    return new Response('Error processing GPX', { status: 500 });
   }
+}
+
+function openIndexedDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('cw_shared_db', 1);
+    request.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore('files');
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = (e) => reject(e);
+  });
 }

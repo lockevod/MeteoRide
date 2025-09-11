@@ -1,3 +1,109 @@
+/* Moved from index.html: header and control-related small styles */
+/* Header/nav buttons: align icon + text vertically */
+header nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+/* Ensure the emoji/icon inside debug button is baseline-aligned and not taller */
+#toggleDebug .debug-ico,
+#toggleConfig .config-ico,
+#toggleHelp .help-text {
+  display: inline-block;
+  line-height: 1;
+  vertical-align: middle;
+  transform: translateY(0);
+  font-size: 1em;
+}
+#toggleDebug .debug-text,
+#toggleConfig .config-text {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+/* Desktop: hide the redundant inline gear icon for the config button so only the text remains.
+   Keep the span available in DOM for small-screen styling, but hide it on larger viewports. */
+@media screen and (min-width: 701px) {
+  #toggleConfig .config-ico { display: none !important; }
+}
+
+/* Speed input and presets: match the select style (soft grey bg, rounded border, consistent height) */
+.speed-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.speed-wrap input[type="number"],
+.speed-wrap .speed-presets {
+  background: var(--input-bg, #f3f4f6);
+  border: 1px solid var(--input-border, #cbd5e1);
+  border-radius: 6px;
+  padding: 6px 8px;
+  height: 36px;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Reduce number field spinner visual noise on WebKit while keeping functionality */
+.speed-wrap input[type="number"]::-webkit-outer-spin-button,
+.speed-wrap input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  opacity: 0.6;
+  -webkit-appearance: none;
+}
+
+/* Ensure small-file-btn / file label aligns with the controls */
+.file-btn.small-file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--input-border, #cbd5e1);
+  background: var(--input-bg, #f3f4f6);
+  cursor: pointer;
+}
+
+/* On very small screens, slightly reduce paddings to avoid wrapping */
+@media (max-width: 520px) {
+  header nav button { padding: 6px 8px; gap: 4px; }
+  .speed-wrap input[type="number"],
+  .speed-wrap .speed-presets,
+  .file-btn.small-file-btn {
+    height: 34px;
+    padding: 5px 7px;
+    border-radius: 6px;
+  }
+  /* Ensure debug emoji doesn't push the line height on iOS */
+  #toggleDebug .debug-ico { font-size: 0.98em; }
+}
+
+/* App logo used inside the page header (do not use as favicon) */
+.app-logo {
+  width: auto;
+  height: 1.05em; /* match roughly the h1 line-height/font-size while remaining slightly smaller */
+  max-height: 48px; /* cap to avoid oversized images on very large headings */
+  vertical-align: middle;
+  margin-right: 10px;
+  display: inline-block;
+  object-fit: contain;
+  background: rgba(255,255,255,0.9); /* subtle white backing to reduce color clash */
+  padding: 4px; /* small padding so rounded bg doesn't clip the icon */
+  border-radius: 6px;
+  box-sizing: content-box;
+}
+
+
 html, body {
   height: 100%;
   margin: 0;
@@ -75,28 +181,35 @@ nav button:hover {
   position: absolute;
   top: 3.5rem;
   right: 1rem;
-  width: 360px;
+  /* Responsive width: grows on large screens but caps to a reasonable size */
+  width: min(520px, 92vw);
+  min-width: 320px;
   background: #ffffff;
   border: 1px solid #bdd7f6;
   box-shadow: 0 10px 24px rgba(30, 64, 175, 0.18);
   padding: 12px 14px 16px;
   border-radius: 10px;
   z-index: 10000;
-  resize: both;
+  /* Prevent manual resize: we adjust size responsively via CSS instead */
+  resize: none;
   overflow-y: auto;
   font-size: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px; /* slightly more vertical breathing room */
+  box-sizing: border-box;
 }
 #configMenu .config-row {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
+  padding: 6px 0; /* give each row some vertical breathing room */
 }
-#configMenu .config-row label {
-  flex: 0 0 auto;
-  min-width: 120px;
+#configMenu .config-row > label {
+  /* fixed label column so controls align across rows */
+  flex: 0 0 140px;
+  min-width: 140px;
+  width: 140px;
 }
 #configMenu .config-row select,
 #configMenu .config-row input[type="text"] {
@@ -112,11 +225,75 @@ nav button:hover {
   gap: 8px;
 }
 #configMenu .unit-pair label {
-  flex: 0 0 auto;
-  min-width: 120px;
+  flex: 0 0 140px; /* match single-row labels */
+  min-width: 140px;
+  width: 140px;
 }
 #configMenu .unit-pair select {
   flex: 1;
+  min-width: 0; /* allow flex children to shrink properly */
+}
+
+/* Headings inside the config panel should wrap naturally (allow two lines) */
+#configMenu h4 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #203050;
+  line-height: 1.2;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Make the panel usable on small screens: occupy most width and stack controls vertically */
+@media screen and (max-width: 700px) {
+  #configMenu {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: 3.5rem;
+    width: calc(100% - 16px);
+    min-width: auto;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  /* Use a compact, wrapping row layout on narrow screens so the panel
+     doesn't become unnecessarily tall — keep label+control on the
+     same line when there's room, but allow wrapping when needed. */
+  /* Keep the same compact row layout as desktop on small screens. */
+  #configMenu .config-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 0;
+  }
+  /* Use the same fixed label width as desktop so controls align across rows */
+  #configMenu .config-row > label,
+  #configMenu .unit-pair label {
+    flex: 0 0 140px;
+    min-width: 140px;
+    width: 140px;
+  }
+  /* Keep unit-pairs identical to desktop: label + select inline with same sizing */
+  #configMenu .unit-pair {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #configMenu .unit-pair select {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+  /* Ensure units rows behave like normal rows (no grid) */
+  #configMenu .units-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
 }
 #configMenu #closeConfig {
   position: absolute;
@@ -946,6 +1123,111 @@ input[type="file"] {
   flex-wrap: wrap;
 }
 
+/* Keep each label+control together; if the row wraps, prefer keeping them on the same line. */
+.param-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0;
+  flex-wrap: nowrap; /* try to keep label and control together */
+}
+
+@media screen and (max-width: 700px) {
+  /* Keep label+control paired horizontally so pairs flow on the same line.
+     Reduce the label width so multiple pairs can fit. */
+  .param-row {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+  /* Ensure labels inside each pair have a fixed width so the control column
+     starts at the same x-position across wrapped lines (aligns selectors). */
+  .param-row > label {
+    flex: 0 0 110px;
+    min-width: 110px;
+    text-align: left;
+    margin-right: 6px;
+  }
+  /* But when using .param-row, the label should not stretch to fill the line
+     — keep it tight next to its control so the selector doesn't get pushed away. */
+  .param-row > label {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+    margin-right: 6px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  /* Under very small widths, stack the pair vertically for readability */
+  @media screen and (max-width: 420px) {
+    .param-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: stretch;
+    }
+    #controlsPanel .params > label,
+    #controlsPanel .params > .param-row > label {
+      width: 100%;
+      flex: none;
+      min-width: 0;
+    }
+  }
+}
+
+/* Utility element to force a wrap in the params flex flow on narrow screens */
+@media screen and (max-width: 700px) {
+  .wrap-break {
+    flex-basis: 100%;
+    height: 0;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Force the Interval row to appear on a new visual line on small screens
+   so it starts aligned under the date selector/control. */
+@media screen and (max-width: 700px) {
+  /* Keep the interval pair as an inline pair (like other .param-row) so
+     after the forced break the interval control can share the same visual
+     line with the following controls (provider, file) instead of forcing
+     them to a third line. */
+  .interval-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px; /* same spacing as other .param-row pairs */
+    margin-top: 6px;
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
+  }
+  /* Use the same label sizing rules as .param-row so spacing is consistent */
+  .interval-row > label {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+    margin-right: 6px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .interval-row > select {
+    flex: 0 0 auto;
+    min-width: 60px;
+    height: 22px;
+  }
+}
+
+/* Reduce visual size of the small file button on narrow screens so its border
+   doesn't appear larger than other controls and it doesn't wrap to next line. */
+@media screen and (max-width: 700px) {
+  .file-btn.small-file-btn {
+    height: 22px;
+    padding: 2px 6px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+}
+
 /* Forzar que el nombre de la ruta quede en la línea siguiente y alineado con la tabla */
 #rutaName {
   margin-top: 6px;
@@ -982,6 +1264,31 @@ input[type="file"] {
     gap: 0.5rem;
   }
 
+  /* Make labels and controls inside the params area match the same
+     visual width as the main #controls area so inputs don't appear wider. */
+  #controlsPanel .params > label {
+    flex: 0 0 180px;
+    min-width: 150px;
+    display: block;
+    font-size: 14px;
+    line-height: 16px;
+  }
+  /* Constrain inputs/selects inside params so they match the visual size
+     used elsewhere (centered content and max-width). */
+  #controlsPanel .params input[type="text"],
+  #controlsPanel .params input[type="number"],
+  #controlsPanel .params input[type="datetime-local"],
+  #controlsPanel .params select {
+  max-width: 140px;
+  width: auto;
+  text-align: center;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  }
+
   /* NEW: keep the scroll wrapper stretched even with align-items:flex-start */
   #controlsPanel .wtc-wrap {
     align-self: stretch;
@@ -998,6 +1305,7 @@ input[type="file"] {
    Do NOT change .file-btn (keeps its blue color). */
 #controlsPanel .params input[type="number"],
 #controlsPanel .params input[type="text"],
+#controlsPanel .params input[type="datetime-local"],
 #controlsPanel .params select,
 #configMenu select,
 #configMenu input[type="text"],
@@ -1034,6 +1342,7 @@ input[type="file"] {
 @media screen and (max-width: 700px) {
   #controlsPanel .params input[type="number"],
   #controlsPanel .params input[type="text"],
+  #controlsPanel .params input[type="datetime-local"],
   #controlsPanel .params select,
   #configMenu select,
   #configMenu input[type="text"],
@@ -1051,6 +1360,7 @@ input[type="number"]::-webkit-inner-spin-button {
   margin: 0;
 }
 input[type="number"] {
+  appearance: textfield;
   -moz-appearance: textfield; /* Firefox */
 }
 
@@ -1085,13 +1395,15 @@ input[type="number"] {
   line-height: 1.2;
 }
 
-/* Equalize sizes for speed and interval controls */
+/* Equalize sizes for speed and interval controls (include datetime) */
 #controlsPanel .params input[type="number"],
+#controlsPanel .params input[type="text"],
+#controlsPanel .params input[type="datetime-local"],
 #controlsPanel .params select {
   box-sizing: border-box;
   height: 22px;        /* keep 22px overall */
-  padding: 2px 8px;    /* was 6px 8px */
-  font-size: 12px;     /* fit inside 22px */
+  padding: 2px 8px;    /* compact padding */
+  font-size: 12px;     /* smaller text to fit */
   line-height: 1.2;
 }
 
@@ -1659,48 +1971,52 @@ body.dragging { user-select: none; }
   /* Hide help text on small screens, keep only icon */
   #toggleHelp .help-text { display: none; }
 
-  /* Robust: if JS writes plain text into the button (no span),
-     force button text invisible and show only the help emoji via pseudo-element. */
-  #toggleHelp {
-    font-size: 0;            /* hide any direct text node */
-    line-height: 1;
-    position: relative;
-  }
-  #toggleHelp::before {
-    content: "❓";
-    display: inline-block;
-    font-size: 0.95rem;      /* explicit size so it's visible despite parent font-size:0 */
-    line-height: 1;
-    vertical-align: middle;
-    margin: 0 .12rem 0 0;
-  }
+  /* Small-screen: hide plain text nodes in help/config buttons and show compact emoji via pseudo-elements
+     These rules are intentionally limited to narrow viewports so desktop keeps full labeled buttons. */
+  @media screen and (max-width: 700px) {
+    /* Robust: if JS writes plain text into the button (no span),
+       force button text invisible and show only the help emoji via pseudo-element. */
+    #toggleHelp {
+      font-size: 0;            /* hide any direct text node */
+      line-height: 1;
+      position: relative;
+    }
+    #toggleHelp::before {
+      content: "❓";
+      display: inline-block;
+      font-size: 0.95rem;      /* explicit size so it's visible despite parent font-size:0 */
+      line-height: 1;
+      vertical-align: middle;
+      margin: 0 .12rem 0 0;
+    }
 
-  /* Hide config label text on small screens, keep gear icon (in-DOM) */
-  #toggleConfig .config-text { display: none !important; }
-  /* If config-ico exists, hide it to avoid duplicate when using pseudo */
-  #toggleConfig .config-ico { display: none !important; }
+    /* Hide config label text on small screens, keep gear icon (in-DOM) */
+    #toggleConfig .config-text { display: none !important; }
+    /* If config-ico exists, hide it to avoid duplicate when using pseudo */
+    #toggleConfig .config-ico { display: none !important; }
 
-  /* Robust: hide any direct text nodes by zeroing button font-size,
-     but render the gear via a pseudo-element with its own font-size. */
-  #toggleConfig {
-    font-size: 0;               /* hide any plain text nodes */
-    line-height: 1;             /* keep button height sane */
-    position: relative;
-  }
-  #toggleConfig::before {
-    content: "⚙️";
-    display: inline-block;
-    font-size: 0.95rem;         /* explicit size so it's visible despite parent font-size:0 */
-    line-height: 1;
-    vertical-align: middle;
-    margin: 0 .12rem 0 0;
-  }
+    /* Robust: hide any direct text nodes by zeroing button font-size,
+       but render the gear via a pseudo-element with its own font-size. */
+    #toggleConfig {
+      font-size: 0;               /* hide any plain text nodes */
+      line-height: 1;             /* keep button height sane */
+      position: relative;
+    }
+    #toggleConfig::before {
+      content: "⚙️";
+      display: inline-block;
+      font-size: 0.95rem;         /* explicit size so it's visible despite parent font-size:0 */
+      line-height: 1;
+      vertical-align: middle;
+      margin: 0 .12rem 0 0;
+    }
 
-  /* Improve help button visibility on small screens */
-  #toggleHelp {
-    background-color: rgba(255,255,255,0.15) !important;
-    color: #fff !important;
-    border: 1px solid rgba(255,255,255,0.3) !important;
+    /* Improve help button visibility on small screens */
+    #toggleHelp {
+      background-color: rgba(255,255,255,0.15) !important;
+      color: #fff !important;
+      border: 1px solid rgba(255,255,255,0.3) !important;
+    }
   }
   
   /* Make nav buttons more compact on mobile */
@@ -1729,6 +2045,26 @@ body.dragging { user-select: none; }
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+/* Allow the inline label (checkbox + text) to occupy the full width of the row
+   so the text doesn't wrap into two lines on wide screens. On small screens
+   the span is allowed to wrap. */
+#configMenu .config-row > label.inline {
+  flex: 1 1 auto; /* grow to fill available space */
+  width: auto;
+  min-width: 0;
+}
+#configMenu .config-row > label.inline span {
+  flex: 1 1 auto; /* let text take remaining space */
+  white-space: nowrap; /* prefer single line */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media screen and (max-width: 700px) {
+  #configMenu .config-row > label.inline span {
+    white-space: normal; /* allow wrap on small screens */
+  }
 }
 
 /* Compare mode: provider first-column sticky + styled (match header bg) */

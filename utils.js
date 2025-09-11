@@ -26,7 +26,8 @@
       toggle_debug: "🐞",
       toggle_help: "Ayuda ❓",
       close: "Cerrar",
-      title: "🚴‍♂️ MeteoRide",
+      //title: "🚴‍♂️ MeteoRide",
+      title: "MeteoRide",
       settings_title: "Ajustes",
       api_provider_changed: "Proveedor API cambiado a {prov}",
       // nuevas claves para labels/placeholders
@@ -91,7 +92,7 @@
       toggle_debug: "🐞",
       toggle_help: "Help ❓",
       close: "Close",
-      title: "🚴‍♂️ MeteoRide",
+      title: "MeteoRide",
       settings_title: "Settings",
       api_provider_changed: "API provider changed to {prov}",
       // new keys
@@ -137,7 +138,7 @@
 
   // NEW: restored helpers (translation, logs, settings, cache, dates, math, conversions)
   function t(key, vars = {}) {
-    const lang = (getVal("language") || "es").toLowerCase();
+    const lang = (getVal("language") || "en").toLowerCase();
     const dict = i18n[lang] || i18n["en"];
     let s = dict[key] || i18n["en"][key] || key;
     return s.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : ""));
@@ -174,7 +175,8 @@
     logDebug(t("config_saved"));
   }
   function loadSettings() {
-    const s = JSON.parse(localStorage.getItem("cwSettings") || "{}");
+  const raw = localStorage.getItem("cwSettings");
+  const s = raw ? JSON.parse(raw) : {};
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
       "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
@@ -185,7 +187,28 @@
      if (el.type === "checkbox") el.checked = !!s[id];
      else if (s[id] != null) el.value = s[id];
     });
+    // Apply sensible defaults when missing and persist them so subsequent loads are consistent
+    let changed = false;
     if (s.apiSource) apiSource = s.apiSource;
+    else { apiSource = 'openmeteo'; s.apiSource = 'openmeteo'; changed = true; }
+    if (!s.language) { s.language = 'en'; changed = true; }
+    if (!s.tempUnits) { s.tempUnits = 'C'; changed = true; }
+    if (!s.windUnits) { s.windUnits = 'ms'; changed = true; }
+    if (!s.distanceUnits) { s.distanceUnits = 'km'; changed = true; }
+    if (!s.precipUnits) { s.precipUnits = 'mm'; changed = true; }
+
+    // Persist updated defaults back to localStorage if we added any
+    if (changed) {
+      try { localStorage.setItem('cwSettings', JSON.stringify(s)); } catch (e) { /* ignore */ }
+    }
+
+    // Apply values to DOM
+    const selApi = document.getElementById('apiSource'); if (selApi) selApi.value = s.apiSource;
+    const langEl = document.getElementById('language'); if (langEl) langEl.value = s.language;
+    const tempEl = document.getElementById('tempUnits'); if (tempEl) tempEl.value = s.tempUnits;
+    const windEl = document.getElementById('windUnits'); if (windEl) windEl.value = s.windUnits;
+    const distEl = document.getElementById('distanceUnits'); if (distEl) distEl.value = s.distanceUnits;
+    const precipEl = document.getElementById('precipUnits'); if (precipEl) precipEl.value = s.precipUnits;
     logDebug(t("config_loaded"));
     const csNum = Number(s.cyclingSpeed ?? document.getElementById("cyclingSpeed")?.value);
     lastAppliedSpeed = Number.isFinite(csNum) ? csNum : null;

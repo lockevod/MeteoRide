@@ -54,10 +54,27 @@
   // Translations
   function applyTranslations() {
     // Elements with data-i18n -> text
+    // Preserve child elements (icons/images) when present, only replace text nodes.
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       const key = el.dataset.i18n;
       if (!key) return;
-      el.textContent = t(key);
+      const translated = t(key);
+      try {
+        // If the element contains an image or other inline control (like the header img),
+        // remove only TEXT nodes and append a single text node with the translation.
+        if (el.querySelector && (el.querySelector('.app-logo') || el.querySelector('.icon') || el.querySelector('img'))) {
+          // remove existing text nodes
+          for (const n of Array.from(el.childNodes)) {
+            if (n.nodeType === Node.TEXT_NODE) n.remove();
+          }
+          el.appendChild(document.createTextNode(translated));
+        } else {
+          el.textContent = translated;
+        }
+      } catch (e) {
+        // Fallback to simple assignment on error
+        el.textContent = translated;
+      }
     });
 
     // Placeholder / title attributes
@@ -74,9 +91,15 @@
 
     // Known buttons/controls
     const bc = document.getElementById("toggleConfig");
-    if (bc) bc.textContent = t("toggle_config");
+    if (bc) {
+      const span = bc.querySelector('.config-text');
+      if (span) span.textContent = t("toggle_config"); else bc.textContent = t("toggle_config");
+    }
     const bd = document.getElementById("toggleDebug");
-    if (bd) bd.textContent = t("toggle_debug");
+    if (bd) {
+      const span = bd.querySelector('.debug-text');
+      if (span) span.textContent = t("toggle_debug"); else bd.textContent = t("toggle_debug");
+    }
     const bclose = document.getElementById("closeConfig");
     if (bclose) bclose.setAttribute("aria-label", t("close"));
 
