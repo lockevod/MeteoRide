@@ -526,6 +526,33 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Force vertical stacking on very small screens (phones) so labels sit above controls
+     and selects/inputs expand to full width - fixes iOS layout where boxes jump under 420px */
+  @media screen and (max-width: 420px) {
+    #controlsPanel .params { display: block !important; }
+    .param-row, .interval-row {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 6px !important;
+      align-items: stretch !important;
+    }
+    .param-row > label, .interval-row > label {
+      width: 100% !important;
+      min-width: 0 !important;
+      margin: 0 0 4px 0 !important;
+      white-space: normal !important;
+    }
+    .param-row select,
+    .param-row input[type="number"],
+    .param-row input[type="text"],
+    .param-row .speed-wrap,
+    .param-row .file-btn.small-file-btn,
+    .interval-row select {
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    .wrap-break { display:none !important; }
+  }
 }
 
 /* Ocultar control file nativo y mostrar label-actuando-como-botón */
