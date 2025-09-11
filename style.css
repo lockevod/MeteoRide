@@ -1190,31 +1190,49 @@ input[type="file"] {
     text-align: left;
     margin-right: 6px;
   }
-  /* But when using .param-row, the label should not stretch to fill the line
-     — keep it tight next to its control so the selector doesn't get pushed away. */
+  /* When using .param-row on small screens, keep label next to its control unless extremely narrow */
   .param-row > label {
-    flex: 0 0 auto;
-    min-width: 0;
-    width: auto;
-    margin-right: 6px;
+    flex: 0 0 110px;
+    min-width: 110px;
     text-align: left;
-    white-space: nowrap;
+    margin-right: 6px;
   }
-  /* Under very small widths, stack the pair vertically for readability */
-  @media screen and (max-width: 420px) {
-    .param-row {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: stretch;
-    }
-    #controlsPanel .params > label,
-    #controlsPanel .params > .param-row > label {
-      width: 100%;
-      flex: none;
-      min-width: 0;
-    }
+}
+
+/* Under very small widths, stack param rows vertically so labels sit above controls
+   and selects/inputs expand to full width (fix alignment on iPhone-sized viewports) */
+@media screen and (max-width: 420px) {
+  .param-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
   }
+  #controlsPanel .params > label,
+  #controlsPanel .params > .param-row > label {
+    width: 100%;
+    flex: none;
+    min-width: 0;
+    margin: 0 0 4px 0;
+  }
+  /* Make form controls fill the available width */
+  #controlsPanel .param-row select,
+  #controlsPanel .param-row input[type="number"],
+  #controlsPanel .param-row input[type="text"],
+  #controlsPanel .param-row .speed-wrap,
+  #controlsPanel .param-row .file-btn.small-file-btn {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  /* Interval row stacks similarly */
+  .interval-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+    margin-top: 6px;
+  }
+  .interval-row > select { width: 100%; box-sizing: border-box; }
 }
 
 /* Utility element to force a wrap in the params flex flow on narrow screens */
