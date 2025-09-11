@@ -92,47 +92,19 @@ For local development:
 1. Clone the repo: `git clone https://github.com/lockevod/MeteoRide.git`
 2. Open `index.html` in your browser.
 
-### Local share-server / Shortcuts (optional)
+### Sharing routes (iOS / Android)
 
-This repository includes a small local Node server `share-server.js` to receive GPX files (useful for testing iOS Shortcuts or Android share targets).
+MeteoRide supports several ways to share GPX routes from mobile devices. Pick the one that fits your workflow:
 
-- Start the server:
+- POST handoff (recommended for iOS / Shortcuts): send raw GPX to the app's share endpoint (the service worker accepts a POST and stores the file temporarily). This method is required for many iOS share flows because the browser/service-worker APIs cannot always receive the raw file directly from the share sheet. For technical reasons this involves uploading the GPX to a temporary server for the handoff; the file is used only for this purpose and is deleted automatically (within a maximum of two minutes). By using the POST handoff you acknowledge the GPX will be uploaded to a temporary server for the handoff only.
 
-```bash
-node share-server.js
-```
+- Hosted URL (`?gpx_url=`): host your GPX somewhere (GitHub, public file host, S3, etc.) and open MeteoRide with `?gpx_url=https://.../route.gpx`. The client fetches the GPX directly from that URL; no upload to a third-party server is required by MeteoRide.
 
-- Quick test with curl (server returns JSON 201 by default):
+- Direct / local open (file input, drag & drop, or open-in flows): choose a GPX file from your device or share it directly to the page when supported. These flows run entirely in your browser and do not upload the file.
 
-```bash
-curl -v -X POST --data-binary @example.gpx http://localhost:8081/share -H 'Content-Type: application/gpx+xml'
-```
+The repository includes a Shortcuts export with an example iOS recipe in `SHORTCUT_EXPORT.md` which you can import into the iOS Shortcuts app to automate the POST handoff.
 
-- Use `run-test.sh` to automate a POST and print the returned `indexUrl`:
-
-```bash
-./run-test.sh --host localhost --port 8081
-```
-
-See `SHORTCUTS.md` and `SHORTCUT_EXPORT.md` for step-by-step instructions and a Shortcuts-friendly flow.
-
-#### iOS Shortcuts (minimum iOS 16)
-
-If you plan to use iOS Shortcuts to send GPX files from your iPhone to the local server, here are concrete notes:
-
-- The repository includes two helper files:
-	- `SHORTCUT_EXPORT.json` — a template describing the Shortcut steps (replace YOUR_HOST and ports).
-	- `SHORTCUT_EXPORT.md` — step-by-step Shortcuts builder notes (manual import/recreate).
-
-- Important: Apple Shortcuts' `.shortcut` import format is platform-specific and often includes metadata/signatures. Creating a fully importable `.shortcut` file outside of the Shortcuts app can fail unless signed. See `SHORTCUT_IMPORT_NOTES.md` for details and a safe manual workflow.
-
-- Quick recommended workflow for iOS 16:
-	1. Open the Shortcuts app on your iPhone.
- 2. Create a new shortcut and follow the steps in `SHORTCUT_EXPORT.md` (Select File → Get File Contents → Get Contents of URL (POST) → Get Dictionary Value → Open URL).
- 3. In the "Get Contents of URL" action set the URL to `http://<YOUR_HOST>:8080/share` (or `:8081` for node server).
- 4. Optionally add `?follow=1` to the URL or set header `X-Follow-Redirect: 1` if you want the server to reply with a 303 redirect.
-
-If you prefer, you can use the `SHORTCUT_EXPORT.json` as a precise checklist to recreate the actions in the Shortcuts app.
+For detailed, up-to-date step-by-step instructions (including Shortcuts recipes and helper scripts), please visit the project website on GitHub.
 
 ## Technologies
 

@@ -145,6 +145,32 @@
   } catch(_){}
   // Resizer (JS-driven, iOS/desktop)
   try {
+      // Log client / browser info once at startup so debug dumps include client details
+      try {
+        const clientInfo = {
+          viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+          screen: { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight },
+          navigator: {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            vendor: navigator.vendor,
+            language: navigator.language,
+            languages: (navigator.languages || []).slice(0,5),
+            cookieEnabled: navigator.cookieEnabled,
+            doNotTrack: navigator.doNotTrack,
+            hardwareConcurrency: navigator.hardwareConcurrency,
+            maxTouchPoints: navigator.maxTouchPoints,
+            onLine: navigator.onLine
+          },
+          timezone: (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : ''
+        };
+        window.logdebug('--- CLIENT INFO ---');
+        window.logdebug('Viewport:', clientInfo.viewport);
+        window.logdebug('Screen:', clientInfo.screen);
+        window.logdebug('Navigator:', clientInfo.navigator);
+        window.logdebug('Timezone:', clientInfo.timezone || 'unknown');
+        window.logdebug('-------------------');
+      } catch(_) {}
   const sec = document.getElementById('debugSection');
   if (sec && !document.getElementById('debugResizerLeft') && !document.getElementById('debugResizerRight')) {
     const leftGrip = document.createElement('div');
