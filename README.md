@@ -4,9 +4,8 @@
 
 ## Features
 
-- **GPX Route Loading**: Supports standard tracks, routes, and waypoints. Load files directly or via URLs with parameters like `?gpx_url=` or `?gpx_data=`.
 - **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), MeteoBlue (API key required, up to 7 days), OpenWeather (API key required, up to 5 days), or Arome-HD (high-resolution for Europe within 48 hours).
-- **Provider chains**: A new chain option is available: "OpenWeather 0–2h → Arome 2–36h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. Chains determine which provider serves each timestamp based on the current time ("now"), not the selected route start.
+- **Provider chains**: A new chain option is available: "OpenWeather 0–2h → Arome 2–36h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. 
 - **Comparison Mode**: Evaluate differences between providers for better decision-making.
 - **Automatic Fallbacks**: Switches to Open-Meteo if your primary provider fails or exceeds its horizon, with optional notifications.
 - **Interactive Weather Table**: Displays hourly data with icons, temperature, wind (speed + direction + gusts), rain (amount + probability), humidity, cloudiness, luminosity bar, and UV index.
@@ -14,16 +13,17 @@
 - **Horizontal Scrolling**: Drag or scroll the table horizontally on touch screens; click columns to highlight and center the map.
 - **Solar Information**: Automatic sunrise/sunset times, civil twilight, and real luminosity calculations.
 - **Smart Fallbacks**: Handles provider failures, retries, and clear notifications on data limitations.
+- **GPX Route Loading**: Supports standard tracks, routes, and waypoints. Load files directly or via URLs with parameters like `?gpx_url=` or sharing directly.
 - **URL Parameters**: Direct links for routes, e.g., `?gpx_url=https://example.com/route.gpx`, `?datetime=2024-03-15T10:00`, `?speed=25`.
 - **Local Caching**: Stores provider responses in localStorage for ~30 minutes per step/hour to speed up reloads and reduce API calls.
 - **Settings**: API key management with check buttons, units (wind: km/h/m/s/mph; temperature: °C/°F; distance: km/mi; precipitation: mm/in), and language support (English/Spanish).
-- **Privacy-Focused**: Runs entirely on your device; no data sent to external servers. Only shares coordinates, dates, and API keys with weather providers.
+- **Privacy-Focused**: No data sent to external servers. Only shares coordinates, dates, and API keys with weather providers. This app can be installed locally (only needs a brownser) except if you want to use "share route" with IOS.
 - **Progressive Web App (PWA)**: Installable on mobile and desktop devices for a native app-like experience.
 - **Open Source**: MIT licensed, available on GitHub for contributions.
 
 ## Howto use
 You can use in your own computer, only download the code and open index.html in your computer.
-You can use directly in a web (it's the same code published by github pages directly). You can use https://app.meteoride.cc
+You can use directly in a web (it's the same code published in Vercel directly). You can use https://app.meteoride.cc We use vercel because it's necessary to have POST option to upload gpx files if you use share (IOS). If you don't use this option (upload a GPX all info is managed in your own brownser. If you upload a )
 
 ## Getting Started
 
@@ -49,13 +49,10 @@ For more detailed information, see the [User Guide (English)](https://app.meteor
 - **Date Out of Range**: Reduce the time horizon.
 - **Empty Table**: Verify route length.
 
-## Privacy and Data
-
-MeteoRide operates locally in your browser. Data shared with providers includes only coordinates, dates, and API keys. Local storage includes settings, encrypted API keys, preferences, and temporary weather cache. This is for donwloaded code and with code in github pages (https://app.meteoride.cc)
 
 ## Installation
 
-No installation required—run directly in your browser (downloaded or by web directly)
+No installation required—run directly in your browser (downloaded or by web directly). If you need/want to share by IOS shortcut then you need to follow the link or install in a web server.
 
 ### Installing as a Progressive Web App (PWA)
 
@@ -102,9 +99,15 @@ MeteoRide supports several ways to share GPX routes from mobile devices. Pick th
 
 - Direct / local open (file input, drag & drop, or open-in flows): choose a GPX file from your device or share it directly to the page when supported. These flows run entirely in your browser and do not upload the file.
 
-The repository includes a Shortcuts export with an example iOS recipe in `SHORTCUT_EXPORT.md` which you can import into the iOS Shortcuts app to automate the POST handoff.
+The repository includes a Shortcuts export with an example iOS recipe in `SHORTCUT_EXPORT.md` which you can follow to create an iOS Shortcuts to automate the POST handoff.
 
 For detailed, up-to-date step-by-step instructions (including Shortcuts recipes and helper scripts), please visit the project website on GitHub.
+
+## Privacy and Data
+
+MeteoRide operates locally in your browser. Data shared with providers includes only coordinates, dates, and API keys. Local storage includes settings, encrypted API keys, preferences, and temporary weather cache. This is for donwloaded code and with code in vercel pages (https://app.meteoride.cc)
+If you use share GPX option (IOS shortcut) then you'll upload the GPX to server, this GPX will be erased automatically 2 minutes later (you don't need to use it, you can open the GPX directly and no data be stored in the server).
+You've detailed instructions to share GPS to this app. Sharing with an IOS shortcut needs to upload the server because IOS doesn't allow to share information directly to a PWA. If you use android you can share directly and this isn't applicable ( no GPX is uploaded).
 
 ## Technologies
 
