@@ -1450,6 +1450,7 @@ function renderWeatherTable() {
     // Optional: clear compact summary content if present
     const cs = document.getElementById("compactSummary");
     if (cs) cs.innerHTML = "";
+    try { window._autoScrolledWeather = false; } catch {}
     return;
   }
 
@@ -1760,6 +1761,82 @@ function renderWeatherTable() {
 
   // Clicks on any generated cell/header select that column
   wireTableInteractions();
+
+  // Auto-scroll after each render if the full table is not yet visible and user hasn't scrolled past it
+  (function autoScrollOnRender(){
+    try {
+  const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+  if (vw < 421) { console.debug('[autoScroll] skip <421', vw); return; }
+      const cont = document.getElementById('weatherTableContainer');
+      if (!cont) { console.debug('[autoScroll] container missing'); return; }
+      const headerRows = cont.querySelectorAll('#weatherTable thead tr').length;
+      if (headerRows < 3) { console.debug('[autoScroll] insufficient header rows', headerRows); return; }
+      const mapEl = document.getElementById('map');
+      const tableRect = cont.getBoundingClientRect();
+      const mapRect = mapEl ? mapEl.getBoundingClientRect() : null;
+      // Contador de intentos para primer render de ruta
+      if (typeof window._autoScrollAttempts !== 'number') window._autoScrollAttempts = 0;
+      window._autoScrollAttempts++;
+      const firstRenders = window._autoScrollAttempts <= 3; // forzar en los tres primeros passes
+      const headerOffset = 56;
+      const overlap = mapRect ? (mapRect.bottom - tableRect.top) : 0;
+      // Criterios para desplazar:
+      // 1) Primeras pasadas (primera carga) OR
+      // 2) Hay solapamiento visual (mapa cubre parte superior de la tabla) OR
+      // 3) Más del 40% de la tabla está por debajo del viewport inferior
+      const viewportBottom = window.scrollY + window.innerHeight;
+      const tableBottomAbs = window.scrollY + tableRect.bottom;
+      const hiddenPortion = tableBottomAbs - viewportBottom;
+      const bigHidden = hiddenPortion > tableRect.height * 0.4;
+      const shouldScroll = firstRenders || overlap > 40 || bigHidden;
+      console.debug('[autoScroll] metrics2', { firstRenders, overlap, hiddenPortion, bigHidden, shouldScroll, attempts: window._autoScrollAttempts, tableRect, scrollY: window.scrollY, vh: window.innerHeight });
+
+      function forceScroll(targetTop, tag) {
+        const before = window.scrollY;
+        console.debug('[autoScroll] attempt', tag, { before, targetTop });
+        try { window.scrollTo({ top: targetTop, behavior: 'smooth' }); } catch { window.scrollTo(0, targetTop); }
+        // Fallback direct assignments (legacy iOS / some PWAs)
+        document.documentElement.scrollTop = targetTop;
+        document.body.scrollTop = targetTop;
+        setTimeout(() => {
+          const after = window.scrollY;
+            console.debug('[autoScroll] post-check', tag, { after, moved: after !== before });
+        }, 60);
+      }
+
+      function scrollToShow(tag){
+        
+        // Comportamiento original (>=701) o fallback si no hay título
+        const idealTop = Math.max(0, window.scrollY + tableRect.top - headerOffset);
+        const maxShift = headerOffset;
+        const delta = Math.max(0, idealTop - window.scrollY);
+        const limitedDelta = Math.min(delta, maxShift);
+        let adjusted = Math.max(0, limitedDelta - 10); // se mantiene -10 para comportamiento previo
+        if (vw < 701) adjusted = Math.max(0, limitedDelta + 70)
+        const targetTop = window.scrollY + adjusted;
+        forceScroll(targetTop, tag + '-limited-10');
+      }
+      if (shouldScroll) {
+        requestAnimationFrame(() => scrollToShow('rAF-primary'));
+        // Reintentos escalonados: 80ms, 160ms, 320ms (si sigue sin moverse mucho)
+        ;[80,160,320].forEach((delay, idx) => {
+          setTimeout(() => {
+            try {
+              const tr2 = cont.getBoundingClientRect();
+              const currentTopDelta = tr2.top; // relativo viewport
+              // Si todavía la parte superior de la tabla no está cerca del header ( > headerOffset + 10 ) reintenta
+              if (currentTopDelta > headerOffset + 10) {
+                console.debug('[autoScroll] retry condition met', { delay, currentTopDelta });
+                scrollToShow('retry'+delay+'ms');
+              }
+            } catch(e) { console.debug('[autoScroll] retry error', e); }
+          }, delay);
+        });
+      }
+    } catch (e) {
+      console.debug('[autoScroll] error', e);
+    }
+  })();
 
   (function ensureMinWidth() {
     const root = getComputedStyle(document.documentElement);

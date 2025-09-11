@@ -312,8 +312,12 @@ nav button:hover {
   /* Tighten unit pairs so two fit on one line without wrapping */
   #configMenu .units-row { gap:10px !important; }
   #configMenu .unit-pair { gap:4px !important; }
-  #configMenu .unit-pair label { flex:0 0 auto !important; min-width:0 !important; white-space:nowrap; }
+  /* Keep unit-pair labels aligned with single labels to avoid select drifting on ~400px widths */
+  #configMenu .unit-pair label { flex:0 0 90px !important; min-width:90px !important; width:90px !important; white-space:nowrap; }
   #configMenu .unit-pair select { min-width:54px; padding:3px 6px; height:28px; font-size:12px; }
+  /* Exception: inline checkbox label ("show no critical...") should not be constrained to 90px */
+  #configMenu .config-row > label.inline { flex:1 1 auto !important; width:auto !important; min-width:0 !important; }
+  #configMenu .config-row > label.inline span { white-space:nowrap !important; overflow:visible !important; text-overflow:clip !important; }
   /* General form controls smaller */
   #configMenu select, #configMenu input[type="text"] { height:30px; padding:4px 8px; font-size:13px; }
   /* Buttons align height */
