@@ -35,6 +35,8 @@ header nav button {
 }
 
 /* Speed input and presets: match the select style (soft grey bg, rounded border, consistent height) */
+  /* Apply same alignment to unit-pair labels so their selects start at same column */
+  #configMenu .unit-pair label { flex:0 0 118px !important; min-width:90px !important; width:90px !important; }
 .speed-wrap {
   display: inline-flex;
   align-items: center;
@@ -294,6 +296,29 @@ nav button:hover {
     gap: 12px;
     align-items: center;
   }
+}
+
+/* FINAL COMPACT OVERRIDES (small screens) */
+@media screen and (max-width: 430px) {
+  /* Reduce vertical footprint */
+  #configMenu .config-row { padding: 2px 0 !important; gap: 6px !important; }
+  /* Narrower label column so selects sit closer */
+  #configMenu .config-row > label { flex: 0 0 90px !important; min-width:90px !important; width:90px !important; }
+  /* Remove extra top/bottom margin from labels */
+  #configMenu label { margin: 0 !important; }
+  /* Slightly smaller font to fit more horizontally */
+  #configMenu .config-row > label, #configMenu .unit-pair label { font-size: 12.5px; line-height:1.15; }
+  /* Tighten unit pairs so two fit on one line without wrapping */
+  #configMenu .units-row { gap:10px !important; }
+  #configMenu .unit-pair { gap:4px !important; }
+  #configMenu .unit-pair label { flex:0 0 auto !important; min-width:0 !important; white-space:nowrap; }
+  #configMenu .unit-pair select { min-width:54px; padding:3px 6px; height:28px; font-size:12px; }
+  /* General form controls smaller */
+  #configMenu select, #configMenu input[type="text"] { height:30px; padding:4px 8px; font-size:13px; }
+  /* Buttons align height */
+  #configMenu .config-row button { height:30px; padding:4px 10px; font-size:12px; }
+  /* Headings slightly denser */
+  #configMenu h4 { margin:6px 0 4px; font-size:13px; }
 }
 #configMenu #closeConfig {
   position: absolute;
