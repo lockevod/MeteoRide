@@ -36,7 +36,8 @@ header nav button {
 
 /* Speed input and presets: match the select style (soft grey bg, rounded border, consistent height) */
   /* Apply same alignment to unit-pair labels so their selects start at same column */
-  #configMenu .unit-pair label { flex:0 0 118px !important; min-width:90px !important; width:90px !important; }
+  /* Standardized base alignment: labels 120px for >=420px screens */
+  #configMenu .unit-pair label { flex:0 0 120px !important; min-width:120px !important; width:120px !important; }
 .speed-wrap {
   display: inline-flex;
   align-items: center;
@@ -209,9 +210,9 @@ nav button:hover {
 }
 #configMenu .config-row > label {
   /* fixed label column so controls align across rows */
-  flex: 0 0 140px;
-  min-width: 140px;
-  width: 140px;
+  flex: 0 0 120px;
+  min-width: 120px;
+  width: 120px;
 }
 #configMenu .config-row select,
 #configMenu .config-row input[type="text"] {
@@ -227,9 +228,9 @@ nav button:hover {
   gap: 8px;
 }
 #configMenu .unit-pair label {
-  flex: 0 0 140px; /* match single-row labels */
-  min-width: 140px;
-  width: 140px;
+  flex: 0 0 120px; /* match single-row labels */
+  min-width: 120px;
+  width: 120px;
 }
 #configMenu .unit-pair select {
   flex: 1;
@@ -274,9 +275,9 @@ nav button:hover {
   /* Use the same fixed label width as desktop so controls align across rows */
   #configMenu .config-row > label,
   #configMenu .unit-pair label {
-    flex: 0 0 140px;
-    min-width: 140px;
-    width: 140px;
+    flex: 0 0 120px;
+    min-width: 120px;
+    width: 120px;
   }
   /* Keep unit-pairs identical to desktop: label + select inline with same sizing */
   #configMenu .unit-pair {
