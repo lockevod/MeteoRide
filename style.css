@@ -1235,6 +1235,36 @@ input[type="file"] {
   }
 }
 
+/* Compact alignment for config rows on small screens (improves vertical density & alignment) */
+@media screen and (max-width: 700px) {
+  #configMenu { padding-top: 10px; }
+  #configMenu .config-row { padding: 1px 0; gap: 6px; }
+  /* Make label + control sit on same baseline */
+  #configMenu .config-row > label,
+  #configMenu .unit-pair label {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px; /* tighter label→text gap */
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.15;
+  }
+  /* Remove larger generic label margins */
+  #configMenu label { margin: 0; }
+  /* Slightly tighter inputs */
+  #configMenu select,
+  #configMenu input[type="text"] { height: 28px; padding: 3px 6px; font-size: 12px; }
+  /* API key rows: ensure button aligns tight */
+  #configMenu .config-row button { height: 28px; padding: 3px 8px; font-size: 11.5px; }
+  /* Unit pairs: keep two in one line without wrap */
+  #configMenu .units-row { gap: 10px; }
+  #configMenu .unit-pair { gap: 4px; }
+  #configMenu .unit-pair label { white-space: nowrap; }
+  #configMenu .unit-pair select { min-width: 58px; }
+  /* Headings tighter */
+  #configMenu h4 { margin: 5px 0 3px; font-size: 12.5px; }
+}
+
 /* Forzar que el nombre de la ruta quede en la línea siguiente y alineado con la tabla */
 #rutaName {
   margin-top: 6px;
