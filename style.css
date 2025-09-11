@@ -74,7 +74,7 @@ header nav button {
   cursor: pointer;
 }
 
-/* On very small screens, slightly reduce paddings to avoid wrapping antes 520*/
+/* On very small screens, slightly reduce paddings to avoid wrapping antes 520
 @media (max-width: 420px) {
   header nav button { padding: 6px 8px; gap: 4px; }
   .speed-wrap input[type="number"],
@@ -84,9 +84,9 @@ header nav button {
     padding: 5px 7px;
     border-radius: 6px;
   }
-  /* Ensure debug emoji doesn't push the line height on iOS */
+
   #toggleDebug .debug-ico { font-size: 0.98em; }
-}
+}*/
 
 /* App logo used inside the page header (do not use as favicon) */
 .app-logo {
