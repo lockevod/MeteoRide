@@ -738,4 +738,53 @@
     reloadFull,
     replaceGPXMarkers,
   };
+
+  // Accept GPX payloads via window.postMessage from external pages (e.g., userscript/extension)
+  // Message format: { action: 'loadGPX', gpx: '<gpx xml string>', name: 'route.gpx' }
+  (function() {
+    // Allowed origin patterns for incoming postMessage (hosts you trust to send GPX)
+    const allowedOriginPatterns = [
+      /\.(?:komoot)\.[a-z.]+$/i, // komoot.*
+      /(?:^|\.)bikemap\.net$/i,  // bikemap.net
+      /^https?:\/\/localhost(?::\d+)?$/i,
+      /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i
+    ];
+
+    function isAllowedOrigin(origin) {
+      if (!origin) return false;
+      try {
+        // origin is like "https://www.komoot.com"
+        return allowedOriginPatterns.some(p => p.test(origin));
+      } catch (e) { return false; }
+    }
+
+    window.addEventListener('message', function (ev) {
+      try {
+        const msg = ev && ev.data;
+        if (!msg || msg.action !== 'loadGPX' || !msg.gpx) return;
+        // Validate origin
+        if (!isAllowedOrigin(ev.origin)) {
+          console.warn('Rejected postMessage from origin', ev.origin);
+          return;
+        }
+        window.logDebug && window.logDebug('Received GPX via postMessage from ' + ev.origin);
+        // Create a Blob/File-like object so reloadFull and other flows can reuse it
+        const blob = new Blob([msg.gpx], { type: 'application/gpx+xml' });
+        // Try to set a name property for compatibility
+        try { blob.name = msg.name || 'route.gpx'; } catch (e) { /* ignore */ }
+        window.lastGPXFile = blob;
+        // If the app exposes the programmatic loader, use it; otherwise fall back to reloadFull
+        if (typeof window.cwLoadGPXFromString === 'function') {
+          try { window.cwLoadGPXFromString(msg.gpx, msg.name || 'route.gpx'); } catch (e) {
+            // Fallback: let reloadFull read window.lastGPXFile
+            window.reloadFull();
+          }
+        } else {
+          window.reloadFull();
+        }
+      } catch (e) {
+        console.warn('postMessage loadGPX error', e);
+      }
+    }, false);
+  })();
 })();
