@@ -751,11 +751,26 @@
     ];
 
     function isAllowedOrigin(origin) {
-      if (!origin) return false;
       try {
-        // origin is like "https://www.komoot.com"
-        return allowedOriginPatterns.some(p => p.test(origin));
+        if (!origin) return true; // userscript / extension contexts may present "" origin
+        let host;
+        try { host = new URL(origin).hostname; } catch { host = origin.replace(/^https?:\/\//,''); }
+        // Direct hostname checks for reliability
+        const allowHosts = [
+          'komoot.com','www.komoot.com','account.komoot.com','komoot.de','www.komoot.de','account.komoot.de',
+          'bikemap.net','www.bikemap.net','localhost','127.0.0.1'
+        ];
+        if (allowHosts.includes(host)) return true;
+        // Subdomains of komoot.* allowed
+        if (/\.komoot\.(com|de)$/i.test(host)) return true;
+        return false;
       } catch (e) { return false; }
+    }
+
+    function simpleHash(str) {
+      let h = 0, i = 0, len = str.length;
+      while (i < len) { h = (h * 31 + str.charCodeAt(i++)) >>> 0; }
+      return ('00000000' + h.toString(16)).slice(-8);
     }
 
     window.addEventListener('message', function (ev) {
@@ -763,27 +778,35 @@
         const msg = ev && ev.data;
         if (!msg || msg.action !== 'loadGPX' || !msg.gpx) return;
         // Validate origin
-        if (!isAllowedOrigin(ev.origin)) {
-          console.warn('Rejected postMessage from origin', ev.origin);
+        const allowed = isAllowedOrigin(ev.origin);
+        if (!allowed) {
+          console.warn('[MeteoRide] Rejected loadGPX postMessage from origin', ev.origin);
+          try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: false, reason: 'forbidden_origin' }, ev.origin || '*'); } catch(_) {}
           return;
         }
-        window.logDebug && window.logDebug('Received GPX via postMessage from ' + ev.origin);
+        const name = msg.name || 'route.gpx';
+        const size = msg.gpx.length;
+        const hs = simpleHash(msg.gpx);
+        console.log('[MeteoRide] Accepted loadGPX postMessage origin=' + ev.origin + ' name=' + name + ' size=' + size + ' hash=' + hs);
+        window.logDebug && window.logDebug('Received GPX via postMessage from ' + ev.origin + ' name=' + name + ' size=' + size + ' hash=' + hs);
         // Create a Blob/File-like object so reloadFull and other flows can reuse it
         const blob = new Blob([msg.gpx], { type: 'application/gpx+xml' });
         // Try to set a name property for compatibility
-        try { blob.name = msg.name || 'route.gpx'; } catch (e) { /* ignore */ }
+        try { blob.name = name; } catch (e) { /* ignore */ }
         window.lastGPXFile = blob;
         // If the app exposes the programmatic loader, use it; otherwise fall back to reloadFull
         if (typeof window.cwLoadGPXFromString === 'function') {
-          try { window.cwLoadGPXFromString(msg.gpx, msg.name || 'route.gpx'); } catch (e) {
+          try { window.cwLoadGPXFromString(msg.gpx, name); } catch (e) {
             // Fallback: let reloadFull read window.lastGPXFile
             window.reloadFull();
           }
         } else {
           window.reloadFull();
         }
+        try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: true, name, size }, ev.origin || '*'); } catch(_) {}
       } catch (e) {
         console.warn('postMessage loadGPX error', e);
+        try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: false, reason: 'exception' }, ev.origin || '*'); } catch(_) {}
       }
     }, false);
   })();
