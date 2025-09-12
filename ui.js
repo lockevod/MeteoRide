@@ -758,11 +758,13 @@
         // Direct hostname checks for reliability
         const allowHosts = [
           'komoot.com','www.komoot.com','account.komoot.com','komoot.de','www.komoot.de','account.komoot.de',
-          'bikemap.net','www.bikemap.net','localhost','127.0.0.1'
+          'bikemap.net','www.bikemap.net','web.bikemap.net','localhost','127.0.0.1'
         ];
         if (allowHosts.includes(host)) return true;
-        // Subdomains of komoot.* allowed
-        if (/\.komoot\.(com|de)$/i.test(host)) return true;
+  // Subdomains of komoot.* allowed
+  if (/\.komoot\.(com|de)$/i.test(host)) return true;
+  // Subdomains of bikemap.net allowed
+  if (/\.bikemap\.net$/i.test(host)) return true;
         return false;
       } catch (e) { return false; }
     }

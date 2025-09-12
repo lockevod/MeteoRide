@@ -1,10 +1,17 @@
 // ==UserScript==
 // @name         MeteoRide Quick Export
-// @namespace    https://meteoride.local/
-// @version      0.5
+// @namespace    https://app.meteoride.cc/
+// @version      0.10
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       MeteoRide
 // @license      MIT
+// @homepageURL  https://app.meteoride.cc/
+// @source       https://github.com/lockevod/meteoride
+// @supportURL   https://github.com/lockevod/meteoride/issues
+// @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js
+// @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js
+// @icon         https://app.meteoride.cc/icon-192.png
+// @run-at       document-end
 // @include      https://www.komoot.*/*
 // @include      https://komoot.*/*
 // @include      https://*.komoot.com/*
@@ -199,25 +206,259 @@
         return false;
     }
 
-    function tryBikemap() {
-        // Bikemap often has a download link with "export/gpx" in href
-    const link = Array.from(document.querySelectorAll('a')).find(a => a.href && (a.href.includes('/export/gpx') || a.href.endsWith('.gpx')));
-    d('tryBikemap linkFound', !!link);
-        if (link) {
-            addButton('Open in MeteoRide', () => {
-        d('Bikemap button clicked');
-                fetchAsText(link.href, (txt) => { if (txt) postToMeteoRide(txt, 'route.gpx'); else alert('Could not fetch GPX'); });
-            });
-            return true;
+    // --- Bikemap helpers ---
+    function getBikemapRouteId(url) {
+        const u = url || location.pathname;
+        const m = u.match(/\/r\/(\d+)/);
+        const id = m ? m[1] : null;
+        d('getBikemapRouteId', u, '=>', id);
+        return id;
+    }
+
+    function fetchBikemapRouteMeta(routeId, cb) {
+        if (!routeId) return cb(null);
+        // Try several endpoint variants (some deployments differ with trailing slash or .json)
+        const endpoints = [
+            `https://www.bikemap.net/api/v5/routes/${routeId}/`,
+            `https://www.bikemap.net/api/v5/routes/${routeId}`,
+            `https://www.bikemap.net/api/v5/routes/${routeId}.json`
+        ];
+        let idx = 0;
+        function tryNext() {
+            if (idx >= endpoints.length) return cb(null);
+            const apiUrl = endpoints[idx++];
+            d('fetchBikemapRouteMeta try', apiUrl);
+            const headers = { 'x-requested-with': 'XMLHttpRequest', 'accept': 'application/json' };
+            const onSuccess = (status, text) => {
+                d('Bikemap meta status', status, 'len', text && text.length);
+                if (!text || status >= 400) return tryNext();
+                try { const json = JSON.parse(text); return cb(json); } catch(e) { d('Bikemap meta parse error', e); tryNext(); }
+            };
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                GM_xmlhttpRequest({ method: 'GET', url: apiUrl, headers, onload: res => onSuccess(res.status, res.responseText), onerror: err => { d('Bikemap meta error', err); tryNext(); } });
+            } else {
+                fetch(apiUrl, { headers }).then(r => r.text().then(t => onSuccess(r.status, t))).catch(e => { d('Bikemap meta fetch err', e); tryNext(); });
+            }
         }
+        tryNext();
+    }
+
+    function findGpxUrlInObject(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        for (const k of Object.keys(obj)) {
+            const v = obj[k];
+            if (typeof v === 'string' && /\.gpx(\?|$)/i.test(v)) return v;
+            if (v && typeof v === 'object') {
+                const found = findGpxUrlInObject(v);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    function findBikemapDomGpxLink() {
+        // Look for explicit .gpx links or data attributes that hint at GPX
+        const anchors = Array.from(document.querySelectorAll('a[href]'));
+        const g1 = anchors.find(a => a.href.match(/\.gpx(\?|$)/i));
+        if (g1) return g1.href;
+        // Sometimes download buttons trigger JS; look for data-export or data-download attributes
+        const exp = anchors.find(a => /gpx/i.test(a.getAttribute('data-export')||'') || /gpx/i.test(a.textContent||''));
+        if (exp && exp.href) return exp.href;
+        return null;
+    }
+
+    function fetchBikemapGpx(routeId, cb) {
+        fetchBikemapRouteMeta(routeId, meta => {
+            if (!meta) {
+                d('No meta via API, trying NEXT_DATA + DOM fallbacks');
+                const nd = extractBikemapFromNextData(routeId);
+                if (nd) {
+                    d('Extracted candidate from __NEXT_DATA__');
+                    meta = nd; // continue as if meta
+                } else {
+                    const domUrl = findBikemapDomGpxLink();
+                    if (domUrl) return fetchAsText(domUrl, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, { title: 'Bikemap Route ' + routeId }); cb(null); });
+                    // As a last resort attempt to parse inline scripts
+                    const inline = extractBikemapFromInlineScripts(routeId);
+                    if (inline) {
+                        d('Recovered from inline script data');
+                        meta = inline;
+                    } else {
+                        return cb(null);
+                    }
+                }
+            }
+            // Try direct meta.gpx or any nested GPX url
+            let gpxUrl = meta.gpx || findGpxUrlInObject(meta);
+            if (gpxUrl) {
+                d('Bikemap found GPX url', gpxUrl);
+                fetchAsText(gpxUrl, txt => {
+                    if (txt && txt.trim().startsWith('<?xml')) return cb(txt, meta);
+                    d('Primary GPX fetch failed or not XML, attempt GeoJSON fallback');
+                    geoJsonFallback();
+                });
+            } else {
+                d('No GPX url in meta, attempt GeoJSON fallback');
+                geoJsonFallback();
+            }
+
+            function geoJsonFallback() {
+                const gj = meta.geo_json || meta.geojson || meta.geometry || null;
+                if (!gj) {
+                    d('No GeoJSON in meta, final DOM link attempt');
+                    const domUrl = findBikemapDomGpxLink();
+                    if (domUrl) return fetchAsText(domUrl, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, meta); cb(null); });
+                    // Last-chance: attempt reconstruct from any coords arrays in meta
+                    const coords = extractAnyCoordinates(meta);
+                    if (coords && coords.length) {
+                        const gpxText = buildGpxFromCoords(coords, meta.title || ('Bikemap Route ' + routeId));
+                        if (gpxText) { d('Last-chance coord extraction success length', gpxText.length); return cb(gpxText, meta); }
+                    }
+                    return cb(null);
+                }
+                try {
+                    let coords = null;
+                    if (gj.type === 'FeatureCollection' && Array.isArray(gj.features) && gj.features.length) {
+                        const feat = gj.features.find(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) || gj.features[0];
+                        if (feat && feat.geometry) {
+                            if (feat.geometry.type === 'LineString') coords = feat.geometry.coordinates;
+                            else if (feat.geometry.type === 'MultiLineString' && feat.geometry.coordinates.length) coords = feat.geometry.coordinates[0];
+                        }
+                    } else if (gj.type === 'LineString') coords = gj.coordinates;
+                    else if (gj.type === 'MultiLineString' && gj.coordinates && gj.coordinates.length) coords = gj.coordinates[0];
+                    if (coords && coords.length) {
+                        const gpxText = buildGpxFromCoords(coords, meta.title || ('Bikemap Route ' + routeId));
+                        if (gpxText) {
+                            d('GeoJSON fallback GPX length', gpxText.length);
+                            return cb(gpxText, meta);
+                        }
+                    }
+                } catch (e) { d('GeoJSON fallback error', e); }
+                // Final attempt: DOM link
+                const domUrl2 = findBikemapDomGpxLink();
+                if (domUrl2) return fetchAsText(domUrl2, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, meta); cb(null); });
+                cb(null);
+            }
+        });
+    }
+
+    function extractAnyCoordinates(obj) {
+        // Deep search for plausible coordinate arrays [[lon,lat],[lon,lat],...]
+        const visited = new Set();
+        function isCoordPair(p) { return Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number'; }
+        function dfs(o) {
+            if (!o || typeof o !== 'object' || visited.has(o)) return null;
+            visited.add(o);
+            if (Array.isArray(o)) {
+                if (o.length > 1 && o.every(isCoordPair)) return o; // treat as coordinates
+                for (const it of o) { const r = dfs(it); if (r) return r; }
+            } else {
+                for (const k of Object.keys(o)) {
+                    const v = o[k];
+                    const r = dfs(v); if (r) return r;
+                }
+            }
+            return null;
+        }
+        return dfs(obj);
+    }
+
+    function extractBikemapFromNextData(routeId) {
+        const el = document.getElementById('__NEXT_DATA__');
+        if (!el) return null;
+        try {
+            const json = JSON.parse(el.textContent || '{}');
+            const targetId = parseInt(routeId, 10);
+            const queue = [json];
+            const seen = new Set();
+            while (queue.length) {
+                const cur = queue.shift();
+                if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+                seen.add(cur);
+                if (cur.id === targetId && (cur.gpx || cur.geo_json || cur.geojson || cur.geometry || extractAnyCoordinates(cur))) {
+                    return cur;
+                }
+                for (const k of Object.keys(cur)) {
+                    const v = cur[k];
+                    if (v && typeof v === 'object') queue.push(v);
+                }
+            }
+        } catch (e) { d('__NEXT_DATA__ parse error', e); }
+        return null;
+    }
+
+    function extractBikemapFromInlineScripts(routeId) {
+        const scripts = Array.from(document.querySelectorAll('script'));
+        const targetId = parseInt(routeId, 10);
+        for (const s of scripts) {
+            const txt = s.textContent || '';
+            if (!txt) continue;
+            if (/gpx/i.test(txt) || /geo_json/i.test(txt) || /coordinates/.test(txt)) {
+                // Try naive brace extraction around first occurrence of 'geo_' or 'coordinates'
+                const idx = txt.search(/geo_json|geojson|coordinates|gpx/i);
+                if (idx >= 0) {
+                    // Walk backwards to first '{'
+                    let start = idx;
+                    while (start > 0 && txt[start] !== '{') start--;
+                    // Walk forward counting braces
+                    let depth = 0; let end = start; let started = false;
+                    for (let i = start; i < txt.length; i++) {
+                        const ch = txt[i];
+                        if (ch === '{') { depth++; started = true; }
+                        else if (ch === '}') { depth--; }
+                        if (started && depth === 0) { end = i+1; break; }
+                    }
+                    const blob = txt.slice(start, end);
+                    try {
+                        const obj = JSON.parse(blob);
+                        if (obj && typeof obj === 'object') {
+                            const queue = [obj];
+                            const seen = new Set();
+                            while (queue.length) {
+                                const cur = queue.shift();
+                                if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+                                seen.add(cur);
+                                if (cur.id === targetId && (cur.gpx || cur.geo_json || cur.geojson || cur.geometry || extractAnyCoordinates(cur))) {
+                                    return cur;
+                                }
+                                for (const k of Object.keys(cur)) { const v = cur[k]; if (v && typeof v === 'object') queue.push(v); }
+                            }
+                        }
+                    } catch(e) { /* ignore parse */ }
+                }
+            }
+        }
+        return null;
+    }
+
+    function addBikemapButton(routeId) {
+        if (!routeId) return false;
+        if (document.querySelector('.meteoride-export-btn.global.bikemap')) return true;
+        const btn = addButton('Open Bikemap route in MeteoRide', () => {
+            d('Bikemap button clicked', routeId);
+            if (btn) { btn.disabled = true; btn.textContent = 'Loading Bikemap route...'; }
+            fetchBikemapGpx(routeId, (gpx, meta) => {
+                if (!gpx) { alert('Could not fetch Bikemap GPX (maybe login required)'); if (btn) { btn.disabled = false; btn.textContent='Open Bikemap route in MeteoRide'; } return; }
+                const name = (meta && meta.title ? meta.title.replace(/\s+/g,'_') : 'bikemap-'+routeId) + '.gpx';
+                postToMeteoRide(gpx, name);
+                if (btn) { btn.disabled = false; btn.textContent = 'Open Bikemap route in MeteoRide'; }
+            });
+        });
+        if (btn) btn.classList.add('bikemap');
+        return true;
+    }
+
+    function tryBikemap() {
+        const id = getBikemapRouteId(location.pathname);
+        if (id) return addBikemapButton(id);
         return false;
     }
 
     function init() {
         // try site-specific helpers
         d('init start');
-        tryKomoot();
-        tryBikemap();
+    tryKomoot();
+    tryBikemap();
         // Generic global button that will attempt to find any GPX link on the page
         addButton('Open route in MeteoRide', () => {
             d('Generic button clicked');
