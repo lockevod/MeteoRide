@@ -174,7 +174,8 @@
 
       <div class="param-row">
         <label class="file-btn small-file-btn" for="gpxFile" title="Upload file">📁</label>
-        <input type="file" id="gpxFile" accept=".gpx" />
+  <!-- Accept GPX and KML files -->
+  <input type="file" id="gpxFile" accept=".gpx,.kml" />
       </div>
     </div>
 
@@ -205,6 +206,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 <script src="utils.js"></script>
+<!-- togeojson: convert KML to GeoJSON in-browser when available -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
 <script src="ui.js"></script>
 <script src="app.js"></script>
 <script src="gpx-share.js"></script>

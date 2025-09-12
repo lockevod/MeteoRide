@@ -1,6 +1,6 @@
 # MeteoRide
 
-🚴‍♂️ **MeteoRide** is a web application designed for cyclists to forecast detailed weather in a route. Load GPX files, select your cycling speed, and get comprehensive weather data along your path, including temperature, wind, precipitation, humidity, cloudiness, luminosity, and UV index.
+🚴‍♂️ **MeteoRide** is a web application designed for cyclists to forecast detailed weather in a route. Load GPX or KML files, select your cycling speed, and get comprehensive weather data along your path, including temperature, wind, precipitation, humidity, cloudiness, luminosity, and UV index.
 
 You can download de code, execute directly without a server, install in a server or acces to https://app.meteoride.cc webapp.
 
@@ -46,7 +46,7 @@ For more detailed information, see the [User Guide (English)](https://app.meteor
 
 ## Troubleshooting
 
-- **GPX Won't Load**: Ensure the file has valid tracks.
+- **GPX/KML Won't Load**: Ensure the file has valid tracks.
 - **No Weather Data**: Check API key or switch to Open-Meteo.
 - **Date Out of Range**: Reduce the time horizon.
 - **Empty Table**: Verify route length.

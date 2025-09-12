@@ -241,6 +241,130 @@
   }
 
   // GPX reloading function
+  // Helper: convert simple KML (Placemarks with Point/LineString) to GPX text
+  // Prefer using the external togeojson library when available (toGeoJSON.kml / togeojson.kml)
+  function kmlToGpxText(kmlText) {
+    try {
+      const parser = new DOMParser();
+      const kmlDoc = parser.parseFromString(kmlText, 'application/xml');
+
+      // Try known global names for the togeojson lib
+      let geojson = null;
+      try {
+        if (window.toGeoJSON && typeof window.toGeoJSON.kml === 'function') {
+          geojson = window.toGeoJSON.kml(kmlDoc);
+        } else if (window.togeojson && typeof window.togeojson.kml === 'function') {
+          geojson = window.togeojson.kml(kmlDoc);
+        } else if (window.togeojson && typeof window.togeojson === 'function') {
+          // Some builds expose a function directly
+          geojson = window.togeojson(kmlDoc);
+        }
+      } catch (e) {
+        geojson = null;
+      }
+
+      if (geojson) {
+        return geojsonToGpx(geojson);
+      }
+
+      // Fallback: minimal DOM-based KML->GPX conversion (keeps previous behavior)
+      const placemarks = Array.from(kmlDoc.getElementsByTagName('Placemark'));
+      let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="meteoride">\n`;
+      for (const pm of placemarks) {
+        const nameEl = pm.getElementsByTagName('name')[0];
+        const name = nameEl ? nameEl.textContent.trim() : '';
+        // Point
+        const point = pm.getElementsByTagName('Point')[0];
+        if (point) {
+          const coords = (point.getElementsByTagName('coordinates')[0] || {}).textContent || '';
+          const [lon, lat] = coords.trim().split(/,\s*/);
+          if (lat && lon) {
+            gpx += `<wpt lat="${lat}" lon="${lon}"><name>${escapeXml(name)}</name></wpt>\n`;
+            continue;
+          }
+        }
+        // LineString
+        const ls = pm.getElementsByTagName('LineString')[0];
+        if (ls) {
+          const coords = (ls.getElementsByTagName('coordinates')[0] || {}).textContent || '';
+          const pts = coords.trim().split(/\s+/).map(s => s.split(',')).filter(a => a.length >= 2);
+          if (pts.length) {
+            gpx += `<trk><name>${escapeXml(name)}</name><trkseg>`;
+            for (const p of pts) {
+              const lon = p[0]; const lat = p[1];
+              gpx += `<trkpt lat="${lat}" lon="${lon}"></trkpt>`;
+            }
+            gpx += `</trkseg></trk>\n`;
+            continue;
+          }
+        }
+        // Route (same as LineString fallback)
+        const rte = pm.getElementsByTagName('LineString')[0];
+        if (rte) {
+          const coords = (rte.getElementsByTagName('coordinates')[0] || {}).textContent || '';
+          const pts = coords.trim().split(/\s+/).map(s => s.split(',')).filter(a => a.length >= 2);
+          if (pts.length) {
+            gpx += `<rte><name>${escapeXml(name)}</name>`;
+            for (const p of pts) { gpx += `<rtept lat="${p[1]}" lon="${p[0]}"></rtept>`; }
+            gpx += `</rte>\n`;
+          }
+        }
+      }
+      gpx += '</gpx>';
+      return gpx;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Convert simple GeoJSON (FeatureCollection / Feature) to GPX text.
+  function geojsonToGpx(geojson) {
+    try {
+      const fc = (geojson.type === 'FeatureCollection') ? geojson : { type: 'FeatureCollection', features: geojson.type === 'Feature' ? [geojson] : [] };
+      let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="meteoride">\n`;
+      for (const feat of (fc.features || [])) {
+        const props = feat.properties || {};
+        const name = props.name || props.title || '';
+        const geom = feat.geometry;
+        if (!geom) continue;
+        const type = geom.type;
+        if (type === 'Point') {
+          const [lon, lat] = geom.coordinates;
+          gpx += `<wpt lat="${lat}" lon="${lon}"><name>${escapeXml(name)}</name></wpt>\n`;
+        } else if (type === 'LineString') {
+          gpx += `<trk><name>${escapeXml(name)}</name><trkseg>`;
+          for (const c of geom.coordinates) {
+            const lon = c[0]; const lat = c[1];
+            gpx += `<trkpt lat="${lat}" lon="${lon}"></trkpt>`;
+          }
+          gpx += `</trkseg></trk>\n`;
+        } else if (type === 'MultiLineString') {
+          gpx += `<trk><name>${escapeXml(name)}</name>`;
+          for (const line of geom.coordinates) {
+            gpx += `<trkseg>`;
+            for (const c of line) { gpx += `<trkpt lat="${c[1]}" lon="${c[0]}"></trkpt>`; }
+            gpx += `</trkseg>`;
+          }
+          gpx += `</trk>\n`;
+        } else if (type === 'Polygon') {
+          // Use outer ring as a track
+          const outer = geom.coordinates && geom.coordinates[0];
+          if (outer && outer.length) {
+            gpx += `<trk><name>${escapeXml(name)}</name><trkseg>`;
+            for (const c of outer) { gpx += `<trkpt lat="${c[1]}" lon="${c[0]}"></trkpt>`; }
+            gpx += `</trkseg></trk>\n`;
+          }
+        }
+      }
+      gpx += '</gpx>';
+      return gpx;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function escapeXml(s) { return String(s || '').replace(/[<>&'"]/g, function(c){ return ({'<' : '&lt;','>' : '&gt;','&' : '&amp;',"'":'&apos;', '"':'&quot;'})[c]; }); }
+
   function reloadFull() {
     if (!window.lastGPXFile) {
       // No mostrar mensaje cuando no hay fichero seleccionado (comportamiento silencioso)
@@ -250,8 +374,17 @@
     
     reader.onload = async function (e) {
       try {
+        // Detect file type by extension and convert if necessary
+        const name = (window.lastGPXFile && window.lastGPXFile.name) ? String(window.lastGPXFile.name).toLowerCase() : '';
+        let content = e.target.result;
+        if (name.endsWith('.kml')) {
+          const g = kmlToGpxText(content);
+          if (!g) throw new Error('KML to GPX conversion failed');
+          content = g;
+        }
+  // FIT files are not accepted by the file input; only .gpx and .kml are handled here.
         if (window.trackLayer) window.map.removeLayer(window.trackLayer);
-        window.trackLayer = new L.GPX(e.target.result, {
+        window.trackLayer = new L.GPX(content, {
           async: true,
           polyline_options: { color: 'blue' },
           marker_options: {
