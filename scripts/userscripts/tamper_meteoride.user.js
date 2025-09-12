@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Quick Export
 // @namespace    https://app.meteoride.cc/
-// @version      0.10
+// @version      0.13
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       MeteoRide
 // @license      MIT
@@ -76,9 +76,9 @@
         fetch(url).then(r => { d('fetch status', url, r.status); return r.text(); }).then(t => { d('fetch OK', url, 'len', t && t.length); cb(t); }).catch(e => { d('fetch ERR', url, e); cb(null); });
     }
 
-    function addButton(label, onclick) {
-        // Prevent creating duplicate global buttons
-        if (document.querySelector('.meteoride-export-btn.global')) return null;
+    function addButton(label, onclick, extraClass) {
+        // Prevent creating duplicate button with same text
+        if (Array.from(document.querySelectorAll('.meteoride-export-btn.global')).some(b => b.textContent === label)) return null;
         const btn = document.createElement('button');
         btn.textContent = label;
         btn.style.position = 'fixed';
@@ -91,7 +91,7 @@
         btn.style.borderRadius = '4px';
         btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
         btn.style.zIndex = 999999;
-        btn.className = 'meteoride-export-btn global';
+    btn.className = 'meteoride-export-btn global' + (extraClass ? ' ' + extraClass : '');
     btn.addEventListener('click', onclick);
         document.body.appendChild(btn);
     d('Button added', label);
@@ -106,6 +106,83 @@
     const id = m ? m[1] : null;
     d('getKomootTourId', u, '=>', id);
     return id;
+    }
+
+    function getKomootDiscoverFocusedTourId() {
+        if (!/\/discover\//.test(location.pathname)) return null;
+        const params = new URLSearchParams(location.search);
+        let ft = params.get('focusedTour');
+        if (ft) {
+            // Remove non-digits (focusedTour sometimes like e123456789)
+            const digits = ft.replace(/\D+/g, '');
+            if (digits.length >= 5) { d('focusedTour param ->', digits); return digits; }
+        }
+        // Fallback: scan anchor hrefs for /tour/<id>
+        const a = Array.from(document.querySelectorAll('a[href*="/tour/"]'))
+            .map(a => (a.getAttribute('href')||'').match(/\/tour\/(\d+)/))
+            .filter(Boolean)
+            .map(m => m[1]);
+        if (a.length) { d('discover anchors candidate', a[0]); return a[0]; }
+        // Fallback: parse __NEXT_DATA__ for tour ids
+        const el = document.getElementById('__NEXT_DATA__');
+        if (el) {
+            try {
+                const json = JSON.parse(el.textContent||'{}');
+                const ids = [];
+                const stack = [json];
+                const seen = new Set();
+                while (stack.length) {
+                    const cur = stack.pop();
+                    if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+                    seen.add(cur);
+                    if (typeof cur.id === 'number' && cur.id > 1000) ids.push(String(cur.id));
+                    for (const k of Object.keys(cur)) {
+                        const v = cur[k];
+                        if (v && typeof v === 'object') stack.push(v);
+                    }
+                }
+                if (ids.length) { d('NEXT_DATA discover ids', ids.slice(0,3)); return ids[0]; }
+            } catch(e) { d('discover NEXT_DATA parse err', e); }
+        }
+        return null;
+    }
+
+    function getKomootSmartTourId() {
+        if (!/\/smarttour\//.test(location.pathname)) return null;
+        // Pattern: /smarttour/<alphanumeric>/...
+        const m = location.pathname.match(/\/smarttour\/([^/]+)/);
+        if (!m) return null;
+        const raw = m[1];
+        const digits = raw.replace(/\D+/g,'');
+        if (digits.length >= 5) { d('smarttour param ->', raw, 'digits', digits); return digits; }
+        // Fallback: scan anchors for /tour/<id>
+        const a = Array.from(document.querySelectorAll('a[href*="/tour/"]'))
+            .map(a => (a.getAttribute('href')||'').match(/\/tour\/(\d+)/))
+            .filter(Boolean)
+            .map(m => m[1]);
+        if (a.length) { d('smarttour anchor fallback ->', a[0]); return a[0]; }
+        // Fallback: parse __NEXT_DATA__ similarly
+        const el = document.getElementById('__NEXT_DATA__');
+        if (el) {
+            try {
+                const json = JSON.parse(el.textContent||'{}');
+                const ids = [];
+                const stack = [json];
+                const seen = new Set();
+                while (stack.length) {
+                    const cur = stack.pop();
+                    if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+                    seen.add(cur);
+                    if (typeof cur.id === 'number' && cur.id > 1000) ids.push(String(cur.id));
+                    for (const k of Object.keys(cur)) {
+                        const v = cur[k];
+                        if (v && typeof v === 'object') stack.push(v);
+                    }
+                }
+                if (ids.length) { d('smarttour NEXT_DATA ids', ids.slice(0,3)); return ids[0]; }
+            } catch(e) { d('smarttour NEXT_DATA parse err', e); }
+        }
+        return null;
     }
 
     function buildGpxFromCoords(coords, name) {
@@ -195,14 +272,17 @@
                 postToMeteoRide(gpx, 'komoot-' + tourId + '.gpx');
                 if (btn) { btn.disabled = false; btn.textContent = 'Open Komoot tour in MeteoRide'; }
             });
-        });
-        if (btn) btn.classList.add('komoot');
+        }, 'komoot');
         return true;
     }
 
     function tryKomoot() {
         const id = getKomootTourId(location.pathname);
         if (id) return addKomootButton(id);
+        const did = getKomootDiscoverFocusedTourId();
+        if (did) return addKomootButton(did);
+    const sid = getKomootSmartTourId();
+    if (sid) return addKomootButton(sid);
         return false;
     }
 
@@ -443,8 +523,7 @@
                 postToMeteoRide(gpx, name);
                 if (btn) { btn.disabled = false; btn.textContent = 'Open Bikemap route in MeteoRide'; }
             });
-        });
-        if (btn) btn.classList.add('bikemap');
+        }, 'bikemap');
         return true;
     }
 
@@ -454,18 +533,43 @@
         return false;
     }
 
-    function init() {
-        // try site-specific helpers
-        d('init start');
-    tryKomoot();
-    tryBikemap();
-        // Generic global button that will attempt to find any GPX link on the page
+    function hasAnyDirectGpxLink() {
+        return !!Array.from(document.querySelectorAll('a[href]')).find(a => a.href && (a.href.match(/\.gpx(\?|$)/i) || a.href.includes('/export/gpx')));
+    }
+
+    function addGenericButtonIfPossible() {
+        if (document.querySelector('.meteoride-export-btn.global.generic')) return;
+        if (document.querySelector('.meteoride-export-btn.global.komoot') || document.querySelector('.meteoride-export-btn.global.bikemap')) return; // site-specific already
+        if (!hasAnyDirectGpxLink()) return;
         addButton('Open route in MeteoRide', () => {
             d('Generic button clicked');
-            const any = Array.from(document.querySelectorAll('a')).find(a => a.href && (a.href.endsWith('.gpx') || a.href.includes('/export/gpx')));
-            if (!any) { alert('No GPX link found on this page'); return; }
-            fetchAsText(any.href, (txt) => { if (txt) postToMeteoRide(txt, 'route.gpx'); else alert('Could not fetch GPX'); });
-        });
+            const any = Array.from(document.querySelectorAll('a')).find(a => a.href && (a.href.match(/\.gpx(\?|$)/i) || a.href.includes('/export/gpx')));
+            if (!any) { alert('No GPX link found on this page'); removeGenericIfInvalid(); return; }
+            fetchAsText(any.href, (txt) => { if (txt) postToMeteoRide(txt, 'route.gpx'); else { alert('Could not fetch GPX'); removeGenericIfInvalid(); } });
+        }, 'generic');
+    }
+
+    function removeGenericIfInvalid() {
+        const btn = document.querySelector('.meteoride-export-btn.global.generic');
+        if (btn && !hasAnyDirectGpxLink()) btn.remove();
+    }
+
+    function refreshButtons() {
+        const hadKomoot = tryKomoot();
+        const hadBikemap = tryBikemap();
+        if (!hadKomoot && !hadBikemap) {
+            addGenericButtonIfPossible();
+        }
+        else {
+            // remove generic if site specific present
+            const generic = document.querySelector('.meteoride-export-btn.global.generic');
+            if (generic) generic.remove();
+        }
+    }
+
+    function init() {
+        d('init start');
+        refreshButtons();
 
         // Watch for dynamic content that may inject GPX links (single global observer)
     const observer = new MutationObserver(mutations => {
@@ -473,29 +577,20 @@
                 if (!m.addedNodes) continue;
                 for (const node of m.addedNodes) {
                     if (!(node instanceof Element)) continue;
-                    // If new links are added, try to detect GPX links and add a page button if found
-                    const found = node.querySelector && node.querySelector('a[href$=".gpx"], a[href*="/export/gpx"]');
-                    if (found) {
-            d('Mutation found potential GPX link');
-                        // ensure there is a global button
-                        if (!document.querySelector('.meteoride-export-btn.global')) {
-                            addButton('Open route in MeteoRide', () => {
-                                const any = Array.from(document.querySelectorAll('a')).find(a => a.href && (a.href.endsWith('.gpx') || a.href.includes('/export/gpx')));
-                                if (!any) { alert('No GPX link found on this page'); return; }
-                                fetchAsText(any.href, (txt) => { if (txt) postToMeteoRide(txt, 'route.gpx'); else alert('Could not fetch GPX'); });
-                            });
-                        }
-                        return;
+                    if (node.querySelector && node.querySelector('a[href$=".gpx"], a[href*="/export/gpx"]')) {
+                        d('Mutation found potential GPX link');
+                        addGenericButtonIfPossible();
                     }
                 }
             }
+            removeGenericIfInvalid();
         });
     observer.observe(document.body, { childList: true, subtree: true });
 
     // SPA route changes (Komoot uses client-side navigation)
     const pushState = history.pushState;
     const replaceState = history.replaceState;
-    function onNav() { d('SPA nav', location.pathname); setTimeout(() => { tryKomoot(); }, 400); }
+    function onNav() { d('SPA nav', location.pathname); setTimeout(() => { refreshButtons(); }, 400); }
     history.pushState = function() { pushState.apply(this, arguments); onNav(); };
     history.replaceState = function() { replaceState.apply(this, arguments); onNav(); };
     window.addEventListener('popstate', onNav);
