@@ -302,7 +302,8 @@
           step.windGust = safeNum(windToUnits(H.wind_gusts_10m?.[idx], windUnit));
           step.humidity = safeNum(H.relative_humidity_2m?.[idx]);
           step.precipitation = safeNum(H.precipitation?.[idx]);
-          step.precipProb = null;
+          // Use precipitation probability when available (0..100)
+          step.precipProb = safeNum(H.precipitation_probability?.[idx]);
           step.weatherCode = H.weathercode?.[idx];
           step.uvindex = safeNum(H.uv_index?.[idx]);
           step.isDaylight = H.is_day?.[idx];
@@ -346,7 +347,14 @@
           const rain = Number(useHourly ? (src.rain?.["1h"] ?? 0) : (src.rain ?? 0));
           const snow = Number(useHourly ? (src.snow?.["1h"] ?? 0) : (src.snow ?? 0));
           step.precipitation = safeNum(rain + snow);
-          step.precipProb = null;
+          // OpenWeather 'pop' is 0..1 -> convert to percent
+          if (useHourly && src && (src.pop != null)) {
+            step.precipProb = safeNum(Number(src.pop) * 100);
+          } else if (src && src.pop != null) {
+            step.precipProb = safeNum(Number(src.pop) * 100);
+          } else {
+            step.precipProb = null;
+          }
           step.weatherCode = Array.isArray(src.weather) && src.weather[0] ? src.weather[0].id : null;
           step.uvindex = safeNum(src.uvi ?? raw.current?.uvi ?? null);
           step.cloudCover = safeNum(src.clouds);
@@ -358,7 +366,12 @@
         step.windGust = safeNum(raw.wind_gust_10m);
         step.humidity = safeNum(raw.relative_humidity_2m);
         step.precipitation = safeNum(raw.precipitation);
-        step.precipProb = null;
+        // MeteoBlue may provide precipitation_probability per timestep; attempt to pick closest
+        try {
+          const Ht = raw.time || raw.valid_time || null;
+          const idx = Array.isArray(Ht) ? (window.cw.findClosestIndex ? window.cw.findClosestIndex(Ht, step.time) : -1) : -1;
+          step.precipProb = idx >= 0 ? safeNum(raw.precipitation_probability?.[idx]) : null;
+        } catch (_) { step.precipProb = null; }
         let pic = null;
         try {
           const Ht = raw.time || raw.valid_time || null;
@@ -449,17 +462,20 @@
     const ws = (step.windSpeed != null) ? Number(step.windSpeed).toFixed(1) : "-";
     const wg = (step.windGust != null) ? Number(step.windGust).toFixed(1) : null;
     const windTxt = (wg != null) ? `${ws} (${wg})` : `${ws}`;
-    const unit = (document.getElementById("precipUnits")?.value || "mm").toLowerCase();
-    const pr = Number(step.precipitation ?? 0);
-    const rainVal = unit === "in" ? pr * 0.0393701 : pr;
-    const rainTxt = `${rainVal.toFixed(1)}`;
+  const unit = (document.getElementById("precipUnits")?.value || "mm").toLowerCase();
+  const pr = Number(step.precipitation ?? 0);
+  const rainVal = unit === "in" ? pr * 0.0393701 : pr;
+  const rainTxt = `${rainVal.toFixed(1)}`;
+  const pp = (step.precipProb != null && Number.isFinite(Number(step.precipProb))) ? Math.round(Number(step.precipProb)) : null;
+  // Show probability only when precipitation amount is > 0
+  const rainWithProb = (pp != null && Number(pr) > 0) ? `${rainTxt} (${pp}%)` : rainTxt;
     return `
       <div style="display:flex;align-items:center;gap:6px;justify-content:center">
         <i class="wi ${iconClass}" style="font-size:22px;line-height:1;color:#29519b"></i>
         <div class="weather-combined" style="min-width:auto;align-items:flex-start">
           <span class="combined-top">${tempTxt}</span>
           <span class="combined-bottom">${windTxt}</span>
-          <span class="combined-bottom">${rainTxt}</span>
+          <span class="combined-bottom">${rainWithProb}</span>
         </div>
       </div>`;
   }
@@ -574,7 +590,30 @@
     thead.appendChild(row);
 
     const tbody = document.createElement("tbody");
-    const provOrder = ["openmeteo","aromehd","ow2_arome_openmeteo","meteoblue","openweather"].filter(p => compareData[p]);
+    // Compute provider display order: prefer a sensible default but try to avoid
+    // showing similar providers (OpenWeather, OPW chain, AROME) consecutively.
+    const defaultOrder = ["openmeteo","aromehd","ow2_arome_openmeteo","meteoblue","openweather"];
+    let provOrder = defaultOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !defaultOrder.includes(p)));
+
+    // Group similar providers to discourage adjacency
+    const simGroup = new Set(["openweather","ow2_arome_openmeteo","aromehd"]);
+    function groupOf(p) { return simGroup.has(p) ? 'sim' : 'other'; }
+
+    // Greedy reorder to avoid same-group adjacency when possible
+    (function tryInterleave() {
+      const src = provOrder.slice();
+      const out = [];
+      let prevGroup = null;
+      while (src.length) {
+        let idx = src.findIndex(x => prevGroup == null || groupOf(x) !== prevGroup);
+        if (idx === -1) idx = 0; // forced
+        const pick = src.splice(idx, 1)[0];
+        out.push(pick);
+        prevGroup = groupOf(pick);
+      }
+      provOrder = out;
+    })();
+
     provOrder.forEach((prov) => {
       const r = document.createElement("tr");
       const th = document.createElement("th");

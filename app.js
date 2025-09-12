@@ -304,7 +304,7 @@ function segmentRouteByTime(geojson) {
     return;
   }
 
-  const speed = Number(getVal("cyclingSpeed")) || 20;
+  const speed = Number(getVal("cyclingSpeed")) || 12;
   const intervalMinutes = Number(getVal("intervalSelect")) || 15;
   const datetimeValue = getVal("datetimeRoute");
   if (!datetimeValue) {
@@ -2225,6 +2225,21 @@ window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint 
     }
     if (!map) {
       console.warn("[cw] map not initialized yet");
+    }
+
+    // Ensure reloadFull() (which reads window.lastGPXFile) works when GPX is injected
+    // programmatically (POST/service-worker flow). Create a File-like object so
+    // the existing file-based reload path can reparse the same GPX on parameter
+    // changes triggered by the UI.
+    try {
+      // File constructor is available in browsers; fallback to a simple object if not.
+      window.lastGPXFile = typeof File === 'function'
+        ? new File([gpxText], nameHint || 'route.gpx', { type: 'application/gpx+xml' })
+        : { name: nameHint || 'route.gpx', _text: gpxText };
+    } catch (e) {
+      // Do not block loading if File creation fails; just log.
+      console.warn('[cw] could not create File for lastGPXFile fallback', e);
+      window.lastGPXFile = { name: nameHint || 'route.gpx', _text: gpxText };
     }
 
     if (trackLayer) {
