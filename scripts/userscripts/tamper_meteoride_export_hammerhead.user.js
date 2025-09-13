@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.8.0
+// @version      0.8.1
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -61,6 +61,7 @@
     DEBUG: true,
     POSTMESSAGE_NAMESPACE: 'mr:hh',
     EXPORT_TIMEOUT_MS: 30000
+  ,PAUSE_BEFORE_IMPORT: true
   };
 
   const HAMMERHEAD_ORIGIN = 'https://dashboard.hammerhead.io';
@@ -181,6 +182,22 @@
     throw new Error('Estrategia de subida desconocida');
   }
 
+  // Validate that a public URL points to a GPX resource and normalize to .gpx URL when possible
+  async function validateGpxUrl(url){
+    try{
+      // quick check
+      if(/\.gpx(\?|$)/i.test(url)) return { ok:true, url };
+      // HEAD
+      const h = await fetch(url, { method:'HEAD', mode:'cors', credentials:'same-origin' });
+      const ct = h && h.headers && h.headers.get && h.headers.get('content-type') || '';
+      if(/gpx/i.test(ct)) return { ok:true, url };
+      // GET and try to resolve via resolveToGpx
+      const resolved = await resolveToGpx(url, (new URL(url)).origin);
+      if(resolved && /\.gpx(\?|$)/i.test(resolved)) return { ok:true, url: resolved };
+      return { ok:false };
+    } catch(e){ return { ok:false }; }
+  }
+
   // -------------------------------------------------------------
   // MeteoRide Side: Button + Send Request
   // -------------------------------------------------------------
@@ -229,6 +246,16 @@
   MRHH.log('Uploading GPX to share-server');
   const publicUrl = await uploadPublic(file);
   MRHH.info('Share server returned URL=', publicUrl);
+  // Optional pause: let user inspect/cancel before we call Hammerhead
+  if(CONFIG.PAUSE_BEFORE_IMPORT){
+    try{
+      const ok = confirm('GPX uploaded to: "' + publicUrl + '"\n\nPress OK to continue and request Hammerhead import, or Cancel to stop.');
+      if(!ok){ MRHH.info('User cancelled before Hammerhead import'); alert('Export cancelled by user');
+        const btn2 = document.getElementById('mr-hh-export-btn'); if(btn2){ btn2.disabled = false; btn2.textContent = CONFIG.BUTTON_TEXT; }
+        return;
+      }
+    } catch(_){ }
+  }
   MRHH.log('Requesting Hammerhead import for URL');
   const outcome = await requestImportInHammerhead(publicUrl);
   MRHH.info('Hammerhead import result', outcome);
@@ -260,6 +287,22 @@
       // Initial broadcast (Hammerhead tab(s) will answer)
   MRHH.info('Broadcasting import request to Hammerhead tabs (postMessage)');
   window.postMessage({ channel, type:'hh-import-request', reqId, publicUrl }, '*');
+
+      // Validate the publicUrl actually points to a GPX file before proceeding
+      (async ()=>{
+        try{
+          MRHH.info('Validating public URL before Hammerhead import', publicUrl);
+          const good = await validateGpxUrl(publicUrl);
+          if(!good || !good.url){
+            cleanup();
+            reject(new Error('Public URL does not point to a valid GPX: '+publicUrl));
+          } else {
+            // overwrite publicUrl with resolved/normalized URL
+            publicUrl = good.url;
+            MRHH.info('Validated public GPX URL =', publicUrl);
+          }
+        } catch(err){ cleanup(); reject(err); }
+      })();
 
       const totalTimeout = CONFIG.EXPORT_TIMEOUT_MS || 30000;
       const firstPhase = Math.max(2000, Math.floor(totalTimeout/3));

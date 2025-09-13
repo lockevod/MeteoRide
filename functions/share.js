@@ -45,7 +45,21 @@ export async function onRequest(context) {
     }
 
     const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-    await env.SHARED_GPX.put(id, raw, { expirationTtl: TTL_SECONDS });
+    // Attempt to write and verify the KV entry to avoid races/failed writes
+    try{
+      await env.SHARED_GPX.put(id, raw, { expirationTtl: TTL_SECONDS });
+    } catch(err){
+      return new Response('KV write failed: '+String(err), { status: 500, headers: corsHeaders() });
+    }
+    // Verify write by reading back once
+    try{
+      const check = await env.SHARED_GPX.get(id);
+      if(!check){
+        return new Response('KV write not visible after put', { status: 500, headers: corsHeaders() });
+      }
+    } catch(err){
+      return new Response('KV verify failed: '+String(err), { status: 500, headers: corsHeaders() });
+    }
 
     // If caller provided a filename, sanitize and include it in the shared URL
     let fileName = request.headers.get('X-File-Name') || '';
@@ -57,18 +71,21 @@ export async function onRequest(context) {
       if(!/\.gpx$/i.test(fileName)) fileName = fileName + '.gpx';
     }
 
-    const sharedUrl = fileName ? `/shared/${encodeURIComponent(id)}_${encodeURIComponent(fileName)}` : `/shared/${encodeURIComponent(id)}.gpx`;
-    const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
+  const sharedUrl = fileName ? `/shared/${encodeURIComponent(id)}_${encodeURIComponent(fileName)}` : `/shared/${encodeURIComponent(id)}.gpx`;
+  const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
+  const absoluteShared = url.origin.replace(/\/$/, '') + sharedUrl;
+  const absoluteIndex = url.origin.replace(/\/$/, '') + indexUrl;
 
     const follow = url.searchParams.get('follow') === '1' || request.headers.get('X-Follow-Redirect') === '1';
 
     if (follow) {
-  return new Response(`Redirecting to ${sharedUrl} (open app: ${indexUrl})`, {
+      return new Response(`Redirecting to ${absoluteShared} (open app: ${absoluteIndex})`, {
         status: 303,
         headers: {
           ...corsHeaders(),
-          'Location': sharedUrl,
-          'X-Shared-Index': indexUrl,
+          'Location': absoluteShared,
+          'X-Shared-Index': absoluteIndex,
+          'X-Shared-Exists': '1',
           'Cache-Control': 'no-store'
         }
       });
@@ -78,6 +95,7 @@ export async function onRequest(context) {
       id,
       sharedUrl,
       indexUrl,
+      url: absoluteShared,
       message: fileName ? `Stored as ${id}_${fileName}` : `Stored as ${id}.gpx`,
       expires_in: TTL_SECONDS
     };
@@ -86,7 +104,9 @@ export async function onRequest(context) {
       headers: {
         ...corsHeaders(),
         'Content-Type': 'application/json',
-        'Cache-Control': 'no-store'
+        'Cache-Control': 'no-store',
+        'Location': absoluteShared,
+        'X-Shared-Exists': '1'
       }
     });
   } catch (err) {
