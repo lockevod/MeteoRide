@@ -47,13 +47,13 @@ export async function onRequest(context) {
     const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     await env.SHARED_GPX.put(id, raw, { expirationTtl: TTL_SECONDS });
 
-    const sharedUrl = `/shared/${encodeURIComponent(id)}`;
-    const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
+  const sharedUrl = `/shared/${encodeURIComponent(id)}.gpx`;
+  const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
 
     const follow = url.searchParams.get('follow') === '1' || request.headers.get('X-Follow-Redirect') === '1';
 
     if (follow) {
-      return new Response(`Redirecting to ${sharedUrl} (open app: ${indexUrl})`, {
+  return new Response(`Redirecting to ${sharedUrl} (open app: ${indexUrl})`, {
         status: 303,
         headers: {
           ...corsHeaders(),

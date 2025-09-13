@@ -23,3 +23,4 @@ SHORTCUT_EXPORT.md
 SHORTCUT_IMPORT_NOTES.md
 .gitignore
 share-server.js
+scripts/.DS_Store

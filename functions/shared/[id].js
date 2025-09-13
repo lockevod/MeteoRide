@@ -3,8 +3,10 @@ export async function onRequest(context) {
   try {
     const { request, env, params } = context;
     const method = request.method;
-    const id = params.id;
-    if (!id) return new Response('Not found', { status: 404, headers: corsHeaders() });
+  let id = params.id;
+  if (!id) return new Response('Not found', { status: 404, headers: corsHeaders() });
+  // Accept id.gpx style paths; strip .gpx suffix if present
+  if(id.toLowerCase().endsWith('.gpx')) id = id.slice(0, -4);
 
     if (method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });
