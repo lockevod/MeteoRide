@@ -7,6 +7,9 @@ export async function onRequest(context) {
   if (!id) return new Response('Not found', { status: 404, headers: corsHeaders() });
   // Accept id.gpx style paths; strip .gpx suffix if present
   if(id.toLowerCase().endsWith('.gpx')) id = id.slice(0, -4);
+  // Support /shared/{id}_{filename}.gpx : extract id before first '_'
+  const mId = id.match(/^([A-Za-z0-9\-]+)(?:_(.*))?$/);
+  if(mId && mId[1]) id = mId[1];
 
     if (method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });

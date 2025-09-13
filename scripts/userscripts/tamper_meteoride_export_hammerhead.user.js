@@ -106,9 +106,11 @@
     // POST raw body or multipart. Our share-server accepts raw text (any content-type). We need the GPX text.
     let text;
     if(file.text) text = await file.text(); else text = await new Response(file).text();
+    const headers = { 'Content-Type':'application/gpx+xml' };
+    try{ if(file && file.name) headers['X-File-Name'] = file.name; }catch(_){ }
     const res = await fetch(base.replace(/\/$/,'') + '/share', {
       method:'POST',
-      headers: { 'Content-Type':'application/gpx+xml' },
+      headers,
       body: text
     });
     // If server redirected us to a final URL (eg 303 -> /shared/...), accept that

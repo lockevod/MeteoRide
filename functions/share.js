@@ -47,8 +47,18 @@ export async function onRequest(context) {
     const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     await env.SHARED_GPX.put(id, raw, { expirationTtl: TTL_SECONDS });
 
-  const sharedUrl = `/shared/${encodeURIComponent(id)}.gpx`;
-  const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
+    // If caller provided a filename, sanitize and include it in the shared URL
+    let fileName = request.headers.get('X-File-Name') || '';
+    fileName = String(fileName || '').trim();
+    if(fileName){
+      // sanitize: keep alphanum, dash, underscore and dot
+      fileName = fileName.replace(/[^A-Za-z0-9._-]+/g, '_');
+      // ensure extension .gpx
+      if(!/\.gpx$/i.test(fileName)) fileName = fileName + '.gpx';
+    }
+
+    const sharedUrl = fileName ? `/shared/${encodeURIComponent(id)}_${encodeURIComponent(fileName)}` : `/shared/${encodeURIComponent(id)}.gpx`;
+    const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
 
     const follow = url.searchParams.get('follow') === '1' || request.headers.get('X-Follow-Redirect') === '1';
 
@@ -68,7 +78,7 @@ export async function onRequest(context) {
       id,
       sharedUrl,
       indexUrl,
-      message: `Stored as ${id}.gpx`,
+      message: fileName ? `Stored as ${id}_${fileName}` : `Stored as ${id}.gpx`,
       expires_in: TTL_SECONDS
     };
     return new Response(JSON.stringify(payload), {
