@@ -1021,10 +1021,22 @@ function processWeatherData() {
   setTimeout(function() {
     if (map && trackLayer) {
       map.invalidateSize();
-      map.fitBounds(trackLayer.getBounds(), {
-        padding: [6, 6],
-        maxZoom: 14
-      });
+      try {
+        const b = trackLayer.getBounds();
+        if (b && b.isValid && b.isValid()) {
+          // Manual fractional fit: compute ideal zoom including padding, subtract a tiny margin
+          const pad = L.point(6,6);
+          let z = map.getBoundsZoom(b, true, pad);
+          z = z - 0.03; // small inward margin so route not glued to edges
+          const minZ = map.getMinZoom ? map.getMinZoom() : 0;
+          const maxZ = map.getMaxZoom ? map.getMaxZoom() : 25;
+            if (z < minZ) z = minZ; else if (z > maxZ) z = maxZ;
+          map.setView(b.getCenter(), z, { animate: false });
+          // Ensure fully visible respecting padding
+          map.panInsideBounds(b, { paddingTopLeft: pad, paddingBottomRight: pad });
+          // Debug (optional): console.debug('[autoFit] zoom', z);
+        }
+      } catch(e) { console.debug('[autoFit] failed', e?.message); }
     }
   }, 200);
 
@@ -2055,10 +2067,10 @@ function renderWindMarkers() {
 }
 
 function initMap() {
-  // Allow finer fractional zoom steps for smoother fitBounds and intermediate zooms
-  // zoomSnap: 0 -> no snapping; zoomDelta controls the zoom step size; smaller -> more steps
-  // wheelPxPerZoomLevel controls mouse-wheel sensitivity; smaller -> more intermediate steps per wheel motion
-  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.1, wheelPxPerZoomLevel: 60 }).setView([41.3874, 2.1686], 14);
+  // Allow even finer fractional zoom steps
+  // zoomDelta: base increment when using keyboard or programmatic zoomIn/Out
+  // wheelPxPerZoomLevel: higher value -> smaller change per wheel notch (more precision)
+  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.05, wheelPxPerZoomLevel: 140 }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>',
@@ -2087,6 +2099,17 @@ function initMap() {
     mapC.addEventListener('mouseleave', () => {
       disableWheelZoom(); // stop zooming when pointer leaves the map
     }, { passive: true });
+
+    // Ultra‑fine zoom: hold Alt while using wheel for ~0.02 steps (non-animated for precision)
+    mapC.addEventListener('wheel', (e) => {
+      if (!wheelEnabled) return; // only if user already interacted
+      if (!e.altKey) return;      // Alt modifier for ultra fine control
+      e.preventDefault();
+      const direction = e.deltaY > 0 ? -1 : 1; // invert to match Leaflet default (scroll up = zoom in)
+      const step = 0.02 * direction;
+      const target = map.getZoom() + step;
+      map.setZoom(target, { animate: false });
+    }, { passive: false });
 
     // Touch: enable pinch-zoom on interaction, auto-disable shortly after
     let touchTimer = null;
@@ -2158,7 +2181,13 @@ function ensureTrackVisible() {
   }
 
   try {
-    map.fitBounds(trackBounds, { padding: [12, 12], maxZoom: 15 });
+  const pad = L.point(12,12);
+  let z = map.getBoundsZoom(trackBounds, true, pad) - 0.03;
+  const minZ = map.getMinZoom ? map.getMinZoom() : 0;
+  const maxZ = map.getMaxZoom ? map.getMaxZoom() : 25;
+  if (z < minZ) z = minZ; else if (z > maxZ) z = maxZ;
+  map.setView(trackBounds.getCenter(), z, { animate: false });
+  map.panInsideBounds(trackBounds, { paddingTopLeft: pad, paddingBottomRight: pad });
   } catch (e) {
     console.debug("[cw] ensureTrackVisible: fitBounds failed:", e?.message);
   }
