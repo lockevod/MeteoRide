@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.15
+// @version      0.16
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -115,6 +115,31 @@
         return btn;
     }
 
+    // Helper: set button loading state without replacing the icon (hide icon, show text)
+    function setButtonLoading(btn, loading, text) {
+        if (!btn) return;
+        const img = btn.querySelector('img');
+        if (loading) {
+            // hide image, but keep it in DOM; set an aria label and show text node
+            if (img) img.style.display = 'none';
+            // store original text in dataset
+            if (!btn.dataset.orig) btn.dataset.orig = btn.getAttribute('data-label') || '';
+            btn.textContent = text || 'Loading...';
+            btn.setAttribute('aria-busy', 'true');
+            btn.disabled = true;
+        } else {
+            // restore image and original label
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            const orig = btn.dataset.orig || btn.getAttribute('data-label') || '';
+            btn.textContent = '';
+            if (img) { img.style.display = 'block'; btn.appendChild(img); }
+            // ensure title/aria-label still set
+            btn.title = orig;
+            btn.setAttribute('aria-label', orig);
+        }
+    }
+
     // --- Komoot helpers ---
     function getKomootTourId(url) {
         const u = url || location.pathname;
@@ -215,11 +240,15 @@
         if (document.querySelector('.meteoride-export-btn.global.komoot')) return true;
         const btn = addButton('Open Komoot tour in MeteoRide', () => {
             d('Komoot button clicked', tourId);
-            if (btn) { btn.disabled = true; btn.textContent = 'Loading Komoot tour...'; }
+            setButtonLoading(btn, true, 'Loading Komoot tour...');
             fetchKomootGpx(tourId, gpx => {
-                if (!gpx) { alert('Could not fetch Komoot GPX'); return; }
+                if (!gpx) {
+                    d('Komoot GPX not available. Are you a Premium user?');
+                    setButtonLoading(btn, false);
+                    return;
+                }
                 postToMeteoRide(gpx, 'komoot-' + tourId + '.gpx');
-                if (btn) { btn.disabled = false; btn.textContent = 'Open Komoot tour in MeteoRide'; }
+                setButtonLoading(btn, false);
             });
         }, 'komoot');
         return true;
@@ -324,12 +353,16 @@
         if (document.querySelector('.meteoride-export-btn.global.bikemap')) return true;
         const btn = addButton('Open Bikemap route in MeteoRide', () => {
             d('Bikemap button clicked', routeId);
-            if (btn) { btn.disabled = true; btn.textContent = 'Loading Bikemap route...'; }
+            setButtonLoading(btn, true, 'Loading Bikemap route...');
             fetchBikemapGpx(routeId, (gpx, meta) => {
-                if (!gpx) { alert('Could not fetch Bikemap GPX (maybe login required)'); if (btn) { btn.disabled = false; btn.textContent='Open Bikemap route in MeteoRide'; } return; }
+                if (!gpx) {
+                    d('Bikemap GPX not available (maybe login required)');
+                    setButtonLoading(btn, false);
+                    return;
+                }
                 const name = (meta && meta.title ? meta.title.replace(/\s+/g,'_') : 'bikemap-'+routeId) + '.gpx';
                 postToMeteoRide(gpx, name);
-                if (btn) { btn.disabled = false; btn.textContent = 'Open Bikemap route in MeteoRide'; }
+                setButtonLoading(btn, false);
             });
         }, 'bikemap');
         return true;
