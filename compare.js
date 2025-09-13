@@ -240,7 +240,7 @@
     }
 
     // Filter providers without any usable data
-    const order = ["openmeteo","aromehd","ow2_arome_openmeteo","meteoblue","openweather"];
+    const order = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"];
     const filtered = {};
     order.forEach(k => { if (compareData[k] && (hasAny[k] || k === 'ow2_arome_openmeteo')) filtered[k] = compareData[k]; });
 

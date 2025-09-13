@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.17
+// @version      0.18
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -84,16 +84,21 @@
         btn.setAttribute('data-label', label);
         btn.title = label;
         btn.setAttribute('aria-label', label);
-        btn.style.position = 'fixed';
-        btn.style.right = '10px';
-        btn.style.bottom = '20px';
-        btn.style.padding = '8px 12px';
-        btn.style.background = '#0077cc';
-        btn.style.color = '#fff';
-        btn.style.border = 'none';
-        btn.style.borderRadius = '4px';
-        btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
-        btn.style.zIndex = 999999;
+    btn.style.position = 'fixed';
+    btn.style.right = '10px';
+    btn.style.bottom = '20px';
+    // reduced vertical padding to avoid large blue area underneath
+    btn.style.padding = '6px 10px';
+    btn.style.background = '#0077cc';
+    btn.style.color = '#fff';
+    btn.style.border = 'none';
+    btn.style.borderRadius = '4px';
+    btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+    btn.style.zIndex = 999999;
+    // Use flex layout to vertically center icon and label and avoid extra height
+    btn.style.display = 'flex';
+    btn.style.alignItems = 'center';
+    btn.style.gap = '6px';
     btn.className = 'meteoride-export-btn global' + (extraClass ? ' ' + extraClass : '');
     // create icon img
     // create icon img and a stable label span (we will toggle the span instead of replacing button text)
@@ -101,7 +106,7 @@
     labelSpan.className = 'mr-label';
     labelSpan.style.display = 'inline-block';
     labelSpan.style.verticalAlign = 'middle';
-    labelSpan.style.marginLeft = '6px';
+    labelSpan.style.marginLeft = '0';
     labelSpan.style.fontSize = '13px';
     labelSpan.style.fontFamily = 'sans-serif';
     labelSpan.textContent = '';
