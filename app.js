@@ -2055,8 +2055,10 @@ function renderWindMarkers() {
 }
 
 function initMap() {
-  // Allow fractional zoom steps for finer fitBounds behavior
-  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.25, wheelPxPerZoomLevel: 120 }).setView([41.3874, 2.1686], 14);
+  // Allow finer fractional zoom steps for smoother fitBounds and intermediate zooms
+  // zoomSnap: 0 -> no snapping; zoomDelta controls the zoom step size; smaller -> more steps
+  // wheelPxPerZoomLevel controls mouse-wheel sensitivity; smaller -> more intermediate steps per wheel motion
+  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.1, wheelPxPerZoomLevel: 60 }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>',
