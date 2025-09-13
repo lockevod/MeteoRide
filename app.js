@@ -1018,27 +1018,19 @@ function processWeatherData() {
 
   renderWeatherTable();
   renderWindMarkers();
-  setTimeout(function() {
-    if (map && trackLayer) {
-      map.invalidateSize();
-      try {
-        const b = trackLayer.getBounds();
-        if (b && b.isValid && b.isValid()) {
-          // Manual fractional fit: compute ideal zoom including padding, subtract a tiny margin
-          const pad = L.point(6,6);
-          let z = map.getBoundsZoom(b, true, pad);
-          z = z - 0.03; // small inward margin so route not glued to edges
-          const minZ = map.getMinZoom ? map.getMinZoom() : 0;
-          const maxZ = map.getMaxZoom ? map.getMaxZoom() : 25;
-            if (z < minZ) z = minZ; else if (z > maxZ) z = maxZ;
-          map.setView(b.getCenter(), z, { animate: false });
-          // Ensure fully visible respecting padding
-          map.panInsideBounds(b, { paddingTopLeft: pad, paddingBottomRight: pad });
-          // Debug (optional): console.debug('[autoFit] zoom', z);
-        }
-      } catch(e) { console.debug('[autoFit] failed', e?.message); }
-    }
-  }, 200);
+  // Improved route fitting: attempt several times to catch late layout/tile size changes
+  function fitRouteOnce(padding = [10,10]) {
+    if (!map || !trackLayer) return;
+    try {
+      const b = trackLayer.getBounds();
+      if (b && b.isValid()) {
+        map.fitBounds(b, { padding });
+      }
+    } catch(e) { /* ignore */ }
+  }
+  // Invalidate size first (in case container resized)
+  if (map) map.invalidateSize();
+  [120, 300, 700].forEach((delay, idx) => setTimeout(() => fitRouteOnce(idx === 0 ? [6,6] : [9,9]), delay));
 
 }
 
@@ -2067,10 +2059,9 @@ function renderWindMarkers() {
 }
 
 function initMap() {
-  // Allow even finer fractional zoom steps
-  // zoomDelta: base increment when using keyboard or programmatic zoomIn/Out
-  // wheelPxPerZoomLevel: higher value -> smaller change per wheel notch (more precision)
-  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.05, wheelPxPerZoomLevel: 140 }).setView([41.3874, 2.1686], 14);
+  // Fractional zoom: prefer 0.2 steps (more coarse than 0.05 but still smoother than whole integers)
+  // zoomDelta: base increment for zoomIn/Out; wheelPxPerZoomLevel kept moderately high for smoother wheel control
+  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.2, wheelPxPerZoomLevel: 100 }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>',
@@ -2100,13 +2091,13 @@ function initMap() {
       disableWheelZoom(); // stop zooming when pointer leaves the map
     }, { passive: true });
 
-    // Ultra‑fine zoom: hold Alt while using wheel for ~0.02 steps (non-animated for precision)
+  // Ultra‑fine zoom: hold Alt while using wheel for ~0.05 steps (non-animated for precision)
     mapC.addEventListener('wheel', (e) => {
       if (!wheelEnabled) return; // only if user already interacted
       if (!e.altKey) return;      // Alt modifier for ultra fine control
       e.preventDefault();
       const direction = e.deltaY > 0 ? -1 : 1; // invert to match Leaflet default (scroll up = zoom in)
-      const step = 0.02 * direction;
+  const step = 0.05 * direction;
       const target = map.getZoom() + step;
       map.setZoom(target, { animate: false });
     }, { passive: false });
@@ -2181,13 +2172,7 @@ function ensureTrackVisible() {
   }
 
   try {
-  const pad = L.point(12,12);
-  let z = map.getBoundsZoom(trackBounds, true, pad) - 0.03;
-  const minZ = map.getMinZoom ? map.getMinZoom() : 0;
-  const maxZ = map.getMaxZoom ? map.getMaxZoom() : 25;
-  if (z < minZ) z = minZ; else if (z > maxZ) z = maxZ;
-  map.setView(trackBounds.getCenter(), z, { animate: false });
-  map.panInsideBounds(trackBounds, { paddingTopLeft: pad, paddingBottomRight: pad });
+  map.fitBounds(trackBounds, { padding: [8, 8] });
   } catch (e) {
     console.debug("[cw] ensureTrackVisible: fitBounds failed:", e?.message);
   }
