@@ -124,7 +124,7 @@
       if (!hasOwArome) {
         const opt2 = document.createElement('option');
         opt2.value = 'ow2_arome_openmeteo';
-        opt2.text = 'OPW + AromeHD';
+        opt2.text = 'OPW - AromeHD';
         sel.add(opt2);
       }
 

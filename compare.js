@@ -589,30 +589,11 @@
     }
     thead.appendChild(row);
 
-    const tbody = document.createElement("tbody");
-    // Compute provider display order: prefer a sensible default but try to avoid
-    // showing similar providers (OpenWeather, OPW chain, AROME) consecutively.
-    const defaultOrder = ["openmeteo","aromehd","ow2_arome_openmeteo","meteoblue","openweather"];
-    let provOrder = defaultOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !defaultOrder.includes(p)));
-
-    // Group similar providers to discourage adjacency
-    const simGroup = new Set(["openweather","ow2_arome_openmeteo","aromehd"]);
-    function groupOf(p) { return simGroup.has(p) ? 'sim' : 'other'; }
-
-    // Greedy reorder to avoid same-group adjacency when possible
-    (function tryInterleave() {
-      const src = provOrder.slice();
-      const out = [];
-      let prevGroup = null;
-      while (src.length) {
-        let idx = src.findIndex(x => prevGroup == null || groupOf(x) !== prevGroup);
-        if (idx === -1) idx = 0; // forced
-        const pick = src.splice(idx, 1)[0];
-        out.push(pick);
-        prevGroup = groupOf(pick);
-      }
-      provOrder = out;
-    })();
+  const tbody = document.createElement("tbody");
+  // User-requested fixed order
+  const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"]; // FIXED ORDER
+  // Keep only those present in compareData; append any others (unexpected) at end
+  let provOrder = desiredOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !desiredOrder.includes(p)));
 
     provOrder.forEach((prov) => {
       const r = document.createElement("tr");
@@ -647,9 +628,9 @@
   }
 
   function labelForProvider(p) {
-    if (p === "openmeteo") return "Open‑Meteo";
-    if (p === "aromehd")   return "AROME‑HD";
-    if (p === "ow2_arome_openmeteo") return "OPW→AROME"; // NEW chain label
+    if (p === "openmeteo") return "OpenMeteo";
+    if (p === "aromehd")   return "AromeHD";
+    if (p === "ow2_arome_openmeteo") return "OPW-AromeHD"; 
     if (p === "meteoblue") return "MeteoBlue";
     if (p === "openweather") return "OpenWeather";
     return String(p || "");
