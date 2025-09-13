@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.7.8
+// @version      0.7.9
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
-// license       MIT
+// @license       MIT
 // @homepageURL  https://app.meteoride.cc/
 // @source       https://github.com/lockevod/meteoride
 // @supportURL   https://github.com/lockevod/meteoride/issues
@@ -55,10 +55,10 @@
     INJECT_BUTTON_SELECTOR: '#top-buttons, body',
     UPLOAD: {
       STRATEGY: 'meteoride_share_server',
-      SHARE_SERVER_BASE: 'https://gpx.yourdomain.tld',
+      SHARE_SERVER_BASE: 'https://app.meteoride.cc',
       CUSTOM: async (file) => { throw new Error('Uploader custom no implementado'); }
     },
-    DEBUG: false,
+    DEBUG: true,
     POSTMESSAGE_NAMESPACE: 'mr:hh',
     EXPORT_TIMEOUT_MS: 30000
   };
@@ -161,14 +161,14 @@
       const txt = await fetch(url, { method:'GET', mode:'cors', credentials:'same-origin', referrer: base, referrerPolicy: 'origin' }).then(r=>r.text()).catch(()=> '');
       // Look for /shared/{id}
       let m = txt.match(/\/shared\/([A-Za-z0-9\-_.]+)/);
-      if(m && m[1]) return base.replace(/\/$/,'') + '/shared/' + m[1];
+  if(m && m[1]) return base.replace(/\/$/,'') + '/shared/' + m[1] + '.gpx';
       // Look for query param shared_id or shared
       m = txt.match(/shared_id=([A-Za-z0-9\-_.]+)/) || txt.match(/shared=([A-Za-z0-9\-_.]+)/);
-      if(m && m[1]) return base.replace(/\/$/,'') + '/shared/' + m[1];
+  if(m && m[1]) return base.replace(/\/$/,'') + '/shared/' + m[1] + '.gpx';
       // As last resort, if url contains a query param with an id-like token, try to use it
       const q = (new URL(url)).searchParams;
       const candidate = q.get('shared_id') || q.get('id') || q.get('shared');
-      if(candidate) return base.replace(/\/$/,'') + '/shared/' + candidate;
+  if(candidate) return base.replace(/\/$/,'') + '/shared/' + candidate + '.gpx';
     } catch(e){ /* ignore */ }
     return url;
   }
