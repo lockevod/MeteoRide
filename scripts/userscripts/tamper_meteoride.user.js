@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         MeteoRide Quick Export
-// @namespace    https://app.meteoride.cc/
-// @version      0.13
+// @name         MeteoRide Import from Komoot and Bikemap
+// @namespace    github.com/lockevod
+// @version      0.15
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
-// @author       MeteoRide
+// @author       Lockevod
 // @license      MIT
 // @homepageURL  https://app.meteoride.cc/
 // @source       https://github.com/lockevod/meteoride
@@ -33,7 +33,7 @@
     const METEORIDE_URL = (location.hostname.includes('localhost') || location.hostname.includes('127.0.0.1')) ? 'http://localhost:8080/' : 'https://app.meteoride.cc/';
 
     // --- Debug helpers ---
-    const DEBUG = true; // set false to silence
+    const DEBUG = false; // set false to silence
     function d(...args) { if (DEBUG) console.log('[MR-UX]', ...args); }
     d('Userscript init starting', { url: location.href });
 
@@ -78,9 +78,12 @@
 
     function addButton(label, onclick, extraClass) {
         // Prevent creating duplicate button with same text
-        if (Array.from(document.querySelectorAll('.meteoride-export-btn.global')).some(b => b.textContent === label)) return null;
+        if (Array.from(document.querySelectorAll('.meteoride-export-btn.global')).some(b => b.getAttribute('data-label') === label)) return null;
         const btn = document.createElement('button');
-        btn.textContent = label;
+        // Use a small MeteoRide icon instead of text for a compact UI
+        btn.setAttribute('data-label', label);
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
         btn.style.position = 'fixed';
         btn.style.right = '10px';
         btn.style.bottom = '20px';
@@ -92,6 +95,20 @@
         btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
         btn.style.zIndex = 999999;
     btn.className = 'meteoride-export-btn global' + (extraClass ? ' ' + extraClass : '');
+    // create icon img
+    try {
+        const img = new Image();
+        img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icon-32.png';
+        img.alt = label;
+        img.style.width = '26px';
+        img.style.height = '26px';
+        img.style.display = 'block';
+        img.style.opacity = '0.85';
+        img.style.filter = 'grayscale(100%) brightness(1.15)';
+        img.style.pointerEvents = 'none';
+        img.style.margin = '0';
+        btn.appendChild(img);
+    } catch (e) { btn.textContent = label; }
     btn.addEventListener('click', onclick);
         document.body.appendChild(btn);
     d('Button added', label);
@@ -108,6 +125,42 @@
     return id;
     }
 
+    // Helper: find first /tour/<id> anchor on the page
+    function findFirstTourAnchorId() {
+        const anchors = Array.from(document.querySelectorAll('a[href*="/tour/"]'));
+        const ids = anchors
+            .map(a => (a.getAttribute('href')||'').match(/\/tour\/(\d+)/))
+            .filter(Boolean)
+            .map(m => m[1]);
+        if (ids.length) { d('found tour anchor id', ids[0]); return ids[0]; }
+        return null;
+    }
+
+    // Helper: parse __NEXT_DATA__ and return first numeric id found with at least minDigits
+    function extractFirstNumericIdFromNextData(minDigits = 5) {
+        const el = document.getElementById('__NEXT_DATA__');
+        if (!el) return null;
+        try {
+            const json = JSON.parse(el.textContent||'{}');
+            const stack = [json];
+            const seen = new Set();
+            while (stack.length) {
+                const cur = stack.pop();
+                if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
+                seen.add(cur);
+                if (typeof cur.id === 'number' && String(cur.id).length >= minDigits) {
+                    d('NEXT_DATA id candidate', String(cur.id));
+                    return String(cur.id);
+                }
+                for (const k of Object.keys(cur)) {
+                    const v = cur[k];
+                    if (v && typeof v === 'object') stack.push(v);
+                }
+            }
+        } catch(e) { d('NEXT_DATA parse err', e); }
+        return null;
+    }
+
     function getKomootDiscoverFocusedTourId() {
         if (!/\/discover\//.test(location.pathname)) return null;
         const params = new URLSearchParams(location.search);
@@ -117,34 +170,11 @@
             const digits = ft.replace(/\D+/g, '');
             if (digits.length >= 5) { d('focusedTour param ->', digits); return digits; }
         }
-        // Fallback: scan anchor hrefs for /tour/<id>
-        const a = Array.from(document.querySelectorAll('a[href*="/tour/"]'))
-            .map(a => (a.getAttribute('href')||'').match(/\/tour\/(\d+)/))
-            .filter(Boolean)
-            .map(m => m[1]);
-        if (a.length) { d('discover anchors candidate', a[0]); return a[0]; }
-        // Fallback: parse __NEXT_DATA__ for tour ids
-        const el = document.getElementById('__NEXT_DATA__');
-        if (el) {
-            try {
-                const json = JSON.parse(el.textContent||'{}');
-                const ids = [];
-                const stack = [json];
-                const seen = new Set();
-                while (stack.length) {
-                    const cur = stack.pop();
-                    if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
-                    seen.add(cur);
-                    if (typeof cur.id === 'number' && cur.id > 1000) ids.push(String(cur.id));
-                    for (const k of Object.keys(cur)) {
-                        const v = cur[k];
-                        if (v && typeof v === 'object') stack.push(v);
-                    }
-                }
-                if (ids.length) { d('NEXT_DATA discover ids', ids.slice(0,3)); return ids[0]; }
-            } catch(e) { d('discover NEXT_DATA parse err', e); }
-        }
-        return null;
+    const anchor = findFirstTourAnchorId();
+    if (anchor) return anchor;
+    const nextId = extractFirstNumericIdFromNextData();
+    if (nextId) return nextId;
+    return null;
     }
 
     function getKomootSmartTourId() {
@@ -155,77 +185,13 @@
         const raw = m[1];
         const digits = raw.replace(/\D+/g,'');
         if (digits.length >= 5) { d('smarttour param ->', raw, 'digits', digits); return digits; }
-        // Fallback: scan anchors for /tour/<id>
-        const a = Array.from(document.querySelectorAll('a[href*="/tour/"]'))
-            .map(a => (a.getAttribute('href')||'').match(/\/tour\/(\d+)/))
-            .filter(Boolean)
-            .map(m => m[1]);
-        if (a.length) { d('smarttour anchor fallback ->', a[0]); return a[0]; }
-        // Fallback: parse __NEXT_DATA__ similarly
-        const el = document.getElementById('__NEXT_DATA__');
-        if (el) {
-            try {
-                const json = JSON.parse(el.textContent||'{}');
-                const ids = [];
-                const stack = [json];
-                const seen = new Set();
-                while (stack.length) {
-                    const cur = stack.pop();
-                    if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
-                    seen.add(cur);
-                    if (typeof cur.id === 'number' && cur.id > 1000) ids.push(String(cur.id));
-                    for (const k of Object.keys(cur)) {
-                        const v = cur[k];
-                        if (v && typeof v === 'object') stack.push(v);
-                    }
-                }
-                if (ids.length) { d('smarttour NEXT_DATA ids', ids.slice(0,3)); return ids[0]; }
-            } catch(e) { d('smarttour NEXT_DATA parse err', e); }
-        }
-        return null;
+    const anchor = findFirstTourAnchorId();
+    if (anchor) return anchor;
+    const nextId = extractFirstNumericIdFromNextData();
+    if (nextId) return nextId;
+    return null;
     }
 
-    function buildGpxFromCoords(coords, name) {
-    if (!Array.isArray(coords) || coords.length === 0) return null;
-    d('buildGpxFromCoords coordsLen', coords.length, 'name', name);
-        let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n';
-        gpx += '<gpx version="1.1" creator="MeteoRide Userscript" xmlns="http://www.topografix.com/GPX/1/1">\n';
-        if (name) gpx += '  <metadata><name>' + (name.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) ) + '</name></metadata>\n';
-        gpx += '  <trk><name>' + (name||'Komoot Tour') + '</name><trkseg>\n';
-        for (const c of coords) {
-            if (!Array.isArray(c) || c.length < 2) continue;
-            const lon = c[0];
-            const lat = c[1];
-            const ele = c.length > 2 ? c[2] : null;
-            gpx += '    <trkpt lat="' + lat + '" lon="' + lon + '">';
-            if (ele != null && !isNaN(ele)) gpx += '<ele>' + ele + '</ele>';
-            gpx += '</trkpt>\n';
-        }
-        gpx += '  </trkseg></trk>\n</gpx>';
-        return gpx;
-    }
-
-    function extractCoordsFromKomootJson(json) {
-        try {
-            if (!json) return null;
-            // Common structure: json.tour.route.geometry.coordinates (array of [lon,lat,ele?])
-            const path1 = json && json.tour && json.tour.route && json.tour.route.geometry && json.tour.route.geometry.coordinates;
-            if (Array.isArray(path1)) return path1;
-            // Sometimes inside geojson: json.geojson.features[0].geometry.coordinates
-            const features = json && json.geojson && json.geojson.features;
-            if (Array.isArray(features) && features.length) {
-                const g = features[0].geometry;
-                if (g && Array.isArray(g.coordinates)) {
-                    // LineString or MultiLineString
-                    if (g.type === 'LineString') return g.coordinates;
-                    if (g.type === 'MultiLineString' && g.coordinates.length) return g.coordinates[0];
-                }
-            }
-        } catch (e) {
-            console.warn('Komoot JSON parse coords error', e);
-        }
-        return null;
-    }
 
     function fetchKomootGpx(tourId, cb) {
         if (!tourId) { d('fetchKomootGpx no tourId'); return cb(null); }
@@ -233,29 +199,12 @@
         const candidates = [base + '.gpx?download=1', base + '.gpx'];
         let idx = 0;
         function tryNext() {
-            if (idx >= candidates.length) { d('No direct GPX, fallback JSON'); return fallbackJson(); }
+            if (idx >= candidates.length) { d('No direct GPX endpoints available'); return cb(null); }
             const url = candidates[idx++];
             d('Attempt direct GPX', url);
             fetchAsText(url, txt => {
                 if (txt && txt.trim().startsWith('<?xml')) { d('Direct GPX success', url); return cb(txt); }
                 tryNext();
-            });
-        }
-        function fallbackJson() {
-            // attempt JSON then reconstruct GPX
-            const jsonUrl = base + '.json';
-            fetchAsText(jsonUrl, txt => {
-                if (!txt) return cb(null);
-                try {
-                    const j = JSON.parse(txt);
-                    const coords = extractCoordsFromKomootJson(j);
-                    if (coords) {
-                        const gpx = buildGpxFromCoords(coords, (j && j.tour && j.tour.name) || 'Komoot Tour ' + tourId);
-                        d('Reconstructed GPX length', gpx && gpx.length);
-                        return cb(gpx);
-                    }
-                } catch (e) { /* ignore */ }
-                cb(null);
             });
         }
         tryNext();
@@ -350,166 +299,25 @@
     function fetchBikemapGpx(routeId, cb) {
         fetchBikemapRouteMeta(routeId, meta => {
             if (!meta) {
-                d('No meta via API, trying NEXT_DATA + DOM fallbacks');
-                const nd = extractBikemapFromNextData(routeId);
-                if (nd) {
-                    d('Extracted candidate from __NEXT_DATA__');
-                    meta = nd; // continue as if meta
-                } else {
-                    const domUrl = findBikemapDomGpxLink();
-                    if (domUrl) return fetchAsText(domUrl, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, { title: 'Bikemap Route ' + routeId }); cb(null); });
-                    // As a last resort attempt to parse inline scripts
-                    const inline = extractBikemapFromInlineScripts(routeId);
-                    if (inline) {
-                        d('Recovered from inline script data');
-                        meta = inline;
-                    } else {
-                        return cb(null);
-                    }
-                }
+                d('No meta via API, trying DOM direct link');
+                const domUrl = findBikemapDomGpxLink();
+                if (domUrl) return fetchAsText(domUrl, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, { title: 'Bikemap Route ' + routeId }); cb(null); });
+                return cb(null);
             }
             // Try direct meta.gpx or any nested GPX url
             let gpxUrl = meta.gpx || findGpxUrlInObject(meta);
             if (gpxUrl) {
                 d('Bikemap found GPX url', gpxUrl);
-                fetchAsText(gpxUrl, txt => {
-                    if (txt && txt.trim().startsWith('<?xml')) return cb(txt, meta);
-                    d('Primary GPX fetch failed or not XML, attempt GeoJSON fallback');
-                    geoJsonFallback();
-                });
-            } else {
-                d('No GPX url in meta, attempt GeoJSON fallback');
-                geoJsonFallback();
+                return fetchAsText(gpxUrl, txt => { if (txt && txt.trim().startsWith('<?xml')) return cb(txt, meta); d('GPX fetch not XML'); return cb(null); });
             }
-
-            function geoJsonFallback() {
-                const gj = meta.geo_json || meta.geojson || meta.geometry || null;
-                if (!gj) {
-                    d('No GeoJSON in meta, final DOM link attempt');
-                    const domUrl = findBikemapDomGpxLink();
-                    if (domUrl) return fetchAsText(domUrl, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, meta); cb(null); });
-                    // Last-chance: attempt reconstruct from any coords arrays in meta
-                    const coords = extractAnyCoordinates(meta);
-                    if (coords && coords.length) {
-                        const gpxText = buildGpxFromCoords(coords, meta.title || ('Bikemap Route ' + routeId));
-                        if (gpxText) { d('Last-chance coord extraction success length', gpxText.length); return cb(gpxText, meta); }
-                    }
-                    return cb(null);
-                }
-                try {
-                    let coords = null;
-                    if (gj.type === 'FeatureCollection' && Array.isArray(gj.features) && gj.features.length) {
-                        const feat = gj.features.find(f => f.geometry && (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString')) || gj.features[0];
-                        if (feat && feat.geometry) {
-                            if (feat.geometry.type === 'LineString') coords = feat.geometry.coordinates;
-                            else if (feat.geometry.type === 'MultiLineString' && feat.geometry.coordinates.length) coords = feat.geometry.coordinates[0];
-                        }
-                    } else if (gj.type === 'LineString') coords = gj.coordinates;
-                    else if (gj.type === 'MultiLineString' && gj.coordinates && gj.coordinates.length) coords = gj.coordinates[0];
-                    if (coords && coords.length) {
-                        const gpxText = buildGpxFromCoords(coords, meta.title || ('Bikemap Route ' + routeId));
-                        if (gpxText) {
-                            d('GeoJSON fallback GPX length', gpxText.length);
-                            return cb(gpxText, meta);
-                        }
-                    }
-                } catch (e) { d('GeoJSON fallback error', e); }
-                // Final attempt: DOM link
-                const domUrl2 = findBikemapDomGpxLink();
-                if (domUrl2) return fetchAsText(domUrl2, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, meta); cb(null); });
-                cb(null);
-            }
+            // Fallback to DOM link only
+            const domUrl2 = findBikemapDomGpxLink();
+            if (domUrl2) return fetchAsText(domUrl2, t => { if (t && t.trim().startsWith('<?xml')) return cb(t, meta); cb(null); });
+            return cb(null);
         });
     }
 
-    function extractAnyCoordinates(obj) {
-        // Deep search for plausible coordinate arrays [[lon,lat],[lon,lat],...]
-        const visited = new Set();
-        function isCoordPair(p) { return Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number'; }
-        function dfs(o) {
-            if (!o || typeof o !== 'object' || visited.has(o)) return null;
-            visited.add(o);
-            if (Array.isArray(o)) {
-                if (o.length > 1 && o.every(isCoordPair)) return o; // treat as coordinates
-                for (const it of o) { const r = dfs(it); if (r) return r; }
-            } else {
-                for (const k of Object.keys(o)) {
-                    const v = o[k];
-                    const r = dfs(v); if (r) return r;
-                }
-            }
-            return null;
-        }
-        return dfs(obj);
-    }
-
-    function extractBikemapFromNextData(routeId) {
-        const el = document.getElementById('__NEXT_DATA__');
-        if (!el) return null;
-        try {
-            const json = JSON.parse(el.textContent || '{}');
-            const targetId = parseInt(routeId, 10);
-            const queue = [json];
-            const seen = new Set();
-            while (queue.length) {
-                const cur = queue.shift();
-                if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
-                seen.add(cur);
-                if (cur.id === targetId && (cur.gpx || cur.geo_json || cur.geojson || cur.geometry || extractAnyCoordinates(cur))) {
-                    return cur;
-                }
-                for (const k of Object.keys(cur)) {
-                    const v = cur[k];
-                    if (v && typeof v === 'object') queue.push(v);
-                }
-            }
-        } catch (e) { d('__NEXT_DATA__ parse error', e); }
-        return null;
-    }
-
-    function extractBikemapFromInlineScripts(routeId) {
-        const scripts = Array.from(document.querySelectorAll('script'));
-        const targetId = parseInt(routeId, 10);
-        for (const s of scripts) {
-            const txt = s.textContent || '';
-            if (!txt) continue;
-            if (/gpx/i.test(txt) || /geo_json/i.test(txt) || /coordinates/.test(txt)) {
-                // Try naive brace extraction around first occurrence of 'geo_' or 'coordinates'
-                const idx = txt.search(/geo_json|geojson|coordinates|gpx/i);
-                if (idx >= 0) {
-                    // Walk backwards to first '{'
-                    let start = idx;
-                    while (start > 0 && txt[start] !== '{') start--;
-                    // Walk forward counting braces
-                    let depth = 0; let end = start; let started = false;
-                    for (let i = start; i < txt.length; i++) {
-                        const ch = txt[i];
-                        if (ch === '{') { depth++; started = true; }
-                        else if (ch === '}') { depth--; }
-                        if (started && depth === 0) { end = i+1; break; }
-                    }
-                    const blob = txt.slice(start, end);
-                    try {
-                        const obj = JSON.parse(blob);
-                        if (obj && typeof obj === 'object') {
-                            const queue = [obj];
-                            const seen = new Set();
-                            while (queue.length) {
-                                const cur = queue.shift();
-                                if (!cur || typeof cur !== 'object' || seen.has(cur)) continue;
-                                seen.add(cur);
-                                if (cur.id === targetId && (cur.gpx || cur.geo_json || cur.geojson || cur.geometry || extractAnyCoordinates(cur))) {
-                                    return cur;
-                                }
-                                for (const k of Object.keys(cur)) { const v = cur[k]; if (v && typeof v === 'object') queue.push(v); }
-                            }
-                        }
-                    } catch(e) { /* ignore parse */ }
-                }
-            }
-        }
-        return null;
-    }
+    // Deep extraction helpers removed to keep userscript small. We only use direct API GPX or DOM .gpx links.
 
     function addBikemapButton(routeId) {
         if (!routeId) return false;

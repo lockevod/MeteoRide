@@ -2055,7 +2055,8 @@ function renderWindMarkers() {
 }
 
 function initMap() {
-  map = L.map("map").setView([41.3874, 2.1686], 14);
+  // Allow fractional zoom steps for finer fitBounds behavior
+  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.25, wheelPxPerZoomLevel: 120 }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>',

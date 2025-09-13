@@ -122,6 +122,29 @@ You've needed files in functions and _routes.js
 - **Libraries**: Leaflet.js, SunCalc, GPX parser
 - **Hosting**: Cloudfare Pages (only if you use web)
 
+## Tampermonkey userscript: direct export from Komoot and Bikemap
+
+If you use Komoot or Bikemap and want a one-click way to open routes in MeteoRide, there is a userscript included in the repository at `scripts/userscripts/tamper_meteoride.user.js`.
+
+What it does
+- Adds a small MeteoRide icon button on Komoot and Bikemap pages when a route GPX is available.
+- When clicked, it downloads the GPX (using the site's API or a direct .gpx link) and opens MeteoRide in a new tab, sending the GPX and imports in Meteoride automatically.
+
+Installation (Tampermonkey)
+1. Install Tampermonkey (or a compatible userscript manager) in your browser.
+2. Open the file `scripts/userscripts/tamper_meteoride.user.js` in this repository or use the raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`.
+3. Create a new userscript in Tampermonkey and paste the contents, or use the `Install` button if you host the raw file.
+4. Ensure the userscript is enabled and allowed to run on Komoot and Bikemap domains.
+
+Notes and limitations
+- Komoot: GPX export is only available for routes if you have a Komoot <strong>Premium</strong> subscription. The userscript can only fetch GPX when the site exposes the GPX file for your current route (direct download or API endpoint). If Komoot doesn't provide a GPX for that route, the button will not appear.
+- Bikemap: some routes may require login or private access; in those cases the userscript cannot fetch the GPX.
+- The userscript deliberately avoids heavy fallback parsing and only attempts direct GPX API endpoints and DOM .gpx links to keep the script lightweight and reliable.
+
+Security
+- The userscript posts the GPX to MeteoRide using window.postMessage. MeteoRide validates the message origin and acknowledges receipt. No GPX is uploaded to external servers by the userscript itself.
+
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
