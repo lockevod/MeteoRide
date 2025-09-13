@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.16
+// @version      0.17
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -96,6 +96,15 @@
         btn.style.zIndex = 999999;
     btn.className = 'meteoride-export-btn global' + (extraClass ? ' ' + extraClass : '');
     // create icon img
+    // create icon img and a stable label span (we will toggle the span instead of replacing button text)
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'mr-label';
+    labelSpan.style.display = 'inline-block';
+    labelSpan.style.verticalAlign = 'middle';
+    labelSpan.style.marginLeft = '6px';
+    labelSpan.style.fontSize = '13px';
+    labelSpan.style.fontFamily = 'sans-serif';
+    labelSpan.textContent = '';
     try {
         const img = new Image();
         img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icon-32.png';
@@ -108,7 +117,12 @@
         img.style.pointerEvents = 'none';
         img.style.margin = '0';
         btn.appendChild(img);
-    } catch (e) { btn.textContent = label; }
+        btn.appendChild(labelSpan);
+    } catch (e) {
+        // If image creation fails, keep a visible label
+        labelSpan.textContent = label;
+        btn.appendChild(labelSpan);
+    }
     btn.addEventListener('click', onclick);
         document.body.appendChild(btn);
     d('Button added', label);
@@ -119,22 +133,19 @@
     function setButtonLoading(btn, loading, text) {
         if (!btn) return;
         const img = btn.querySelector('img');
+        const labelSpan = btn.querySelector('.mr-label');
         if (loading) {
-            // hide image, but keep it in DOM; set an aria label and show text node
-            if (img) img.style.display = 'none';
-            // store original text in dataset
             if (!btn.dataset.orig) btn.dataset.orig = btn.getAttribute('data-label') || '';
-            btn.textContent = text || 'Loading...';
+            if (img) img.style.display = 'none';
+            if (labelSpan) labelSpan.textContent = text || 'Loading...';
             btn.setAttribute('aria-busy', 'true');
             btn.disabled = true;
         } else {
-            // restore image and original label
             btn.disabled = false;
             btn.removeAttribute('aria-busy');
             const orig = btn.dataset.orig || btn.getAttribute('data-label') || '';
-            btn.textContent = '';
-            if (img) { img.style.display = 'block'; btn.appendChild(img); }
-            // ensure title/aria-label still set
+            if (labelSpan) labelSpan.textContent = '';
+            if (img) img.style.display = 'block';
             btn.title = orig;
             btn.setAttribute('aria-label', orig);
         }
