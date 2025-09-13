@@ -4,6 +4,13 @@
 // @version      0.7.8
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
+// license       MIT
+// @homepageURL  https://app.meteoride.cc/
+// @source       https://github.com/lockevod/meteoride
+// @supportURL   https://github.com/lockevod/meteoride/issues
+// @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
+// @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
+// @icon         https://app.meteoride.cc/icon-192.png
 // @match        https://app.meteoride.cc/*
 // @match        https://dashboard.hammerhead.io/*
 // @grant        none
