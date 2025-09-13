@@ -1,30 +1,62 @@
+// Cloudflare Pages Function: POST /share
+// Adds CORS + preflight + TTL single-use style storage in KV (namespace SHARED_GPX)
 export async function onRequest(context) {
   try {
     const { request, env } = context;
     const url = new URL(request.url);
+
+    // CORS Preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
     if (request.method !== 'POST' || url.pathname !== '/share') {
+      // Pass through for other assets / methods
       return fetch(request);
     }
 
-    const TTL_SECONDS = 120; // align with Node local server default (can adjust if needed)
-    const raw = await request.text();
+    const TTL_SECONDS = 120; // back to 120s to match earlier behavior (adjust if needed)
+    const contentType = request.headers.get('content-type') || '';
+    let raw;
+    if (/multipart\/form-data/i.test(contentType)) {
+      // Accept first file part (field name 'file' preferred) or any File
+      try {
+        const form = await request.formData();
+        let file = form.get('file');
+        if (!file) {
+          for (const [k, v] of form.entries()) {
+            if (v instanceof File) { file = v; break; }
+          }
+        }
+        if (file && file.text) raw = await file.text();
+      } catch (e) {
+        return new Response('Multipart parse error', { status: 400, headers: corsHeaders() });
+      }
+    } else {
+      raw = await request.text();
+    }
+
     if (!raw || raw.indexOf('<gpx') === -1) {
-      return new Response('No GPX content received', { status: 400 });
+      return new Response('No GPX content received', { status: 400, headers: corsHeaders() });
+    }
+
+    if (raw.length > 2_500_000) {
+      return new Response('GPX too large', { status: 413, headers: corsHeaders() });
     }
 
     const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     await env.SHARED_GPX.put(id, raw, { expirationTtl: TTL_SECONDS });
 
-    const sharedUrl = `/shared/${encodeURIComponent(id)}`; // one-time GPX fetch URL
-    const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`; // app entry with param
+    const sharedUrl = `/shared/${encodeURIComponent(id)}`;
+    const indexUrl = `/index.html?shared_id=${encodeURIComponent(id)}`;
 
-    // Follow redirect only if explicitly requested like Node implementation
     const follow = url.searchParams.get('follow') === '1' || request.headers.get('X-Follow-Redirect') === '1';
 
     if (follow) {
       return new Response(`Redirecting to ${sharedUrl} (open app: ${indexUrl})`, {
         status: 303,
         headers: {
+          ...corsHeaders(),
           'Location': sharedUrl,
           'X-Shared-Index': indexUrl,
           'Cache-Control': 'no-store'
@@ -32,7 +64,6 @@ export async function onRequest(context) {
       });
     }
 
-    // Default JSON (safer for iOS Shortcuts / avoids auto-follow of 303)
     const payload = {
       id,
       sharedUrl,
@@ -43,11 +74,21 @@ export async function onRequest(context) {
     return new Response(JSON.stringify(payload), {
       status: 201,
       headers: {
+        ...corsHeaders(),
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store'
       }
     });
   } catch (err) {
-    return new Response('Function error: ' + String(err), { status: 500 });
+    return new Response('Function error: ' + String(err), { status: 500, headers: corsHeaders() });
   }
+}
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '600'
+  };
 }
