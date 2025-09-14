@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.9.1
+// @version      0.9.2
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
