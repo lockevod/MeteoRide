@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.8.1
+// @version      0.9
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -12,6 +12,7 @@
 // @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
 // @icon         https://app.meteoride.cc/icon-192.png
 // @match        https://app.meteoride.cc/*
+// @match        http://localhost:8080/*
 // @match        https://dashboard.hammerhead.io/*
 // @grant        none
 // @run-at       document-end
@@ -53,9 +54,16 @@
     BUTTON_TEXT: 'HH',
     BUTTON_TITLE: 'Export to Hammerhead',
     INJECT_BUTTON_SELECTOR: '#top-buttons, body',
+  // Poll interval (ms) used to wait for a route to appear/disappear. Default 10000
+    POLL_INTERVAL_MS: 10000,
     UPLOAD: {
       STRATEGY: 'meteoride_share_server',
-      SHARE_SERVER_BASE: 'https://app.meteoride.cc',
+      // Default to the local share-server port used in this repo (change to your public host in prod)
+      SHARE_SERVER_BASE: 'http://127.0.0.1:8081',
+      // If true, the share-server will delete the file after the first successful serve
+      // by appending ?once=1 to the shared URL before sending it to Hammerhead.
+      DELETE_AFTER_IMPORT: false,
+      //SHARE_SERVER_BASE: 'https://app.meteoride.cc',
       CUSTOM: async (file) => { throw new Error('Uploader custom no implementado'); }
     },
     DEBUG: true,
@@ -72,6 +80,20 @@
     info: (...a)=>{ console.info('[MR→HH]', ...a); },
     dbg: (...a)=>{ console.debug('[MR→HH]', ...a); }
   };
+
+  // Compare origins but treat 127.0.0.1 and localhost (and ::1) as equivalent for local testing
+  function sameOriginLoose(aUrl, bUrl){
+    try{
+      const a = new URL(aUrl);
+      const b = new URL(bUrl);
+      const normalize = (u)=>{
+        let host = u.hostname;
+        if(host === '127.0.0.1' || host === '::1') host = 'localhost';
+        return `${host}:${u.port||('http'===u.protocol.replace(':','')? '80':'')}`;
+      };
+      return normalize(a) === normalize(b) && a.protocol === b.protocol;
+    } catch(e){ return false; }
+  }
 
   // Sanitize large or sensitive claim values for logging
   function sanitizeClaims(claims){
@@ -101,77 +123,140 @@
   // -------------------------------------------------------------
   // Public Upload Implementations
   // -------------------------------------------------------------
+  // Robust upload to share-server: try multipart POST, fall back to raw GPX POST,
+  // and try multiple heuristics to resolve the shared URL from JSON, Location,
+  // HTML body or by constructing /shared/<filename>.
   async function uploadViaShareServer(file){
-    const base = CONFIG.UPLOAD.SHARE_SERVER_BASE;
-    if(!base || !/^https:\/\//.test(base)) throw new Error('Configura CONFIG.UPLOAD.SHARE_SERVER_BASE (https://...)');
-    // POST raw body or multipart. Our share-server accepts raw text (any content-type). We need the GPX text.
-    let text;
-    if(file.text) text = await file.text(); else text = await new Response(file).text();
-    const headers = { 'Content-Type':'application/gpx+xml' };
-    try{ if(file && file.name) headers['X-File-Name'] = file.name; }catch(_){ }
-    const res = await fetch(base.replace(/\/$/,'') + '/share', {
-      method:'POST',
-      headers,
-      body: text
-    });
-    // If server redirected us to a final URL (eg 303 -> /shared/...), accept that
-    try {
-      if(res.redirected && res.url && /^https?:\/\//i.test(res.url)){
-        return await resolveToGpx(res.url, base);
-      }
-      const loc = res.headers.get && res.headers.get('location');
-      if(loc){
-        const l = loc.trim();
-        if(/^https?:\/\//i.test(l)) return await resolveToGpx(l, base);
-        // relative path -> join with base
-        if(l.startsWith('/')) return await resolveToGpx(base.replace(/\/$/,'') + l, base);
-      }
-    } catch(_){}
-    // Read body (try JSON then fallback to text) and provide richer errors for debugging
-    let bodyText = '';
-    try { bodyText = await res.clone().text(); } catch(_) { bodyText = ''; }
-    if(!res.ok){
-      const msg = `share-server fallo ${res.status} ${res.statusText} - ${bodyText.slice(0,200)}`;
-      throw new Error(msg);
-    }
-    let json = null;
-    try { json = JSON.parse(bodyText); } catch(_){ json = null; }
-    // Accept several shapes: { sharedUrl: '/shared/..' }, { url: 'https://...' }, { shared_url: '/shared/..' }, or plain text URL
-    if(json && (json.sharedUrl || json.url || json.shared_url || json.path || json.id)){
-      if(json.url) return await resolveToGpx(json.url, base);
-      if(json.sharedUrl) return await resolveToGpx(base.replace(/\/$/,'') + json.sharedUrl, base);
-      if(json.shared_url) return await resolveToGpx(base.replace(/\/$/,'') + json.shared_url, base);
-      if(json.path) return await resolveToGpx(base.replace(/\/$/,'') + json.path, base);
-      if(json.id) return await resolveToGpx(base.replace(/\/$/,'') + '/shared/' + json.id, base);
-    }
-    // Fallback: if bodyText looks like a URL, return it
-    const urlLike = (bodyText || '').trim();
-  if(/^https?:\/\//i.test(urlLike)) return await resolveToGpx(urlLike, base);
-    // Nothing matched: throw informative error including body
-    const snippet = (bodyText||'').slice(0,500);
-    throw new Error('Respuesta share-server inesperada: ' + snippet);
-  }
+    const shareServerUrl = (CONFIG.UPLOAD && CONFIG.UPLOAD.SHARE_SERVER_BASE) || 'http://127.0.0.1:8081';
+    MRHH.info('uploadViaShareServer: subiendo a share-server en', shareServerUrl);
 
+    // Obtain GPX text and filename
+    let gpxText = '';
+    let filename = 'route.gpx';
+    if(file instanceof File || file instanceof Blob){
+      gpxText = await file.text();
+      if(file.name) filename = file.name;
+    } else if(file && file._text){
+      gpxText = file._text;
+      if(file.name) filename = file.name;
+    } else if(typeof file === 'string'){
+      gpxText = file;
+    } else {
+      throw new Error('Formato de archivo no soportado');
+    }
+    if(!gpxText || !gpxText.includes('<gpx')) throw new Error('El contenido no parece ser un GPX válido');
+
+    // Prefer UI-derived name if present
+    try{
+      const rnEl = document.getElementById('rutaName');
+      let routeName = rnEl && rnEl.textContent ? rnEl.textContent.trim() : '';
+      if(routeName){ routeName = routeName.replace(/[^A-Za-z0-9._-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,''); if(!/\.gpx$/i.test(routeName)) routeName += '.gpx'; filename = routeName; }
+    }catch(_){ }
+
+    MRHH.info('uploadViaShareServer: subiendo archivo', filename, 'tamaño:', gpxText.length);
+
+    const buildFallbackUrl = (name) => `${shareServerUrl.replace(/\/$/,'')}/shared/${encodeURIComponent(name)}`;
+
+    async function parseResponse(resp){
+      // Try Location header first (redirects)
+      const loc = resp.headers && resp.headers.get && resp.headers.get('Location') || resp.headers && resp.headers.get && resp.headers.get('location');
+      if(loc){
+        try{ const u = new URL(loc, shareServerUrl); return u.href; } catch(_){ return (shareServerUrl.replace(/\/$/,'') + '/' + loc.replace(/^\//,'')); }
+      }
+      const ct = (resp.headers && resp.headers.get && resp.headers.get('content-type')) || '';
+      const txt = await resp.text().catch(()=> '');
+      // If JSON, parse and prefer absolute url fields
+      try{ const j = JSON.parse(txt); if(j){ if(j.url) return j.url; if(j.sharedUrl) return shareServerUrl.replace(/\/$/,'') + j.sharedUrl; if(j.path) return shareServerUrl.replace(/\/$/,'') + j.path; } } catch(_){ }
+      // If body contains explicit absolute shared href or /shared/ fragment, pick it
+      const m = txt.match(/https?:\/\/[^"'<>\s]*\/shared\/[A-Za-z0-9_\-\.]+(?:\.gpx)?/i);
+      if(m && m[0]) return m[0];
+      const m2 = txt.match(/\/shared\/[A-Za-z0-9_\-\.]+(?:\.gpx)?/i);
+      if(m2 && m2[0]) return shareServerUrl.replace(/\/$/,'') + m2[0];
+      // If page contains redirect string pointing to /shared/..., try to extract
+      const m3 = txt.match(/Location:\s*(\/shared\/[A-Za-z0-9_\-\.]+(?:\.gpx)?)/i) || txt.match(/Redirecting to (\/shared\/[A-Za-z0-9_\-\.]+(?:\.gpx)?)/i);
+      if(m3 && m3[1]) return shareServerUrl.replace(/\/$/,'') + m3[1];
+      // Last resort: construct by filename
+      return buildFallbackUrl(filename);
+    }
+
+    // Try raw GPX POST first (preferred): send GPX text as body and pass X-File-Name.
+    // This avoids multipart/form-data envelopes that sometimes get stored verbatim.
+    try{
+      const rawUrlNoFollow = shareServerUrl.replace(/\/$/,'') + '/share';
+      MRHH.dbg('uploadViaShareServer: attempting RAW POST (no follow) to', rawUrlNoFollow);
+      const respRaw = await fetch(rawUrlNoFollow, { method:'POST', body: gpxText, mode:'cors', credentials:'omit', headers: { 'Content-Type':'application/gpx+xml', 'X-File-Name': filename } });
+      if(!respRaw) throw new Error('No response');
+      MRHH.dbg('uploadViaShareServer: raw POST status', respRaw.status, 'ct=', respRaw.headers && respRaw.headers.get && respRaw.headers.get('content-type'));
+      if(respRaw.status === 201){
+        const txt = await respRaw.text().catch(()=> '');
+        try{ const j = JSON.parse(txt); if(j && (j.url || j.sharedUrl || j.path)){ const final = j.url || (shareServerUrl.replace(/\/$/,'') + (j.sharedUrl || j.path)); MRHH.info('uploadViaShareServer: raw returned JSON 201, final URL:', final); return final; } } catch(e){ MRHH.dbg('uploadViaShareServer: 201 but JSON parse failed', e); }
+      }
+      try{ const resolved = await parseResponse(respRaw); if(resolved) { MRHH.info('uploadViaShareServer: resolved URL (raw/no-follow):', resolved); return resolved; } } catch(err){ MRHH.dbg('raw parse failed', err); }
+      MRHH.dbg('uploadViaShareServer: raw no-follow did not yield usable URL, falling back to multipart');
+    } catch(e){ MRHH.dbg('raw upload (no-follow) failed, will retry multipart/follow', e && e.message ? e.message : e); }
+
+    // Fallback: POST raw GPX body (some proxies/servers prefer raw)
+    try{
+      // Raw POST fallback also requests follow=1 so fetch will land on final resource
+      const rawUrl = shareServerUrl.replace(/\/$/,'') + '/share?follow=1';
+      const resp2 = await fetch(rawUrl, { method:'POST', body: gpxText, mode:'cors', credentials:'omit', headers: { 'Content-Type': 'application/gpx+xml', 'X-Follow-Redirect': '1' } });
+      if(resp2 && resp2.url && /\/shared\//.test(resp2.url)){
+        MRHH.info('uploadViaShareServer: response.url indicates shared resource (raw->follow):', resp2.url);
+        return resp2.url;
+      }
+      const resolved2 = await parseResponse(resp2);
+      MRHH.info('uploadViaShareServer: resolved URL (raw):', resolved2);
+      return resolved2;
+    } catch(err2){
+      MRHH.err('uploadViaShareServer: all upload attempts failed', err2 && err2.message ? err2.message : err2);
+      throw new Error('Error subiendo a share-server: ' + (err2 && err2.message ? err2.message : String(err2)));
+    }
+  }
+   
   // Try to resolve an index-like URL to a direct GPX/shared URL.
   async function resolveToGpx(url, base){
     try{
       if(/\.gpx(\?|$)/i.test(url)) return url;
       // HEAD to inspect content-type
-      const h = await fetch(url, { method:'HEAD', mode:'cors', credentials:'same-origin', referrer: base, referrerPolicy: 'origin' });
+  const h = await fetch(url, { method:'HEAD', mode:'cors', credentials:'omit', referrer: base, referrerPolicy: 'origin' });
       const ct = (h && h.headers && h.headers.get('content-type')) || '';
       if(/gpx/i.test(ct)) return url;
       // If HTML, GET and try to find shared id or /shared/ path
-      const txt = await fetch(url, { method:'GET', mode:'cors', credentials:'same-origin', referrer: base, referrerPolicy: 'origin' }).then(r=>r.text()).catch(()=> '');
-      // Look for /shared/{id}
-      let m = txt.match(/\/shared\/([A-Za-z0-9\-_.]+)/);
-  if(m && m[1]) return base.replace(/\/$/,'') + '/shared/' + m[1] + '.gpx';
-      // Look for query param shared_id or shared
-      m = txt.match(/shared_id=([A-Za-z0-9\-_.]+)/) || txt.match(/shared=([A-Za-z0-9\-_.]+)/);
-  if(m && m[1]) return base.replace(/\/$/,'') + '/shared/' + m[1] + '.gpx';
-      // As last resort, if url contains a query param with an id-like token, try to use it
-      const q = (new URL(url)).searchParams;
-      const candidate = q.get('shared_id') || q.get('id') || q.get('shared');
-  if(candidate) return base.replace(/\/$/,'') + '/shared/' + candidate + '.gpx';
+  const txt = await fetch(url, { method:'GET', mode:'cors', credentials:'omit', referrer: base, referrerPolicy: 'origin' }).then(r=>r.text()).catch(()=> '');
+      // Look for explicit /shared/{name} occurrences in HTML (prefer ones that include .gpx)
+      let m = txt.match(/\/shared\/([A-Za-z0-9\-_.]+(?:\.gpx)?)/i);
+      if(m && m[1]){
+        const name = m[1];
+        if(/\.gpx$/i.test(name)) return base.replace(/\/$/,'') + '/shared/' + name;
+        return base.replace(/\/$/,'') + '/shared/' + name + '.gpx';
+      }
+      // Look for anchors that may point to the shared file (absolute or relative)
+      let ma = txt.match(/<a[^>]+href=["']([^"']*\/shared\/[^"']+)["']/i);
+      if(ma && ma[1]){
+        try{
+          const link = ma[1];
+          if(/^https?:\/\//i.test(link)) return link;
+          // relative -> join with origin of the fetched page (use url's origin)
+          const origin = (new URL(url)).origin;
+          return origin.replace(/\/$/,'') + (link.startsWith('/') ? link : '/' + link);
+        }catch(_){ /* ignore and continue */ }
+      }
+      // Look for meta refresh or JS redirect patterns that include a /shared/ target
+      let mm = txt.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["']?[^"']*url=([^"'>\s]+)/i);
+      if(mm && mm[1]){
+        const candidate = mm[1];
+        if(/^https?:\/\//i.test(candidate)) return candidate;
+        try{ const origin = (new URL(url)).origin; return origin.replace(/\/$/,'') + (candidate.startsWith('/') ? candidate : '/' + candidate); }catch(_){ }
+      }
+      let mloc = txt.match(/window\.location(?:\.href)?\s*=\s*["']([^"']*\/shared\/[^"']+)["']/i);
+      if(mloc && mloc[1]){
+        const candidate = mloc[1];
+        if(/^https?:\/\//i.test(candidate)) return candidate;
+        try{ const origin = (new URL(url)).origin; return origin.replace(/\/$/,'') + (candidate.startsWith('/') ? candidate : '/' + candidate); }catch(_){ }
+      }
+      // Do not infer shared URLs from query parameters like ?shared=1 — these are ambiguous and often indicate a redirect to an index page.
+  // Removed inference from generic query params (?shared=1) to avoid creating bogus /shared/<id>.gpx.
+  // If a future explicit param is needed (e.g. shared_id), introduce a strict pattern here.
     } catch(e){ /* ignore */ }
     return url;
   }
@@ -191,9 +276,20 @@
       const h = await fetch(url, { method:'HEAD', mode:'cors', credentials:'same-origin' });
       const ct = h && h.headers && h.headers.get && h.headers.get('content-type') || '';
       if(/gpx/i.test(ct)) return { ok:true, url };
-      // GET and try to resolve via resolveToGpx
+      // If server reports HTML or text, fetch body and inspect for real GPX content and not multipart boundaries
+      if(/html|text/i.test(ct) || !ct){
+        const txt = await fetch(url, { method:'GET', mode:'cors', credentials:'same-origin' }).then(r=>r.text()).catch(()=> '');
+        // If body contains multipart markers, it's likely the server returned the upload envelope, reject.
+        if(/WebKitFormBoundary|Content-Disposition: form-data|multipart\//i.test(txt)){
+          MRHH.err('validateGpxUrl: detected multipart-like response body, rejecting');
+          return { ok:false };
+        }
+        // basic GPX detection
+        if(/<gpx[\s>]/i.test(txt) || /<\?xml[\s\S]{0,200}<gpx/i.test(txt)) return { ok:true, url };
+      }
+      // GET and try to resolve via resolveToGpx as a last resort
       const resolved = await resolveToGpx(url, (new URL(url)).origin);
-      if(resolved && /\.gpx(\?|$)/i.test(resolved)) return { ok:true, url: resolved };
+  if(resolved && /\.gpx(\?|$)/i.test(resolved)) return { ok:true, url: resolved };
       return { ok:false };
     } catch(e){ return { ok:false }; }
   }
@@ -205,26 +301,77 @@
     if(!CONFIG.ENABLE_UI_BUTTON) return;
     if(!isMeteoRide()) return;
     if(document.getElementById('mr-hh-export-btn')) return;
-    // Try multiple selectors then fallback to floating button
-    const candidates = (CONFIG.INJECT_BUTTON_SELECTOR || '').split(',').map(s=>s.trim()).concat([
-      '#top-buttons', '.top-buttons', '#buttons', '.header-actions', '#appHeader', '#appTitle', '.app-logo', 'header', 'body'
-    ]);
-    let container = null;
-    for(const sel of candidates){ try { const found = document.querySelector(sel); if(found){ container = found; break; } } catch(e){}
+
+    // Helper: detect if we have a route available
+    function hasRoute(){
+      try{
+        if(window.lastGPXFile) return true;
+        if(window.trackLayer && typeof window.trackLayer.toGeoJSON === 'function'){
+          const gj = window.trackLayer.toGeoJSON(); if(gj && gj.features && gj.features.length) return true;
+        }
+        if(window.cw && typeof window.cw.getSteps === 'function'){
+          const s = window.cw.getSteps() || []; if(s.length >= 2) return true;
+        }
+      }catch(e){}
+      return false;
     }
 
-    const btn = document.createElement('button');
-    btn.id = 'mr-hh-export-btn';
-    btn.textContent = CONFIG.BUTTON_TEXT;
-    btn.title = CONFIG.BUTTON_TITLE;
-    Object.assign(btn.style, { cursor:'pointer', padding:'4px 8px', margin:'4px', fontSize:'13px', lineHeight:'16px'});
-    btn.addEventListener('click', onExportClick);
-    if(container && container !== document.body){
-      try { container.appendChild(btn); MRHH.info('Inserted HH export button into', container.tagName || container.className || container.id); }
-        catch(e){ MRHH.dbg('append failed', e); addFloatingButton(btn); }
-    } else {
-      addFloatingButton(btn);
+    // Create and insert the button (keeps previous insertion logic), and return the created element
+    function createAndInsertButton(){
+      // Try multiple selectors then fallback to floating button
+      const candidates = (CONFIG.INJECT_BUTTON_SELECTOR || '').split(',').map(s=>s.trim()).concat([
+        '#top-buttons', '.top-buttons', '#buttons', '.header-actions', '#appHeader', '#appTitle', '.app-logo', 'header', 'body'
+      ]);
+      let container = null;
+      for(const sel of candidates){ try { const found = document.querySelector(sel); if(found){ container = found; break; } } catch(e){}
+      }
+
+      const btn = document.createElement('button');
+      btn.id = 'mr-hh-export-btn';
+      btn.textContent = CONFIG.BUTTON_TEXT;
+      btn.title = CONFIG.BUTTON_TITLE;
+      Object.assign(btn.style, { cursor:'pointer', padding:'4px 8px', margin:'4px', fontSize:'13px', lineHeight:'16px'});
+      btn.addEventListener('click', onExportClick);
+      if(container && container !== document.body){
+        try { container.appendChild(btn); MRHH.info('Inserted HH export button into', container.tagName || container.className || container.id); }
+          catch(e){ MRHH.dbg('append failed', e); addFloatingButton(btn); }
+      } else {
+        addFloatingButton(btn);
+      }
+
+      // Monitor the route; if it disappears remove the button and start waiting again
+  const monitorInterval = setInterval(()=>{
+        try{
+          if(!hasRoute()){
+            const existing = document.getElementById('mr-hh-export-btn');
+            if(existing){ existing.remove(); MRHH.info('Route gone — HH button hidden'); }
+            clearInterval(monitorInterval);
+            // restart waiting loop to re-insert when route returns
+            startWaiting();
+          }
+        }catch(e){ clearInterval(monitorInterval); }
+  }, CONFIG.POLL_INTERVAL_MS);
+
+      return btn;
     }
+
+    // Waiting loop: poll for route and insert button when found
+    function startWaiting(){
+      if(document.getElementById('mr-hh-export-btn')) return;
+      if(hasRoute()){ createAndInsertButton(); return; }
+      MRHH.info('HH export button deferred until a route is available (waiting indefinitely)');
+  const t = setInterval(()=>{
+        try{
+          if(document.getElementById('mr-hh-export-btn')){ clearInterval(t); return; }
+          if(hasRoute()){
+            clearInterval(t); createAndInsertButton(); return;
+          }
+        }catch(e){ clearInterval(t); }
+  }, CONFIG.POLL_INTERVAL_MS);
+    }
+
+    // Start the initial waiting
+    startWaiting();
   }
 
   function addFloatingButton(btn){
@@ -235,31 +382,95 @@
   } catch(e){ MRHH.err('Could not insert floating button', e); }
   }
 
+  // Delegate GPX generation to the page's API when available
+  function buildFreshGpxFile(){
+    if (window.cw && typeof window.cw.exportRouteToGpx === 'function'){
+      const g = window.cw.exportRouteToGpx('route.gpx', true);
+      if (g) {
+        MRHH.info('GPX generado via window.cw.exportRouteToGpx, assigned to window.lastGPXFile (length=', (g && g.length) || 0, ')');
+        return window.lastGPXFile;
+      }
+      MRHH.info('window.cw.exportRouteToGpx returned no data');
+      return null;
+    }
+    throw new Error('API no disponible: window.cw.exportRouteToGpx');
+  }
+
   async function onExportClick(){
     try {
-  const btn = this;
-  btn.disabled = true; const orig = btn.textContent; btn.textContent = '…';
-  MRHH.info('Export button clicked');
-  if(!window.lastGPXFile){ throw new Error('No GPX loaded (window.lastGPXFile missing)'); }
-  const file = window.lastGPXFile;
-  MRHH.info('Found window.lastGPXFile size=', file.size || 'unknown');
-  MRHH.log('Uploading GPX to share-server');
-  const publicUrl = await uploadPublic(file);
-  MRHH.info('Share server returned URL=', publicUrl);
-  // Optional pause: let user inspect/cancel before we call Hammerhead
-  if(CONFIG.PAUSE_BEFORE_IMPORT){
-    try{
-      const ok = confirm('GPX uploaded to: "' + publicUrl + '"\n\nPress OK to continue and request Hammerhead import, or Cancel to stop.');
-      if(!ok){ MRHH.info('User cancelled before Hammerhead import'); alert('Export cancelled by user');
-        const btn2 = document.getElementById('mr-hh-export-btn'); if(btn2){ btn2.disabled = false; btn2.textContent = CONFIG.BUTTON_TEXT; }
-        return;
+      const btn = this;
+      btn.disabled = true; 
+      const orig = btn.textContent; 
+      btn.textContent = '…';
+      MRHH.info('Export button clicked');
+      
+      // Generar GPX exactamente como hace el botón "Generar GPX" - SIN UPLOAD
+      let file;
+      try {
+        file = buildFreshGpxFile();
+      } catch(e){ 
+        throw new Error('No se pudo generar GPX: '+e.message); 
       }
-    } catch(_){ }
-  }
-  MRHH.log('Requesting Hammerhead import for URL');
-  const outcome = await requestImportInHammerhead(publicUrl);
-  MRHH.info('Hammerhead import result', outcome);
-  alert('Import Hammerhead: '+outcome.status+' '+(outcome.message||''));
+      if(!file) throw new Error('GPX generation failed');
+      MRHH.info('GPX generado localmente, size=', file.size || (file._text && file._text.length) || 'unknown');
+      
+      // Primero guardamos el GPX en el share-server para que esté disponible
+      MRHH.log('Guardando GPX en share-server para que esté accesible...');
+      const shareResponse = await uploadPublic(file);
+      MRHH.info('GPX guardado en share-server:', shareResponse);
+      
+      // Construir URL directamente basada en el nombre del archivo generado
+      let filename = 'route.gpx';
+      if(file && file.name) {
+        filename = file.name;
+      } else {
+        // Derivar nombre del UI si está disponible
+        try {
+          const rnEl = document.getElementById('rutaName');
+          let routeName = rnEl && rnEl.textContent ? rnEl.textContent.trim() : '';
+          if(routeName){
+            routeName = routeName.replace(/[^A-Za-z0-9._-]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+            if(!/\.gpx$/i.test(routeName)) routeName += '.gpx';
+            filename = routeName;
+          }
+        } catch(_){ }
+      }
+      
+      // Usar la URL del share-server o construir URL basada en shared_id
+      let publicUrl;
+      if(shareResponse && shareResponse.includes('/shared/')){
+        // Si el share-server nos devolvió una URL directa, usarla
+        publicUrl = shareResponse;
+      } else {
+        // Construir URL usando el share-server base si está configurado (apunta a /shared/<filename>),
+        // sino usar el origen actual, y como último recurso fallback a localhost para compatibilidad local.
+        // Must use configured share server base; do not guess localhost. Fail fast if not configured.
+        const shareBase = (CONFIG.UPLOAD && CONFIG.UPLOAD.SHARE_SERVER_BASE);
+        if(!shareBase){
+          throw new Error('CONFIG.UPLOAD.SHARE_SERVER_BASE no configurado — no puedo construir publicUrl');
+        }
+        publicUrl = shareBase.replace(/\/$/, '') + '/shared/' + encodeURIComponent(filename);
+      }
+      
+      MRHH.info('GPX URL para Hammerhead:', publicUrl);
+      
+      // Optional pause: let user inspect/cancel before we call Hammerhead
+      if(CONFIG.PAUSE_BEFORE_IMPORT){
+        try{
+          const ok = confirm('GPX generado localmente. URL para Hammerhead: "' + publicUrl + '"\n\nPress OK to continue and request Hammerhead import, or Cancel to stop.');
+          if(!ok){ 
+            MRHH.info('User cancelled before Hammerhead import'); 
+            alert('Export cancelled by user');
+            return;
+          }
+        } catch(_){ }
+      }
+
+      MRHH.log('Requesting Hammerhead import for URL');
+      const outcome = await requestImportInHammerhead(publicUrl);
+      MRHH.info('Hammerhead import result', outcome);
+      alert('Import Hammerhead: '+outcome.status+' '+(outcome.message||''));
+      
     } catch(e){
       alert('Error export HH: '+e.message);
       MRHH.err(e.message || e);
@@ -267,7 +478,6 @@
       const btn = document.getElementById('mr-hh-export-btn');
       if(btn){ btn.disabled = false; btn.textContent = CONFIG.BUTTON_TEXT; }
     }
-
   }
 
   function requestImportInHammerhead(publicUrl){
@@ -382,6 +592,21 @@
       try { message = await res.text(); } catch(_){ }
   MRHH.info('Hammerhead API status', res.status, 'ok=', res.ok);
       postResult(reqId, { status: res.status, ok: res.ok, message: message.slice(0,400) });
+      // If import succeeded and user requested delete-after-import, perform DELETE on the shared URL
+      try{
+        if(res.ok && CONFIG.UPLOAD && CONFIG.UPLOAD.DELETE_AFTER_IMPORT){
+          try{
+            const su = new URL(publicUrl);
+            // send DELETE to /shared/<filename>
+            const parts = su.pathname.split('/');
+            const filename = decodeURIComponent(parts[parts.length-1] || '');
+            const delUrl = su.origin + '/shared/' + encodeURIComponent(filename);
+            MRHH.info('Requesting share-server to DELETE after import:', delUrl);
+            await fetch(delUrl, { method:'DELETE', mode:'cors', credentials:'omit' });
+            MRHH.info('Delete request sent');
+          }catch(_){ MRHH.err('Delete after import failed', _); }
+        }
+      }catch(_){ MRHH.err('Post-import cleanup error', _); }
     } catch(e){
   postResult(reqId, { status: 'error', message: e.message });
   MRHH.err('HH import error', e.message || e);

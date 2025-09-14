@@ -24,3 +24,6 @@ SHORTCUT_IMPORT_NOTES.md
 .gitignore
 share-server.js
 scripts/.DS_Store
+shared_storage/*
+scripts/userscripts/tamper_meteoride_export_hammerhead.user copia.js
+scripts/userscripts/tamper_meteoride_export_hammerhead.user copia 2.js

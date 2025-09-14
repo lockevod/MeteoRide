@@ -1,4 +1,8 @@
 (function() {
+  // Toggle: show the floating "Generar y Guardar GPX" button when true.
+  // Set window.SHOW_GENERATE_AND_SAVE_BUTTON = false in the console before reload to hide the button.
+  const SHOW_GENERATE_AND_SAVE_BUTTON = false;
+  try { window.SHOW_GENERATE_AND_SAVE_BUTTON = SHOW_GENERATE_AND_SAVE_BUTTON; } catch (e) { /* ignore */ }
   // UI notice helpers (shared for warnings and errors)
   function setNotice(msg, type = "warn") {
     const el = document.getElementById("horizonNotice");
@@ -365,6 +369,201 @@
 
   function escapeXml(s) { return String(s || '').replace(/[<>&'"]/g, function(c){ return ({'<' : '&lt;','>' : '&gt;','&' : '&amp;',"'":'&apos;', '"':'&quot;'})[c]; }); }
 
+  // Programmatic export: build GPX from existing map layer or cw steps and set window.lastGPXFile
+  // Exposed as window.cw.exportRouteToGpx(nameHint, noReload)
+  // If noReload is true the function will NOT call reloadFull() (avoids reloading map/route/clima)
+  function exportRouteToGpx(nameHint = 'route.gpx', noReload = false) {
+    try {
+      // Prefer an existing GPX/track layer
+      let gpxText = null;
+      try {
+        if (window.trackLayer && typeof window.trackLayer.toGeoJSON === 'function') {
+          const gj = window.trackLayer.toGeoJSON();
+          gpxText = geojsonToGpx(gj);
+        }
+      } catch (e) { /* ignore and try other source */ }
+
+      // Fallback: build from cw.getSteps() if available
+      if (!gpxText && window.cw && typeof window.cw.getSteps === 'function') {
+        const steps = window.cw.getSteps() || [];
+        if (steps.length >= 2) {
+          const coords = steps.map(s => [s.lon, s.lat]);
+          const geojson = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: nameHint }, geometry: { type: 'LineString', coordinates: coords } }] };
+          gpxText = geojsonToGpx(geojson);
+        }
+      }
+
+      if (!gpxText) {
+        console.warn('[MeteoRide] exportRouteToGpx: no route data available to build GPX');
+        return null;
+      }
+
+      // Create a File-like object for compatibility with reloadFull()
+      try {
+        window.lastGPXFile = (typeof File === 'function')
+          ? new File([gpxText], nameHint || 'route.gpx', { type: 'application/gpx+xml' })
+          : { name: nameHint || 'route.gpx', _text: gpxText };
+      } catch (e) {
+        window.lastGPXFile = { name: nameHint || 'route.gpx', _text: gpxText };
+      }
+
+      // Trigger the normal reload path so UI updates unless caller requested noReload
+      if (!noReload && typeof window.reloadFull === 'function') {
+        try { window.reloadFull(); } catch (e) { /* ignore */ }
+      }
+      console.info('[MeteoRide] exportRouteToGpx: GPX generated and assigned to window.lastGPXFile');
+      return gpxText;
+    } catch (err) {
+      console.error('[MeteoRide] exportRouteToGpx error', err);
+      return null;
+    }
+  }
+
+  // Upload lastGPXFile to a share-server instance (defaults to same-origin path `/share` so Caddy can proxy to the internal server)
+  async function uploadGPXToShareServer(options = {}) {
+    // If caller provides an absolute server base URL, use it; otherwise default to the same-origin path
+    // so Caddy can proxy /share -> backend. options.server may be absolute (http(s)://host:port) or falsy.
+    let endpoint;
+    let serverBase = options.server || '';
+    if (serverBase && /^https?:\/\//i.test(String(serverBase))) {
+      // absolute base provided
+      endpoint = new URL('/share', serverBase).toString();
+      console.log('[MODHH] uploadGPXToShareServer using absolute endpoint=', endpoint, 'serverBase=', serverBase);
+      // Quick health check to confirm the share-server is reachable from the page context
+      try {
+        const hurl = new URL('/health', serverBase).toString();
+        const hr = await fetch(hurl, { method: 'GET' });
+        const htxt = await hr.text().catch(() => '');
+        console.log('[MODHH] share-server health GET', hurl, 'status=', hr.status, 'text=', htxt, 'headers=', Array.from(hr.headers.entries()));
+        if (!hr.ok) {
+          console.warn('[MODHH] share-server health check failed; request may be intercepted by proxy or not reachable');
+          window.setNotice && window.setNotice('[MODHH] share-server no reachable desde la página (health ' + hr.status + ')', 'warn');
+        }
+      } catch (e) {
+        console.error('[MODHH] share-server health fetch error', e);
+        window.setNotice && window.setNotice('[MODHH] Error comprobando share-server: ' + e.message, 'warn');
+      }
+    } else {
+      // Default: use same-origin path so Caddy (on port 8080) can proxy to internal node server
+      endpoint = '/share';
+      console.log('[MODHH] uploadGPXToShareServer using same-origin endpoint=', endpoint);
+    }
+    // Ensure we have a GPX file in window.lastGPXFile; generate one if not present
+    if (!window.lastGPXFile) {
+      // Try to generate from current route without reloading UI/map
+      exportRouteToGpx(undefined, true);
+    }
+    if (!window.lastGPXFile) {
+      window.setNotice && window.setNotice(window.t ? window.t('no_route_for_export') || 'No route to export' : 'No route to export', 'warn');
+      return null;
+    }
+
+    // Build payload
+    let rawText = null;
+    let filename = (window.lastGPXFile && window.lastGPXFile.name) ? window.lastGPXFile.name : 'route.gpx';
+    try {
+      const f = window.lastGPXFile;
+      if (typeof File !== 'undefined' && f instanceof File && typeof f.text === 'function') {
+        rawText = await f.text();
+      } else if (f && f._text) {
+        rawText = String(f._text);
+      } else if (typeof f === 'string') {
+        rawText = f;
+      }
+      if (!rawText) {
+        window.setNotice && window.setNotice('GPX payload not available', 'error');
+        return null;
+      }
+    } catch (e) {
+      window.setNotice && window.setNotice('Error preparing GPX upload: ' + e.message, 'error');
+      return null;
+    }
+
+    try {
+      window.showLoading && window.showLoading();
+      window.setKeyStatus && window.setKeyStatus('Subiendo GPX...', 'testing');
+      // Preferred: send raw GPX body with application/gpx+xml
+      let res = null;
+      try {
+        res = await fetch(endpoint, {
+        method: 'POST',
+        body: rawText,
+        headers: { 'Content-Type': 'application/gpx+xml', 'X-File-Name': filename, 'X-Bypass-Service-Worker': '1' }
+        });
+      } catch (netErr) {
+        console.error('[MODHH] network error when POSTing to share-server', netErr);
+        window.setNotice && window.setNotice('[MODHH] Error de red al subir GPX: ' + netErr.message, 'error');
+        return null;
+      }
+
+      // If server rejected raw body (e.g., 400) try multipart fallback for compatibility
+      if (!res.ok && res.status >= 400 && res.status < 500) {
+        try {
+          const form = new FormData();
+          const blob = new Blob([rawText], { type: 'application/gpx+xml' });
+          form.append('file', blob, filename);
+          res = await fetch(endpoint, { method: 'POST', body: form, headers: { 'X-File-Name': filename, 'X-Bypass-Service-Worker': '1' } });
+        } catch (e) {
+          // keep original res if fallback fails
+        }
+      }
+      const text = await res.text();
+      let payload = null;
+      try { payload = JSON.parse(text); } catch (e) { payload = null; }
+      // Detect cases where the server returned the app index (likely Caddy proxying /share to 8080)
+      if (text && typeof text === 'string' && /<!doctype html/i.test(text)) {
+        console.warn('[MODHH] Received HTML (index) when uploading GPX — request probably hit the webserver (Caddy) not the share-server:', endpoint);
+        console.log('[MODHH] response head:', text.slice(0, 300));
+        window.setNotice && window.setNotice('[MODHH] Error: la petición fue servida por el servidor web (index) en vez del share-server. Revisa la URL del share-server o la configuración de Caddy/proxy.', 'error');
+        return null;
+      }
+      if (!res.ok) {
+        const msg = payload && payload.message ? payload.message : (text || res.statusText || 'Upload failed');
+        window.setNotice && window.setNotice('Upload failed: ' + msg, 'error');
+        return null;
+      }
+
+      // Success: servers in this repo return JSON with url or sharedUrl
+      console.log('[MeteoRide] share response status=', res.status, 'text=', text, 'parsed=', payload);
+      const sharedUrl = (payload && (payload.url || payload.sharedUrl)) || (res.headers.get('Location')) || null;
+      window.setKeyStatus && window.setKeyStatus('GPX guardado', 'ok');
+      if (sharedUrl) {
+        const abs = (typeof sharedUrl === 'string' && sharedUrl.startsWith('http')) ? sharedUrl : (new URL(sharedUrl, serverBase)).toString();
+        // Try HEAD to check availability
+        let available = false;
+        try {
+          const h = await fetch(abs, { method: 'HEAD' });
+          available = h.ok;
+        } catch (e) { available = false; }
+
+        // Extract saved filename/message if present
+        let savedName = null;
+        if (payload && payload.message) {
+          const m = String(payload.message).match(/Stored as\s+(.+)$/i);
+          if (m) savedName = m[1]; else savedName = payload.message;
+        }
+
+        const noticeMsg = (savedName ? `${savedName} -> ` : '') + abs + (available ? ' (available)' : ' (may be pending)');
+        window.setNotice && window.setNotice(noticeMsg, 'ok');
+        console.log('[MeteoRide] shared URL:', abs, 'available=', available, 'payload=', payload);
+        try { await navigator.clipboard?.writeText(abs); } catch (e) { /* ignore clipboard errors */ }
+        return { url: abs, available, payload };
+      }
+      window.setNotice && window.setNotice('GPX guardado', 'ok');
+      return payload;
+    } catch (err) {
+      window.setNotice && window.setNotice('Error subiendo GPX: ' + err.message, 'error');
+      console.error('uploadGPXToShareServer error', err);
+      return null;
+    } finally {
+      window.hideLoading && window.hideLoading();
+    }
+  }
+
+  // Export geojsonToGpx helper so other scripts/userscripts can reuse it
+  // Attach to window.cw namespace (created later in the file); create temporary holder now
+  window._internal_geojsonToGpx = geojsonToGpx;
+
   function reloadFull() {
     if (!window.lastGPXFile) {
       // No mostrar mensaje cuando no hay fichero seleccionado (comportamiento silencioso)
@@ -428,8 +627,8 @@
 
         window.trackLayer.addTo(window.map);
       } catch (err) {
-        alert(window.t("error_reading_gpx", { msg: err.message }));
-        window.logDebug(window.t("error_reading_gpx", { msg: err.message }), true);
+        console.error(window.t ? window.t("error_reading_gpx", { msg: err.message }) : ('Error reading GPX: ' + err.message));
+        window.logDebug && window.logDebug(window.t ? window.t("error_reading_gpx", { msg: err.message }) : ('Error reading GPX: ' + err.message), true);
       }
     };
     reader.readAsText(window.lastGPXFile);
@@ -702,6 +901,52 @@
 
     // Call update once to inject new options
     updateProviderOptions();
+
+    // Floating quick-export-and-save GPX button (single control)
+    try {
+      if (window.SHOW_GENERATE_AND_SAVE_BUTTON && !document.getElementById('mr_save_gpx_btn')) {
+        const btn = document.createElement('button');
+        btn.id = 'mr_save_gpx_btn';
+        btn.textContent = 'Generar y Guardar GPX';
+        btn.style.position = 'fixed';
+        btn.style.right = '12px';
+        btn.style.bottom = '100px';
+        btn.style.zIndex = 99999;
+        btn.style.padding = '6px 10px';
+        btn.style.background = '#059669';
+        btn.style.color = '#fff';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '6px';
+        btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+        btn.title = 'Generar desde la ruta actual y guardar en el share-server local';
+        btn.addEventListener('click', async () => {
+          try {
+            const g = exportRouteToGpx(undefined, true);
+            if (!g) {
+              console.warn('No hay datos de ruta para generar GPX');
+              return;
+            }
+            console.log('[MeteoRide] exportRouteToGpx output length=', (g && g.length) || 0);
+            const resp = await uploadGPXToShareServer();
+            // uploadGPXToShareServer may return an object with a url or a payload; handle both
+            if (resp) {
+              const url = (typeof resp === 'string') ? resp : (resp.url || resp.sharedUrl || (resp.payload && resp.payload.url) || null);
+              if (url) {
+                console.log('GPX guardado: ' + url + ' (Enlace copiado al portapapeles si está disponible)');
+                return;
+              }
+              // If no URL, but truthy response, show generic success
+              console.log('GPX guardado');
+              return;
+            }
+            console.error('Error: no se recibió respuesta del servidor al guardar GPX');
+          } catch (e) {
+            console.error('Error subiendo GPX: ' + (e && e.message ? e.message : String(e)));
+          }
+        });
+        document.body.appendChild(btn);
+      }
+    } catch (e) { /* ignore */ }
   }
 
   // Expose globally
@@ -737,7 +982,14 @@
     bindUIEvents,
     reloadFull,
     replaceGPXMarkers,
+  uploadGPXToShareServer,
   };
+
+  // Attach export helper and geojsonToGpx to public cw API
+  try {
+    window.cw.exportRouteToGpx = exportRouteToGpx;
+    window.cw.geojsonToGpx = window._internal_geojsonToGpx;
+  } catch (e) { /* ignore */ }
 
   // Accept GPX payloads via window.postMessage from external pages (e.g., userscript/extension)
   // Message format: { action: 'loadGPX', gpx: '<gpx xml string>', name: 'route.gpx' }

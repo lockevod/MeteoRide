@@ -34,7 +34,11 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
     const path = (url.pathname || '').toLowerCase();
 
-    const shouldHandlePost = event.request.method === 'POST' && (
+    // Only handle /share POSTs when the client explicitly requests SW storage by setting
+    // the header X-SW-Store: 1. By default the service worker should not swallow page-origin
+    // uploads so they reach the backend server (Caddy -> share-server).
+    const swStore = String(event.request.headers.get('X-SW-Store') || '') === '1';
+    const shouldHandlePost = swStore && event.request.method === 'POST' && (
       path.endsWith('/share') ||
       path.endsWith('/share-gpx') ||
       path.endsWith('/share_receiver') ||
@@ -69,7 +73,9 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.method === 'POST' && event.request.url.includes('/share')) {
+  // Secondary handler: only handle when client sets X-SW-Store:1 and the URL looks like a /share target
+  const swStore2 = String(event.request.headers.get('X-SW-Store') || '') === '1';
+  if (swStore2 && event.request.method === 'POST' && event.request.url.includes('/share')) {
     event.respondWith(handleSharePost(event.request));
     return;
   }
