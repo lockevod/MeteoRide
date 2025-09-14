@@ -3,6 +3,10 @@ export async function onRequest(context) {
   try {
     const { request, env, params } = context;
     const method = request.method;
+  const url = new URL(request.url);
+  // Allow configuring auto-delete behavior via environment variable SHARED_AUTO_DELETE
+  // If SHARED_AUTO_DELETE is set to '1' or 'true' (case-insensitive), GET will schedule deletion.
+  const AUTO_DELETE_ON_GET = (typeof env.SHARED_AUTO_DELETE !== 'undefined') ? (String(env.SHARED_AUTO_DELETE).toLowerCase() === '1' || String(env.SHARED_AUTO_DELETE).toLowerCase() === 'true') : false;
   let id = params.id;
   if (!id) return new Response('Not found', { status: 404, headers: corsHeaders() });
   // Accept id.gpx style paths; strip .gpx suffix if present
@@ -36,8 +40,13 @@ export async function onRequest(context) {
     const data = await env.SHARED_GPX.get(id);
     if (!data) return new Response('Not found', { status: 404, headers: corsHeaders() });
 
-    // Delete single-use (do not block response)
-    try { context.waitUntil(env.SHARED_GPX.delete(id)); } catch (_) { /* ignore */ }
+    // Determine if this GET should delete the KV entry after serving.
+    // Priority: query param ?once=1 forces deletion for this request.
+    const forceOnce = url.searchParams.get('once') === '1';
+
+    if (AUTO_DELETE_ON_GET || forceOnce) {
+      try { context.waitUntil(env.SHARED_GPX.delete(id)); } catch(_) { /* ignore */ }
+    }
 
     return new Response(data, {
       status: 200,

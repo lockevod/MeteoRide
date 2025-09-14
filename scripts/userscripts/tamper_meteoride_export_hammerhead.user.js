@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.9
+// @version      0.9.1
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -59,11 +59,14 @@
     UPLOAD: {
       STRATEGY: 'meteoride_share_server',
       // Default to the local share-server port used in this repo (change to your public host in prod)
-      SHARE_SERVER_BASE: 'http://127.0.0.1:8081',
+      //SHARE_SERVER_BASE: 'http://127.0.0.1:8081',
       // If true, the share-server will delete the file after the first successful serve
       // by appending ?once=1 to the shared URL before sending it to Hammerhead.
       DELETE_AFTER_IMPORT: false,
-      //SHARE_SERVER_BASE: 'https://app.meteoride.cc',
+  SHARE_SERVER_BASE: 'https://app.meteoride.cc',
+  // If true, the userscript will append ?once=1 to the shared URL so the server
+  // can remove the entry after that single GET. Configure at the top of the script.
+  USE_ONCE_PARAM: false,
       CUSTOM: async (file) => { throw new Error('Uploader custom no implementado'); }
     },
     DEBUG: true,
@@ -453,6 +456,16 @@
       }
       
       MRHH.info('GPX URL para Hammerhead:', publicUrl);
+
+      // If configured, append ?once=1 so the share-server will delete after first GET
+      if(CONFIG.UPLOAD && CONFIG.UPLOAD.USE_ONCE_PARAM){
+        try{
+          const u = new URL(publicUrl);
+          u.searchParams.set('once','1');
+          publicUrl = u.href;
+          MRHH.info('Using once=1 param, publicUrl now:', publicUrl);
+        }catch(_){ publicUrl = publicUrl + (publicUrl.includes('?') ? '&' : '?') + 'once=1'; }
+      }
       
       // Optional pause: let user inspect/cancel before we call Hammerhead
       if(CONFIG.PAUSE_BEFORE_IMPORT){
