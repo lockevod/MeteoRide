@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.9.2
+// @version      0.9.3
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -610,9 +610,21 @@
       });
       let message = '';
       try { message = await res.text(); } catch(_){ }
-      MRHH.info('Hammerhead API status', res.status, 'ok=', res.ok);
-      MRHH.info('Hammerhead response (first 2000 chars):', (message||'').slice(0,2000));
-      postResult(reqId, { status: res.status, ok: res.ok, message: message.slice(0,400) });
+      // Collect response headers into an object for easier inspection
+      try{
+        const rh = {};
+        if(res && res.headers && typeof res.headers.forEach === 'function'){
+          res.headers.forEach((v,k)=>{ rh[k]=v; });
+        }
+        MRHH.info('Hammerhead API status', res.status, 'ok=', res.ok);
+        MRHH.info('Hammerhead response headers:', rh);
+        MRHH.info('Hammerhead response (first 2000 chars):', (message||'').slice(0,2000));
+        postResult(reqId, { status: res.status, ok: res.ok, message: message.slice(0,2000), headers: rh, statusText: res.statusText });
+      } catch(_){
+        MRHH.info('Hammerhead API status', res.status, 'ok=', res.ok);
+        MRHH.info('Hammerhead response (first 2000 chars):', (message||'').slice(0,2000));
+        postResult(reqId, { status: res.status, ok: res.ok, message: message.slice(0,2000), statusText: res.statusText });
+      }
       // If import succeeded and user requested delete-after-import, perform DELETE on the shared URL
       try{
         if(res.ok && CONFIG.UPLOAD && CONFIG.UPLOAD.DELETE_AFTER_IMPORT){
@@ -745,7 +757,10 @@
                 if(CONFIG.DEBUG){ try{ const tokenMasked2 = token && token.length>10 ? token.slice(0,8)+'…'+token.slice(-8) : token; const hhLog2 = Object.assign({}, hhHeaders2); hhLog2.Authorization = 'Bearer '+(tokenMasked2||'(none)'); MRHH.dbg('hhHeaders2 (debug)', hhLog2); } catch(_){ } }
               const res = await fetch(endpoint, { method:'POST', headers: hhHeaders2, body, credentials: 'same-origin', referrer: HAMMERHEAD_ORIGIN + '/routes', referrerPolicy: 'origin', mode: 'cors' });
               const text = await res.text().catch(()=> '');
-              const payload = { status: res.status, ok: res.ok, message: (text||'').slice(0,400) };
+              // include response headers and a larger message preview for debugging
+              const headersObj = {};
+              try{ if(res && res.headers && typeof res.headers.forEach === 'function'){ res.headers.forEach((v,k)=>{ headersObj[k]=v; }); } } catch(_){ }
+              const payload = { status: res.status, ok: res.ok, message: (text||'').slice(0,2000), headers: headersObj, statusText: res.statusText };
               MRHH.info('Auto import performed, will post result to opener (if present)');
               try{
                 if(window.opener && window.opener.postMessage){
