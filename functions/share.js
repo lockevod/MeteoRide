@@ -15,7 +15,8 @@ export async function onRequest(context) {
       return fetch(request);
     }
 
-    const TTL_SECONDS = 120; // back to 120s to match earlier behavior (adjust if needed)
+  // Keep shared GPX in KV for 30 minutes (1800 seconds) in production
+  const TTL_SECONDS = 1800; // 30 minutes
     const contentType = request.headers.get('content-type') || '';
     let raw;
     if (/multipart\/form-data/i.test(contentType)) {
@@ -116,9 +117,12 @@ export async function onRequest(context) {
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '600'
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
+  // Allow common custom headers used by the client/userscript
+  'Access-Control-Allow-Headers': 'Content-Type, X-File-Name, X-Follow-Redirect, X-Bypass-Service-Worker, Authorization',
+  // Expose useful response headers to the browser (Location and our X- headers)
+  'Access-Control-Expose-Headers': 'Location, X-Shared-Exists, X-Shared-Index',
+  'Access-Control-Max-Age': '600'
   };
 }

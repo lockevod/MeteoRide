@@ -579,6 +579,13 @@
         }
       } catch(_){ }
   if(CONFIG.DEBUG){ try{ const tokenMasked = token && token.length>10 ? token.slice(0,8)+'…'+token.slice(-8) : token; const hhLog = Object.assign({}, hhHeaders); hhLog.Authorization = 'Bearer '+(tokenMasked||'(none)'); MRHH.dbg('hhHeaders (debug)', hhLog); } catch(_){}}
+      // Debug: log request payload and masked headers to help troubleshooting
+      try{
+        const tokenMasked = (token && token.length>20) ? token.slice(0,8) + '…' + token.slice(-8) : token;
+        MRHH.info('Hammerhead POST', endpoint);
+        MRHH.info('Hammerhead headers (masked):', Object.assign({}, hhHeaders, { Authorization: 'Bearer '+tokenMasked }));
+        MRHH.info('Hammerhead body preview:', (body && body.slice) ? body.slice(0,400) : body);
+      } catch(_){ }
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: hhHeaders,
@@ -590,7 +597,8 @@
       });
       let message = '';
       try { message = await res.text(); } catch(_){ }
-  MRHH.info('Hammerhead API status', res.status, 'ok=', res.ok);
+      MRHH.info('Hammerhead API status', res.status, 'ok=', res.ok);
+      MRHH.info('Hammerhead response (first 2000 chars):', (message||'').slice(0,2000));
       postResult(reqId, { status: res.status, ok: res.ok, message: message.slice(0,400) });
       // If import succeeded and user requested delete-after-import, perform DELETE on the shared URL
       try{

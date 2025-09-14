@@ -20,8 +20,17 @@ export async function onRequest(context) {
       return new Response(null, { status: exists ? 200 : 404, headers: { ...corsHeaders(), 'X-Shared-Exists': exists ? '1' : '0' } });
     }
 
-    if (method !== 'GET') {
+    // Allow DELETE for post-import cleanup and HEAD/GET
+    if (method !== 'GET' && method !== 'DELETE') {
       return new Response('Method not allowed', { status: 405, headers: corsHeaders() });
+    }
+
+    if (method === 'DELETE') {
+      // Allow explicit delete for cleanup
+      try{
+        await env.SHARED_GPX.delete(id);
+        return new Response('Deleted', { status: 200, headers: { ...corsHeaders(), 'X-Shared-Exists': '0' } });
+      }catch(e){ return new Response('Delete failed', { status: 500, headers: corsHeaders() }); }
     }
 
     const data = await env.SHARED_GPX.get(id);
@@ -35,7 +44,8 @@ export async function onRequest(context) {
       headers: {
         ...corsHeaders(),
         'Content-Type': 'application/gpx+xml',
-        'Cache-Control': 'no-store'
+        'Cache-Control': 'no-store',
+        'X-Shared-Exists': '1'
       }
     });
   } catch (err) {
@@ -45,9 +55,10 @@ export async function onRequest(context) {
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Max-Age': '600'
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,HEAD,OPTIONS,DELETE',
+  'Access-Control-Allow-Headers': 'Content-Type, X-File-Name, X-Follow-Redirect, X-Bypass-Service-Worker, Authorization',
+  'Access-Control-Expose-Headers': 'Location, X-Shared-Exists, X-Shared-Index',
+  'Access-Control-Max-Age': '600'
   };
 }
