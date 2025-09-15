@@ -328,17 +328,19 @@ nav button:hover {
 
   /* Make the speed number input a bit wider on small screens so two-digit values don't get visually clipped */
   .speed-wrap input[type="number"] {
-    min-width: 50px; /* ensure two digits plus padding fit */
-    width: 56px;
-    padding: 6px 10px;
+    min-width: 46px; /* ensure two digits plus padding fit */
+    width: 50px;
+    padding: 4px 10px;
     height: 34px;
     box-sizing: border-box;
+    text-align: center; /* centra el valor numérico */
   }
   .speed-wrap .speed-presets {
-    min-width: 40px;
-    padding: 6px 10px;
+    min-width: 32px;
+    padding: 4px 10px;
     height: 34px;
     box-sizing: border-box;
+    text-align: center;
   }
 }
 #configMenu #closeConfig {
