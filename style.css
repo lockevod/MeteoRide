@@ -328,14 +328,14 @@ nav button:hover {
 
   /* Make the speed number input a bit wider on small screens so two-digit values don't get visually clipped */
   .speed-wrap input[type="number"] {
-    min-width: 60px; /* ensure two digits plus padding fit */
-    width: 64px;
+    min-width: 50px; /* ensure two digits plus padding fit */
+    width: 56px;
     padding: 6px 10px;
     height: 34px;
     box-sizing: border-box;
   }
   .speed-wrap .speed-presets {
-    min-width: 56px;
+    min-width: 40px;
     padding: 6px 10px;
     height: 34px;
     box-sizing: border-box;
