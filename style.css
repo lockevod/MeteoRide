@@ -357,19 +357,22 @@ nav button:hover {
   /* Compact provider select and center text on small screens */
   #apiSource {
     min-width: 92px;    /* slightly wider than a single digit to preserve labels */
-    width: 110px;
+    width: 100px;
     padding: 6px 8px;
+    height: 34px;
     text-align: center;
     text-align-last: center;
+    box-sizing: border-box;
   }
 
   /* Interval select is numeric (two digits) — make it narrow and centered */
   #intervalSelect {
-    min-width: 48px;
-    width: 56px;
-    padding: 6px 8px;
+    min-width: 32px;
+    padding: 4px 10px;
+    height: 34px;
     text-align: center;
     text-align-last: center;
+    box-sizing: border-box;
   }
   }
 }
