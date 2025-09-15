@@ -54,11 +54,11 @@ For more detailed information, see the [User Guide (English)](https://app.meteor
 
 ## Installation
 
-No installation required—run directly in your browser (downloaded or by web directly). If you need/want to share by IOS shortcut then you need to follow the link or install in a web server.
+No installation required—run directly in your browser (downloaded or https://app.meteoride.cc  directly). If you want to install locally in a web server you can use a common webserver (apache, caddy, etc), if you want to  use shortcuts  you will need some method to provide POST method (testing in a Caddy and Node environment, but you can use your onwn).
 
 ### Installing as a Progressive Web App (PWA)
 
-MeteoRide can be installed as a PWA for a native app-like experience.
+MeteoRide can be installed as a PWA for a native app-like experience. If you want to install as a PWA you need to have deployed webapp in a server or use https://app.meteoride.cc 
 
 #### Android
 1. Open MeteoRide in Chrome.
@@ -108,38 +108,29 @@ You can also donwload mine shortcut. I'm using it and it's working fine.
 [GPX to Meteoride Shortcut](https://www.icloud.com/shortcuts/a57e06eaadca423eafaeaee05753b79b)
 
 
-## Recommended Production setup for POST handoff (Cloudflare Pages + Worker)
+### Recommended Production setup for POST handoff (Cloudflare Pages + Worker)
 
-If you want the POST handoff to work reliably (required for iOS Shortcuts POST flows), the app's service worker and the POST endpoint must be served from the same origin. GitHub Pages cannot host a dynamic POST endpoint. The quickest production-ready option is Cloudflare Pages + KV  which lets you host the static site and run a small Worker at the same origin.
+If you want the POST handoff to work reliably (required for iOS Shortcuts POST flows), the app's service worker and the POST endpoint must be served from the same origin. GitHub Pages cannot host a dynamic POST endpoint. The quickest production-ready option is Cloudflare Pages + KV  which lets you host the static site and run a small Worker at the same origin (but you can use vercel  or similar also or any webserver supporting POST and commmond headers.)
 
-You've needed files in functions and _routes.js
+If you use cloudflare you've exemples in this repo (files in functions,_routes.js an .headers)
 
-## Technologies
-
-- **Maps**: OpenStreetMap
-- **Weather Data**: Open-Meteo, MeteoBlue, OpenWeather
-- **Icons**: Weather Icons by Erik Flowers
-- **Libraries**: Leaflet.js, SunCalc, GPX parser
-- **Hosting**: Cloudfare Pages (only if you use web)
 
 ## Tampermonkey userscripts
 
 This project includes two optional Tampermonkey userscripts. Install them in your browser if you want one-click integrations with third-party sites.
 
 1) Komoot / Bikemap → MeteoRide
+Adds a small MeteoRide icon button on Komoot and Bikemap pages when a route GPX is available; clicking the button sends the GPX to MeteoRide.
 - Path: `scripts/userscripts/tamper_meteoride.user.js`
 - Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`
-- What it does: adds a small MeteoRide icon button on Komoot and Bikemap pages when a route GPX is available; clicking the button sends the GPX to MeteoRide.
+- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js)  
 
-	Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js)  
-	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`
 
 2) MeteoRide → Hammerhead (URL import)
+Adds an export button in the MeteoRide UI that uploads the generated GPX to Hammerhead Dashboard.
 - Path: `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
 - Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
-- What it does: adds an export button in the MeteoRide UI that uploads the generated GPX (raw `application/gpx+xml`) to a configured share-server and requests Hammerhead to import the shared URL via `POST /v1/users/{userId}/routes/import/url` from the Hammerhead dashboard tab.
-
-	Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js)  
+- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js)  
 	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
 
 Installation (Tampermonkey)
@@ -158,50 +149,25 @@ Notes and limitations
 
 Security
 - The Komoot/Bikemap userscript posts the GPX to MeteoRide using `window.postMessage`; MeteoRide validates the message origin. No GPX is uploaded to external servers by that script itself.
-- The Hammerhead exporter uploads GPX to your configured share-server; treat shared links as public unless your server enforces access controls. The Hammerhead token discovery happens inside the Hammerhead tab and the token is not exfiltrated from that page.
-
-## Tampermonkey userscript: export from MeteoRide to Hammerhead (GPX URL import)
-
-If you want a one-click workflow from MeteoRide to Hammerhead (dashboard.hammerhead.io) there is a userscript included at `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js` that implements the following flow:
-
-What it does
-- Adds a small export button in the MeteoRide UI when a route is available.
-- Generates the GPX via the page API (no page reload) and uploads the raw GPX text to your configured share-server using Content-Type: `application/gpx+xml`.
-- Optionally appends `?once=1` to the public URL so a compatible share-server can delete the file after the first GET.
-- Requests Hammerhead to import the shared GPX URL using the fixed Hammerhead API `POST /v1/users/{userId}/routes/import/url` from the Hammerhead dashboard tab. The userscript detects the Hammerhead userId/token automatically when a Hammerhead tab is open.
-
-Installation (Tampermonkey)
-1. Install Tampermonkey (or a compatible userscript manager) in your browser.
-2. Open the file `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js` in this repository or use the raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`.
-3. Create a new userscript in Tampermonkey and paste the contents, or use the `Install` button if you host the raw file.
-4. Ensure the userscript is enabled and allowed to run on `https://app.meteoride.cc/*` and `https://dashboard.hammerhead.io/*`.
-
-Notes and limitations
-- The userscript uploads the GPX to the configured share-server. The share-server must support returning a stable `/shared/<id>.gpx` URL or a JSON response containing the shared URL. See `CONFIG.UPLOAD.SHARE_SERVER_BASE` in the script.
-- For automatic imports the Hammerhead dashboard tab should be open in the same browser profile. If the tab is not logged in when the import request arrives, the script will open/focus a Hammerhead tab and poll for a login for up to `AUTH_WAIT_MS` (default 120000 ms). During this time a visible in-page notice will appear in the Hammerhead tab.
-- The script attempts to find a JWT token and userId in Hammerhead's localStorage/sessionStorage; this is done locally in the Hammerhead tab and the token never leaves that tab.
-- If your share-server supports `?once=1` behaviour (delete after first GET), enable `CONFIG.UPLOAD.USE_ONCE_PARAM` in the userscript to append it automatically.
-
-Security & privacy
-- GPX files uploaded to the share-server are publicly accessible at the returned URL until deleted or TTL expires — treat shared GPX links as public unless your server implements access controls.
-- The script does not transmit your Hammerhead token off the Hammerhead tab — the import request is executed from the Hammerhead dashboard context.
-
-Configuration (quick)
-- `CONFIG.UPLOAD.SHARE_SERVER_BASE`: URL of your share-server (required for the upload/resolve flow).
-- `CONFIG.UPLOAD.USE_ONCE_PARAM`: append `?once=1` for single-use links.
-- `CONFIG.UPLOAD.DELETE_AFTER_IMPORT`: attempt DELETE on shared resource after import.
-- `CONFIG.HH_WINDOW_NAME`: window name used to reuse the same Hammerhead tab.
-- `CONFIG.AUTH_WAIT_MS`: how long the Hammerhead tab will poll for login when import is triggered before login (default 120000 ms).
-
-Usage
-- Click the HH export button in MeteoRide when a route is loaded. The script will upload the GPX and request an import in Hammerhead. You will get a friendly success/failure message when the process completes.
-
-If you need help or have issues, file an issue at https://github.com/lockevod/meteoride/issues describing your share-server and browser environment.
+- The Hammerhead exporter uploads GPX to your configured share-server; treat shared links as public unless your server enforces access controls. The Hammerhead token discovery happens inside the Hammerhead tab and the token is not exfiltrated from that page. Web https://app.meteoride.cc delectes all gpx every 2 minutes and tampermonkey is configured to delete gpx once is donwloades/send to hammerhead.
 
 
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Bikemap, Komoot, OpenWeatherMaps, Openmeteo, Meteoblue and Hammerhead are registerer marks. They can have specific propietary licenses, please if you use this code or the published webapp you have to comply with them. If you don't want you cannot use this code or the app.
+
+This code and the webapp are designed with "zero trust" security in mind but it isn't a commercial code or service, the code and web app is provide as is, any liability or warranty is given with this code and webapp. You accept this if you donwload this repo, use the code or use the webapp. 
+
+
+## Technologies
+
+- **Maps**: OpenStreetMap
+- **Weather Data**: Open-Meteo, MeteoBlue, OpenWeather
+- **Icons**: Weather Icons by Erik Flowers
+- **Libraries**: Leaflet.js, SunCalc, GPX parser
+- **Hosting**: Cloudfare Pages (only if you use web)
+- **Sripts**: Tampermonkey
 
 ## Contributing
 
