@@ -1,0 +1,7 @@
+/shared/*.gpx
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, HEAD, OPTIONS, DELETE
+  Access-Control-Allow-Headers: Content-Type, X-File-Name, X-Follow-Redirect, X-Bypass-Service-Worker, Authorization
+  Access-Control-Expose-Headers: Location, X-Shared-Exists, X-Shared-Index
+  Cache-Control: public, max-age=120
+  Content-Type: application/gpx+xml

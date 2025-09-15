@@ -15,8 +15,10 @@ export async function onRequest(context) {
       return fetch(request);
     }
 
-  // Keep shared GPX in KV for 30 minutes (1800 seconds) in production
-  const TTL_SECONDS = 1800; // 30 minutes
+  // Keep shared GPX in KV for a configurable period (env.SHARED_TTL_SECONDS) default 2 minutes
+  const ttlEnv = env.SHARED_TTL_SECONDS || env.SHARED_TTL || ''; 
+  const parsed = parseInt(String(ttlEnv || '' ).trim(), 10);
+  const TTL_SECONDS = (Number.isFinite(parsed) && parsed > 0) ? parsed : 120; // default 120s
     const contentType = request.headers.get('content-type') || '';
     let raw;
     if (/multipart\/form-data/i.test(contentType)) {

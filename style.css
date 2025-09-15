@@ -48,8 +48,9 @@ header nav button {
   background: var(--input-bg, #f3f4f6);
   border: 1px solid var(--input-border, #cbd5e1);
   border-radius: 6px;
-  padding: 6px 8px;
-  height: 36px;
+  /* increase horizontal padding by 1px each side to add ~2px to width */
+  padding: 6px 9px;
+  height: 36px; /* original height */
   box-sizing: border-box;
   color: inherit;
   font: inherit;

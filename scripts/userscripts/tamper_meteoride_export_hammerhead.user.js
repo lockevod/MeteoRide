@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.9.3
+// @version      0.9.4
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -12,7 +12,6 @@
 // @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
 // @icon         https://app.meteoride.cc/icon-192.png
 // @match        https://app.meteoride.cc/*
-// @match        http://localhost:8080/*
 // @match        https://dashboard.hammerhead.io/*
 // @grant        none
 // @run-at       document-end
@@ -114,6 +113,12 @@
     return out;
   }
 
+  // Escape XML special chars for safe insertion into GPX
+  function escapeXml(s){
+    if(s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  }
+
   // -------------------------------------------------------------
   // Environment Detection (MeteoRide vs Hammerhead)
   // -------------------------------------------------------------
@@ -139,6 +144,39 @@
     if(file instanceof File || file instanceof Blob){
       gpxText = await file.text();
       if(file.name) filename = file.name;
+      // Ensure GPX contains a <name> element with the route name if available in the UI
+      try{
+        const rnEl = document.getElementById('rutaName');
+        const routeName = rnEl && rnEl.textContent ? rnEl.textContent.trim() : '';
+        if(routeName && /<gpx[\s\S]*?>/i.test(gpxText)){
+          // Insert/update both <metadata><name> and the first <trk><name> when possible.
+          // 1) metadata.name: replace if exists, else insert metadata block with name.
+          if(/<metadata[\s\S]*?<name[\s\S]*?>[\s\S]*?<\/name>/i.test(gpxText)){
+            gpxText = gpxText.replace(/(<metadata[\s\S]*?<name[\s\S]*?>)[\s\S]*?(<\/name>)/i, `$1${escapeXml(routeName)}$2`);
+          } else if(/<metadata[\s\S]*?>/i.test(gpxText)){
+            gpxText = gpxText.replace(/(<metadata[\s\S]*?>)/i, `$1\n  <name>${escapeXml(routeName)}<\/name>`);
+          } else if(/<gpx[\s\S]*?>/i.test(gpxText)){
+            // insert minimal metadata block after opening <gpx>
+            gpxText = gpxText.replace(/(<gpx[\s\S]*?>)/i, `$1\n  <metadata>\n    <name>${escapeXml(routeName)}<\/name>\n  <\/metadata>`);
+          }
+
+          // 2) trk.name: replace the first occurrence if present, else insert inside first <trk> element
+          if(/<trk[\s\S]*?<name[\s\S]*?>[\s\S]*?<\/name>/i.test(gpxText)){
+            gpxText = gpxText.replace(/(<trk[\s\S]*?<name[\s\S]*?>)[\s\S]*?(<\/name>)/i, `$1${escapeXml(routeName)}$2`);
+          } else if(/<trk[\s\S]*?>/i.test(gpxText)){
+            // insert <name> immediately after opening <trk>
+            gpxText = gpxText.replace(/(<trk[\s\S]*?>)/i, `$1\n    <name>${escapeXml(routeName)}<\/name>`);
+          }
+
+          // 3) rte.name: if GPX uses routes (<rte>), prefer to set the route name there as well
+          if(/<rte[\s\S]*?<name[\s\S]*?>[\s\S]*?<\/name>/i.test(gpxText)){
+            gpxText = gpxText.replace(/(<rte[\s\S]*?<name[\s\S]*?>)[\s\S]*?(<\/name>)/i, `$1${escapeXml(routeName)}$2`);
+          } else if(/<rte[\s\S]*?>/i.test(gpxText)){
+            // insert <name> immediately after opening <rte>
+            gpxText = gpxText.replace(/(<rte[\s\S]*?>)/i, `$1\n    <name>${escapeXml(routeName)}<\/name>`);
+          }
+        }
+      }catch(_){ /* ignore injection errors */ }
     } else if(file && file._text){
       gpxText = file._text;
       if(file.name) filename = file.name;
