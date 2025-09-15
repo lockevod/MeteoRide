@@ -375,7 +375,7 @@
         <ul>
             <li><strong>Coordenadas geográficas</strong> de los puntos de tu ruta</li>
             <li><strong>Fechas y horas</strong> para las que necesitas la previsión</li>
-            <li><strong>Tu API Key</strong> (si usas MeteoBlue u OpenWeather)</li>
+            <li><strong>Tu API Key</strong> (si usas MeteoBlue u OpenWeather) estarán en el local storage de tu equipo. Esto significa que podrían ser accesibles, hipotéticamente por un tercero. El riesgo con este tipo de claves es bajo, pero se recomienda el uso de una clave free a estos proveedores con datos que no supongan un problema en caso de leak. O no usarlos y usar los proveedores (openmeteo-Arome) que no tienen necesidad de API.</li>
         </ul>
         
         <div class="tip">
@@ -404,20 +404,18 @@
             <li>✅ Puedes modificar el código fuente</li>
             <li>✅ Puedes distribuir tu propia versión</li>
             <li>✅ Para uso personal y comercial</li>
+            <li>✅ Tienes que informar sobre el autor y la licencia MIT</li>
         </ul>
-        
-        <div class="tip">
+ 
+       <p>Bikemap, Komoot, OpenWeatherMaps, Openmeteo, Meteoblue y Hammerhead son marcas registradas. Pueden tener licencias propietarias específicas, por favor, si usas este código o la aplicación web publicada debes cumplir con ellas. Si no quieres, no puedes usar este código ni la aplicación.</p>
+
+        <p>Este código y la aplicación web están diseñados con la seguridad de tipo "zero trust" en mente, pero no son un código ni un servicio comercial. El código y la aplicación web se proporcionan tal cual, sin ninguna garantía ni responsabilidad. Aceptas esto si descargas este repositorio, usas el código o usas la aplicación web.</p>
+
+        <p>La información actualizada sobre esta aplicación está siempre en <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. Aceptas toda la información actualizada, responsabilidades y restricciones en la página de GitHub enlazada si usas esta aplicación.</p>
+
+   <div class="tip">
             <strong>📋 Código Fuente:</strong> El código completo está disponible en <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. ¡Las contribuciones son bienvenidas!
         </div>
-
-        <h3>🙏 Tecnologías y Servicios</h3>
-        <ul>
-            <li><strong>Mapas:</strong> OpenStreetMap y colaboradores</li>
-            <li><strong>Datos Meteorológicos:</strong> Open-Meteo, MeteoBlue, OpenWeather</li>
-            <li><strong>Iconos del Tiempo:</strong> Weather Icons por Erik Flowers</li>
-            <li><strong>Librerías:</strong> Leaflet.js, SunCalc, GPX parser</li>
-            <li><strong>Hosting:</strong> GitHub Pages (opcional)</li>
-        </ul>
 
         <h3>⚖️ Exención de Responsabilidad</h3>
         <p>MeteoRide es una herramienta de planificación. Los datos meteorológicos son estimaciones y pueden no ser completamente precisos. Siempre usa tu criterio y verifica las condiciones antes de salir. El desarrollador no se hace responsable de decisiones basadas en esta información.</p>

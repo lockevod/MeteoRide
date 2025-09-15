@@ -160,6 +160,40 @@ Bikemap, Komoot, OpenWeatherMaps, Openmeteo, Meteoblue and Hammerhead are regist
 This code and the webapp are designed with "zero trust" security in mind but it isn't a commercial code or service, the code and web app is provide as is, any liability or warranty is given with this code and webapp. You accept this if you donwload this repo, use the code or use the webapp. 
 
 
+## Privacy and Data
+
+### Protecting your Privacy
+
+**MeteoRide webapp (https://app.meteoride.cc) runs completely on your device.** All settings, preferences and data are stored only in your browser's localStorage. Only when using shortcuts to share a GPX will the file be uploaded to Cloudflare (or your configured share-server). This is necessary for some iOS Shortcuts workflows that require a POST handoff. If you open the file directly from MeteoRide it will not be uploaded since it is processed locally. In any case, uploaded GPX files are deleted automatically after a short period (the default implementation removes them within a maximum of two minutes).
+
+Key points:
+
+- **No account required:** You don't need to create an account or provide personal data to use MeteoRide.
+- **Full control:** You can delete all stored data via your browser settings (localStorage).
+- **Open source:** The full source code is available on GitHub so you can verify how data is handled.
+
+### Data Shared with Weather Providers
+
+To obtain forecasts, MeteoRide only shares:
+
+- **Geographic coordinates** of the points in your route
+- **Dates and times** for which you request forecasts
+- **Your API Key** (only if you configure one for providers such as MeteoBlue or OpenWeather)
+
+Note about API keys: API keys are stored in your browser localStorage. While the risk from storing a free API key locally is low, be mindful that they could be accessed by other scripts running in your browser if your environment is compromised. If you prefer, avoid supplying provider API keys and rely on providers that do not require keys (for example Open‑Meteo / AromeHD where available).
+
+> **Note:** Weather providers (Open‑Meteo, MeteoBlue, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting forecast data from those services.
+
+### What is stored locally
+
+- Units and language settings
+- API keys (stored in your browser localStorage)
+- Speed and interval preferences
+- Temporary weather data cache (approximately 30 minutes per step/hour)
+
+If you need stricter privacy guarantees, consider running MeteoRide completely offline (open `index.html` locally without using share/upload features) or deploy the share-server under your control and configure appropriate access policies.
+
+
 ## Technologies
 
 - **Maps**: OpenStreetMap

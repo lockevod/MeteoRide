@@ -43,7 +43,7 @@
       distance_units_label: "Distancia:",
       route_datetime_label: "Fecha:",
       cycling_speed_label: "Velocidad:",
-      interval_label: "Intervalo:",
+      interval_label: "Inter.:",
       loading_text: "Cargando...",
       // NEW
       horizon_exceeded: "Fecha fuera de horizonte ({days} días). Algunos pasos no tendrán datos.",
@@ -108,7 +108,7 @@
       units_label: "Units/i18n",
       route_datetime_label: "Time:",
       cycling_speed_label: "Speed:",
-      interval_label: "Interval:",
+      interval_label: "Inter.:",
       loading_text: "Loading...",
       // NEW
       horizon_exceeded: "Date beyond forecast horizon ({days} days). Some steps will have no data.",

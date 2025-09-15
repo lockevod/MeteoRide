@@ -353,6 +353,7 @@ nav button:hover {
     height: 34px;
     box-sizing: border-box;
     text-align: center;
+  }
 
   /* Compact provider select and center text on small screens */
   #apiSource {
@@ -374,7 +375,7 @@ nav button:hover {
     text-align-last: center;
     box-sizing: border-box;
   }
-  }
+  
 }
 #configMenu #closeConfig {
   position: absolute;
