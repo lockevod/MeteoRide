@@ -325,6 +325,21 @@ nav button:hover {
   #configMenu .config-row button { height:30px; padding:4px 10px; font-size:12px; }
   /* Headings slightly denser */
   #configMenu h4 { margin:6px 0 4px; font-size:13px; }
+
+  /* Make the speed number input a bit wider on small screens so two-digit values don't get visually clipped */
+  .speed-wrap input[type="number"] {
+    min-width: 60px; /* ensure two digits plus padding fit */
+    width: 64px;
+    padding: 6px 10px;
+    height: 34px;
+    box-sizing: border-box;
+  }
+  .speed-wrap .speed-presets {
+    min-width: 56px;
+    padding: 6px 10px;
+    height: 34px;
+    box-sizing: border-box;
+  }
 }
 #configMenu #closeConfig {
   position: absolute;
