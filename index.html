@@ -1,9 +1,38 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MeteoRide</title>
+<!-- SEO -->
+<meta name="description" content="MeteoRide — plan routes with detailed weather forecasts along your route. Supports GPX/KML, multiple providers and forecast comparisons." />
+<link rel="canonical" href="https://app.meteoride.cc/" />
+<meta name="robots" content="index, follow" />
+<!-- Open Graph / Social -->
+<meta property="og:site_name" content="MeteoRide" />
+<meta property="og:title" content="MeteoRide — Plan routes with detailed weather forecast" />
+<meta property="og:description" content="Plan routes with detailed weather forecasts at each point of the route. Supports GPX/KML and multiple weather providers." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://app.meteoride.cc/" />
+<meta property="og:image" content="https://app.meteoride.cc/icons/icon-192.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="MeteoRide — Plan routes with detailed weather forecast" />
+<meta name="twitter:description" content="Plan b routes with detailed weather forecasts at each point of the route. Supports GPX/KML and multiple weather providers." />
+<meta name="twitter:image" content="https://app.meteoride.cc/icons/icon-192.png" />
+
+<!-- Structured data (WebSite) -->
+<script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "MeteoRide",
+  "url": "https://app.meteoride.cc/",
+  "description": "Plan bike routes with detailed weather forecasts along your route.",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://app.meteoride.cc/?gpx_url={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}</script>
 <!-- Legacy/favicon.ico fallback (cache-busted) -->
 <link rel="icon" href="/favicon.ico?v=2" />
 <link rel="shortcut icon" href="/favicon.ico?v=2" />
