@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.19
+// @version      0.20
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -10,7 +10,6 @@
 // @supportURL   https://github.com/lockevod/meteoride/issues
 // @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
 // @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
-// @installURL   https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
 // @icon         https://app.meteoride.cc/icons/icon-192.png
 // @run-at       document-end
 // @include      https://www.komoot.*/*
@@ -115,7 +114,7 @@
     labelSpan.textContent = '';
     try {
         const img = new Image();
-        img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icon-32.png';
+        img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icons/icon-32.png';
         img.alt = label;
         img.style.width = '26px';
         img.style.height = '26px';
