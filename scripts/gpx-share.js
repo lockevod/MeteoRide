@@ -4,7 +4,7 @@
   async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     try {
-      await navigator.serviceWorker.register('/service-worker.js');
+      await navigator.serviceWorker.register('/scripts/service-worker.js');
     } catch (err) {
       console.warn('[cw] sw register failed', err);
     }

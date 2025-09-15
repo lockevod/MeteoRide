@@ -22,14 +22,14 @@
 <meta name="apple-mobile-web-app-title" content="MeteoRide" />
 <meta name="theme-color" content="#1e40af" />
 <!-- Provide an apple-touch-icon so iOS uses a PNG for Add to Home Screen -->
-<link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png" />
 
 <!-- Styles moved to style.css to keep HTML clean -->
 </head>
 <body>
 <header>
 <!-- traducible: título de la app -->
-<h1 id="appTitle" data-i18n="title"><img src="/icon.svg" alt="MeteoRide" class="app-logo" />MeteoRide</h1>
+<h1 id="appTitle" data-i18n="title"><img src="icons/icon.svg" alt="MeteoRide" class="app-logo" />MeteoRide</h1>
 <nav>
 <button id="toggleConfig" title="Configuración">
   <span class="config-text" data-i18n="toggle_config">Configuración</span>
@@ -205,14 +205,14 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
-<script src="utils.js"></script>
+<script src="scripts/utils.js"></script>
 <!-- togeojson: convert KML to GeoJSON in-browser when available -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
-<script src="ui.js"></script>
-<script src="app.js"></script>
-<script src="gpx-share.js"></script>
-<script src="compare.js"></script>
-<script src="ui_weather.js"></script>
-<script src="console_debug.js"></script>
+<script src="scripts/ui.js"></script>
+<script src="scripts/app.js"></script>
+<script src="scripts/gpx-share.js"></script>
+<script src="scripts/compare.js"></script>
+<script src="scripts/ui_weather.js"></script>
+<script src="scripts/console_debug.js"></script>
 </body>
 </html>

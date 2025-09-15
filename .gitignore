@@ -3,27 +3,18 @@ __pycache__
 meteoride.code-workspace
 Caddyfile
 .gitignore
-.gitignore
-server.py
-dev-start.sh
-package.json
-package-lock.json
-.gitignore
 node_modules
 logs
 .gitignore.swp
 Caddyfile.local
 .gitignore
-example.gpx
-teialada.gpx
-run-test.sh
-downloaded.gpx
-shared_storage/.DS_Store
-SHORTCUT_EXPORT.md
-SHORTCUT_IMPORT_NOTES.md
-.gitignore
-share-server.js
-scripts/.DS_Store
 shared_storage/*
-scripts/userscripts/tamper_meteoride_export_hammerhead.user copia.js
-scripts/userscripts/tamper_meteoride_export_hammerhead.user copia 2.js
+scripts/.DS_Store
+shared_storage
+tools/.DS_Store
+.gitignore
+package.json
+.gitignore
+package-lock.json
+share-server.js
+tools/userscripts/.DS_Store

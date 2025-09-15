@@ -1,24 +1,24 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (GPX Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.10
+// @version      0.11
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
 // @homepageURL  https://app.meteoride.cc/
 // @source       https://github.com/lockevod/meteoride
 // @supportURL   https://github.com/lockevod/meteoride/issues
-// @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
-// @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
-// @installURL   https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
-// @icon         https://app.meteoride.cc/icon-192.png
+// @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js
+// @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js
+// @installURL   https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js
+// @icon         https://app.meteoride.cc/icons/icon-192.png
 // @match        https://app.meteoride.cc/*
 // @match        https://dashboard.hammerhead.io/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
 
-// Install (one-click - raw): https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
+// Install (one-click - raw): https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js
 
 /*
  MODO ÚNICO SOPORTADO

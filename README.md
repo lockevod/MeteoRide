@@ -122,16 +122,16 @@ This project includes two optional Tampermonkey userscripts. Install them in you
 1) Komoot / Bikemap → MeteoRide
 Adds a small MeteoRide icon button on Komoot and Bikemap pages when a route GPX is available; clicking the button sends the GPX to MeteoRide.
 - Path: `scripts/userscripts/tamper_meteoride.user.js`
-- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`
-- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js)  
+- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js`
+- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js)  
 
 
 2) MeteoRide → Hammerhead (URL import)
 Adds an export button in the MeteoRide UI that uploads the generated GPX to Hammerhead Dashboard.
 - Path: `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
-- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
-- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js)  
-	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
+- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
+- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js)  
+	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
 
 Installation (Tampermonkey)
 1. Install Tampermonkey (or a compatible userscript manager) in your browser (Chrome, Firefox, Edge, etc.).

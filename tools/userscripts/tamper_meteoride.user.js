@@ -1,16 +1,17 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.18
+// @version      0.19
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
 // @homepageURL  https://app.meteoride.cc/
 // @source       https://github.com/lockevod/meteoride
 // @supportURL   https://github.com/lockevod/meteoride/issues
-// @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js
-// @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js
-// @icon         https://app.meteoride.cc/icon-192.png
+// @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
+// @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
+// @installURL   https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
+// @icon         https://app.meteoride.cc/icons/icon-192.png
 // @run-at       document-end
 // @include      https://www.komoot.*/*
 // @include      https://komoot.*/*
@@ -24,6 +25,8 @@
 // @connect      komoot.de
 // @connect      bikemap.net
 // ==/UserScript==
+
+// Install (one-click - raw): https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
 
 (function() {
     'use strict';
