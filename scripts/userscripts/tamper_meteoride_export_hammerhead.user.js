@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (URL Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.9.4
+// @version      0.9.6
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -55,6 +55,15 @@
     INJECT_BUTTON_SELECTOR: '#top-buttons, body',
   // Poll interval (ms) used to wait for a route to appear/disappear. Default 10000
     POLL_INTERVAL_MS: 10000,
+  // How long to wait (ms) before attempting to open/focus a Hammerhead tab (shorter = faster UX)
+  HH_OPEN_DELAY_MS: 300,
+  // Name for the Hammerhead window so window.open reuses/focuses the same tab instead of creating new ones
+  HH_WINDOW_NAME: 'meteoride_hh_import',
+  // When a Hammerhead tab receives an import request but the user is not logged in,
+  // the script will poll for auth for up to this time before giving up.
+  AUTH_WAIT_MS: 60000,
+  // Poll interval (ms) while waiting for auth in Hammerhead tab
+  AUTH_POLL_INTERVAL_MS: 1000,
     UPLOAD: {
       STRATEGY: 'meteoride_share_server',
       // Default to the local share-server port used in this repo (change to your public host in prod)
@@ -569,19 +578,29 @@
       const firstPhase = Math.max(2000, Math.floor(totalTimeout/3));
       const secondPhase = totalTimeout - firstPhase;
 
-      // Phase 1: wait a short while for an existing HH tab
+      // Phase 1: wait a short while for an existing HH tab to answer
       const t1 = setTimeout(()=>{
         if(finished) return;
-  MRHH.info('No response from existing Hammerhead tabs; attempting to open a Hammerhead tab to complete the import');
+        MRHH.info('No response from existing Hammerhead tabs; attempting to open/focus a Hammerhead tab to complete the import');
         try{
           // user gesture already present (click) so window.open should be allowed
-          // Open Hammerhead with query params so the userscript there can auto-run the import
+          // Use a fixed window name so subsequent opens reuse/focus the same tab instead of creating new ones
           const params = new URLSearchParams({ mr_hh_import: publicUrl, mr_reqId: reqId });
           const url = HAMMERHEAD_ORIGIN + '/?' + params.toString();
-          const win = window.open(url, '_blank');
-          if(win) MRHH.info('Opened Hammerhead tab (or focused existing)'); else MRHH.info('Could not open Hammerhead tab automatically');
-  } catch(e){ MRHH.dbg('window.open failed', e); }
-        // Re-broadcast to newly opened tab(s)
+          // Use configured window name and a minimal delay before open to speed up UX
+          const win = window.open(url, CONFIG.HH_WINDOW_NAME || '_blank');
+          if(win) {
+            MRHH.info('Opened or focused Hammerhead window (name=', CONFIG.HH_WINDOW_NAME || '(default)', ')');
+            try{
+              // If we obtained a window reference, postMessage directly to that window (works cross-origin)
+              if(typeof win.postMessage === 'function'){
+                win.postMessage({ channel, type:'hh-import-request', reqId, publicUrl }, HAMMERHEAD_ORIGIN);
+                MRHH.info('Posted import request directly to opened Hammerhead window via win.postMessage');
+              }
+            }catch(e){ MRHH.dbg('win.postMessage failed', e); }
+          } else MRHH.info('Could not open Hammerhead tab automatically');
+        } catch(e){ MRHH.dbg('window.open failed', e); }
+        // If we couldn't post directly to the opened window, fall back to broadcasting on this origin
         try{ window.postMessage({ channel, type:'hh-import-request', reqId, publicUrl }, '*'); } catch(_){ }
         // Phase 2: final wait
         const t2 = setTimeout(()=>{
@@ -589,7 +608,7 @@
           cleanup();
           reject(new Error('Timeout waiting Hammerhead tab'));
         }, secondPhase);
-      }, firstPhase);
+      }, Math.max(100, CONFIG.HH_OPEN_DELAY_MS || 300));
 
     });
   }
@@ -749,6 +768,13 @@
   function init(){
     if(isMeteoRide()) injectButton();
     if(isHammerhead()){
+      // Ensure the Hammerhead tab has a stable window.name so window.open can reuse/focus it
+      try{
+        if(CONFIG.HH_WINDOW_NAME && !window.name){
+          MRHH.info('Setting window.name to', CONFIG.HH_WINDOW_NAME, 'so opener can reuse this tab');
+          window.name = CONFIG.HH_WINDOW_NAME;
+        }
+      }catch(e){ MRHH.dbg('set window.name failed', e); }
       window.addEventListener('message', handleHammerheadImportRequest, false);
       // Automatic import via query param (fallback when opened by the MeteoRide script)
       try{
@@ -764,18 +790,24 @@
               const { token, userId } = await discoverAuth();
               try{ const claims = decodeJwt(token); MRHH.dbg('auto-import: token claims', sanitizeClaims(claims)); } catch(_){}
               try{ const masked = (token && token.length>10) ? (token.slice(0,8)+'…'+token.slice(-8)) : token; MRHH.dbg('auto-import: tokenMasked', masked); } catch(_){}
+              // If no token/userId found, poll for up to AUTH_WAIT_MS so the user can log in interactively
               if(!token || !userId){
-                const payload = { status:'error', message:'token/userId not found in hammerhead tab' };
-                MRHH.info('Auto import: token/userId not found, will notify opener if possible');
-                try{
-                  if(window.opener && window.opener.postMessage){
-                    window.opener.postMessage({ channel: CONFIG.POSTMESSAGE_NAMESPACE, type:'hh-import-result', reqId: autoReq, payload }, '*');
-                    MRHH.info('Notified opener about missing auth (postMessage *).');
-                  } else {
-                    MRHH.info('No opener present to notify.');
-                  }
-                } catch(errPost){ MRHH.dbg('postMessage to opener failed', errPost); }
-                return;
+                MRHH.info('Auto import: token/userId not found, will poll for user login for up to', CONFIG.AUTH_WAIT_MS, 'ms');
+                const deadline = Date.now() + (CONFIG.AUTH_WAIT_MS || 60000);
+                let polledToken = token, polledUserId = userId;
+                while(Date.now() < deadline){
+                  await new Promise(r=>setTimeout(r, CONFIG.AUTH_POLL_INTERVAL_MS || 1000));
+                  const found = await discoverAuth();
+                  if(found && found.token && found.userId){ polledToken = found.token; polledUserId = found.userId; break; }
+                }
+                if(!polledToken || !polledUserId){
+                  const payload = { status:'error', message:'token/userId not found in hammerhead tab after wait' };
+                  MRHH.info('Auto import: auth not present after wait, will notify opener if possible');
+                  try{ if(window.opener && window.opener.postMessage){ window.opener.postMessage({ channel: CONFIG.POSTMESSAGE_NAMESPACE, type:'hh-import-result', reqId: autoReq, payload }, '*'); MRHH.info('Notified opener about missing auth (postMessage *).'); } else { MRHH.info('No opener present to notify.'); } } catch(errPost){ MRHH.dbg('postMessage to opener failed', errPost); }
+                  return;
+                }
+                // use polled values
+                token = polledToken; userId = polledUserId;
               }
               const endpoint = `${HAMMERHEAD_ORIGIN}/v1/users/${encodeURIComponent(userId)}/routes/import/url`;
               const body = JSON.stringify({ url: autoUrl });
