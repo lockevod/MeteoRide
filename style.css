@@ -1442,7 +1442,7 @@ input[type="number"] {
 .speed-wrap input[type="number"],
 .speed-presets {
   height: 22px;
-  padding: 2px 8px;
+  padding: 3px 8px;
   line-height: normal;
 }
 .speed-presets {
@@ -1470,7 +1470,7 @@ input[type="number"] {
 #controlsPanel .params select {
   box-sizing: border-box;
   height: 22px;        /* keep 22px overall */
-  padding: 2px 8px;    /* compact padding */
+  padding: 3px 8px;    /* compact padding */
   font-size: 12px;     /* smaller text to fit */
   line-height: 1.2;
 }
@@ -1482,7 +1482,7 @@ input[type="number"] {
   #speedPresets,
   #cyclingSpeed {
     /* add ~2px to left and right padding (total +4px width) */
-    padding: 2px 10px;
+    padding: 3px 10px;
     /* ensure box-sizing keeps width predictable */
     box-sizing: border-box;
   }
