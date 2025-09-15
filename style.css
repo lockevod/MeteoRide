@@ -107,6 +107,18 @@ header nav button {
   box-sizing: content-box;
 }
 
+/* Align provider and interval selects centered and keep widths compact */
+#apiSource, #intervalSelect {
+  text-align: center;           /* center text in most browsers */
+  text-align-last: center;      /* ensure last line centered in Firefox/IE */
+  -moz-text-align-last: center; /* Firefox legacy */
+  min-width: 64px;
+  max-width: 220px;
+  width: auto;                  /* allow natural sizing but respect min/max */
+  box-sizing: border-box;
+}
+
+
 
 html, body {
   height: 100%;
@@ -341,6 +353,24 @@ nav button:hover {
     height: 34px;
     box-sizing: border-box;
     text-align: center;
+
+  /* Compact provider select and center text on small screens */
+  #apiSource {
+    min-width: 92px;    /* slightly wider than a single digit to preserve labels */
+    width: 110px;
+    padding: 6px 8px;
+    text-align: center;
+    text-align-last: center;
+  }
+
+  /* Interval select is numeric (two digits) — make it narrow and centered */
+  #intervalSelect {
+    min-width: 48px;
+    width: 56px;
+    padding: 6px 8px;
+    text-align: center;
+    text-align-last: center;
+  }
   }
 }
 #configMenu #closeConfig {
