@@ -1475,6 +1475,19 @@ input[type="number"] {
   line-height: 1.2;
 }
 
+/* Increase horizontal space for speed controls on very narrow phones so numbers don't get clipped */
+@media screen and (max-width: 420px) {
+  .speed-wrap input[type="number"],
+  .speed-presets,
+  #speedPresets,
+  #cyclingSpeed {
+    /* add ~2px to left and right padding (total +4px width) */
+    padding: 2px 10px;
+    /* ensure box-sizing keeps width predictable */
+    box-sizing: border-box;
+  }
+}
+
 /* Make interval selector match the presets look-and-feel */
 #intervalSelect {
   font-weight: 600;

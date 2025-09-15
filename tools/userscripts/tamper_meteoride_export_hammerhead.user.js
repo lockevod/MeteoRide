@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide ➜ Hammerhead Export (GPX Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.12
+// @version      0.13
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -71,13 +71,12 @@
       STRATEGY: 'meteoride_share_server',
       // Default to the local share-server port used in this repo (change to your public host in prod)
       //SHARE_SERVER_BASE: 'http://127.0.0.1:8081',
-      // If true, the share-server will delete the file after the first successful serve
-      // by appending ?once=1 to the shared URL before sending it to Hammerhead.
-      DELETE_AFTER_IMPORT: true,
       SHARE_SERVER_BASE: 'https://app.meteoride.cc',
       // If true, the userscript will append ?once=1 to the shared URL so the server
-      // can remove the entry after that single GET. Configure at the top of the script.
-      USE_ONCE_PARAM: false,
+      // can remove the entry after that single GET. When this is enabled the script
+      // will NOT perform an explicit DELETE after Hammerhead import. If false, the
+      // script will attempt to DELETE the shared resource after a successful import.
+      USE_ONCE_PARAM: true,
       CUSTOM: async (file) => { throw new Error('Uploader custom no implementado'); }
     },
     DEBUG: false,
@@ -716,19 +715,22 @@
         MRHH.info('Hammerhead response (first 2000 chars):', (message||'').slice(0,2000));
         postResult(reqId, { status: res.status, ok: res.ok, message: message.slice(0,2000), statusText: res.statusText });
       }
-      // If import succeeded and user requested delete-after-import, perform DELETE on the shared URL
+      // Post-import cleanup: perform DELETE only when CONFIG.UPLOAD.USE_ONCE_PARAM is true.
+      // When USE_ONCE_PARAM is false, explicit client-side DELETE is skipped.
       try{
-        if(res.ok && CONFIG.UPLOAD && CONFIG.UPLOAD.DELETE_AFTER_IMPORT){
+        if(CONFIG.UPLOAD && CONFIG.UPLOAD.USE_ONCE_PARAM){
           try{
             const su = new URL(publicUrl);
             // send DELETE to /shared/<filename>
             const parts = su.pathname.split('/');
             const filename = decodeURIComponent(parts[parts.length-1] || '');
             const delUrl = su.origin + '/shared/' + encodeURIComponent(filename);
-            MRHH.info('Requesting share-server to DELETE after import:', delUrl);
+            MRHH.info('Requesting share-server to DELETE after import (USE_ONCE_PARAM=true):', delUrl);
             await fetch(delUrl, { method:'DELETE', mode:'cors', credentials:'omit' });
             MRHH.info('Delete request sent');
           }catch(_){ MRHH.err('Delete after import failed', _); }
+        } else {
+          MRHH.info('Skipping explicit DELETE after import because USE_ONCE_PARAM is false');
         }
       }catch(_){ MRHH.err('Post-import cleanup error', _); }
     } catch(e){
