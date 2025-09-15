@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         MeteoRide ➜ Hammerhead Export (URL Import)
+// @name         MeteoRide ➜ Hammerhead Export (GPX Import)
 // @namespace    https://app.meteoride.cc/
-// @version      0.9.6
+// @version      0.10
 // @description  Export current GPX desde MeteoRide a Hammerhead usando siempre /v1/users/{userId}/routes/import/url (userId detectado automáticamente).
 // @author       lockevod
 // @license       MIT
@@ -10,12 +10,15 @@
 // @supportURL   https://github.com/lockevod/meteoride/issues
 // @downloadURL  https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
 // @updateURL    https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
+// @installURL   https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
 // @icon         https://app.meteoride.cc/icon-192.png
 // @match        https://app.meteoride.cc/*
 // @match        https://dashboard.hammerhead.io/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
+
+// Install (one-click - raw): https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js
 
 /*
  MODO ÚNICO SOPORTADO
@@ -61,7 +64,8 @@
   HH_WINDOW_NAME: 'meteoride_hh_import',
   // When a Hammerhead tab receives an import request but the user is not logged in,
   // the script will poll for auth for up to this time before giving up.
-  AUTH_WAIT_MS: 60000,
+  // Increased default to 2 minutes to give users more time to complete interactive login.
+  AUTH_WAIT_MS: 120000,
   // Poll interval (ms) while waiting for auth in Hammerhead tab
   AUTH_POLL_INTERVAL_MS: 1000,
     UPLOAD: {
@@ -70,17 +74,21 @@
       //SHARE_SERVER_BASE: 'http://127.0.0.1:8081',
       // If true, the share-server will delete the file after the first successful serve
       // by appending ?once=1 to the shared URL before sending it to Hammerhead.
-      DELETE_AFTER_IMPORT: false,
-  SHARE_SERVER_BASE: 'https://app.meteoride.cc',
-  // If true, the userscript will append ?once=1 to the shared URL so the server
-  // can remove the entry after that single GET. Configure at the top of the script.
-  USE_ONCE_PARAM: false,
+      DELETE_AFTER_IMPORT: true,
+      SHARE_SERVER_BASE: 'https://app.meteoride.cc',
+      // If true, the userscript will append ?once=1 to the shared URL so the server
+      // can remove the entry after that single GET. Configure at the top of the script.
+      USE_ONCE_PARAM: false,
       CUSTOM: async (file) => { throw new Error('Uploader custom no implementado'); }
     },
-    DEBUG: true,
+    DEBUG: false,
     POSTMESSAGE_NAMESPACE: 'mr:hh',
     EXPORT_TIMEOUT_MS: 30000
   ,PAUSE_BEFORE_IMPORT: true
+  // New: explicit toggle + message for the pre-import confirmation shown to the user.
+  // Set to false to skip the "wait/confirm" dialog before requesting Hammerhead import.
+  ,PRE_IMPORT_PROMPT_ENABLED: false
+  ,PRE_IMPORT_PROMPT_MESSAGE: 'GPX generated locally. Press OK to continue and request Hammerhead import, or Cancel to stop.'
   };
 
   const HAMMERHEAD_ORIGIN = 'https://dashboard.hammerhead.io';
@@ -91,6 +99,23 @@
     info: (...a)=>{ console.info('[MR→HH]', ...a); },
     dbg: (...a)=>{ console.debug('[MR→HH]', ...a); }
   };
+
+  // Small in-page notice helpers shown in Hammerhead tab while polling for login
+  function createNoticeEl(){
+    try{
+      const id = 'mrhh-notice';
+      let el = document.getElementById(id);
+      if(el) return el;
+      el = document.createElement('div');
+      el.id = id;
+      Object.assign(el.style, { position:'fixed', right:'12px', top:'12px', zIndex: 2147483647, background:'#111', color:'#fff', padding:'8px 12px', borderRadius:'6px', fontSize:'13px', opacity:'0.95', boxShadow:'0 2px 8px rgba(0,0,0,0.3)' });
+      document.body.appendChild(el);
+      return el;
+    }catch(e){ return null; }
+  }
+  function showNotice(msg){ try{ const el = createNoticeEl(); if(el) el.textContent = msg; }catch(_){} }
+  function updateNotice(msg){ try{ const el = document.getElementById('mrhh-notice'); if(el) el.textContent = msg; }catch(_){} }
+  function removeNotice(){ try{ const el = document.getElementById('mrhh-notice'); if(el) el.remove(); }catch(_){} }
 
   // Compare origins but treat 127.0.0.1 and localhost (and ::1) as equivalent for local testing
   function sameOriginLoose(aUrl, bUrl){
@@ -515,9 +540,9 @@
       }
       
       // Optional pause: let user inspect/cancel before we call Hammerhead
-      if(CONFIG.PAUSE_BEFORE_IMPORT){
+      if(CONFIG.PAUSE_BEFORE_IMPORT && CONFIG.PRE_IMPORT_PROMPT_ENABLED){
         try{
-          const ok = confirm('GPX generado localmente. URL para Hammerhead: "' + publicUrl + '"\n\nPress OK to continue and request Hammerhead import, or Cancel to stop.');
+          const ok = confirm(CONFIG.PRE_IMPORT_PROMPT_MESSAGE + '\n\nURL: ' + publicUrl);
           if(!ok){ 
             MRHH.info('User cancelled before Hammerhead import'); 
             alert('Export cancelled by user');
@@ -529,7 +554,17 @@
       MRHH.log('Requesting Hammerhead import for URL');
       const outcome = await requestImportInHammerhead(publicUrl);
       MRHH.info('Hammerhead import result', outcome);
-      alert('Import Hammerhead: '+outcome.status+' '+(outcome.message||''));
+      // User-friendly messages: show success/failure in plain English.
+      try{
+        if(outcome && outcome.ok){
+          alert('Hammerhead import succeeded. The route should appear in your Hammerhead dashboard shortly.');
+        } else {
+          const reason = outcome && outcome.message ? (String(outcome.message).slice(0,300)) : (outcome && outcome.statusText ? outcome.statusText : 'Unknown error');
+          alert('Hammerhead import failed: ' + reason);
+        }
+      } catch(e){
+        alert('Hammerhead import completed. Check the console for details.');
+      }
       
     } catch(e){
       alert('Error export HH: '+e.message);
@@ -783,11 +818,10 @@
         const autoReq = qs.get('mr_reqId') || ('exp_'+Date.now());
         if(autoUrl){
           MRHH.info('Auto import param found in HH tab, attempting import for', autoUrl);
-          (async ()=>{
-            try{
+            (async ()=>{ try{
               // Wait a short moment for page scripts / storage to settle
               await new Promise(r=>setTimeout(r, 3000));
-              const { token, userId } = await discoverAuth();
+              let { token, userId } = await discoverAuth();
               try{ const claims = decodeJwt(token); MRHH.dbg('auto-import: token claims', sanitizeClaims(claims)); } catch(_){}
               try{ const masked = (token && token.length>10) ? (token.slice(0,8)+'…'+token.slice(-8)) : token; MRHH.dbg('auto-import: tokenMasked', masked); } catch(_){}
               // If no token/userId found, poll for up to AUTH_WAIT_MS so the user can log in interactively

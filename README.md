@@ -122,27 +122,81 @@ You've needed files in functions and _routes.js
 - **Libraries**: Leaflet.js, SunCalc, GPX parser
 - **Hosting**: Cloudfare Pages (only if you use web)
 
-## Tampermonkey userscript: direct export from Komoot and Bikemap
+## Tampermonkey userscripts
 
-If you use Komoot or Bikemap and want a one-click way to open routes in MeteoRide, there is a userscript included in the repository at `scripts/userscripts/tamper_meteoride.user.js`.
+This project includes two optional Tampermonkey userscripts. Install them in your browser if you want one-click integrations with third-party sites.
+
+1) Komoot / Bikemap → MeteoRide
+- Path: `scripts/userscripts/tamper_meteoride.user.js`
+- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`
+- What it does: adds a small MeteoRide icon button on Komoot and Bikemap pages when a route GPX is available; clicking the button sends the GPX to MeteoRide.
+
+	Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js)  
+	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`
+
+2) MeteoRide → Hammerhead (URL import)
+- Path: `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
+- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
+- What it does: adds an export button in the MeteoRide UI that uploads the generated GPX (raw `application/gpx+xml`) to a configured share-server and requests Hammerhead to import the shared URL via `POST /v1/users/{userId}/routes/import/url` from the Hammerhead dashboard tab.
+
+	Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js)  
+	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
+
+Installation (Tampermonkey)
+1. Install Tampermonkey (or a compatible userscript manager) in your browser (Chrome, Firefox, Edge, etc.).
+2. Open the raw URL for the script you want (see above) and use the Tampermonkey `Install` button, or create a new userscript and paste the file contents from the repository.
+3. Make sure the userscript is enabled and allowed to run on the relevant domains:
+	- `tamper_meteoride.user.js`: enable for Komoot/Bikemap domains.
+	- `tamper_meteoride_export_hammerhead.user.js`: enable for `https://app.meteoride.cc/*` and `https://dashboard.hammerhead.io/*`.
+4. Configure any required options in the script header or in the `CONFIG` object near the top of the file (for example, share-server base URL for the Hammerhead exporter).
+
+Notes and limitations
+- Komoot: GPX export is only available for routes if you have a Komoot **Premium** subscription. The userscript can only fetch GPX when the site exposes the GPX file for your current route (direct download or API endpoint).
+- Bikemap: some routes may require login or private access; the userscript cannot fetch GPX in those cases.
+- Hammerhead exporter: requires a share-server that returns a `/shared/<id>.gpx` URL or JSON with the shared URL. The Hammerhead tab should be open in the same browser profile for automatic token discovery; if it is not logged in the script will poll for interactive login (configurable `AUTH_WAIT_MS`).
+- Both scripts avoid heavy DOM parsing and prefer direct GPX links / APIs to stay lightweight and reliable.
+
+Security
+- The Komoot/Bikemap userscript posts the GPX to MeteoRide using `window.postMessage`; MeteoRide validates the message origin. No GPX is uploaded to external servers by that script itself.
+- The Hammerhead exporter uploads GPX to your configured share-server; treat shared links as public unless your server enforces access controls. The Hammerhead token discovery happens inside the Hammerhead tab and the token is not exfiltrated from that page.
+
+## Tampermonkey userscript: export from MeteoRide to Hammerhead (GPX URL import)
+
+If you want a one-click workflow from MeteoRide to Hammerhead (dashboard.hammerhead.io) there is a userscript included at `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js` that implements the following flow:
 
 What it does
-- Adds a small MeteoRide icon button on Komoot and Bikemap pages when a route GPX is available.
-- When clicked, it downloads the GPX (using the site's API or a direct .gpx link) and opens MeteoRide in a new tab, sending the GPX and imports in Meteoride automatically.
+- Adds a small export button in the MeteoRide UI when a route is available.
+- Generates the GPX via the page API (no page reload) and uploads the raw GPX text to your configured share-server using Content-Type: `application/gpx+xml`.
+- Optionally appends `?once=1` to the public URL so a compatible share-server can delete the file after the first GET.
+- Requests Hammerhead to import the shared GPX URL using the fixed Hammerhead API `POST /v1/users/{userId}/routes/import/url` from the Hammerhead dashboard tab. The userscript detects the Hammerhead userId/token automatically when a Hammerhead tab is open.
 
 Installation (Tampermonkey)
 1. Install Tampermonkey (or a compatible userscript manager) in your browser.
-2. Open the file `scripts/userscripts/tamper_meteoride.user.js` in this repository or use the raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride.user.js`.
+2. Open the file `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js` in this repository or use the raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`.
 3. Create a new userscript in Tampermonkey and paste the contents, or use the `Install` button if you host the raw file.
-4. Ensure the userscript is enabled and allowed to run on Komoot and Bikemap domains.
+4. Ensure the userscript is enabled and allowed to run on `https://app.meteoride.cc/*` and `https://dashboard.hammerhead.io/*`.
 
 Notes and limitations
-- Komoot: GPX export is only available for routes if you have a Komoot <strong>Premium</strong> subscription. The userscript can only fetch GPX when the site exposes the GPX file for your current route (direct download or API endpoint). If Komoot doesn't provide a GPX for that route, the button will not appear.
-- Bikemap: some routes may require login or private access; in those cases the userscript cannot fetch the GPX.
-- The userscript deliberately avoids heavy fallback parsing and only attempts direct GPX API endpoints and DOM .gpx links to keep the script lightweight and reliable.
+- The userscript uploads the GPX to the configured share-server. The share-server must support returning a stable `/shared/<id>.gpx` URL or a JSON response containing the shared URL. See `CONFIG.UPLOAD.SHARE_SERVER_BASE` in the script.
+- For automatic imports the Hammerhead dashboard tab should be open in the same browser profile. If the tab is not logged in when the import request arrives, the script will open/focus a Hammerhead tab and poll for a login for up to `AUTH_WAIT_MS` (default 120000 ms). During this time a visible in-page notice will appear in the Hammerhead tab.
+- The script attempts to find a JWT token and userId in Hammerhead's localStorage/sessionStorage; this is done locally in the Hammerhead tab and the token never leaves that tab.
+- If your share-server supports `?once=1` behaviour (delete after first GET), enable `CONFIG.UPLOAD.USE_ONCE_PARAM` in the userscript to append it automatically.
 
-Security
-- The userscript posts the GPX to MeteoRide using window.postMessage. MeteoRide validates the message origin and acknowledges receipt. No GPX is uploaded to external servers by the userscript itself.
+Security & privacy
+- GPX files uploaded to the share-server are publicly accessible at the returned URL until deleted or TTL expires — treat shared GPX links as public unless your server implements access controls.
+- The script does not transmit your Hammerhead token off the Hammerhead tab — the import request is executed from the Hammerhead dashboard context.
+
+Configuration (quick)
+- `CONFIG.UPLOAD.SHARE_SERVER_BASE`: URL of your share-server (required for the upload/resolve flow).
+- `CONFIG.UPLOAD.USE_ONCE_PARAM`: append `?once=1` for single-use links.
+- `CONFIG.UPLOAD.DELETE_AFTER_IMPORT`: attempt DELETE on shared resource after import.
+- `CONFIG.HH_WINDOW_NAME`: window name used to reuse the same Hammerhead tab.
+- `CONFIG.AUTH_WAIT_MS`: how long the Hammerhead tab will poll for login when import is triggered before login (default 120000 ms).
+
+Usage
+- Click the HH export button in MeteoRide when a route is loaded. The script will upload the GPX and request an import in Hammerhead. You will get a friendly success/failure message when the process completes.
+
+If you need help or have issues, file an issue at https://github.com/lockevod/meteoride/issues describing your share-server and browser environment.
 
 
 ## License
