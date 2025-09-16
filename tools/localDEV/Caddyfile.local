@@ -1,0 +1,34 @@
+# Caddyfile local snippet for MeteoRide development
+:8080
+root * /Users/sergi/DEVEL/meteoride
+encode gzip
+
+# Access log -> file and stdout
+log {
+	output file ./logs/caddy_access.log
+}
+log {
+	output stdout
+	level INFO
+}
+
+# Add common CORS headers for static files
+header * {
+	Access-Control-Allow-Origin *
+	Access-Control-Allow-Methods "GET, POST, OPTIONS"
+	Access-Control-Allow-Headers "Content-Type"
+}
+
+handle {
+	@share path /share /share/*
+	reverse_proxy @share localhost:8081
+}
+
+handle {
+	@shared path /shared/*
+	reverse_proxy @shared localhost:8081
+}
+
+handle {
+	file_server
+}

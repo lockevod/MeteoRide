@@ -1,47 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<title>MeteoRide – Route Weather over your GPX (MTB, Cycling & Walking)</title>
+<meta name="description" content="Upload your route and see rain, wind and temperature along your route. Fast, clear, mobile-friendly. Works for MTB, cycling and walking.  Multiple providers and forecast comparisons">
+<link rel="canonical" href="https://app.meteoride.cc/">
+<meta name="robots" content="index, follow" />
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MeteoRide</title>
-<!-- SEO -->
-<meta name="description" content="MeteoRide — plan routes with detailed weather forecasts along your route. Supports GPX/KML, multiple providers and forecast comparisons." />
-<link rel="canonical" href="https://app.meteoride.cc/" />
-<meta name="robots" content="index, follow" />
-<!-- Open Graph / Social -->
-<meta property="og:site_name" content="MeteoRide" />
-<meta property="og:title" content="MeteoRide — Plan routes with detailed weather forecast" />
-<meta property="og:description" content="Plan routes with detailed weather forecasts at each point of the route. Supports GPX/KML and multiple weather providers." />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://app.meteoride.cc/" />
-<meta property="og:image" content="https://app.meteoride.cc/icons/icon-192.png" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="MeteoRide — Plan routes with detailed weather forecast" />
-<meta name="twitter:description" content="Plan b routes with detailed weather forecasts at each point of the route. Supports GPX/KML and multiple weather providers." />
-<meta name="twitter:image" content="https://app.meteoride.cc/icons/icon-192.png" />
 
+<!-- Idiomas principales (en <head> de la home) -->
+<link rel="alternate" hreflang="en" href="https://app.meteoride.cc/en/route-weather">
+<link rel="alternate" hreflang="es" href="https://app.meteoride.cc/es/tiempo-en-tu-ruta">
+
+<!-- Open Graph / Twitter -->
+<meta property="og:title" content="MeteoRide — Weather along your MTB, cycling & walking routes">
+<meta property="og:description" content="Upload your GPX and see rain, wind and temperature along the track. Supports multiple weather providers.">
+<meta property="og:image" content="https://app.meteoride.cc/assets/preview.png">
+<meta property="og:url" content="https://app.meteoride.cc/">
+<meta name="twitter:card" content="summary_large_image">
+
+
+
+<meta property="og:site_name" content="MeteoRide" />
+<meta name="twitter:description" content="Upload your GPX and see rain, wind and temperature along the track. Supports multiple weather providers. Fast, clear and mobile-friendly.">
 <!-- Structured data (WebSite) -->
-<script type="application/ld+json">{
+<script type="application/ld+json">
+{
   "@context": "https://schema.org",
   "@type": "WebSite",
   "name": "MeteoRide",
   "url": "https://app.meteoride.cc/",
-  "description": "Plan bike routes with detailed weather forecasts along your route.",
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "https://app.meteoride.cc/?gpx_url={search_term_string}",
-    "query-input": "required name=search_term_string"
-  }
-}</script>
+  "description": "Route weather over your track for MTB, cycling and walking: rain, wind and temperature by segment.",
+}
+</script>
+
+<!-- Structured data (WebApplication) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "MeteoRide",
+  "url": "https://app.meteoride.cc/",
+  "applicationCategory": "SportsApplication",
+  "operatingSystem": "Web",
+  "description": "Route weather over your track for MTB, cycling and walking: rain, wind and temperature by segment."
+}
+</script>
+
 <!-- Legacy/favicon.ico fallback (cache-busted) -->
-<link rel="icon" href="/favicon.ico?v=2" />
-<link rel="shortcut icon" href="/favicon.ico?v=2" />
-<link rel="stylesheet" href="style.css" />
+<link rel="icon" href="/favicon.ico" />
+<link rel="shortcut icon" href="/favicon.ico" />
+<link rel="stylesheet" href="/style.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons-wind.min.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.css" />
-<link rel="manifest" href="manifest.json" />
+<link rel="manifest" href="/manifest.json" />
 
 <!-- iOS PWA meta -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -51,14 +65,25 @@
 <meta name="apple-mobile-web-app-title" content="MeteoRide" />
 <meta name="theme-color" content="#1e40af" />
 <!-- Provide an apple-touch-icon so iOS uses a PNG for Add to Home Screen -->
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png" />
 
-<!-- Styles moved to style.css to keep HTML clean -->
+  <meta name="twitter:title" content="MeteoRide — Weather along your MTB, cycling & walking routes">
+  <meta name="twitter:image" content="https://app.meteoride.cc/assets/preview.png">
+  <meta property="og:type" content="website">
 </head>
 <body>
+  <h1 class="sr-only">Route weather over your GPX for MTB, cycling & walking</h1>
 <header>
 <!-- traducible: título de la app -->
-<h1 id="appTitle" data-i18n="title"><img src="icons/icon.svg" alt="MeteoRide" class="app-logo" />MeteoRide</h1>
+<h1 id="appTitle" data-i18n="title">
+  <picture>
+    <!-- prefer a real SVG if present; browsers will skip this source if file is missing or not a true SVG -->
+    <source srcset="/icons/icon.svg" type="image/svg+xml">
+    <!-- fallback PNGs: 512 used on high-res, 180 as default, 120 as small fallback -->
+    <img src="/icons/icon-180.png" srcset="/icons/icon-512.png 512w, /icons/icon-180.png 180w, /icons/icon-120.png 120w" sizes="48px" alt="MeteoRide" class="app-logo" />
+  </picture>
+  MeteoRide
+</h1>
 <nav>
 <button id="toggleConfig" title="Configuración">
   <span class="config-text" data-i18n="toggle_config">Configuración</span>
@@ -227,21 +252,21 @@
 </div>
 
 <!-- NEW: live viewport badge -->
-<div id="vpBadge" aria-hidden="true"></div>
+<div id="vpBadge" aria-hidden="true"></div> 
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/2.1.2/gpx.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
-<script src="scripts/utils.js"></script>
+<script src="/scripts/utils.js"></script>
 <!-- togeojson: convert KML to GeoJSON in-browser when available -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
-<script src="scripts/ui.js"></script>
-<script src="scripts/app.js"></script>
-<script src="scripts/gpx-share.js"></script>
-<script src="scripts/compare.js"></script>
-<script src="scripts/ui_weather.js"></script>
-<script src="scripts/console_debug.js"></script>
+<script src="/scripts/ui.js"></script>
+<script src="/scripts/app.js"></script>
+<script src="/scripts/gpx-share.js"></script>
+<script src="/scripts/compare.js"></script>
+<script src="/scripts/ui_weather.js"></script>
+<script src="/scripts/console_debug.js"></script>
 </body>
 </html>

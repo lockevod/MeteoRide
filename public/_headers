@@ -5,3 +5,12 @@
   Access-Control-Expose-Headers: Location, X-Shared-Exists, X-Shared-Index
   Cache-Control: no-store
   Content-Type: application/gpx+xml
+  
+/en/route-weather/*
+  Cache-Control: public, max-age=3600
+
+/es/tiempo-en-tu-ruta/*
+  Cache-Control: public, max-age=3600
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

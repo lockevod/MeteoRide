@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://app.meteoride.cc/sitemap.xml
+
+# Disallow internal or sensitive directories that should not be indexed
+Disallow: /logs/
+Disallow: /shared_storage/
+Disallow: /functions/
