@@ -129,9 +129,10 @@ header nav button {
   margin-right: 10px;
   display: inline-block;
   object-fit: contain;
-  background: rgba(255,255,255,0.9); /* subtle white backing to reduce color clash */
-  padding: 4px; /* small padding so rounded bg doesn't clip the icon */
-  border-radius: 6px;
+  /* Show PNG transparency directly: remove background and padding that created a visible light band over the blue header. */
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
   box-sizing: border-box;
 }
 
