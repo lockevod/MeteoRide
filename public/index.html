@@ -72,17 +72,18 @@
   <meta property="og:type" content="website">
 </head>
 <body>
-  <h1 class="sr-only">Route weather over your GPX for MTB, cycling & walking</h1>
 <header>
 <!-- traducible: título de la app -->
-<h1 id="appTitle" data-i18n="title">
+<h1 id="appTitle" data-i18n="app_name">
   <picture>
     <!-- prefer a real SVG if present; browsers will skip this source if file is missing or not a true SVG -->
     <source srcset="/icons/icon.svg" type="image/svg+xml">
     <!-- fallback PNGs: 512 used on high-res, 180 as default, 120 as small fallback -->
     <img src="/icons/icon-180.png" srcset="/icons/icon-512.png 512w, /icons/icon-180.png 180w, /icons/icon-120.png 120w" sizes="48px" alt="MeteoRide" class="app-logo" />
   </picture>
-  MeteoRide
+  
+  <span class="subtitle" data-i18n="subtitle">Route weather</span>
+  <span class="sr-only" data-i18n="subtitle_long"> – Weather forecast along GPX routes for MTB, cycling and walking</span>
 </h1>
 <nav>
 <button id="toggleConfig" title="Configuración">

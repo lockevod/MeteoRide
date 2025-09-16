@@ -28,6 +28,32 @@ header nav button {
   line-height: 1;
 }
 
+/* Subtítulo visible solo en pantallas grandes */
+.subtitle {
+  font-size: 0.6em;
+  color: #ddd; /* más discreto */
+  margin-left: 0.3em;
+}
+
+@media (max-width: 700px) {
+  .subtitle {
+    display: none; /* ocultar en móviles */
+  }
+}
+
+/* Texto largo solo para /accesibilidad */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Desktop: hide the redundant inline gear icon for the config button so only the text remains.
    Keep the span available in DOM for small-screen styling, but hide it on larger viewports. */
 @media screen and (min-width: 701px) {

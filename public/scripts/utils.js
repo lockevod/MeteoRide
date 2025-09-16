@@ -6,6 +6,9 @@
     es: {
       config_saved: "Configuración guardada",
       config_loaded: "Configuración cargada",
+      app_name: "MeteoRide",
+      subtitle: "Tiempo de ruta",
+      subtitle_long: " – Previsión meteorológica a lo largo de rutas GPX para MTB, ciclismo y senderismo",
       enter_meteoblue_key: "Introduzca API key MeteoBlue",
       missing_meteoblue_key: "Error: falta API Key MeteoBlue",
       error_http_step: "Error API paso {step}: HTTP {status}",
@@ -27,7 +30,7 @@
       toggle_help: "Ayuda ❓",
       close: "Cerrar",
       //title: "🚴‍♂️ MeteoRide",
-      title: "MeteoRide",
+      title: "MeteoRide. Tiempo sobre tu ruta para MTB, ciclismo y senderismo",
       settings_title: "Ajustes",
       api_provider_changed: "Proveedor API cambiado a {prov}",
       // nuevas claves para labels/placeholders
@@ -72,6 +75,9 @@
     en: {
       config_saved: "Settings saved",
       config_loaded: "Settings loaded",
+      app_name: "MeteoRide",
+      subtitle: "Route weather",
+      subtitle_long: " – Weather forecast along GPX routes for MTB, cycling and walking",
       enter_meteoblue_key: "Enter MeteoBlue API key",
       missing_meteoblue_key: "Error: missing MeteoBlue API key",
       error_http_step: "API error step {step}: HTTP {status}",
@@ -92,7 +98,7 @@
       toggle_debug: "🐞",
       toggle_help: "Help ❓",
       close: "Close",
-      title: "MeteoRide",
+      title: "MeteoRide. Weather over your route for MTB, cycling & walking",
       settings_title: "Settings",
       api_provider_changed: "API provider changed to {prov}",
       // new keys
