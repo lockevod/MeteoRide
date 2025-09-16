@@ -184,7 +184,7 @@ html, body {
 
 /* Header */
 header {
-  background: #1e40af;
+  background: #0B6297; /* matched to icon background */
   color: white;
   padding: 0.5rem 1rem;
   display: flex;
