@@ -111,6 +111,30 @@
     if (typeof document !== "undefined") document.title = t("title");
   }
 
+  // Localize header and keep logic with UI-related code
+  function localizeHeader() {
+    try {
+      const h = document.getElementById('appTitle');
+      const img = h && h.querySelector('.app-logo');
+      if (window.t && h) {
+        const nameEl = h.querySelector('.app-name');
+        const subEl = h.querySelector('.subtitle');
+        const subLong = h.querySelector('.sr-only');
+        if (nameEl) nameEl.textContent = window.t('app_name');
+        if (subEl) subEl.textContent = window.t('subtitle');
+        if (subLong) subLong.textContent = window.t('subtitle_long');
+        if (!nameEl && !subEl) {
+          for (const n of Array.from(h.childNodes)) {
+            if (n.nodeType === Node.TEXT_NODE) n.remove();
+          }
+          const txt = document.createTextNode(window.t('app_name') + (window.t('subtitle') ? ' ' + window.t('subtitle') : ''));
+          h.appendChild(txt);
+        }
+      }
+      if (img && window.t) img.alt = window.t('title');
+    } catch (e) { console.warn('[ui] header localize failed', e); }
+  }
+
   // Provider options update
   function updateProviderOptions() {
     try {
@@ -957,6 +981,7 @@
   window.toggleConfig = toggleConfig;
   window.toggleDebug = toggleDebug;
   window.applyTranslations = applyTranslations;
+  window.localizeHeader = localizeHeader;
   window.updateProviderOptions = updateProviderOptions;
   window.setKeyStatus = setKeyStatus;
   window.testMeteoBlueKey = testMeteoBlueKey;

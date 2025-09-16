@@ -29,8 +29,9 @@
       toggle_debug: "🐞",
       toggle_help: "Ayuda ❓",
       close: "Cerrar",
-      //title: "🚴‍♂️ MeteoRide",
-      title: "MeteoRide. Tiempo sobre tu ruta para MTB, ciclismo y senderismo",
+  //title: "🚴‍♂️ MeteoRide",
+  // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
+  title: "MeteoRide — Previsión para tu salida",
       settings_title: "Ajustes",
       api_provider_changed: "Proveedor API cambiado a {prov}",
       // nuevas claves para labels/placeholders
@@ -98,7 +99,8 @@
       toggle_debug: "🐞",
       toggle_help: "Help ❓",
       close: "Close",
-      title: "MeteoRide. Weather over your route for MTB, cycling & walking",
+  // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
+  title: "MeteoRide — Forecast for your ride",
       settings_title: "Settings",
       api_provider_changed: "API provider changed to {prov}",
       // new keys

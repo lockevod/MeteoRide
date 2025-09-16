@@ -13,6 +13,9 @@ window.lastGPXFile = null;
 window.lastAppliedSpeed = null;
 window.apiSource = null; // Initialize as null, will be set later
 
+// Initialize GPX sharing helper (if available)
+try { if (typeof window.initGpxShare === 'function') window.initGpxShare(); } catch (e) { console.warn('[app] initGpxShare failed', e); }
+
 // removed cacheTTL; now in utils.js
 
 const weatherIconsMap = {

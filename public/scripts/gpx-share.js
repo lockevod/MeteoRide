@@ -248,32 +248,19 @@
     } catch (e) { console.warn('shared_id load failed', e); }
   }
 
-  // Localize header title and ensure logo adapts to header height
-  function localizeHeader() {
-    try {
-      const h = document.getElementById('appTitle');
-      const img = h && h.querySelector('.app-logo');
-      if (window.t && h) {
-        for (const n of Array.from(h.childNodes)) {
-          if (n.nodeType === Node.TEXT_NODE) n.remove();
-        }
-        const txt = document.createTextNode(window.t('title'));
-        h.appendChild(txt);
-      }
-      if (img && window.t) img.alt = window.t('title');
-    } catch (e){ console.warn('[cw] header localize failed', e); }
-  }
+  // NOTE: localizeHeader moved to ui.js; gpx-share.js will call the global function if present.
 
   // Expose some helpers globally (non-enumerable)
   window.cwInjectGPXFromText = cwInjectGPXFromText;
   window.readSharedGPXFromIDB = readSharedGPXFromIDB;
   window.openIndexedDB = openIndexedDB;
 
-  // Boot sequence
-  (async function boot(){
+  // Boot/initialization logic is exposed so the main app can control when to start
+  async function initGpxShare() {
     await registerServiceWorker();
     sessionStorageHandoff();
-    localizeHeader();
+    // prefer UI module's header localize if available
+    try { if (typeof window.localizeHeader === 'function') window.localizeHeader(); } catch(_) {}
     // Try to read any GPX the SW might have stored
     try {
       const payload = await readSharedGPXFromIDB();
@@ -300,6 +287,9 @@
 
     // handle shared_id server copies
     loadSharedIdIfPresent();
-  })();
+  }
+
+  // Expose initializer so the app can control boot timing
+  window.initGpxShare = initGpxShare;
 
 })();
