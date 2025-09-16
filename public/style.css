@@ -120,9 +120,11 @@ header nav button {
 
 /* App logo used inside the page header (do not use as favicon) */
 .app-logo {
-  width: auto;
-  height: 1.05em; /* match roughly the h1 line-height/font-size while remaining slightly smaller */
-  max-height: 48px; /* cap to avoid oversized images on very large headings */
+  /* Fixed visual size to make srcset selection deterministic */
+  width: 48px;
+  height: 48px;
+  max-width: 48px;
+  max-height: 48px;
   vertical-align: middle;
   margin-right: 10px;
   display: inline-block;
@@ -130,7 +132,7 @@ header nav button {
   background: rgba(255,255,255,0.9); /* subtle white backing to reduce color clash */
   padding: 4px; /* small padding so rounded bg doesn't clip the icon */
   border-radius: 6px;
-  box-sizing: content-box;
+  box-sizing: border-box;
 }
 
 /* Align provider and interval selects centered and keep widths compact */
