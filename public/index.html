@@ -75,12 +75,9 @@
 <header>
 <!-- traducible: título de la app -->
 <h1 id="appTitle">
-  <picture>
-    <!-- prefer a real SVG if present; browsers will skip this source if file is missing or not a true SVG -->
-    <source srcset="/icons/icon2.svg" type="image/svg+xml">
-    <!-- fallback PNGs: 512 used on high-res, 180 as default, 120 as small fallback -->
-    <img src="/icons/icon-180.png" srcset="/icons/icon-512.png 512w, /icons/icon-180.png 180w, /icons/icon-120.png 120w" sizes="48px" alt="MeteoRide" class="app-logo" />
-  </picture>
+  <!-- Use only PNG icons here. Removed SVG source to avoid any SVG being requested. -->
+  <!-- PNG fallbacks: 512 for high-res, 180 default, 120 small fallback -->
+  <img src="/icons/icon-180.png" srcset="/icons/icon-512.png 512w, /icons/icon-180.png 180w, /icons/icon-120.png 120w" sizes="48px" alt="MeteoRide" class="app-logo" />
   
   <span class="app-name" data-i18n="app_name">MeteoRide</span>
   <span class="subtitle" data-i18n="subtitle"> – Route weather</span>
