@@ -1,11 +1,14 @@
 # Caddyfile local snippet for MeteoRide development
 :8080
-root * /Users/sergi/DEVEL/meteoride
+# Use repo-relative public dir so the Caddyfile can live in tools/localDEV
+# Root is relative to this Caddyfile's directory: ../../public -> repo-root/public
+root * ../../public
 encode gzip
 
-# Access log -> file and stdout
+# Access log -> repo logs and stdout
 log {
-	output file ./logs/caddy_access.log
+	# write into repo-root/logs to centralize logs for localDEV
+	output file ../../logs/caddy_access.log
 }
 log {
 	output stdout

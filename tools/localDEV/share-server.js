@@ -11,8 +11,12 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 8081;
-const STORAGE_DIR = path.join(__dirname, 'shared_storage');
-const LOG_DIR = path.join(__dirname, 'logs');
+// Default storage and log dirs: prefer repo-root shared_storage / logs when running from tools/localDEV
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const STORAGE_DIR = process.env.SHARE_STORAGE_DIR || path.join(REPO_ROOT, 'shared_storage');
+const LOG_DIR = process.env.SHARE_LOG_DIR || path.join(REPO_ROOT, 'logs');
+// Optional static public dir to serve index during local testing (if set, GET / will serve it)
+const PUBLIC_DIR = process.env.SHARE_PUBLIC_DIR || path.join(REPO_ROOT, 'public');
 // Default TTL for shared files: 2 minutes (configurable via SHARE_TTL_MS in ms or SHARE_TTL_SECONDS)
 const DEFAULT_TTL_MS = 2 * 60 * 1000; // 2 minutes
 let SHARE_TTL_MS = DEFAULT_TTL_MS;
@@ -23,6 +27,10 @@ if (process.env.SHARE_TTL_MS) {
 }
 if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+if (!fs.existsSync(PUBLIC_DIR)) {
+  // Do not error if public is absent; log a warning
+  console.warn(`share-server: PUBLIC_DIR not found at ${PUBLIC_DIR} — GET / will 404`);
+}
 const LOGFILE = path.join(LOG_DIR, 'share-server.log');
 
 function appendLog(line) {
@@ -179,6 +187,17 @@ app.post('/share', (req, res) => {
     });
   }
 });
+
+// Optional developer convenience: serve static index for GET / when PUBLIC_DIR exists
+if (fs.existsSync(PUBLIC_DIR)) {
+  app.get('/', (req, res) => {
+    const indexPath = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+    res.status(404).send('index not found');
+  });
+  // Also serve static assets under /static if needed (optional)
+  app.use('/static', express.static(PUBLIC_DIR));
+}
 
 function handleSaveContent(req, res, content, filename) {
   const id = genId();
