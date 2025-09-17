@@ -111,6 +111,29 @@
     if (typeof document !== "undefined") document.title = t("title");
   }
 
+    // Wire up Best-window button
+    function wireBestWindowButton() {
+      const btn = document.getElementById('btnFindBestMain') || document.getElementById('btnFindBest');
+        if (!btn) return;
+      // Prefer updating the localized label span so we don't remove the icon or other markup
+      const labelEl = btn.querySelector('.btn-label');
+      btn.addEventListener('click', async () => {
+        try {
+          // open the small config modal so user can choose days/time then run search
+          if (typeof window.showBestWindowConfigModal === 'function') {
+            window.showBestWindowConfigModal();
+          } else if (typeof window.findBestWindow === 'function') {
+            // fallback: run immediate search
+            if (labelEl) labelEl.textContent = t('best_find_button') + '...';
+            await window.findBestWindow();
+            if (labelEl) labelEl.textContent = t('best_find_button');
+          }
+        } catch (e) {
+          console.error('best-window click error', e);
+        }
+      });
+    }
+
   // Localize header and keep logic with UI-related code
   function localizeHeader() {
     try {

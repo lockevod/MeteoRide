@@ -237,6 +237,35 @@ function classifyProviderError(prov, status, bodyText = "") {
   return "http";
 }
 
+// Find the best upcoming window for the loaded route based on user preferences.
+// This is a minimal implementation that reads the UI controls and validates state.
+if (typeof window.findBestWindow !== 'function') {
+  window.findBestWindow = async function() {
+  try {
+    // Read UI settings
+    const daysAhead = Number((document.getElementById('bestDays') || {}).value || 0);
+    const timeChoice = Array.from(document.getElementsByName('bestTime')).find(r => r.checked)?.value || 'morning';
+
+    if (!window.lastStepped || !Array.isArray(window.lastStepped) || window.lastStepped.length === 0) {
+      // If we don't have a segmented route, ask the user to segment first
+      setNotice(t('select_gpx'), 'error');
+      return;
+    }
+
+    // For now, just log the request and show a notice. The full search will sample candidate start dates
+    // across the daysAhead range and score each candidate by aggregating luminance/precip variables.
+    console.log('findBestWindow: daysAhead=', daysAhead, 'timeChoice=', timeChoice);
+    setNotice(t('best_find_button') + ' — ' + (daysAhead === 0 ? 'today' : daysAhead + 'd'), 'warn');
+
+    // TODO: implement candidate generation, weather fetch sampling, scoring, and present best result.
+    // We'll implement a conservative sampling strategy to limit API calls (e.g., up to 21 candidates).
+  } catch (e) {
+    console.error('findBestWindow failed', e);
+    setNotice(t('error_api', { msg: String(e) }), 'error');
+  }
+  };
+}
+
 // Build URL per provider (add OpenWeather One Call 3.0)
 function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   if (prov === "aromehd") {
@@ -411,6 +440,12 @@ function segmentRouteByTime(geojson) {
       if (timeSteps.length) timeSteps[timeSteps.length - 1] = arrivalTime;
     }
   }
+
+  // Persist last segmented steps so other modules (best-window) can reuse them
+  try {
+    window.lastStepped = steps.slice();
+    window.lastTimeSteps = timeSteps.slice();
+  } catch (e) { /* ignore */ }
 
   //const dateISO = startDateTime.toISOString().substring(0, 10);
   //console.log("steps ejemplo:", steps[0]);
@@ -609,6 +644,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             if (aromeResponseLooksInvalid(json)) {
               const prov2 = "openmeteo";
               const key2 = `cw_weather_${prov2}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
+
               const cached2 = getCache(key2);
               if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
