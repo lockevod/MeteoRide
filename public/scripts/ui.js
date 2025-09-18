@@ -717,6 +717,10 @@
     }
   }
 
+  // Explicit compare-by-dates mode flag: when true and compare UI is visible,
+  // date changes do NOT auto-recalculate; user must click the "Run compare" button.
+  let explicitCompareActive = false;
+
   // Bind UI events
   function bindUIEvents() {
     const toggleConfigEl = document.getElementById("toggleConfig");
@@ -793,7 +797,47 @@
         } else {
           dtEl.value = rounded;
         }
-        window.reloadFull();
+        // If compare-dates is active (date B row visible), re-run compare-dates instead of full reload
+        const row2 = document.getElementById('datetimeRoute2Row');
+        const compareActive = row2 && row2.style.display !== 'none';
+        if (compareActive) {
+          if (!explicitCompareActive && window.cw?.runCompareDatesMode) {
+            window.cw.runCompareDatesMode();
+          }
+          // In explicit mode, do nothing until user clicks Run Compare
+        } else {
+          window.reloadFull();
+        }
+      });
+    }
+
+    // Date B: when the second date is visible, changing it should immediately re-run compare-dates mode
+    const dtEl2 = document.getElementById("datetimeRoute2");
+    if (dtEl2) {
+      dtEl2.addEventListener("change", () => {
+        if (!dtEl2.value) return;
+        const row2 = document.getElementById('datetimeRoute2Row');
+        const visible = row2 && getComputedStyle(row2).display !== 'none';
+        // Round to next quarter like A
+        const [Y, M, D, H, Min] = dtEl2.value.split(/[-:T]/).map(Number);
+        const localDate = new Date(Y, M - 1, D, H, Min, 0, 0);
+        const rounded = window.roundToNextQuarterISO(localDate);
+        dtEl2.value = rounded;
+        if (visible && window.cw?.runCompareDatesMode) {
+          if (!explicitCompareActive) {
+            window.cw.runCompareDatesMode();
+          }
+        }
+      });
+      // Also react on input (useful on some UIs) when value is complete
+      dtEl2.addEventListener("input", () => {
+        const row2 = document.getElementById('datetimeRoute2Row');
+        const visible = row2 && getComputedStyle(row2).display !== 'none';
+        if (!visible || explicitCompareActive) return;
+        const v = dtEl2.value || "";
+        if (v.length >= 16 && window.cw?.runCompareDatesMode) {
+          window.cw.runCompareDatesMode();
+        }
       });
     }
 
@@ -822,6 +866,14 @@
             } else {
               window.clearNotice();
             }
+            // If compare-by-dates is active, refresh compare instead of full reload
+            const row2 = document.getElementById('datetimeRoute2Row');
+            const compareActive = row2 && row2.style.display !== 'none';
+            if (compareActive && window.cw?.runCompareDatesMode) {
+              window.saveSettings();
+              window.cw.runCompareDatesMode();
+              return; // avoid falling through to reloadFull
+            }
           }
           if (id === "apiKey" || id === "apiKeyOW") {
             updateProviderOptions();
@@ -839,6 +891,13 @@
           if (["windUnits", "tempUnits"].includes(id) && window.weatherData.length) {
             window.updateUnits();
           }
+          // If compare-by-dates UI is visible, refresh the compare view instead of full reload
+          const row2 = document.getElementById('datetimeRoute2Row');
+          const compareActive = row2 && row2.style.display !== 'none';
+          if (compareActive && window.cw?.runCompareDatesMode) {
+            window.cw.runCompareDatesMode();
+            return;
+          }
           window.reloadFull();
         });
       }
@@ -849,11 +908,92 @@
     if (apiSourceEl) {
       apiSourceEl.addEventListener("change", () => {
         const prov = apiSourceEl.value;
+        // If date-compare is active and a normal provider is selected, re-run date compare with the new provider
+        const row2 = document.getElementById('datetimeRoute2Row');
+        const compareActive = row2 && row2.style.display !== 'none';
+        if (compareActive && prov !== 'compare') {
+          if (window.cw?.runCompareDatesMode) window.cw.runCompareDatesMode();
+          return;
+        }
         if (prov === "compare") {
           if (window.cw?.runCompareMode) window.cw.runCompareMode();
           return;
         }
         window.renderWeatherTable();
+      });
+    }
+
+    // Toggle button for Compare Dates mode (next to date A)
+    const toggleCompBtn = document.getElementById('toggleCompareDates');
+    const compareNowBtn = document.getElementById('compareDatesNow');
+    if (toggleCompBtn) {
+      toggleCompBtn.addEventListener('click', (ev) => {
+        const row = document.getElementById('datetimeRoute2Row');
+        if (!row) return;
+        const isHidden = getComputedStyle(row).display === 'none';
+        // Toggle: if currently hidden -> show and focus, else hide
+        if (isHidden) {
+          row.style.display = '';
+          // Focus date B for immediate edit
+          const dt2 = document.getElementById('datetimeRoute2');
+          if (dt2) {
+            // Prefill B with A if empty
+            if (!dt2.value) {
+              const a = document.getElementById('datetimeRoute')?.value;
+              if (a) dt2.value = a;
+            }
+            dt2.focus();
+          }
+          // Enter explicit compare mode by default; user can click the run button to compute
+          explicitCompareActive = true;
+          if (compareNowBtn) {
+            compareNowBtn.style.display = '';
+            // Ensure i18n title
+            if (window.t) compareNowBtn.title = window.t('compare_now_btn_title');
+          }
+          // Visual active state and i18n label/title
+          toggleCompBtn.setAttribute('aria-pressed', 'true');
+          if (window.t) {
+            // Icon-only button: keep content minimal; update title only
+            toggleCompBtn.title = window.t('compare_dates_btn_title_on');
+          }
+        } else {
+          row.style.display = 'none';
+          // Re-render default table
+          window.renderWeatherTable();
+          // Clear compare mode class on table if present
+          const wt = document.getElementById('weatherTable');
+          if (wt) wt.classList.remove('compare-dates-mode');
+          // Reset button visual state and label/title
+          toggleCompBtn.setAttribute('aria-pressed', 'false');
+          if (window.t) {
+            // Icon-only button: keep content minimal; update title only
+            toggleCompBtn.title = window.t('compare_dates_btn_title');
+          }
+          if (compareNowBtn) compareNowBtn.style.display = 'none';
+          explicitCompareActive = false;
+        }
+      });
+    }
+
+    // Run comparison explicitly on demand
+    if (compareNowBtn) {
+      // Initialize visibility
+      const row = document.getElementById('datetimeRoute2Row');
+      const visible = row && getComputedStyle(row).display !== 'none';
+      compareNowBtn.style.display = visible ? '' : 'none';
+      if (window.t) compareNowBtn.title = window.t('compare_now_btn_title');
+      compareNowBtn.addEventListener('click', () => {
+        const row2 = document.getElementById('datetimeRoute2Row');
+        const compareActive = row2 && row2.style.display !== 'none';
+        if (!compareActive) return;
+        const a = document.getElementById('datetimeRoute')?.value || '';
+        const b = document.getElementById('datetimeRoute2')?.value || '';
+        if (a.length < 16 || b.length < 16) {
+          console.debug('[compare] Please select both Date A and Date B before running compare');
+          return;
+        }
+        if (window.cw?.runCompareDatesMode) window.cw.runCompareDatesMode();
       });
     }
 

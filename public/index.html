@@ -183,9 +183,15 @@
   <div id="map" style="height:60vh;"></div>
   <div id="controlsPanel">
     <div class="params">
-      <div class="param-row">
-        <label for="datetimeRoute" data-i18n="route_datetime_label">Fecha y hora ruta:</label>
-        <input type="datetime-local" id="datetimeRoute" step="900"/>
+      <div class="param-row date-row">
+        <label for="datetimeRoute" data-i18n="route_datetime_label">Fecha y hora ruta (A):</label>
+    <input type="datetime-local" id="datetimeRoute" step="900" />
+  <button id="toggleCompareDates" class="icon-btn primary" aria-pressed="false" title="Toggle compare dates" data-i18n-title="compare_dates_btn_title" aria-label="Toggle compare dates">⇄</button>
+    <button id="compareDatesNow" class="icon-btn primary" title="Run compare" data-i18n-title="compare_now_btn_title" aria-label="Run compare">⟲</button>
+      </div>
+      <div class="param-row" id="datetimeRoute2Row" style="display:none;">
+        <label for="datetimeRoute2" data-i18n="route_datetime_label_b">Fecha y hora ruta (B):</label>
+        <input type="datetime-local" id="datetimeRoute2" step="900" />
       </div>
 
       <div class="param-row">
@@ -214,9 +220,9 @@
         </select>
       </div>
 
-      <div class="param-row">
+      <div class="param-row provider-row" style="display:flex;gap:8px;align-items:center;">
         <label for="apiSource" data-i18n="provider_label">Proveedor:</label>
-        <select id="apiSource">
+        <select id="apiSource" style="flex:0 0 auto;">
           <option value="meteoblue">MeteoBlue</option>
           <option value="openmeteo" selected>OpenMeteo</option>
           <option value="openweather">OpenWeather</option>

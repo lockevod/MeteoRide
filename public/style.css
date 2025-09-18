@@ -164,6 +164,12 @@ html, body {
   --cw-col-min: 64px;
   --cw-col-ideal: 7.5vw;
   --cw-col-max: 120px;
+  /* buttons */
+  --btn-bg: #0b6297;
+  --btn-bg-hover: #0a5582;
+  --btn-text: #fff;
+  --btn-muted-bg: #eef2f7;
+  --btn-muted-fg: #1f3a56;
 }
 /* On very wide screens, compress a bit more */
 @media screen and (min-width: 1200px) {
@@ -191,6 +197,32 @@ header {
   justify-content: space-between;
   align-items: center;
 }
+
+/* Icon-only buttons (used for compare dates toggle and run) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: #f3f4f6; /* grey background like file-btn */
+  color: #374151;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 16px;
+  transition: background-color 140ms ease, color 140ms ease, transform 100ms ease;
+}
+.icon-btn:hover { background: #2563eb; color: #fff; transform: translateY(-1px); }
+.icon-btn.primary { background: #f3f4f6; color: #374151; border-color: rgba(0,0,0,0.06); }
+.icon-btn.primary:hover { background: #2563eb; color: #fff; }
+.icon-btn[aria-pressed="true"] { box-shadow: 0 0 0 2px rgba(11,98,151,0.18) inset; }
+
+/* Align icon buttons next to date inputs nicely */
+.date-row .icon-btn { margin-left: 6px; }
 
 header h1 {
   font-weight: 800;      /* más contraste frente a los toggles */
@@ -1243,6 +1275,64 @@ input[type="file"] {
   flex-wrap: nowrap; /* try to keep label and control together */
 }
 
+/* Ensure the small Compare Dates button next to provider selector is visible and doesn't collapse */
+#toggleCompareDates {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 12px;
+  padding: 6px 8px;
+  margin-left: 4px;
+  cursor: pointer;
+}
+
+/* Also target the new class for the moved button next to the datetime input */
+.compare-dates-btn {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 12px;
+  padding: 6px 8px;
+  margin-left: 6px;
+  cursor: pointer;
+  background: #0B6297;
+  color: #fff;
+  border: 1px solid #0B6297;
+  border-radius: 4px;
+}
+
+/* Keep the first param-row (date A + button) wrapping nicely on small screens */
+.param-row > #datetimeRoute + .compare-dates-btn {
+  flex: 0 0 auto;
+}
+
+/* Allow provider row (provider select + toggle button) to wrap on narrow screens */
+.provider-row {
+  flex-wrap: wrap;
+}
+.provider-row > label,
+.provider-row > #apiSource,
+.provider-row > #toggleCompareDates {
+  margin-bottom: 4px;
+}
+
+/* Let the first date row wrap so the compare button is never pushed off-screen */
+.date-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.date-row > label,
+.date-row > #datetimeRoute,
+.date-row > #toggleCompareDates,
+.date-row > .compare-dates-btn {
+  flex: 0 0 auto;
+  margin-bottom: 4px;
+}
+/* Ensure inputs do not grow too wide and push the button out */
+.date-row > #datetimeRoute {
+  max-width: 180px;
+}
+
 /* Slightly lower the provider selector so it visually aligns with interval */
 .param-row > label[for="apiSource"],
 .param-row > #apiSource {
@@ -2256,6 +2346,58 @@ body.dragging { user-select: none; }
   color: #203050 !important;
   font-weight: 700 !important;
   text-align: left;
+}
+
+/* Compare-dates mode: mimic normal look and keep sticky first column */
+#weatherTable.compare-dates-mode {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: auto; /* allow table to be wider than container for scrolling */
+}
+#weatherTable.compare-dates-mode tbody tr th:first-child,
+#weatherTable.compare-dates-mode thead tr th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #e0ebff; /* match provider compare first column */
+  width: 150px; /* increased width for better fit */
+  min-width: 150px;
+  max-width: 150px;
+}
+#weatherTable.compare-dates-mode tbody tr th {
+  text-align: left;
+  padding: 18px 8px;
+  font-weight: 700; /* match provider weight */
+  color: #203050;  /* match provider color */
+  border-right: 1px solid #e5edf6;
+  white-space: nowrap;
+}
+#weatherTable.compare-dates-mode tbody tr td {
+  padding: 16px 6px;
+  text-align: center;
+  border-right: 1px solid #eef3f9;
+}
+#weatherTable.compare-dates-mode .cell-row { display:flex; gap:6px; align-items:center; justify-content:center; min-width:0; }
+#weatherTable.compare-dates-mode .cell-row.no-icon .time-dist-col { margin-left: 0; }
+#weatherTable.compare-dates-mode .cell-row .icon-col img { width:16px; height:26px; object-fit:contain; display:block; }
+#weatherTable.compare-dates-mode .time-dist-col { display:flex; flex-direction:column; gap:2px; min-width:0; }
+#weatherTable.compare-dates-mode .m-cell .m-text { font-size: 11px; color:#577; }
+#weatherTable.compare-dates-mode tbody tr:nth-child(odd) td { background: transparent; }
+#weatherTable.compare-dates-mode tbody tr:nth-child(even) td { background: transparent; }
+#weatherTable.compare-dates-mode tbody tr.interval-row td { background: #e3f0fd; }
+#weatherTable.compare-dates-mode .time-cell { font-variant-numeric: tabular-nums; font-weight: 600; color: #0b6297; }
+#weatherTable.compare-dates-mode .date { color: #5a7a9a; margin-left: 6px; font-weight: 500; }
+/* Make the combined summary inside the sticky first column wrap and be extra compact */
+#weatherTable.compare-dates-mode tbody tr th:first-child .combined-header {
+  white-space: normal !important;
+  line-height: 1.1;
+}
+#weatherTable.compare-dates-mode tbody tr th:first-child .route-summary {
+  font-size: 12px;
+}
+#weatherTable.compare-dates-mode tbody tr th:first-child .route-summary .rs-line {
+  white-space: normal;
 }
 /* Resizer grips (left & right) */
 #debugResizerLeft, #debugResizerRight {

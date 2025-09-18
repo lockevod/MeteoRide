@@ -46,6 +46,7 @@
       precip_units_label: "Lluvia:",
       distance_units_label: "Distancia:",
       route_datetime_label: "Fecha:",
+  route_datetime_label_b: "Fecha (B):",
       cycling_speed_label: "Velocidad:",
       interval_label: "Inter.:",
       loading_text: "Cargando...",
@@ -72,6 +73,14 @@
       key_http_error: "Error HTTP {status}.",
       key_network_error: "Error de red: {msg}",
      notices_noncritical_label: "Mostrar avisos no críticos",
+      // Compare-dates UI
+      summary_label: "Resumen",
+      choose_compare_both_dates: "Por favor, selecciona ambas fechas para comparar.",
+      compare_dates_btn_label: "Comparar fechas",
+      compare_dates_btn_title: "Activar modo comparar fechas (A/B)",
+  compare_dates_btn_label_on: "Salir comparar",
+  compare_dates_btn_title_on: "Salir del modo comparar fechas",
+  compare_now_btn_title: "Calcular comparación",
     },
     en: {
       config_saved: "Settings saved",
@@ -115,6 +124,7 @@
       precip_units_label: "Rain:",
       units_label: "Units/i18n",
       route_datetime_label: "Time:",
+  route_datetime_label_b: "Time (B):",
       cycling_speed_label: "Speed:",
       interval_label: "Inter.:",
       loading_text: "Loading...",
@@ -141,6 +151,14 @@
       key_http_error: "HTTP error {status}.",
       key_network_error: "Network error: {msg}",
       notices_noncritical_label: "Show non‑critical notices",
+      // Compare-dates UI
+      summary_label: "Summary",
+      choose_compare_both_dates: "Please pick both dates to compare.",
+      compare_dates_btn_label: "Compare dates",
+      compare_dates_btn_title: "Toggle compare-by-dates mode (A/B)",
+  compare_dates_btn_label_on: "Exit compare",
+  compare_dates_btn_title_on: "Exit compare-by-dates mode",
+  compare_now_btn_title: "Run comparison",
     },
   };
 

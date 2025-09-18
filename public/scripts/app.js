@@ -2039,7 +2039,7 @@ function renderWindMarkers() {
     // Optional rain drop
     const precip = Number(data.precipitation ?? 0);
     const prob   = Number(data.precipProb ?? 0);
-    const showDrop = (precip >= PRECIP_MIN) || (prob >= PROB_MIN);
+    const showDrop = (precip >= PRECIP_MIN) && (prob >= PROB_MIN);
     if (showDrop) {
       const rainIcon = L.divIcon({
         html: `<span class="rain-glyph">💧</span>`,
@@ -2389,6 +2389,9 @@ try {
     buildCombinedHeaderHTML,
     buildSunHeaderCell,
   };
+  window.cw.getDetailedCategoryOpenMeteo = getDetailedCategoryOpenMeteo;
+  window.cw.getDetailedCategoryOpenWeather = getDetailedCategoryOpenWeather;
+  window.cw.getDetailedCategoryMeteoBlue = getDetailedCategoryMeteoBlue;
   window.cw.formatTime = formatTime;
   // Allow compare.js to set a baseline and re-render markers
   window.cw.setWeatherData = (arr) => { weatherData = Array.isArray(arr) ? arr.slice() : []; };

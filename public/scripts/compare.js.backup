@@ -4,6 +4,20 @@
   let compareRendering = false;
   let lastCompareKey = "";
 
+  // Helper function to manage loading indicator
+  function showLoadingIndicator(text) {
+    const indicator = document.getElementById('compareDatesLoading');
+    if (indicator) {
+      indicator.textContent = text;
+      indicator.classList.add('show');
+    }
+  }
+
+  function hideLoadingIndicator() {
+    const indicator = document.getElementById('compareDatesLoading');
+    if (indicator) {
+      indicator.classList.remove('show');
+    }
   // Guard on DOM ready
   document.addEventListener("DOMContentLoaded", () => {
     const sel = document.getElementById("apiSource");
@@ -82,6 +96,13 @@
     // Prevent re-entrancy and stop observer while we render
     compareRendering = true;
     try { compareMO && compareMO.disconnect(); } catch(_) {}
+
+    // Show loading indicator
+    var cmpProvInd = document.getElementById('compareDatesLoading');
+    if (cmpProvInd) {
+      cmpProvInd.textContent = 'Comparando proveedores...';
+      cmpProvInd.classList.add('show');
+    }
 
     // Mark body as compare-active (used for small-screen behavior)
     try { document.body.classList.add("compare-active"); } catch {}
@@ -257,6 +278,12 @@
     // Compare mode: ensure no markers remain
     if (window.cw?.clearMarkers) window.cw.clearMarkers();
 
+    // Hide loading indicator
+    var cmpProvInd = document.getElementById('compareDatesLoading');
+    if (cmpProvInd) {
+      cmpProvInd.classList.remove('show');
+    }
+
     // Store key and reconnect observer after rendering
     lastCompareKey = newKey;
     try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
@@ -264,11 +291,31 @@
   }
 
   async function runCompareDatesMode() {
-    if (!isReady()) return;
+    if (!isReady()) {
+      // Hide loading indicator if not ready
+      const loadingIndicator = document.getElementById('compareDatesLoading');
+      if (loadingIndicator) {
+        loadingIndicator.classList.remove('show');
+      }
+      return;
+    }
     // Prevent re-entrancy
-    if (compareRendering) return;
+    if (compareRendering) {
+      // Hide loading indicator if already rendering
+      const loadingIndicator = document.getElementById('compareDatesLoading');
+      if (loadingIndicator) {
+        loadingIndicator.classList.remove('show');
+      }
+      return;
+    }
     compareRendering = true;
     try { compareMO && compareMO.disconnect(); } catch(_) {}
+
+    // Show loading indicator
+    const loadingIndicator = document.getElementById('compareDatesLoading');
+    if (loadingIndicator) {
+      loadingIndicator.classList.add('show');
+    }
 
     // Clear any existing markers since we can't show two dates at once
     if (window.cw?.clearMarkers) window.cw.clearMarkers();
@@ -287,7 +334,16 @@
     }
 
     const steps = (window.cw.getSteps && window.cw.getSteps()) || [];
-    if (!steps.length) { compareRendering = false; return; }
+    if (!steps.length) { 
+      // Hide loading indicator
+      const loadingIndicator = document.getElementById('compareDatesLoading');
+      if (loadingIndicator) {
+        loadingIndicator.classList.remove('show');
+      }
+      
+      compareRendering = false; 
+      return; 
+    }
 
     const units = (window.cw.getUnits && window.cw.getUnits()) || { temp: "C", wind: "kmh", precip: "mm", distance: "km" };
   // Use the currently selected provider in the main select; coerce invalid 'compare' to openmeteo
@@ -306,6 +362,13 @@
         const msg = (window.t ? window.t('choose_compare_both_dates') : 'Please pick both dates to compare.');
         table.innerHTML = `<tbody><tr><td><span data-i18n="choose_compare_both_dates">${msg}</span></td></tr></tbody>`;
       }
+      
+      // Hide loading indicator
+      const loadingIndicator = document.getElementById('compareDatesLoading');
+      if (loadingIndicator) {
+        loadingIndicator.classList.remove('show');
+      }
+      
       try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
       compareRendering = false;
       return;
@@ -403,36 +466,8 @@
     }
 
     try {
-      // Show subtle loading indicator
-      const container = document.getElementById("weatherTableContainer");
-      if (container) {
-        // Create a centered loading overlay
-        const loadingDiv = document.createElement('div');
-        loadingDiv.id = 'compare-loading-overlay';
-        loadingDiv.innerHTML = `<span style="font-size: 0.9em; color: #666; font-style: italic; opacity: 0.8;">${(window.t ? window.t('Loading...') : 'Loading...')}</span>`;
-        loadingDiv.style.cssText = `
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background: rgba(255, 255, 255, 0.95);
-          padding: 8px 16px;
-          border-radius: 6px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-          z-index: 1000;
-          font-size: 0.9em;
-          border: 1px solid rgba(0,0,0,0.1);
-        `;
-        container.style.position = 'relative';
-        container.appendChild(loadingDiv);
-      }
-
       const dataA = await fetchDataForBase(baseA);
       const dataB = await fetchDataForBase(baseB);
-
-      // Remove loading indicator
-      const loadingOverlay = document.getElementById('compare-loading-overlay');
-      if (loadingOverlay) loadingOverlay.remove();
 
       // Render combined table: header (times) then block A (label row + data rows), block B
       const labelA = formatDateOnly(baseA);
@@ -441,10 +476,12 @@
 
       lastCompareKey = `${provider}|${steps.length}|${baseA.toISOString()}|${baseB.toISOString()}`;
     } finally {
-      // Ensure loading indicator is removed even if there's an error
-      const loadingOverlay = document.getElementById('compare-loading-overlay');
-      if (loadingOverlay) loadingOverlay.remove();
-
+      // Hide loading indicator
+      const loadingIndicator = document.getElementById('compareDatesLoading');
+      if (loadingIndicator) {
+        loadingIndicator.classList.remove('show');
+      }
+      
       try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
       compareRendering = false;
     }
