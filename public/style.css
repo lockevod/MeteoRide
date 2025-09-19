@@ -2361,9 +2361,9 @@ body.dragging { user-select: none; }
   left: 0;
   z-index: 2;
   background: #e0ebff; /* match provider compare first column */
-  width: 150px; /* increased width for better fit */
-  min-width: 150px;
-  max-width: 150px;
+  width: 170px; /* increased width for better fit with units and larger numbers */
+  min-width: 170px;
+  max-width: 170px;
 }
 #weatherTable.compare-dates-mode tbody tr th {
   text-align: left;
@@ -2399,6 +2399,103 @@ body.dragging { user-select: none; }
 #weatherTable.compare-dates-mode tbody tr th:first-child .route-summary .rs-line {
   white-space: normal;
 }
+
+/* Responsive styles for compare-dates mode on small screens */
+@media screen and (max-width: 700px) {
+  #weatherTable.compare-dates-mode {
+    font-size: 12px; /* Reduce font size for better fit */
+    width: auto; /* Allow table to size based on content but respect min-width from JS */
+  }
+
+  #weatherTable.compare-dates-mode tbody tr th:first-child {
+    width: 140px; /* Increased first column width on small screens for units and larger numbers */
+    min-width: 140px;
+    max-width: 140px;
+    padding: 12px 6px; /* Reduce padding */
+  }
+
+  #weatherTable.compare-dates-mode tbody tr th {
+    padding: 12px 4px; /* Reduce padding for all header cells */
+    font-size: 11px; /* Smaller font for headers */
+  }
+
+  #weatherTable.compare-dates-mode tbody tr td {
+    padding: 10px 3px; /* Reduce padding for data cells */
+    min-width: 60px; /* Increased minimum width for data cells */
+    width: 60px; /* Fixed width to ensure consistency */
+  }
+
+  #weatherTable.compare-dates-mode .cell-row .icon-col img {
+    width: 14px; /* Smaller icons */
+    height: 20px;
+  }
+
+  #weatherTable.compare-dates-mode .time-dist-col {
+    gap: 1px; /* Reduce gap */
+  }
+
+  #weatherTable.compare-dates-mode .time-cell {
+    font-size: 10px; /* Smaller time text */
+  }
+
+  #weatherTable.compare-dates-mode .m-cell .m-text {
+    font-size: 9px; /* Smaller distance text */
+  }
+
+  /* Optimize weather data display in compare-dates mode on small screens */
+  #weatherTable.compare-dates-mode .weather-combined {
+    min-width: 0 !important;
+    flex-shrink: 1;
+  }
+  
+  #weatherTable.compare-dates-mode .weather-combined .combined-top {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  
+  #weatherTable.compare-dates-mode .weather-combined .combined-bottom {
+    font-size: 9px;
+    line-height: 1.1;
+  }
+
+  /* Ensure container allows proper scrolling on small screens */
+  #weatherTableContainer {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  /* In compare-dates mode on small screens, hide the large combined header
+     inside the sticky first column to avoid duplicating the compact summary */
+  #weatherTable.compare-dates-mode tbody tr th:first-child .combined-header { display: none !important; }
+  
+  /* Ensure summary rows are visible and have proper height */
+  #weatherTable.compare-dates-mode tbody tr {
+    display: table-row !important;
+    visibility: visible !important;
+    height: auto !important;
+    min-height: 40px;
+  }
+  
+  #weatherTable.compare-dates-mode tbody tr:not(.interval-row) {
+    background-color: #f8fafc !important; /* Light background for summary rows */
+  }
+  
+  #weatherTable.compare-dates-mode tbody tr.summary-row {
+    display: table-row !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    min-height: 45px;
+  }
+  
+  #weatherTable.compare-dates-mode tbody tr.summary-row td {
+    display: table-cell !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+}
+
 /* Resizer grips (left & right) */
 #debugResizerLeft, #debugResizerRight {
   position: absolute;

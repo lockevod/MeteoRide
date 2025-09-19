@@ -564,8 +564,18 @@
     table.classList.remove('compare-mode');
     table.classList.add('compare-dates-mode');
 
+    // In compare-dates mode, remove any previously injected compact summary bar
+    // to avoid duplicating info above the table and mixing contexts.
+    try {
+      const cs = document.getElementById('compactSummary');
+      if (cs && cs.parentElement) cs.parentElement.removeChild(cs);
+    } catch {}
+
     const formatTime = window.cw.formatTime || ((d)=>new Date(d).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
-    const maxCols = Math.max((dataA && dataA.length) || 0, (dataB && dataB.length) || 0);
+    const rawMaxCols = Math.max((dataA && dataA.length) || 0, (dataB && dataB.length) || 0);
+    // Limit columns on small screens to prevent overflow
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const maxCols = (vw < 701) ? Math.min(rawMaxCols, Math.max(6, Math.floor((vw - 120) / 50))) : rawMaxCols;
     const distanceUnit = (document.getElementById("distanceUnits")?.value || (units && units.distance) || "km");
     const toDisplayDist = (m) => {
       if (!Number.isFinite(m)) return "";
@@ -654,9 +664,10 @@
     const intervalsA = document.createElement('tr');
     intervalsA.classList.add('interval-row');
     intervalsA.dataset.row = '0'; // Row for date A intervals
-  const firstA = document.createElement('th'); firstA.scope = 'row'; firstA.classList.add('provider-cell'); firstA.style.textAlign = 'left'; firstA.innerHTML = `<div style="margin-bottom: 8px;">${String(dateA)}</div>` + combinedHeader(summaryHTML_A, ""); intervalsA.appendChild(firstA);
-    // Combine first column with the following summary row
-    try { firstA.rowSpan = 2; } catch(_) {}
+  const firstA = document.createElement('th'); firstA.scope = 'row'; firstA.classList.add('provider-cell'); firstA.style.textAlign = 'left';
+  firstA.innerHTML = `<div class="date-label" style="margin-bottom: 4px; font-weight:600; color:#203050;">${String(dateA)}</div>`;
+  intervalsA.appendChild(firstA);
+    // No rowspan: the summary row has its own first cell (compact summary)
     {
       const arr = dataA || [];
       const maxM = arr.length ? Math.max(...arr.map(w => Number(w?.distanceM || 0))) : 0;
@@ -690,8 +701,10 @@
 
   // Row 2: summary fecha A (using buildCompareCell)
   const summaryA = document.createElement('tr');
+  summaryA.classList.add('summary-row');
   summaryA.dataset.row = '1'; // Row for date A summary
-    // Do NOT create a first cell here: it's covered by the rowspan from the intervals row
+    // First cell: compact summary for Date A (no date label)
+    { const th = document.createElement('th'); th.scope = 'row'; th.classList.add('provider-cell'); th.style.textAlign = 'left'; th.innerHTML = summaryHTML_A || ''; summaryA.appendChild(th); }
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
       const step = (dataA && dataA[i]) ? dataA[i] : null; td.innerHTML = buildCompareCell(step); summaryA.appendChild(td);
@@ -702,9 +715,10 @@
     const intervalsB = document.createElement('tr');
     intervalsB.classList.add('interval-row');
     intervalsB.dataset.row = '2'; // Row for date B intervals
-  const firstB = document.createElement('th'); firstB.scope = 'row'; firstB.classList.add('provider-cell'); firstB.style.textAlign = 'left'; firstB.innerHTML = `<div>${String(dateB)}</div>` + combinedHeader(summaryHTML_B, ""); intervalsB.appendChild(firstB);
-    // Combine first column with the following summary row
-    try { firstB.rowSpan = 2; } catch(_) {}
+  const firstB = document.createElement('th'); firstB.scope = 'row'; firstB.classList.add('provider-cell'); firstB.style.textAlign = 'left';
+  firstB.innerHTML = `<div class="date-label" style="margin-bottom: 4px; font-weight:600; color:#203050;">${String(dateB)}</div>`;
+  intervalsB.appendChild(firstB);
+    // No rowspan: the summary row has its own first cell (compact summary)
     {
       const arr = dataB || [];
       const maxM = arr.length ? Math.max(...arr.map(w => Number(w?.distanceM || 0))) : 0;
@@ -738,8 +752,10 @@
 
   // Row 4: summary fecha B
     const summaryB = document.createElement('tr');
+    summaryB.classList.add('summary-row');
     summaryB.dataset.row = '3'; // Row for date B summary
-    // Do NOT create a first cell here: it's covered by the rowspan from the intervals row
+    // First cell: compact summary for Date B (no date label)
+    { const th = document.createElement('th'); th.scope = 'row'; th.classList.add('provider-cell'); th.style.textAlign = 'left'; th.innerHTML = summaryHTML_B || ''; summaryB.appendChild(th); }
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
       const step = (dataB && dataB[i]) ? dataB[i] : null; td.innerHTML = buildCompareCell(step); summaryB.appendChild(td);
@@ -755,8 +771,9 @@
       const toPx = (v) => parseFloat(v) || 0;
       const colMin  = toPx(root.getPropertyValue('--cw-col-min')) || 64;
       const cols = maxCols;
-      const firstColW = 150; // increased to match CSS mode
-      const minW = Math.max(600, Math.ceil(firstColW + Math.max(0, cols) * colMin));
+      const firstColW = (vw < 701) ? 140 : 170; // Increased first column width for units and larger numbers
+      // On small screens, don't enforce a large minWidth to allow proper scrolling
+      const minW = (vw < 701) ? Math.max(400, Math.ceil(firstColW + Math.max(0, cols) * 45)) : Math.max(600, Math.ceil(firstColW + Math.max(0, cols) * colMin));
       table.style.minWidth = `${minW}px`;
     })();
   }
@@ -980,12 +997,12 @@
   // Show probability only when precipitation amount is > 0
   const rainWithProb = (pp != null && Number(pr) > 0) ? `${rainTxt} (${pp}%)` : rainTxt;
     return `
-      <div style="display:flex;align-items:center;gap:6px;justify-content:center">
-        <i class="wi ${iconClass}" style="font-size:22px;line-height:1;color:#29519b"></i>
-        <div class="weather-combined" style="min-width:auto;align-items:flex-start">
+      <div style="display:flex;align-items:center;gap:4px;justify-content:center;min-width:0">
+        <i class="wi ${iconClass}" style="font-size:18px;line-height:1;color:#29519b;flex-shrink:0"></i>
+        <div class="weather-combined" style="min-width:0;align-items:flex-start;flex-shrink:1">
           <span class="combined-top">${tempTxt}</span>
-          <span class="combined-bottom">${windTxt}</span>
-          <span class="combined-bottom">${rainWithProb}</span>
+          <span class="combined-bottom" style="font-size:10px">${windTxt}</span>
+          <span class="combined-bottom" style="font-size:10px">${rainWithProb}</span>
         </div>
       </div>`;
   }

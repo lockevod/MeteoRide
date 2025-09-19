@@ -1545,7 +1545,14 @@ function renderWeatherTable() {
 
   // NEW: compact summary bar (only on small screens). Update/remove depending on viewport.
   (function upsertCompactSummary() {
-    // CHANGED: always render the compact summary (no removal on large screens)
+    // Do not render the compact summary while in compare-dates mode.
+    const tbl = document.getElementById('weatherTable');
+    if (tbl && tbl.classList.contains('compare-dates-mode')) {
+      const existing = document.getElementById('compactSummary');
+      if (existing && existing.parentElement) try { existing.parentElement.removeChild(existing); } catch {}
+      return;
+    }
+    // Otherwise, render/update the compact summary.
     let cs = document.getElementById("compactSummary");
     const panel = document.getElementById("controlsPanel");
     const wrap = document.querySelector(".wtc-wrap");
