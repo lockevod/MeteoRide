@@ -1656,6 +1656,14 @@ input[type="number"] {
     /* ensure box-sizing keeps width predictable */
     box-sizing: border-box;
   }
+  
+  /* On very small screens in compare modes, allow main to grow beyond viewport height
+     to accommodate larger table structures without cutting off rows */
+  main.compare-dates-mode,
+  main.compare-mode {
+    height: auto !important;
+    min-height: calc(100vh - 3rem);
+  }
 }
 
 /* Make interval selector match the presets look-and-feel */

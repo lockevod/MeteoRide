@@ -1481,6 +1481,11 @@ function renderWeatherTable() {
 
   const table = document.getElementById("weatherTable");
   table.innerHTML = "";
+  
+  // Clear compare mode classes from table and main element
+  table.classList.remove('compare-mode', 'compare-dates-mode');
+  const main = document.querySelector('main');
+  if (main) main.classList.remove('compare-mode', 'compare-dates-mode');
   const thead = document.createElement("thead");
   let row;
 

@@ -563,6 +563,13 @@
     table.innerHTML = "";
     table.classList.remove('compare-mode');
     table.classList.add('compare-dates-mode');
+    
+    // Also add class to main element for viewport height adjustments on small screens
+    const main = document.querySelector('main');
+    if (main) {
+      main.classList.remove('compare-mode');
+      main.classList.add('compare-dates-mode');
+    }
 
     // In compare-dates mode, remove any previously injected compact summary bar
     // to avoid duplicating info above the table and mixing contexts.
@@ -1040,6 +1047,13 @@
     if (!table) return;
     table.innerHTML = "";
     table.classList.add("compare-mode");
+    
+    // Also add class to main element for viewport height adjustments on small screens
+    const main = document.querySelector('main');
+    if (main) {
+      main.classList.remove('compare-dates-mode');
+      main.classList.add('compare-mode');
+    }
 
     const thead = document.createElement("thead");
 

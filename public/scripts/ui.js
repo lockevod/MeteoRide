@@ -1033,6 +1033,9 @@
           // Clear compare mode class on table if present
           const wt = document.getElementById('weatherTable');
           if (wt) wt.classList.remove('compare-dates-mode');
+          // Also remove class from main element
+          const main = document.querySelector('main');
+          if (main) main.classList.remove('compare-dates-mode');
           // Reset button visual state and label/title
           toggleCompBtn.setAttribute('aria-pressed', 'false');
           if (window.t) {
