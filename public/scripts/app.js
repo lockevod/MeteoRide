@@ -1683,6 +1683,9 @@ function renderWeatherTable() {
   const lumVal = Number.isFinite(w?.luminance) ? w.luminance : null;
   // Render only the vertical bar markup
   lumDiv.innerHTML = luminanceBarHTML(lumVal);
+    // attach tooltip text for luminance
+    const lumTip = (lumVal != null) ? `${Math.round(lumVal * 100)}%` : '-';
+    lumDiv.setAttribute('data-tooltip', `Luminance: ${lumTip}`);
 
   const iconWrapper = document.createElement("div");
   iconWrapper.classList.add("icon-with-lum");
@@ -1730,10 +1733,11 @@ function renderWeatherTable() {
         case "windCombined":return "wi-strong-wind";
         case "rainCombined":return "wi-raindrop";
         case "humidity":    return "wi-humidity";
-        case "cloud_uv":    return "wi-cloud";
+        case "cloud_uv":    return "wi-cloud wi-uv-combo"; // handled specially below
         default:            return "wi-na";
       }
     })();
+    // Return a single icon (for cloud_uv we'll add the second icon after the label text)
     return `<i class="wi ${cls} label-ico" aria-hidden="true"></i>`;
   };
 
@@ -1751,6 +1755,24 @@ function renderWeatherTable() {
     return `${getRowIconHTML(key)} <span class="label-text">${base}</span>`;
   });
 
+  // Post-process labelsHTML so cloud_uv shows icon + label + second icon (not adjacent)
+  labelsHTML.forEach((html, idx) => {
+    const key = keys[idx];
+    if (key === 'cloud_uv') {
+      // Place the UV icon to the left of the 'UV' token inside the label text
+      const raw = labels[lang][idx];
+      // If label contains 'UV' place icon before it, otherwise append at end
+      if (raw.indexOf('UV') !== -1) {
+        const parts = raw.split('UV');
+        // Desktop: show full label with UV icon near the UV text
+        // Compact-only: show a small separator '/' and the UV icon immediately next to the cloud icon
+        labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text desktop-only">${parts[0]}<i class="wi wi-hot label-ico-inline" aria-hidden="true" style="margin:0 6px 0 4px"></i>UV${parts[1] || ''}</span><span class="compact-only" aria-hidden="true"><span class="sep"> / </span><i class="wi wi-hot label-ico" aria-hidden="true" style="margin-left:4px"></i></span>`;
+      } else {
+        labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text">${raw}</span>`;
+      }
+    }
+  });
+
   // Ahora iterar por cada key (filas reducidas)
   keys.forEach((key, idx) => {
     const row = document.createElement("tr");
@@ -1764,9 +1786,14 @@ function renderWeatherTable() {
         const cc = Number(w?.cloudCover ?? -1);
   const uvRaw = (w?.uvindex ?? w?.uv);
   const uv = (uvRaw == null || uvRaw === '') ? null : Math.max(0, Math.round(Number(uvRaw)));
-  const cloudPart = Number.isFinite(cc) && cc >= 0 ? `<span class="cloud-part"><i class="wi wi-cloud" aria-hidden="true"></i> <span class="cloud-text">${Math.round(cc)}%</span></span>` : `<span class="cloud-part">-</span>`;
-  const uvPart = uv != null ? `<span class="uv-part"><i class="wi wi-hot" aria-hidden="true"></i> <span class="uv-text">${uv}</span></span>` : `<span class="uv-part">-</span>`;
+    // Data cells: show only numeric values (no icons) per UI decision
+    const cloudPart = Number.isFinite(cc) && cc >= 0 ? `<span class="cloud-part"><span class="cloud-text">${Math.round(cc)}%</span></span>` : `<span class="cloud-part">-</span>`;
+  const uvPart = uv != null ? `<span class="uv-part"><span class="uv-text">${uv}</span></span>` : `<span class="uv-part">-</span>`;
+        const tooltipText = (lang === 'es')
+          ? (uv != null ? `Nubosidad: ${Math.round(cc)}% — UV: ${uv}` : `Nubosidad: ${Math.round(cc)}%`)
+          : (uv != null ? `Cloud cover: ${Math.round(cc)}% — UV: ${uv}` : `Cloud cover: ${Math.round(cc)}%`);
         td.innerHTML = `<div class="cloud-uv-cell">${cloudPart}<span class="sep"> / </span>${uvPart}</div>`;
+        td.setAttribute('data-tooltip', tooltipText);
       } else {
         const val = w[key];
         if (key === "windCombined" || key === "rainCombined") {
@@ -1794,6 +1821,9 @@ function renderWeatherTable() {
 
   // Clicks on any generated cell/header select that column
   wireTableInteractions();
+
+  // Wire up tooltips for luminance and cloud/UV cells (desktop hover + mobile touch)
+  wireTooltips();
 
   // Auto-scroll after each render if the full table is not yet visible and user hasn't scrolled past it
   (function autoScrollOnRender(){
@@ -1880,6 +1910,72 @@ function renderWeatherTable() {
     const minW = Math.max(600, Math.ceil(firstCol + Math.max(0, cols) * colMin));
     table.style.minWidth = `${minW}px`;
   })();
+  
+  // Tooltip helpers: small lightweight tooltip that works on hover and touch
+  function ensureTooltipEl() {
+    let el = document.getElementById('cw-tooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'cw-tooltip';
+      el.className = 'cw-tooltip';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function showTooltipAt(target, text, clientX, clientY) {
+    const el = ensureTooltipEl();
+    el.textContent = text;
+    el.style.display = 'block';
+    // position above target when possible
+    const rect = target.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    let left = rect.left + window.scrollX + (rect.width - elRect.width) / 2;
+    let top = rect.top + window.scrollY - elRect.height - 8;
+    // fallback to client coords if given
+    if (typeof clientX === 'number') left = clientX - elRect.width / 2 + window.scrollX;
+    if (typeof clientY === 'number') top = clientY - elRect.height - 12 + window.scrollY;
+    // clamp
+    left = Math.max(6 + window.scrollX, Math.min(left, window.scrollX + document.documentElement.clientWidth - elRect.width - 6));
+    if (top < window.scrollY + 6) top = rect.bottom + window.scrollY + 8; // place below if not enough space
+    el.style.left = `${Math.round(left)}px`;
+    el.style.top = `${Math.round(top)}px`;
+  }
+
+  function hideTooltip() {
+    const el = document.getElementById('cw-tooltip');
+    if (el) el.style.display = 'none';
+  }
+
+  function wireTooltips() {
+    const table = document.getElementById('weatherTable');
+    if (!table) return;
+    let touchTimer = null;
+    table.addEventListener('mouseover', (ev) => {
+      const t = ev.target.closest('[data-tooltip]');
+      if (!t) return;
+      showTooltipAt(t, t.getAttribute('data-tooltip'));
+    });
+    table.addEventListener('mouseout', (ev) => {
+      const related = ev.relatedTarget;
+      if (related && related.closest && related.closest('#cw-tooltip')) return;
+      hideTooltip();
+    });
+    // touch support: show on touchstart and hide after 3s or on next touch
+    table.addEventListener('touchstart', (ev) => {
+      const t = ev.target.closest('[data-tooltip]');
+      if (!t) return;
+      if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+      const touch = ev.touches && ev.touches[0];
+      showTooltipAt(t, t.getAttribute('data-tooltip'), touch ? touch.clientX : undefined, touch ? touch.clientY : undefined);
+      touchTimer = setTimeout(() => { hideTooltip(); touchTimer = null; }, 3000);
+    }, { passive: true });
+    // hide tooltip when tapping elsewhere
+    document.addEventListener('touchstart', (ev) => {
+      const t = ev.target.closest('[data-tooltip]');
+      if (!t) hideTooltip();
+    }, { passive: true });
+  }
 }
 function luminanceBarHTML(val) {
     // Render a vertical bar (anchored to bottom). If no value, return an empty placeholder so layout stays stable.
