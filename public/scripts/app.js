@@ -323,9 +323,10 @@ function segmentRouteByTime(geojson) {
   }
 
   // Validate date range (today to today + 14 days)
-  const dateValidation = validateDateRange(datetimeValue, 'fecha de salida');
+  const dateValidation = window.validateDateRange(datetimeValue, 'fecha de salida');
   if (!dateValidation.valid) {
     logDebug(dateValidation.error, true);
+    if (window.setNotice) window.setNotice(dateValidation.error, 'error');
     return;
   }
 

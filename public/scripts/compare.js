@@ -345,8 +345,9 @@
     if (!isReady()) return;
 
     // Validate that a route is loaded before proceeding
-    const routeValidation = validateRouteLoaded();
+    const routeValidation = window.validateRouteLoaded();
     if (!routeValidation.valid) {
+      if (window.setNotice) window.setNotice(routeValidation.error, 'error');
       return;
     }
 

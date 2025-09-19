@@ -941,10 +941,12 @@
           if (id === "language") window.applyTranslations();
           if (["windUnits", "tempUnits"].includes(id) && window.weatherData.length) {
             // Validate that a route is loaded before updating units
-            const routeValidation = validateRouteLoaded();
-            if (routeValidation.valid) {
-              window.updateUnits();
+            const routeValidation = window.validateRouteLoaded();
+            if (!routeValidation.valid) {
+              if (window.setNotice) window.setNotice(routeValidation.error, 'error');
+              return;
             }
+            window.updateUnits();
           }
           // If compare-by-dates UI is visible, refresh the compare view instead of full reload
           const row2 = document.getElementById('datetimeRoute2Row');
@@ -970,8 +972,9 @@
       apiSourceEl.addEventListener("change", () => {
         const prov = apiSourceEl.value;
         // Validate that a route is loaded before proceeding
-        const routeValidation = validateRouteLoaded();
+        const routeValidation = window.validateRouteLoaded();
         if (!routeValidation.valid) {
+          if (window.setNotice) window.setNotice(routeValidation.error, 'error');
           return;
         }
         // If date-compare is active and a normal provider is selected, re-run date compare with the new provider
@@ -1057,8 +1060,9 @@
         if (!compareActive) return;
 
         // Validate that a route is loaded before proceeding
-        const routeValidation = validateRouteLoaded();
+        const routeValidation = window.validateRouteLoaded();
         if (!routeValidation.valid) {
+          if (window.setNotice) window.setNotice(routeValidation.error, 'error');
           return;
         }
 
