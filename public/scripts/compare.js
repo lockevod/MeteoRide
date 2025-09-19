@@ -580,11 +580,8 @@
 
     const formatTime = window.cw.formatTime || ((d)=>new Date(d).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
     const rawMaxCols = Math.max((dataA && dataA.length) || 0, (dataB && dataB.length) || 0);
-    // Limit columns on small screens to prevent overflow, but be more generous in compare-dates mode
-    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
-    const maxCols = (vw < 701) ? 
-      Math.min(rawMaxCols, Math.max(10, Math.floor((vw - 80) / 35))) : // More generous: min 10 cols, less spacing (35px), smaller offset (80px)
-      rawMaxCols;
+    // Show ALL columns in compare-dates mode, just like normal mode - no artificial limits
+    const maxCols = rawMaxCols;
     const distanceUnit = (document.getElementById("distanceUnits")?.value || (units && units.distance) || "km");
     const toDisplayDist = (m) => {
       if (!Number.isFinite(m)) return "";
