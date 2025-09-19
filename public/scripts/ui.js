@@ -1092,12 +1092,15 @@
         if (cs) cs.value = v;
         window.lastAppliedSpeed = Number(v);
         window.saveSettings();
-        // Check mode and call appropriate function
+        // Check mode: if we're in compare-dates (row2 visible) do NOT auto-refresh here.
+        // Just save the speed and let the user trigger the compare explicitly with the Run button.
         const row2 = document.getElementById('datetimeRoute2Row');
         const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive && !explicitCompareActive && window.cw?.runCompareDatesMode) {
-          window.cw.runCompareDatesMode();
-        } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+        if (compareActive) {
+          return;
+        }
+        // Otherwise behave as before for compare-mode (provider compare) or normal reload
+        if (window.apiSource === "compare" && window.cw?.runCompareMode) {
           window.cw.runCompareMode();
         } else {
           window.reloadFull();
@@ -1112,12 +1115,11 @@
         if (ev.key === "Enter") {
           window.lastAppliedSpeed = Number(cyclingInput.value);
           window.saveSettings();
-          // Check mode and call appropriate function
+          // If in compare-dates mode, do NOT auto-refresh on Enter; user should press Run
           const row2 = document.getElementById('datetimeRoute2Row');
           const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive && !explicitCompareActive && window.cw?.runCompareDatesMode) {
-            window.cw.runCompareDatesMode();
-          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+          if (compareActive) return;
+          if (window.apiSource === "compare" && window.cw?.runCompareMode) {
             window.cw.runCompareMode();
           } else {
             window.reloadFull();
@@ -1130,12 +1132,11 @@
         if (window.lastAppliedSpeed === null || Number(v) !== Number(window.lastAppliedSpeed)) {
           window.lastAppliedSpeed = Number(v);
           window.saveSettings();
-          // Check mode and call appropriate function
+          // If in compare-dates mode, do NOT auto-refresh on blur; user should press Run
           const row2 = document.getElementById('datetimeRoute2Row');
           const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive && !explicitCompareActive && window.cw?.runCompareDatesMode) {
-            window.cw.runCompareDatesMode();
-          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+          if (compareActive) return;
+          if (window.apiSource === "compare" && window.cw?.runCompareMode) {
             window.cw.runCompareMode();
           } else {
             window.reloadFull();
