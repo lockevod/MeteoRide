@@ -1672,17 +1672,31 @@ function renderWeatherTable() {
         : prov === "openweather"
         ? getWeatherIconClassOpenWeather(w.weatherCode, w.isDaylight)
         : getWeatherIconClassOpenMeteo(w.weatherCode, w.isDaylight);
-    const icon = document.createElement("i");
-    icon.classList.add("wi", iconClass);
-    icon.style.fontSize = "28px";
-    th.appendChild(icon);
-    th.dataset.col = String(i);
-    th.dataset.ori = String(viewOriginalIndexMap[i]);
-    row.appendChild(th);
+  const icon = document.createElement("i");
+  icon.classList.add("wi", iconClass);
+  icon.style.fontSize = "28px";
+
+  // Create luminance vertical block (to the right of the icon). Only render the vertical bar —
+  // numeric percent is omitted per UX request.
+  const lumDiv = document.createElement("div");
+  lumDiv.classList.add("luminance-vert");
+  const lumVal = Number.isFinite(w?.luminance) ? w.luminance : null;
+  // Render only the vertical bar markup
+  lumDiv.innerHTML = luminanceBarHTML(lumVal);
+
+  const iconWrapper = document.createElement("div");
+  iconWrapper.classList.add("icon-with-lum");
+  iconWrapper.appendChild(icon);
+  iconWrapper.appendChild(lumDiv);
+
+  th.appendChild(iconWrapper);
+  th.dataset.col = String(i);
+  th.dataset.ori = String(viewOriginalIndexMap[i]);
+  row.appendChild(th);
   });
   thead.appendChild(row);
 
-  // Labels base (sin unidades)
+  // Labels base (sin unidades) - reduced rows: combine Cloud + UV, move luminance into icon row
   const lang = getVal("language") || "es";
   const labels = {
     es: [
@@ -1690,18 +1704,14 @@ function renderWeatherTable() {
       "Viento/Racha",
       "Lluvia/Probabilidad",
       "Humedad relativa",
-      "Nubosidad",
-      "Luminosidad",
-      "Índice UV",
+      "Nubes / UV",
     ],
     en: [
       "Temperature",
       "Wind/Gust",
       "Rain/Probability",
       "Relative humidity",
-      "Cloud cover",
-      "Luminosity",
-      "UV index",
+      "Cloud / UV",
     ],
   };
   const keys = [
@@ -1709,12 +1719,10 @@ function renderWeatherTable() {
     "windCombined",
     "rainCombined",
     "humidity",
-    "cloudCover",
-    "luminance",
-    "uvindex",
+    "cloud_uv",
   ];
 
-  // NEW: small icon for each metric row
+  // Small icon for each metric row
   const getRowIconHTML = (key) => {
     const cls = (() => {
       switch (key) {
@@ -1722,9 +1730,7 @@ function renderWeatherTable() {
         case "windCombined":return "wi-strong-wind";
         case "rainCombined":return "wi-raindrop";
         case "humidity":    return "wi-humidity";
-        case "cloudCover":  return "wi-cloud";
-        case "luminance":   return "wi-day-sunny";
-        case "uvindex":     return "wi-hot";
+        case "cloud_uv":    return "wi-cloud";
         default:            return "wi-na";
       }
     })();
@@ -1745,44 +1751,44 @@ function renderWeatherTable() {
     return `${getRowIconHTML(key)} <span class="label-text">${base}</span>`;
   });
 
-   // Ahora iterar como antes pero usando labelsHTML
-   keys.forEach((key, idx) => {
-     const row = document.createElement("tr");
-     const th = document.createElement("th");
-    th.innerHTML = labelsHTML[idx]; // CHANGED: include icon + wrapped text
-     row.appendChild(th);
-     viewData.forEach((w, i) => {
-       const td = document.createElement("td");
-       const val = w[key];
-       // Solo viento, racha y precipitación con decimales, resto enteros
-       if (key === "windCombined" || key === "rainCombined") {
-         // innerHTML porque los valores incluyen iconos o formato HTML
-         td.innerHTML = val || "-";
-       } else if (key === "temp") {
-        
-         // temperatura: una sola línea con símbolo º, mismo estilo que combined-top
-         td.innerHTML = formatTempCell(val);
-       } else if (key === "humidity") {
-         td.textContent = (val == null) ? "-" : `${Math.round(val)}%`;
-       } else if (key === "cloudCover") {
-         td.textContent = (val == null) ? "-" : `${Math.round(val)}%`;
-       } else if (key === "luminance") {
-         td.innerHTML = luminanceBarHTML(val);
-       } else {
-         const decimalKeys = ["precipitation", "windSpeed", "windGust"];
-         td.textContent =
-           val !== null && val !== undefined
-             ? (decimalKeys.includes(key)
-                 ? Number(val).toFixed(1)
-                 : Math.round(Number(val)))
-             : "-";
-       }
-       td.dataset.col = String(i);
-       td.dataset.ori = String(viewOriginalIndexMap[i]);
-       row.appendChild(td);
-     });
-     thead.appendChild(row);
-   });
+  // Ahora iterar por cada key (filas reducidas)
+  keys.forEach((key, idx) => {
+    const row = document.createElement("tr");
+    const th = document.createElement("th");
+    th.innerHTML = labelsHTML[idx]; // include icon + wrapped text
+    row.appendChild(th);
+    viewData.forEach((w, i) => {
+      const td = document.createElement("td");
+      // Special rendering for combined cloud + UV row
+      if (key === "cloud_uv") {
+        const cc = Number(w?.cloudCover ?? -1);
+  const uvRaw = (w?.uvindex ?? w?.uv);
+  const uv = (uvRaw == null || uvRaw === '') ? null : Math.max(0, Math.round(Number(uvRaw)));
+  const cloudPart = Number.isFinite(cc) && cc >= 0 ? `<span class="cloud-part"><i class="wi wi-cloud" aria-hidden="true"></i> <span class="cloud-text">${Math.round(cc)}%</span></span>` : `<span class="cloud-part">-</span>`;
+  const uvPart = uv != null ? `<span class="uv-part"><i class="wi wi-hot" aria-hidden="true"></i> <span class="uv-text">${uv}</span></span>` : `<span class="uv-part">-</span>`;
+        td.innerHTML = `<div class="cloud-uv-cell">${cloudPart}<span class="sep"> / </span>${uvPart}</div>`;
+      } else {
+        const val = w[key];
+        if (key === "windCombined" || key === "rainCombined") {
+          td.innerHTML = val || "-";
+        } else if (key === "temp") {
+          td.innerHTML = formatTempCell(val);
+        } else if (key === "humidity") {
+          td.textContent = (val == null) ? "-" : `${Math.round(val)}%`;
+        } else {
+          const decimalKeys = ["precipitation", "windSpeed", "windGust"];
+          td.textContent =
+            val !== null && val !== undefined
+              ? (decimalKeys.includes(key) ? Number(val).toFixed(1) : Math.round(Number(val)))
+              : "-";
+        }
+      }
+      td.dataset.col = String(i);
+      td.dataset.ori = String(viewOriginalIndexMap[i]);
+      row.appendChild(td);
+    });
+    thead.appendChild(row);
+  });
 
   table.appendChild(thead);
 
@@ -1876,14 +1882,12 @@ function renderWeatherTable() {
   })();
 }
 function luminanceBarHTML(val) {
-    if (val == null) return "-";
+    // Render a vertical bar (anchored to bottom). If no value, return an empty placeholder so layout stays stable.
+    if (val == null) return `<div class="lum-vert-outer" aria-hidden="true"><div class="lum-vert-inner" style="height:0%"></div></div>`;
     const v = Math.max(0, Math.min(1, Number(val)));
-    const w = Math.round(v * 100);
-    return `
-      <div style="height:8px;background:#e5e7eb;border-radius:6px;overflow:hidden">
-        <div style="width:${w}%;height:100%;background:#f59e0b"></div>
-      </div>
-    `;
+    const h = Math.round(v * 100);
+    // Height expressed as percentage for the inner fill; outer dimensions are set by CSS
+    return `<div class="lum-vert-outer" aria-hidden="true"><div class="lum-vert-inner" style="height:${h}%"></div></div>`;
   }
   function styleByIntensity(intensity) {
   // Tamaño base (en px para el SVG), color de relleno y del trazo
@@ -1934,7 +1938,9 @@ function wireTableInteractions() {
     if (!cell) return;
     const col = Number(cell.dataset.col);
     if (!Number.isFinite(col)) return;
-    selectViewCol(col, true); // center map on selection
+    // Only highlight/mark the point, do NOT recenter the map on click.
+    // Use false so highlightMapStep won't pan the map.
+    selectViewCol(col, false);
   });
 }
 function clearTableSelection() {

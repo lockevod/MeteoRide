@@ -2600,3 +2600,29 @@ tr.selected-row:hover {
 .selected-col:hover {
   background-color: rgba(34, 197, 94, 0.15) !important;
 }
+
+/* Weather table: icon + luminance styling */
+.icon-with-lum { display: inline-flex; align-items: center; gap: 8px; }
+.icon-with-lum .luminance-vert { display: inline-flex; flex-direction: column; align-items: center; min-width: 36px; }
+.icon-with-lum { gap: 10px; }
+/* vertical lum bar outer container */
+.lum-vert-outer { width: 8px; height: 28px; background: #e5e7eb; border-radius: 4px; overflow: hidden; display: inline-block; margin-left: 6px; }
+.lum-vert-inner { width: 100%; background: linear-gradient(180deg, #f59e0b 0%, #f97316 100%); display: block; transform-origin: bottom center; }
+.luminance-vert .lum-value { font-size: 11px; color: #374151; margin-top: 4px; }
+
+/* Cloud / UV combined cell */
+.cloud-uv-cell { display: inline-flex; align-items: center; gap: 6px; }
+.cloud-uv-cell .cloud-part, .cloud-uv-cell .uv-part { display: inline-flex; align-items: center; gap: 4px; }
+.cloud-uv-cell .cloud-text, .cloud-uv-cell .uv-text { font-size: 13px; color: #263238; }
+.cloud-uv-cell .sep { color: #9aa4ad; }
+
+/* Small screens: hide textual %/value and show only icons separated by slash */
+@media screen and (max-width: 420px) {
+  .cloud-uv-cell .cloud-text, .cloud-uv-cell .uv-text { display: none; }
+  .cloud-uv-cell { gap: 4px; }
+  .cloud-uv-cell .sep { display: inline-block; padding: 0 3px; }
+  /* Make luminance compact next to icon */
+  .icon-with-lum { gap: 6px; }
+  .luminance-vert { min-width: 28px; }
+  .luminance-vert .lum-value { font-size: 10px; }
+}
