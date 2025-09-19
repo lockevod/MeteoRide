@@ -34,7 +34,56 @@
         // Allow clicks in both compare and compare-dates mode
         const table = document.getElementById("weatherTable");
         const isCompareDates = table && table.classList.contains('compare-dates-mode');
-        if (sel.value !== "compare" && !isCompareDates) return;
+        const isCompareMode = table && table.classList.contains('compare-mode');
+        if (!isCompareMode && !isCompareDates) return;
+
+        // For compare modes, handle row selection instead of column selection
+        // First check if we clicked on a row with data-row attribute
+        let row = ev.target.closest("tr[data-row]");
+        if (!row) {
+          // If not found directly, check if we clicked in a cell that belongs to a row with data-row
+          const cell = ev.target.closest("td, th");
+          if (cell) {
+            const parentRow = cell.closest("tr");
+            if (parentRow && parentRow.dataset.row) {
+              row = parentRow;
+            }
+          }
+        }
+
+        if (row) {
+          const rawIndex = Number(row.dataset.row);
+          if (!Number.isFinite(rawIndex)) return;
+
+          // Determine which row should be selected in compare-dates mode.
+          // Requirement: clicks map to the summary row:
+          // 0 -> 1, 1 -> 1, 2 -> 3, 3 -> 3
+          let targetIndex = rawIndex;
+          if (isCompareDates) {
+            // map even interval rows to the following summary row
+            if (rawIndex % 2 === 0) targetIndex = rawIndex + 1;
+            else targetIndex = rawIndex; // odd already a summary
+          }
+
+          // Resolve the actual row element to select (fallback to clicked row)
+          const targetRow = table.querySelector(`tr[data-row="${targetIndex}"]`) || row;
+
+          // Clear previous row selection
+          table.querySelectorAll("tr.selected-row").forEach(r => r.classList.remove("selected-row"));
+
+          // Select target row (summary for compare-dates)
+          targetRow.classList.add("selected-row");
+
+          // Show markers for the logical row on map
+          if (window.cw && window.cw.showCompareRowMarkers) {
+            window.cw.showCompareRowMarkers(targetIndex, isCompareDates);
+          }
+          return;
+        }
+
+        // Fallback to column selection for non-compare modes
+        // If we are in any compare mode, do not perform column selection here.
+        if (isCompareMode || isCompareDates) return;
         const cell = ev.target.closest("[data-col]");
         if (!cell) return;
         const col = Number(cell.dataset.col);
@@ -86,8 +135,11 @@
     // Mark body as compare-active (used for small-screen behavior)
     try { document.body.classList.add("compare-active"); } catch {}
 
-    // Ensure no wind/rain markers are shown in compare mode
-    if (window.cw?.clearMarkers) window.cw.clearMarkers();
+    // Ensure no wind/rain markers are shown in compare mode: always clear on entering/refresh
+    if (window.cw?.clearMarkers) {
+      try { window.cw.clearMarkers(); } catch(_) {}
+      try { window.cw._compareMarkersCleared = true; } catch(_) {}
+    }
 
     const steps = (window.cw.getSteps && window.cw.getSteps()) || [];
     if (!steps.length) { compareRendering = false; return; } // no baseline yet
@@ -119,6 +171,13 @@
     const hasAny = {};
     for (const p of provs) compareData[p] = [];
 
+    // Show loading overlay (use global overlay for consistency)
+    try {
+      if (window.cw && window.cw.ui && typeof window.cw.ui.showLoading === 'function') window.cw.ui.showLoading();
+      else if (typeof window.showLoading === 'function') window.showLoading();
+    } catch(_) {}
+
+    try {
     for (let i = 0; i < steps.length; i++) {
       const p = steps[i];
       const timeAt = new Date(p.time);
@@ -251,27 +310,56 @@
     const baseline = filtered.openmeteo || filtered.aromehd || filtered.meteoblue || filtered.openweather || [];
     if (window.cw.setWeatherData) window.cw.setWeatherData(baseline);
 
+    // Store provider data for row selection
+    window.cw.compareProviderData = filtered;
+
     // Build table
     renderCompareTable(filtered, baseline, units);
 
-    // Compare mode: ensure no markers remain
-    if (window.cw?.clearMarkers) window.cw.clearMarkers();
+    // Compare mode: ensure no markers remain (only once)
+    if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
+      window.cw.clearMarkers();
+      try { window.cw._compareMarkersCleared = true; } catch(_) {}
+    }
+
+    // Hide global loading overlay
+    try {
+      if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
+      else if (typeof window.hideLoading === 'function') window.hideLoading();
+    } catch(_) {}
 
     // Store key and reconnect observer after rendering
     lastCompareKey = newKey;
     try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
     compareRendering = false;
+    } finally {
+      // Ensure global loading is hidden even if there's an error
+      try {
+        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
+        else if (typeof window.hideLoading === 'function') window.hideLoading();
+      } catch(_) {}
+    }
   }
 
   async function runCompareDatesMode() {
     if (!isReady()) return;
+
+    // Validate that a route is loaded before proceeding
+    const routeValidation = validateRouteLoaded();
+    if (!routeValidation.valid) {
+      return;
+    }
+
     // Prevent re-entrancy
     if (compareRendering) return;
     compareRendering = true;
     try { compareMO && compareMO.disconnect(); } catch(_) {}
 
-    // Clear any existing markers since we can't show two dates at once
-    if (window.cw?.clearMarkers) window.cw.clearMarkers();
+    // Clear any existing markers since we can't show two dates at once (only once per session)
+    if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
+      window.cw.clearMarkers();
+      try { window.cw._compareMarkersCleared = true; } catch(_) {}
+    }
 
     // Helper: parse "YYYY-MM-DDTHH:mm" (or with space) as local time reliably
     function parseLocalDateTime(val) {
@@ -297,6 +385,31 @@
   // Read both datetimes (full YYYY-MM-DDTHH:mm) and parse locally
   const dtA = document.getElementById("datetimeRoute")?.value || "";
   const dtB = document.getElementById("datetimeRoute2")?.value || "";
+
+  // Validate date ranges for both dates
+  const validationA = validateDateRange(dtA, 'fecha A');
+  const validationB = validateDateRange(dtB, 'fecha B');
+
+  if (!validationA.valid) {
+    const table = document.getElementById("weatherTable");
+    if (table) {
+      table.innerHTML = `<tbody><tr><td><span style="color: red;">${validationA.error}</span></td></tr></tbody>`;
+    }
+    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
+    compareRendering = false;
+    return;
+  }
+
+  if (!validationB.valid) {
+    const table = document.getElementById("weatherTable");
+    if (table) {
+      table.innerHTML = `<tbody><tr><td><span style="color: red;">${validationB.error}</span></td></tr></tbody>`;
+    }
+    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
+    compareRendering = false;
+    return;
+  }
+
   const baseA = parseLocalDateTime(dtA);
   const baseB = parseLocalDateTime(dtB);
   if (!baseA || !baseB) {
@@ -403,47 +516,37 @@
     }
 
     try {
-      // Show subtle loading indicator
-      const container = document.getElementById("weatherTableContainer");
-      if (container) {
-        // Create a centered loading overlay
-        const loadingDiv = document.createElement('div');
-        loadingDiv.id = 'compare-loading-overlay';
-        loadingDiv.innerHTML = `<span style="font-size: 0.9em; color: #666; font-style: italic; opacity: 0.8;">${(window.t ? window.t('Loading...') : 'Loading...')}</span>`;
-        loadingDiv.style.cssText = `
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          background: rgba(255, 255, 255, 0.95);
-          padding: 8px 16px;
-          border-radius: 6px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-          z-index: 1000;
-          font-size: 0.9em;
-          border: 1px solid rgba(0,0,0,0.1);
-        `;
-        container.style.position = 'relative';
-        container.appendChild(loadingDiv);
-      }
+      // Show global loading overlay for consistency
+      try {
+        if (window.cw && window.cw.ui && typeof window.cw.ui.showLoading === 'function') window.cw.ui.showLoading();
+        else if (typeof window.showLoading === 'function') window.showLoading();
+      } catch(_) {}
 
       const dataA = await fetchDataForBase(baseA);
       const dataB = await fetchDataForBase(baseB);
 
-      // Remove loading indicator
-      const loadingOverlay = document.getElementById('compare-loading-overlay');
-      if (loadingOverlay) loadingOverlay.remove();
+      // Hide global loading overlay
+      try {
+        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
+        else if (typeof window.hideLoading === 'function') window.hideLoading();
+      } catch(_) {}
 
       // Render combined table: header (times) then block A (label row + data rows), block B
       const labelA = formatDateOnly(baseA);
       const labelB = formatDateOnly(baseB);
       renderDateCompareTable(labelA, dataA, labelB, dataB, units);
 
+      // Store data for row selection
+      window.cw.weatherDataA = dataA;
+      window.cw.weatherDataB = dataB;
+
       lastCompareKey = `${provider}|${steps.length}|${baseA.toISOString()}|${baseB.toISOString()}`;
     } finally {
-      // Ensure loading indicator is removed even if there's an error
-      const loadingOverlay = document.getElementById('compare-loading-overlay');
-      if (loadingOverlay) loadingOverlay.remove();
+      // Ensure global loading is hidden even if there's an error
+      try {
+        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
+        else if (typeof window.hideLoading === 'function') window.hideLoading();
+      } catch(_) {}
 
       try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
       compareRendering = false;
@@ -549,7 +652,10 @@
   // Row 1: intervals fecha A (first column = day/month)
     const intervalsA = document.createElement('tr');
     intervalsA.classList.add('interval-row');
-  const firstA = document.createElement('th'); firstA.scope = 'row'; firstA.classList.add('provider-cell'); firstA.style.textAlign = 'left'; firstA.rowSpan = '2'; firstA.innerHTML = `<div style="margin-bottom: 8px;">${String(dateA)}</div>` + combinedHeader(summaryHTML_A, ""); intervalsA.appendChild(firstA);
+    intervalsA.dataset.row = '0'; // Row for date A intervals
+  const firstA = document.createElement('th'); firstA.scope = 'row'; firstA.classList.add('provider-cell'); firstA.style.textAlign = 'left'; firstA.innerHTML = `<div style="margin-bottom: 8px;">${String(dateA)}</div>` + combinedHeader(summaryHTML_A, ""); intervalsA.appendChild(firstA);
+    // Combine first column with the following summary row
+    try { firstA.rowSpan = 2; } catch(_) {}
     {
       const arr = dataA || [];
       const maxM = arr.length ? Math.max(...arr.map(w => Number(w?.distanceM || 0))) : 0;
@@ -583,9 +689,8 @@
 
   // Row 2: summary fecha A (using buildCompareCell)
   const summaryA = document.createElement('tr');
-  // No th for first column, since rowspan from row 1
-  // Add empty td to maintain column structure
-  const emptyA = document.createElement('td'); emptyA.style.display = 'none'; summaryA.appendChild(emptyA);
+  summaryA.dataset.row = '1'; // Row for date A summary
+    // Do NOT create a first cell here: it's covered by the rowspan from the intervals row
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
       const step = (dataA && dataA[i]) ? dataA[i] : null; td.innerHTML = buildCompareCell(step); summaryA.appendChild(td);
@@ -595,7 +700,10 @@
   // Row 3: intervals fecha B
     const intervalsB = document.createElement('tr');
     intervalsB.classList.add('interval-row');
-  const firstB = document.createElement('th'); firstB.scope = 'row'; firstB.classList.add('provider-cell'); firstB.style.textAlign = 'left'; firstB.rowSpan = '2'; firstB.innerHTML = `<div>${String(dateB)}</div>` + combinedHeader(summaryHTML_B, ""); intervalsB.appendChild(firstB);
+    intervalsB.dataset.row = '2'; // Row for date B intervals
+  const firstB = document.createElement('th'); firstB.scope = 'row'; firstB.classList.add('provider-cell'); firstB.style.textAlign = 'left'; firstB.innerHTML = `<div>${String(dateB)}</div>` + combinedHeader(summaryHTML_B, ""); intervalsB.appendChild(firstB);
+    // Combine first column with the following summary row
+    try { firstB.rowSpan = 2; } catch(_) {}
     {
       const arr = dataB || [];
       const maxM = arr.length ? Math.max(...arr.map(w => Number(w?.distanceM || 0))) : 0;
@@ -629,9 +737,8 @@
 
   // Row 4: summary fecha B
     const summaryB = document.createElement('tr');
-    // No th for first column, since rowspan from row 3
-    // Add empty td to maintain column structure
-    const emptyB = document.createElement('td'); emptyB.style.display = 'none'; summaryB.appendChild(emptyB);
+    summaryB.dataset.row = '3'; // Row for date B summary
+    // Do NOT create a first cell here: it's covered by the rowspan from the intervals row
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
       const step = (dataB && dataB[i]) ? dataB[i] : null; td.innerHTML = buildCompareCell(step); summaryB.appendChild(td);
@@ -997,8 +1104,11 @@
   // Keep only those present in compareData; append any others (unexpected) at end
   let provOrder = desiredOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !desiredOrder.includes(p)));
 
-    provOrder.forEach((prov) => {
+    provOrder.forEach((prov, rowIndex) => {
       const r = document.createElement("tr");
+      r.dataset.row = String(rowIndex);
+      // store provider id for reliable lookups when a row is clicked
+      r.dataset.prov = prov;
       const th = document.createElement("th");
       th.innerHTML = `<i class="wi wi-cloud label-ico" aria-hidden="true"></i> <span class="label-text">${labelForProvider(prov)}</span><span class="label-abbrev">${getProviderAbbrev(prov)}</span>`;
       th.classList.add("provider-cell");
@@ -1049,10 +1159,63 @@
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  // NEW: Function to show markers for a selected row in compare modes
+  function showCompareRowMarkers(rowIndex, isCompareDates) {
+    // NOTE: do not clear markers here - createMarkersForData will manage markers
+
+    const table = document.getElementById("weatherTable");
+    if (!table) return;
+
+    let rowData = [];
+    let provider = '';
+
+    if (isCompareDates) {
+      // Compare dates mode: row 0,1 = date A, row 2,3 = date B
+      if (rowIndex === 0 || rowIndex === 1) {
+        rowData = window.cw.weatherDataA || [];
+        provider = 'Date A';
+      } else if (rowIndex === 2 || rowIndex === 3) {
+        rowData = window.cw.weatherDataB || [];
+        provider = 'Date B';
+      }
+    } else {
+      // Compare providers mode: get data for the selected provider
+      const rows = table.querySelectorAll('tbody tr[data-row]');
+      if (rowIndex < rows.length) {
+        const row = rows[rowIndex];
+        // prefer the stored provider id on the row
+        const provId = row.dataset.prov || '';
+        if (provId) {
+          provider = provId;
+        } else {
+          const providerCell = row.querySelector('.provider-cell .label-text');
+          if (providerCell) provider = providerCell.textContent.trim();
+        }
+
+        // Get the specific provider data from stored compare data using provider id
+        if (window.cw.compareProviderData && window.cw.compareProviderData[provider]) {
+          rowData = window.cw.compareProviderData[provider];
+        } else {
+          // Fallback to baseline data if provider data not found
+          rowData = window.cw.weatherData || [];
+        }
+      }
+    }
+
+    // Create markers for each data point in the row
+    if (rowData.length > 0 && window.cw?.createMarkersForData) {
+        try {
+          console.debug('[compare] showCompareRowMarkers', { rowIndex, isCompareDates, provider, rowDataLength: (rowData || []).length, sample: (rowData && rowData[0]) || null });
+        } catch(_) {}
+        window.cw.createMarkersForData(rowData, provider);
+    }
+  }
+
   // Expose compare runner so app.js can trigger it when needed (first load, GPX load, etc.)
   try {
     window.cw = window.cw || {};
     window.cw.runCompareMode = runCompareMode;
+    window.cw.showCompareRowMarkers = showCompareRowMarkers;
   } catch (_) {}
 
 })();

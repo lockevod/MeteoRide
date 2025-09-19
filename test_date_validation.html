@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Date Validation</title>
+</head>
+<body>
+    <h1>Testing Date Range Validation</h1>
+    <div id="results"></div>
+
+    <script src="public/scripts/utils.js"></script>
+    <script>
+        // Test the validateDateRange function
+        function runTests() {
+            const results = document.getElementById('results');
+            const tests = [
+                // Valid dates
+                { date: new Date().toISOString().substring(0, 16), expected: true, desc: 'Today' },
+                { date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().substring(0, 16), expected: true, desc: '7 days from now' },
+                { date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().substring(0, 16), expected: true, desc: '14 days from now (should be valid)' },
+                { date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000 - 1000).toISOString().substring(0, 16), expected: true, desc: '13 days 23h 59m 59s from now (should be valid)' },
+
+                // Invalid dates
+                { date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().substring(0, 16), expected: false, desc: 'Yesterday' },
+                { date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000 + 1000).toISOString().substring(0, 16), expected: false, desc: '14 days + 1 second from now (should be invalid)' },
+                { date: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().substring(0, 16), expected: false, desc: '15 days from now' },
+                { date: '', expected: false, desc: 'Empty string' },
+                { date: 'invalid-date', expected: false, desc: 'Invalid format' }
+            ];
+
+            let output = '<h2>Test Results:</h2><ul>';
+
+            tests.forEach(test => {
+                const result = validateDateRange(test.date);
+                const passed = result.valid === test.expected;
+                output += `<li style="color: ${passed ? 'green' : 'red'};">`;
+                output += `${test.desc}: ${passed ? 'PASS' : 'FAIL'} `;
+                output += `(Expected: ${test.expected}, Got: ${result.valid})`;
+                if (!result.valid && result.error) {
+                    output += ` - Error: ${result.error}`;
+                }
+                output += '</li>';
+            });
+
+            output += '</ul>';
+            results.innerHTML = output;
+        }
+
+        // Wait for utils.js to load
+        setTimeout(runTests, 1000);
+    </script>
+</body>
+</html>

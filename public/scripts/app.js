@@ -322,6 +322,13 @@ function segmentRouteByTime(geojson) {
     return;
   }
 
+  // Validate date range (today to today + 14 days)
+  const dateValidation = validateDateRange(datetimeValue, 'fecha de salida');
+  if (!dateValidation.valid) {
+    logDebug(dateValidation.error, true);
+    return;
+  }
+
   let totalDistance = 0;
   for (let i = 1; i < coords.length; i++) {
     totalDistance += haversine(coords[i - 1], coords[i]); // km
@@ -1907,6 +1914,9 @@ function wireTableInteractions() {
   const table = document.getElementById("weatherTable");
   if (!table) return;
   table.addEventListener("click", (ev) => {
+    // Do not trigger column selection when compare modes are active
+    const isCompareMode = table.classList.contains('compare-mode') || table.classList.contains('compare-dates-mode');
+    if (isCompareMode) return;
     const cell = ev.target.closest("[data-col]");
     if (!cell) return;
     const col = Number(cell.dataset.col);
@@ -1975,17 +1985,22 @@ function selectByOriginalIdx(originalIdx, centerMap = false) {
 }
 
 function renderWindMarkers() {
-  // Clear previous
+  // Compare mode: when compare is active we must not clear or re-render
+  // markers here because compare-specific markers are created elsewhere
+  const sel = document.getElementById("apiSource");
+  const table = document.getElementById("weatherTable");
+  const isCompareActive = sel && (sel.value === "compare") || table?.classList.contains('compare-dates-mode');
+  if (isCompareActive) {
+    // If compare is active and a row is selected, markers are managed by compare handlers
+    // If no row is selected, nothing should be shown. In both cases we skip clearing/rendering here.
+    return;
+  }
+
+  // Clear previous (non-compare mode)
   windMarkers.forEach(m => map.removeLayer(m));
   windMarkers = [];
   rainMarkers.forEach(m => map.removeLayer(m));
   rainMarkers = [];
-
-  // Compare mode: do not render wind/rain markers (keep them cleared)
-  const sel = document.getElementById("apiSource");
-  if (sel && sel.value === "compare") {
-    return;
-  }
 
   if (!weatherData?.length) return;
 
@@ -2047,9 +2062,10 @@ function renderWindMarkers() {
         iconSize: [24, 24],
         iconAnchor: [12, 24]
       });
-      L.marker([rPos[0], rPos[1]], { icon: rainIcon, pane: 'windPane' })
-        .addTo(map)
-        .setZIndexOffset(900);
+      const rMarker = L.marker([rPos[0], rPos[1]], { icon: rainIcon, pane: 'windPane' })
+        .addTo(map);
+      try { rMarker.setZIndexOffset(900); } catch(_) {}
+      rainMarkers.push(rMarker);
     }
   }
 
@@ -2059,6 +2075,91 @@ function renderWindMarkers() {
   if (selectedOriginalIdx != null) {
     highlightMapStep(selectedOriginalIdx, false);
   }
+}
+
+// NEW: Function to create markers for specific data (used in compare modes)
+function createMarkersForData(dataArray, providerLabel = '') {
+  if (!Array.isArray(dataArray) || !map) return;
+
+  // Clear existing markers
+  windMarkers.forEach(m => map.removeLayer(m));
+  windMarkers = [];
+  rainMarkers.forEach(m => map.removeLayer(m));
+  rainMarkers = [];
+
+  try {
+    console.debug('[app] createMarkersForData called', { providerLabel, length: dataArray.length, sample: dataArray[0] || null });
+  } catch(_) {}
+
+  const PRECIP_MIN = 0.1;
+  const PROB_MIN = 20;
+
+  const metersBetween = (a, b) =>
+    haversine({ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }) * 1000;
+
+  for (let i = 0; i < dataArray.length; i++) {
+    const data = dataArray[i];
+    if (!data || data.lat == null || data.lon == null) continue;
+
+    // Calculate positions like in normal mode
+    const p0 = i > 0 ? { lat: dataArray[i-1].lat, lon: dataArray[i-1].lon } : { lat: data.lat, lon: data.lon };
+    const p1 = i < dataArray.length-1 ? { lat: dataArray[i+1].lat, lon: dataArray[i+1].lon } : { lat: data.lat, lon: data.lon };
+
+    // Unit normal and tangent (in degrees space)
+    const dx = p1.lon - p0.lon, dy = p1.lat - p0.lat;
+    const len = Math.hypot(dx, dy) || 1;
+    const tx = dx / len, ty = dy / len; // tangent
+    const { nx, ny } = normalUnit(p0, p1); // normal (perpendicular)
+
+    // Offsets (meters) - same as normal mode
+    const OFF_WIND = 14;
+    const OFF_RAIN = 16;
+    const SHIFT_T  = 10;
+    const rainShiftMeters = (i % 2 === 0) ? SHIFT_T : -SHIFT_T;
+
+    // Positions
+    const wPos = offsetLatLng(data.lat, data.lon, nx, ny, OFF_WIND);
+    const rPosShift = offsetLatLng(data.lat, data.lon, tx, ty, rainShiftMeters);
+    let rPos = offsetLatLng(rPosShift[0], rPosShift[1], -nx, -ny, OFF_RAIN);
+    if (metersBetween(wPos, rPos) < 22) {
+      rPos = offsetLatLng(rPos[0], rPos[1], -nx, -ny, 8);
+    }
+
+    // Wind marker (support both naming conventions: windDir or windDirection)
+    const windDir = (data.windDir != null) ? data.windDir : (data.windDirection != null ? data.windDirection : null);
+    const speedForIcon = (typeof windIntensityValue === 'function')
+      ? windIntensityValue(Number(data.windSpeed ?? 0), Number(data.windGust ?? 0))
+      : Number(data.windSpeed ?? 0);
+    if (data.windSpeed != null && windDir != null) {
+      const windIcon = makeWindSVGIcon(Number(windDir), speedForIcon);
+      const wMarker = L.marker([wPos[0], wPos[1]], { icon: windIcon, pane: 'windPane' })
+        .addTo(map);
+      try { wMarker.setZIndexOffset(1000); } catch(_) {}
+      windMarkers.push(wMarker);
+    }
+
+    // Rain marker (use safe numeric checks)
+    const precipVal = Number(data.precipitation ?? 0);
+    const probVal = Number(data.precipProb ?? 0);
+    if (precipVal >= PRECIP_MIN && probVal >= PROB_MIN) {
+      const rainIcon = L.divIcon({
+        className: 'rain-marker',
+        html: '💧',
+        iconSize: [24, 24],
+        iconAnchor: [12, 24]
+      });
+      const rMarker = L.marker([rPos[0], rPos[1]], { icon: rainIcon, pane: 'windPane' })
+        .addTo(map)
+        .setZIndexOffset(900);
+      rainMarkers.push(rMarker);
+    }
+  }
+
+  // Set z-index for wind markers
+  windMarkers.forEach(m => m.setZIndexOffset(1000));
+
+  // Bring track to back if it exists
+  if (trackLayer?.bringToBack) trackLayer.bringToBack();
 }
 
 function initMap() {
@@ -2402,7 +2503,10 @@ try {
     windMarkers = [];
     try { rainMarkers.forEach(m => map && map.removeLayer(m)); } catch(_) {}
     rainMarkers = [];
+    // Do NOT modify window.cw._compareMarkersCleared here; compare mode logic manages that flag
   };
+  // NEW: expose function to create markers for specific data
+  window.cw.createMarkersForData = createMarkersForData;
   // NEW: expose selection helpers for compare clicks
   window.cw.highlightColumn = (col) => highlightColumn(col);
   window.cw.highlightMapStep = (idx, center = false) => highlightMapStep(idx, center);

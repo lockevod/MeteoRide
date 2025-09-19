@@ -81,6 +81,13 @@
   compare_dates_btn_label_on: "Salir comparar",
   compare_dates_btn_title_on: "Salir del modo comparar fechas",
   compare_now_btn_title: "Calcular comparación",
+      // Date validation messages
+      date_empty: "La {field} no puede estar vacía.",
+      date_invalid: "La {field} tiene un formato inválido.",
+      date_too_early: "La {field} no puede ser anterior al día actual.",
+      date_too_late: "La {field} no puede ser posterior a 14 días desde hoy.",
+      // Route validation messages
+      no_route_loaded: "No hay ruta cargada. Por favor, carga una ruta GPX primero.",
     },
     en: {
       config_saved: "Settings saved",
@@ -159,6 +166,13 @@
   compare_dates_btn_label_on: "Exit compare",
   compare_dates_btn_title_on: "Exit compare-by-dates mode",
   compare_now_btn_title: "Run comparison",
+      // Date validation messages
+      date_empty: "The {field} cannot be empty.",
+      date_invalid: "The {field} has an invalid format.",
+      date_too_early: "The {field} cannot be earlier than today.",
+      date_too_late: "The {field} cannot be later than 14 days from today.",
+      // Route validation messages
+      no_route_loaded: "No route loaded. Please load a GPX route first.",
     },
   };
 
@@ -267,6 +281,40 @@
     if (isNaN(selected.getTime())) return roundUpToNextQuarterDate(now);
     if (selected < now) return roundUpToNextQuarterDate(now);
     return selected;
+  }
+  function validateDateRange(dateString, fieldName = 'fecha') {
+    if (!dateString) return { valid: false, error: window.t ? window.t('date_empty', { field: fieldName }) : `La ${fieldName} no puede estar vacía.` };
+
+    const selected = new Date(dateString);
+    if (isNaN(selected.getTime())) {
+      return { valid: false, error: window.t ? window.t('date_invalid', { field: fieldName }) : `La ${fieldName} tiene un formato inválido.` };
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const maxDate = new Date(today);
+    maxDate.setDate(today.getDate() + 14);
+    // Set to end of day for maxDate to include the full 14th day
+    maxDate.setHours(23, 59, 59, 999);
+
+    if (selected < today) {
+      return { valid: false, error: window.t ? window.t('date_too_early', { field: fieldName }) : `La ${fieldName} no puede ser anterior al día actual.` };
+    }
+
+    if (selected > maxDate) {
+      return { valid: false, error: window.t ? window.t('date_too_late', { field: fieldName }) : `La ${fieldName} no puede ser posterior a 14 días desde hoy.` };
+    }
+
+    return { valid: true };
+  }
+  function validateRouteLoaded() {
+    // Check if there's a route loaded by verifying weatherData and trackLayer
+    if (!Array.isArray(window.weatherData) || window.weatherData.length === 0 || !window.trackLayer) {
+      const errorMsg = window.t ? window.t('no_route_loaded') : 'No route loaded. Please load a GPX route first.';
+      logDebug(errorMsg, true);
+      return { valid: false, error: errorMsg };
+    }
+    return { valid: true };
   }
   function roundToNextQuarterISO(date = new Date()) {
     const d = new Date(date);
@@ -555,6 +603,8 @@
   window.beaufortIntensity = beaufortIntensity;
   window.windToUnits = windToUnits;
   window.windIntensityValue = windIntensityValue;
+  window.validateDateRange = validateDateRange;
+  window.validateRouteLoaded = validateRouteLoaded;
 
   // Also via window.cw for modularity
   window.cw = window.cw || {};
@@ -569,6 +619,8 @@
      getCache,
      setCache,
      getValidatedDateTime,
+     validateDateRange,
+     validateRouteLoaded,
      roundToNextQuarterISO,
      roundUpToNextQuarterDate,
      setupDateLimits,

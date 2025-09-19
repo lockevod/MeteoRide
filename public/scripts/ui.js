@@ -20,10 +20,55 @@
   }
   function clearNotice() { setNotice("", "warn"); }
 
+  // Helper function to create discrete loading indicators
+  function createDiscreteLoadingIndicator(container, id = 'loading-overlay') {
+    // Instead of creating a per-container overlay, reuse the global centered overlay
+    // so all loading indicators look identical (same text, size and position).
+    try {
+      // Ensure global overlay exists and is translated
+      showLoading();
+      const el = document.getElementById('loadingOverlay');
+      if (el) return el;
+    } catch (e) {
+      // Fallback: create a minimal inline indicator in container
+      const existing = document.getElementById(id);
+      if (existing) existing.remove();
+      const loadingDiv = document.createElement('div');
+      loadingDiv.id = id;
+      loadingDiv.innerHTML = `<span style="font-size: 0.9em; color: #666; font-style: italic; opacity: 0.8;">${(window.t ? window.t('loading_text') : 'Loading...')}</span>`;
+      loadingDiv.style.cssText = `position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.95);padding:8px 16px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:1000;font-size:0.9em;border:1px solid rgba(0,0,0,0.1);`;
+      try { container.style.position = 'relative'; container.appendChild(loadingDiv); } catch (_) {}
+      return loadingDiv;
+    }
+  }
+
   // Loading overlay
   function showLoading() {
-    const el = document.getElementById("loadingOverlay");
-    if (!el) return;
+    let el = document.getElementById("loadingOverlay");
+    if (!el) {
+      // Create the overlay if it doesn't exist
+      el = document.createElement('div');
+      el.id = 'loadingOverlay';
+      el.innerHTML = `<span style="font-size: 0.9em; color: #666; font-style: italic; opacity: 0.8;">${(window.t ? window.t('loading_text') : 'Loading...')}</span>`;
+      el.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.95);
+        padding: 8px 16px;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 20000;
+        font-size: 0.9em;
+        border: 1px solid rgba(0,0,0,0.1);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      `;
+      document.body.appendChild(el);
+    }
+    // Do not overwrite the content if the element already existed (keeps data-i18n translation)
     el.style.visibility = "visible";
     el.style.opacity = "1";
     el.style.pointerEvents = "auto";
@@ -797,7 +842,7 @@
         } else {
           dtEl.value = rounded;
         }
-        // If compare-dates is active (date B row visible), re-run compare-dates instead of full reload
+          // If compare-by-dates is active, refresh compare instead of full reload
         const row2 = document.getElementById('datetimeRoute2Row');
         const compareActive = row2 && row2.style.display !== 'none';
         if (compareActive) {
@@ -805,6 +850,8 @@
             window.cw.runCompareDatesMode();
           }
           // In explicit mode, do nothing until user clicks Run Compare
+        } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+          window.cw.runCompareMode();
         } else {
           window.reloadFull();
         }
@@ -871,8 +918,12 @@
             const compareActive = row2 && row2.style.display !== 'none';
             if (compareActive && window.cw?.runCompareDatesMode) {
               window.saveSettings();
-              window.cw.runCompareDatesMode();
-              return; // avoid falling through to reloadFull
+              if (!explicitCompareActive) {
+                window.cw.runCompareDatesMode();
+                return; // avoid falling through to reloadFull
+              }
+              // In explicit mode, do not auto-run; just save settings
+              return;
             }
           }
           if (id === "apiKey" || id === "apiKeyOW") {
@@ -889,13 +940,23 @@
           window.saveSettings();
           if (id === "language") window.applyTranslations();
           if (["windUnits", "tempUnits"].includes(id) && window.weatherData.length) {
-            window.updateUnits();
+            // Validate that a route is loaded before updating units
+            const routeValidation = validateRouteLoaded();
+            if (routeValidation.valid) {
+              window.updateUnits();
+            }
           }
           // If compare-by-dates UI is visible, refresh the compare view instead of full reload
           const row2 = document.getElementById('datetimeRoute2Row');
           const compareActive = row2 && row2.style.display !== 'none';
           if (compareActive && window.cw?.runCompareDatesMode) {
-            window.cw.runCompareDatesMode();
+            if (!explicitCompareActive) {
+              window.cw.runCompareDatesMode();
+              return;
+            }
+            return;
+          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+            window.cw.runCompareMode();
             return;
           }
           window.reloadFull();
@@ -908,11 +969,16 @@
     if (apiSourceEl) {
       apiSourceEl.addEventListener("change", () => {
         const prov = apiSourceEl.value;
+        // Validate that a route is loaded before proceeding
+        const routeValidation = validateRouteLoaded();
+        if (!routeValidation.valid) {
+          return;
+        }
         // If date-compare is active and a normal provider is selected, re-run date compare with the new provider
         const row2 = document.getElementById('datetimeRoute2Row');
         const compareActive = row2 && row2.style.display !== 'none';
         if (compareActive && prov !== 'compare') {
-          if (window.cw?.runCompareDatesMode) window.cw.runCompareDatesMode();
+          if (window.cw?.runCompareDatesMode && !explicitCompareActive) window.cw.runCompareDatesMode();
           return;
         }
         if (prov === "compare") {
@@ -972,6 +1038,8 @@
           }
           if (compareNowBtn) compareNowBtn.style.display = 'none';
           explicitCompareActive = false;
+          // Recalculate normal weather data when exiting compare-dates mode
+          window.reloadFull();
         }
       });
     }
@@ -987,13 +1055,23 @@
         const row2 = document.getElementById('datetimeRoute2Row');
         const compareActive = row2 && row2.style.display !== 'none';
         if (!compareActive) return;
+
+        // Validate that a route is loaded before proceeding
+        const routeValidation = validateRouteLoaded();
+        if (!routeValidation.valid) {
+          return;
+        }
+
         const a = document.getElementById('datetimeRoute')?.value || '';
         const b = document.getElementById('datetimeRoute2')?.value || '';
         if (a.length < 16 || b.length < 16) {
           console.debug('[compare] Please select both Date A and Date B before running compare');
           return;
         }
-        if (window.cw?.runCompareDatesMode) window.cw.runCompareDatesMode();
+        if (window.cw?.runCompareDatesMode) {
+          // explicitCompareActive doesn't block the user clicking Run; here this is the Run button handler
+          window.cw.runCompareDatesMode();
+        }
       });
     }
 
@@ -1007,7 +1085,16 @@
         if (cs) cs.value = v;
         window.lastAppliedSpeed = Number(v);
         window.saveSettings();
-        window.reloadFull();
+        // Check mode and call appropriate function
+        const row2 = document.getElementById('datetimeRoute2Row');
+        const compareActive = row2 && row2.style.display !== 'none';
+        if (compareActive && !explicitCompareActive && window.cw?.runCompareDatesMode) {
+          window.cw.runCompareDatesMode();
+        } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+          window.cw.runCompareMode();
+        } else {
+          window.reloadFull();
+        }
       });
     }
 
@@ -1018,7 +1105,16 @@
         if (ev.key === "Enter") {
           window.lastAppliedSpeed = Number(cyclingInput.value);
           window.saveSettings();
-          window.reloadFull();
+          // Check mode and call appropriate function
+          const row2 = document.getElementById('datetimeRoute2Row');
+          const compareActive = row2 && row2.style.display !== 'none';
+          if (compareActive && !explicitCompareActive && window.cw?.runCompareDatesMode) {
+            window.cw.runCompareDatesMode();
+          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+            window.cw.runCompareMode();
+          } else {
+            window.reloadFull();
+          }
         }
       });
       cyclingInput.addEventListener("blur", () => {
@@ -1027,7 +1123,16 @@
         if (window.lastAppliedSpeed === null || Number(v) !== Number(window.lastAppliedSpeed)) {
           window.lastAppliedSpeed = Number(v);
           window.saveSettings();
-          window.reloadFull();
+          // Check mode and call appropriate function
+          const row2 = document.getElementById('datetimeRoute2Row');
+          const compareActive = row2 && row2.style.display !== 'none';
+          if (compareActive && !explicitCompareActive && window.cw?.runCompareDatesMode) {
+            window.cw.runCompareDatesMode();
+          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
+            window.cw.runCompareMode();
+          } else {
+            window.reloadFull();
+          }
         }
       });
       cyclingInput.addEventListener("input", () => {
@@ -1137,6 +1242,7 @@
     clearNotice,
     showLoading,
     hideLoading,
+    createDiscreteLoadingIndicator,
     toggleConfig,
     toggleDebug,
     applyTranslations,

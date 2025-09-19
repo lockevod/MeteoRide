@@ -2471,3 +2471,27 @@ body.dragging { user-select: none; }
   #toggleDebug .debug-text { display: none !important; }
   #toggleDebug .debug-ico   { font-size: 0.95rem; }
 }
+
+/* Compare mode row selection styles */
+tr.selected-row {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-left: 3px solid #3b82f6;
+}
+
+tr.selected-row td {
+  background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+tr.selected-row:hover {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Compare mode column selection styles */
+.selected-col {
+  background-color: rgba(34, 197, 94, 0.1) !important;
+  border-top: 2px solid #22c55e !important;
+}
+
+.selected-col:hover {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+}
