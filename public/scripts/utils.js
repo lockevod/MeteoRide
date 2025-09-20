@@ -73,6 +73,7 @@
       key_http_error: "Error HTTP {status}.",
       key_network_error: "Error de red: {msg}",
      notices_noncritical_label: "Mostrar avisos no críticos",
+     show_debug_button_label: "Mostrar botón de debug",
       // Compare-dates UI
       summary_label: "Resumen",
       choose_compare_both_dates: "Por favor, selecciona ambas fechas para comparar.",
@@ -158,6 +159,7 @@
       key_http_error: "HTTP error {status}.",
       key_network_error: "Network error: {msg}",
       notices_noncritical_label: "Show non‑critical notices",
+      show_debug_button_label: "Show debug button",
       // Compare-dates UI
       summary_label: "Summary",
       choose_compare_both_dates: "Please pick both dates to compare.",
@@ -210,6 +212,7 @@
       datetimeRoute: getVal("datetimeRoute"),
       intervalSelect: getVal("intervalSelect"),
      noticeAll: !!document.getElementById("noticeAll")?.checked,
+     showDebugButton: !!document.getElementById("showDebugButton")?.checked,
     };
     localStorage.setItem("cwSettings", JSON.stringify(settings));
     logDebug(t("config_saved"));
@@ -220,6 +223,7 @@
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
       "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
+      "noticeAll","showDebugButton",
     ].forEach((id) => {
       const el = document.getElementById(id);
 
@@ -255,6 +259,27 @@
  // Ensure noticeAll default to true when missing
   const na = document.getElementById("noticeAll");
   if (na) na.checked = (s.noticeAll !== false);
+  
+  // Apply showDebugButton configuration and set initial visibility
+  const sdb = document.getElementById("showDebugButton");
+  const debugButton = document.getElementById("toggleDebug");
+  if (sdb && debugButton) {
+    sdb.checked = (s.showDebugButton !== false); // Default to true
+    console.log(`Initial debug button visibility: ${sdb.checked}`);
+    if (sdb.checked) {
+      debugButton.classList.remove('debug-hidden');
+      debugButton.style.display = ''; // Reset any inline styles
+    } else {
+      debugButton.classList.add('debug-hidden');
+    }
+  }
+  
+  // Apply translations after loading settings to ensure new elements are translated
+  setTimeout(() => {
+    if (window.applyTranslations) {
+      window.applyTranslations();
+    }
+  }, 50);
   }
   function getVal(id) {
     const el = document.getElementById(id);

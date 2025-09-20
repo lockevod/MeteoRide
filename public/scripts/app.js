@@ -2280,37 +2280,120 @@ function createMarkersForData(dataArray, providerLabel = '') {
 function initMap() {
   // Fractional zoom: prefer 0.2 steps (more coarse than 0.05 but still smoother than whole integers)
   // zoomDelta: base increment for zoomIn/Out; wheelPxPerZoomLevel kept moderately high for smoother wheel control
-  map = L.map("map", { zoomSnap: 0, zoomDelta: 0.2, wheelPxPerZoomLevel: 100 }).setView([41.3874, 2.1686], 14);
+  map = L.map("map", { 
+    zoomSnap: 0, 
+    zoomDelta: 0.2, 
+    wheelPxPerZoomLevel: 100,
+    attributionControl: true  // Ensure attribution control is enabled
+  }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '<span class="map-provider">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></span>',
+    attribution: '<span class="map-provider">| © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>',
   }).addTo(map);
 
-  // Move the built-in attribution control to the bottom-left so provider
-  // credit (Leaflet/OpenStreetMap) appears on the left side of the map.
+  // Move the built-in attribution control to the bottom-right
   if (map.attributionControl && typeof map.attributionControl.setPosition === 'function') {
     try {
-      map.attributionControl.setPosition('bottomleft');
+      map.attributionControl.setPosition('bottomright');
     } catch (e) {
       // ignore if setPosition isn't supported in this Leaflet build
     }
+  } else {
+    // Fallback: create our own attribution control if the built-in one isn't available
+    const attributionControl = L.control.attribution({
+      position: 'bottomright'
+    });
+    attributionControl.addTo(map);
   }
 
-  // Add a lightweight separate control at bottom-right for the app credit.
-  // Create one control instance, set its onAdd, then add it to the map so
-  // the element is actually rendered (previous code created one instance
-  // and added a different one without onAdd).
-  try {
-    const appControl = L.control({ position: 'bottomright' });
-    appControl.onAdd = function() {
-      const div = L.DomUtil.create('div', 'map-app-control leaflet-control');
-      div.innerHTML = 'By <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>';
-      return div;
-    };
-    appControl.addTo(map);
-  } catch (e) {
-    /* ignore if control creation fails */
-  }
+  // Clean up only excessive separators, keep Leaflet's natural separator
+  setTimeout(() => {
+    try {
+      const attrEl = document.querySelector('.leaflet-control-attribution');
+      if (attrEl) {
+        // Only clean up text nodes that have multiple separators or are after our app element
+        const walker = document.createTreeWalker(
+          attrEl,
+          NodeFilter.SHOW_TEXT,
+          null,
+          false
+        );
+        
+        const textNodesToClean = [];
+        let node;
+        while (node = walker.nextNode()) {
+          const text = node.textContent || '';
+          // Only remove nodes that contain multiple pipes or excessive separators
+          if (/\|\s*\|/.test(text) || /^\s*[|,]\s*$/.test(text)) {
+            textNodesToClean.push(node);
+          }
+        }
+        
+        // Remove only the problematic separator text nodes
+        textNodesToClean.forEach(textNode => {
+          textNode.remove();
+        });
+      }
+    } catch (e) {
+      // Silently ignore any DOM manipulation errors
+    }
+  }, 100);
+
+  // Add app credit to the main attribution control instead of creating a separate control
+  setTimeout(() => {
+    try {
+      let attrEl = document.querySelector('.leaflet-control-attribution');
+      
+      // If no attribution element exists, create one manually
+      if (!attrEl) {
+        console.log('No attribution control found, creating manual one');
+        attrEl = document.createElement('div');
+        attrEl.className = 'leaflet-control-attribution leaflet-control';
+        attrEl.innerHTML = '<span class="map-provider">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>';
+        
+        // Add to the map container
+        const mapContainer = document.querySelector('#map');
+        if (mapContainer) {
+          mapContainer.appendChild(attrEl);
+        }
+      }
+      
+      if (attrEl) {
+        // Make sure it's visible
+        attrEl.style.display = 'flex';
+        attrEl.style.visibility = 'visible';
+        attrEl.style.opacity = '1';
+        
+        // Create app credit span if it doesn't exist
+        if (!attrEl.querySelector('.map-app')) {
+          const appSpan = document.createElement('span');
+          appSpan.className = 'map-app';
+          appSpan.innerHTML = '©<a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>';
+          attrEl.appendChild(appSpan);
+        }
+        
+        // Add separator only between OpenStreetMap and Lockevod
+        setTimeout(() => {
+          // Remove any existing .map-sep elements first
+          const existingSeps = attrEl.querySelectorAll('.map-sep');
+          existingSeps.forEach(sep => sep.remove());
+          
+          // Find the app element and add separator before it if needed
+          const appEl = attrEl.querySelector('.map-app');
+          if (appEl) {
+            // Only add separator before the app element (between OpenStreetMap and Lockevod)
+            const separator = document.createElement('span');
+            separator.className = 'map-sep';
+            separator.textContent = ' | ';
+            separator.style.display = 'inline';
+            attrEl.insertBefore(separator, appEl);
+          }
+        }, 50);
+      }
+    } catch (e) {
+      console.error('Attribution setup error:', e);
+    }
+  }, 150);
 
   // Enable clicks on wind markers
   const windPane = map.createPane('windPane');

@@ -900,6 +900,7 @@
       "apiSource",
       "intervalSelect",
       "noticeAll",
+      "showDebugButton",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {
@@ -934,6 +935,28 @@
             if (sel) {
               if (sel.value === "meteoblue" && !hasMB)  { sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
               if (sel.value === "openweather" && !hasOWM){ sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
+            }
+          }
+          
+          if (id === "showDebugButton") {
+            // Toggle debug button visibility in real time
+            const debugButton = document.getElementById("toggleDebug");
+            if (debugButton) {
+              const isVisible = el.checked;
+              console.log(`Debug button toggle: ${isVisible}`, debugButton);
+              console.log(`Before - classes:`, debugButton.className, `display:`, debugButton.style.display);
+              
+              if (isVisible) {
+                debugButton.classList.remove('debug-hidden');
+                debugButton.style.display = ''; // Reset inline style
+              } else {
+                debugButton.classList.add('debug-hidden');
+                debugButton.style.display = 'none'; // Force hide with inline style too
+              }
+              
+              console.log(`After - classes:`, debugButton.className, `display:`, debugButton.style.display);
+            } else {
+              console.log('Debug button not found!');
             }
           }
 

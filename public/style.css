@@ -41,6 +41,14 @@ header nav button {
   }
 }
 
+/* Debug button hide utility class */
+#toggleDebug.debug-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Texto largo solo para /accesibilidad */
 .sr-only {
   position: absolute;
@@ -292,6 +300,7 @@ html, body {
   white-space: nowrap !important;
 }
 
+/* Leaflet link visibility is controlled by responsive rules above */
 
 /* Header */
 header {
@@ -544,30 +553,80 @@ nav button:hover {
   
 }
 
-/* Attribution tweaks: allow splitting provider vs app credit for small viewports
-  Keep full attribution present in the DOM (required by tile providers). For
-  narrow viewports, show provider on the left and move the app credit to the
-  right side of the map container to reduce wrapping footprint. */
+/* Attribution tweaks: responsive behavior for different screen sizes */
 .leaflet-control-attribution .map-provider { white-space: nowrap; }
 .leaflet-control-attribution .map-app { white-space: nowrap; }
-.leaflet-control-attribution .map-sep { display: inline; }
+.leaflet-control-attribution .map-sep { display: none !important; }
 
-@media screen and (max-width: 700px) {
-  /* On small screens, prevent the attribution control from wrapping onto
-    multiple lines. Keep provider/Leaflet elements aligned to the left and
-    move the app credit to the far right. We intentionally target element
-    children so any Leaflet-inserted anchors (e.g. a "Leaflet" link) are
-    grouped to the left alongside our .map-provider span. */
-  .leaflet-control-attribution { display: flex; align-items: center; gap: 8px; }
-  /* All child elements except the app credit should be treated as the
-    left group. Use a safe selector for element children (text nodes are
-    ignored but typical Leaflet links are elements). */
-  .leaflet-control-attribution > *:not(.map-app) { order: 1; margin-right: auto; white-space: nowrap; }
-  .leaflet-control-attribution .map-sep { display: none; } /* hide separator when splitting */
-  .leaflet-control-attribution .map-app { order: 2; margin-left: auto; white-space: nowrap; }
-  /* Ensure links remain visible and don't wrap inside the segments */
-  .leaflet-control-attribution .map-provider a,
-  .leaflet-control-attribution .map-app a { text-decoration: underline; color: inherit; }
+/* Ensure attribution control is visible and properly styled */
+.leaflet-control-attribution {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  align-items: center;
+  gap: 2px;
+  text-align: right;
+  background: rgba(255,255,255,0.85) !important;
+  color: #333 !important;
+  z-index: 1500 !important;
+  position: relative !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 20px !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+}
+
+/* Show Leaflet link on screens > 420px */
+@media screen and (min-width: 421px) {
+  .leaflet-control-attribution {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+  }
+  
+  .leaflet-control-attribution a[href*="leaflet"] {
+    display: inline !important;
+  }
+  
+  /* Show separators on large screens */
+  .leaflet-control-attribution .map-sep {
+    display: inline !important;
+  }
+}
+
+/* Small screens: hide Leaflet, stack in two lines, align right */
+@media screen and (max-width: 420px) {
+  .leaflet-control-attribution {
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 1px !important;
+    width: auto !important;
+    white-space: normal !important;
+  }
+  
+  /* Hide Leaflet link on small screens */
+  .leaflet-control-attribution a[href*="leaflet"] {
+    display: none !important;
+  }
+  
+  /* Hide separators on small screens for cleaner vertical layout */
+  .leaflet-control-attribution .map-sep {
+    display: none !important;
+  }
+  
+  /* Ensure proper stacking order: app credit on top, provider below */
+  .leaflet-control-attribution .map-app { order: 1; }
+  .leaflet-control-attribution .map-provider { order: 2; }
+  .leaflet-control-attribution > *:not(.map-app):not(.map-provider) { order: 3; }
+}
+
+/* Emergency positioning for attribution control */
+.leaflet-control-attribution {
+  position: absolute !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  margin: 5px !important;
 }
 
 #configMenu #closeConfig {
