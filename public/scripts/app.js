@@ -3272,9 +3272,9 @@ function showAlertIndicator() {
           indicator.style.height = '32px !important';
           indicator.style.fontSize = '14px !important';
         } else {
-          indicator.style.width = '40px !important';
-          indicator.style.height = '40px !important';
-          indicator.style.fontSize = '18px !important';
+          indicator.style.width = '32px !important';
+          indicator.style.height = '32px !important';
+          indicator.style.fontSize = '14px !important';
         }
         
         // Move indicator inside rutaName if not already there
@@ -3312,13 +3312,13 @@ function showAlertIndicator() {
     indicator.style.cssText = `
       background: #ff6b35 !important;
       color: white !important;
-      width: 40px !important;
-      height: 40px !important;
+      width: 32px !important;
+      height: 32px !important;
       border-radius: 50% !important;
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
-      font-size: 18px !important;
+      font-size: 14px !important;
       cursor: pointer !important;
       z-index: 9999 !important;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
