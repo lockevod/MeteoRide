@@ -688,20 +688,20 @@ nav button:hover {
     display: flex !important;
     flex-direction: column !important;
     align-items: flex-end !important;
-    text-align: right !important;
+    text-align: left !important;
     gap: 1px !important;
   }
   
   #simple-attribution .lockevod-credit {
     order: 1 !important;
     display: block !important;
-    text-align: right !important;
+    text-align: left !important;
   }
   
   #simple-attribution .osm-credit {
     order: 2 !important;
     display: block !important;
-    text-align: right !important;
+    text-align: left !important;
   }
   
   #simple-attribution .separator {
