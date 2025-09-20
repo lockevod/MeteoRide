@@ -1766,7 +1766,7 @@ function renderWeatherTable() {
         const parts = raw.split('UV');
         // Desktop: show full label with UV icon near the UV text
         // Compact-only: show a small separator '/' and the UV icon immediately next to the cloud icon
-  labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text desktop-only">${parts[0]}<i class="wi wi-hot label-ico-inline" aria-hidden="true" style="margin:0 6px 0 4px"></i>UV${parts[1] || ''}</span><span class="compact-only" aria-hidden="true"><span class="sep"> / </span></span>`;
+  labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text desktop-only">${parts[0]}<i class="wi wi-hot label-ico-inline" aria-hidden="true" style="margin:0 6px 0 4px"></i>UV${parts[1] || ''}</span>`;
       } else {
         labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text">${raw}</span>`;
       }
