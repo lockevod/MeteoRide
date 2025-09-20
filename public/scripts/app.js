@@ -2349,61 +2349,41 @@ function initMap() {
     }
   }, 100);
 
-  // Add app credit to the main attribution control instead of creating a separate control
+  // Simplified, robust attribution that works on all screen sizes
   setTimeout(() => {
     try {
-      let attrEl = document.querySelector('.leaflet-control-attribution');
+      const mapContainer = document.querySelector('#map');
+      if (!mapContainer) return;
       
-      // If no attribution element exists, create one manually
-      if (!attrEl) {
-        console.log('No attribution control found, creating manual one');
-        attrEl = document.createElement('div');
-        attrEl.className = 'leaflet-control-attribution leaflet-control';
-        attrEl.innerHTML = '<span class="map-provider">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>';
-        
-        // Add to the map container
-        const mapContainer = document.querySelector('#map');
-        if (mapContainer) {
-          mapContainer.appendChild(attrEl);
-        }
-      }
+      // Remove any existing attribution elements to start fresh
+      const existingAttrs = mapContainer.querySelectorAll('.leaflet-control-attribution, #simple-attribution');
+      existingAttrs.forEach(el => el.remove());
       
-      if (attrEl) {
-        // Make sure it's visible
-        attrEl.style.display = 'flex';
-        attrEl.style.visibility = 'visible';
-        attrEl.style.opacity = '1';
-        
-        // Create app credit span if it doesn't exist
-        if (!attrEl.querySelector('.map-app')) {
-          const appSpan = document.createElement('span');
-          appSpan.className = 'map-app';
-          appSpan.innerHTML = '©<a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>';
-          attrEl.appendChild(appSpan);
-        }
-        
-        // Add separator only between OpenStreetMap and Lockevod
-        setTimeout(() => {
-          // Remove any existing .map-sep elements first
-          const existingSeps = attrEl.querySelectorAll('.map-sep');
-          existingSeps.forEach(sep => sep.remove());
-          
-          // Find the app element and add separator before it if needed
-          const appEl = attrEl.querySelector('.map-app');
-          if (appEl) {
-            // Only add separator before the app element (between OpenStreetMap and Lockevod)
-            const separator = document.createElement('span');
-            separator.className = 'map-sep';
-            separator.textContent = ' | ';
-            separator.style.display = 'inline';
-            attrEl.insertBefore(separator, appEl);
-          }
-        }, 50);
-      }
+      // Create a simple, always-visible attribution element with structured HTML
+      const attribution = document.createElement('div');
+      attribution.id = 'simple-attribution';
+      
+      // Crear estructura HTML con clases específicas para el CSS
+      attribution.innerHTML = `
+        <span class="lockevod-credit">© <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a></span><span class="separator"> | </span><span class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>
+      `;
+      
+      // Add to map container
+      mapContainer.appendChild(attribution);
+      
+      console.log('Simple attribution created for screen width:', window.innerWidth);
+      
+      // Handle window resize if needed (CSS handles most of it now)
+      const handleResize = () => {
+        console.log('Window resized to:', window.innerWidth);
+      };
+      
+      window.addEventListener('resize', handleResize);
+      
     } catch (e) {
       console.error('Attribution setup error:', e);
     }
-  }, 150);
+  }, 100);
 
   // Enable clicks on wind markers
   const windPane = map.createPane('windPane');

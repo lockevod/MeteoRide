@@ -595,14 +595,18 @@ nav button:hover {
   }
 }
 
-/* Small screens: hide Leaflet, stack in two lines, align right */
+/* Small screens: hide Leaflet, stack in two lines, align left for visibility */
 @media screen and (max-width: 420px) {
   .leaflet-control-attribution {
     flex-direction: column !important;
-    align-items: flex-end !important;
+    align-items: flex-start !important;
     gap: 1px !important;
     width: auto !important;
     white-space: normal !important;
+    left: 5px !important;
+    right: auto !important;
+    text-align: left !important;
+    max-width: calc(100vw - 15px) !important;
   }
   
   /* Hide Leaflet link on small screens */
@@ -621,12 +625,120 @@ nav button:hover {
   .leaflet-control-attribution > *:not(.map-app):not(.map-provider) { order: 3; }
 }
 
+/* Simple attribution styles for reliable visibility */
+#simple-attribution {
+  position: absolute !important;
+  bottom: 0px !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  color: #333 !important;
+  padding: 2px 5px !important;
+  font-size: 8px !important;
+  font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif !important;
+  line-height: 1.3 !important;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  word-wrap: break-word !important;
+  box-sizing: border-box !important;
+}
+
+/* Pantallas pequeñas: dos líneas, Lockevod arriba, OpenStreetMap abajo, alineado a la derecha */
+@media screen and (max-width: 420px) {
+  #simple-attribution {
+    right: 0px !important;
+    left: auto !important;
+    font-size: 7px !important;
+    max-width: calc(100vw - 10px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    text-align: right !important;
+    gap: 1px !important;
+  }
+  
+  #simple-attribution .lockevod-credit {
+    order: 1 !important;
+    display: block !important;
+    text-align: right !important;
+  }
+  
+  #simple-attribution .osm-credit {
+    order: 2 !important;
+    display: block !important;
+    text-align: right !important;
+  }
+  
+  #simple-attribution .separator {
+    display: none !important;
+  }
+}
+
+/* Pantallas grandes: una línea a la derecha */
+@media screen and (min-width: 421px) {
+  #simple-attribution {
+    right: 0px !important;
+    left: auto !important;
+    font-size: 10px !important;
+    max-width: none !important;
+    display: block !important;
+  }
+  
+  #simple-attribution .lockevod-credit,
+  #simple-attribution .osm-credit {
+    display: inline !important;
+  }
+  
+  #simple-attribution .separator {
+    display: inline !important;
+  }
+}
+
 /* Emergency positioning for attribution control */
 .leaflet-control-attribution {
   position: absolute !important;
   bottom: 0 !important;
   right: 0 !important;
   margin: 5px !important;
+}
+
+/* Force attribution visibility on very small screens with maximum specificity */
+@media screen and (max-width: 420px) {
+  #map .leaflet-control-attribution,
+  .leaflet-control.leaflet-control-attribution,
+  .leaflet-control-attribution.leaflet-control {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 5px !important;
+    right: auto !important;
+    z-index: 99999 !important;
+    background: rgba(255,255,255,0.95) !important;
+    color: #333 !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    font-size: 11px !important;
+    margin: 5px !important;
+    max-width: calc(100vw - 20px) !important;
+    box-sizing: border-box !important;
+    pointer-events: auto !important;
+  }
+  
+  #map .leaflet-control-attribution span,
+  #map .leaflet-control-attribution .map-provider,
+  #map .leaflet-control-attribution .map-app {
+    display: inline-block !important;
+    white-space: normal !important;
+    overflow: visible !important;
+  }
+  
+  #map .leaflet-control-attribution a {
+    color: #0066cc !important;
+    text-decoration: underline !important;
+  }
 }
 
 #configMenu #closeConfig {
