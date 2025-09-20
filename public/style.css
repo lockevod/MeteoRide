@@ -687,21 +687,21 @@ nav button:hover {
     max-width: calc(100vw - 10px) !important;
     display: flex !important;
     flex-direction: column !important;
-    align-items: flex-end !important;
-    text-align: left !important;
+    align-items: center !important; /* Cambiado a center para centrar el cuadradito */
+    /* text-align: left !important; */ /* Quitado para que no interfiera */
     gap: 1px !important;
   }
   
   #simple-attribution .lockevod-credit {
     order: 1 !important;
     display: block !important;
-    text-align: left !important;
+    text-align: center !important; /* Cambiado a center */
   }
   
   #simple-attribution .osm-credit {
     order: 2 !important;
     display: block !important;
-    text-align: left !important;
+    text-align: center !important; /* Cambiado a center */
   }
   
   #simple-attribution .separator {
