@@ -676,8 +676,11 @@
             routeName = meta && meta.name ? meta.name : null;
           }
           if (routeName) {
-            document.getElementById("rutaName").textContent =
-              routeName;
+            const rutaNameEl = document.getElementById("rutaName");
+            rutaNameEl.textContent = routeName;
+            // Clear placeholder styling when real route name is loaded
+            rutaNameEl.style.color = '';
+            rutaNameEl.style.fontStyle = '';
           }
 
           const layer = evt.target;
@@ -863,6 +866,10 @@
         } else {
           window.reloadFull();
         }
+        // Re-validate weather alerts when date changes
+        if (window.revalidateWeatherAlerts) {
+          window.revalidateWeatherAlerts();
+        }
       });
     }
 
@@ -994,6 +1001,11 @@
             return;
           }
           window.reloadFull();
+          
+          // Re-validate weather alerts when parameters change
+          if (["intervalSelect", "cyclingSpeed", "datetimeRoute"].includes(id) && window.revalidateWeatherAlerts) {
+            window.revalidateWeatherAlerts();
+          }
         });
       }
     });
@@ -1137,6 +1149,10 @@
         } else {
           window.reloadFull();
         }
+        // Re-validate weather alerts when speed changes
+        if (window.revalidateWeatherAlerts) {
+          window.revalidateWeatherAlerts();
+        }
       });
     }
 
@@ -1157,6 +1173,10 @@
             window.reloadFull();
           }
         }
+        // Re-validate weather alerts when speed changes
+        if (window.revalidateWeatherAlerts) {
+          window.revalidateWeatherAlerts();
+        }
       });
       cyclingInput.addEventListener("blur", () => {
         const v = Number(cyclingInput.value);
@@ -1173,6 +1193,10 @@
           } else {
             window.reloadFull();
           }
+        }
+        // Re-validate weather alerts when speed changes
+        if (window.revalidateWeatherAlerts) {
+          window.revalidateWeatherAlerts();
         }
       });
       cyclingInput.addEventListener("input", () => {

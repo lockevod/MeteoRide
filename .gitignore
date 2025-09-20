@@ -1,6 +1,5 @@
 /.DS_Store
 meteoride.code-workspace
-.gitignore
 node_modules
 logs
 .gitignore.swp
@@ -18,3 +17,5 @@ public/en/.DS_Store
 old_icons
 public/es/.DS_Store
 public/assets/.DS_Store
+tools/localDEV/pids/caddy.pid
+tools/localDEV/pids/share-server.pid

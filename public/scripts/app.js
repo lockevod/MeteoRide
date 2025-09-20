@@ -2724,6 +2724,9 @@ try {
   // NEW: expose selection helpers for compare clicks
   window.cw.highlightColumn = (col) => highlightColumn(col);
   window.cw.highlightMapStep = (idx, center = false) => highlightMapStep(idx, center);
+  
+  // Expose weather alerts functions
+  window.revalidateWeatherAlerts = revalidateWeatherAlerts;
 } catch (_) {
   // ignore: hooks are optional
 }
@@ -2787,6 +2790,139 @@ window.testWeatherAlerts = function() {
   processWeatherAlerts(testAlerts, testPoint, testTime);
   
   console.log('Test weather alerts triggered. Total active alerts:', window.activeWeatherAlerts.length);
+};
+
+// Test function to show alert indicator directly (for debugging)
+window.testAlertIndicator = function() {
+  console.log('Testing alert indicator directly...');
+  
+  // Create a fake alert to force showing the indicator
+  window.activeWeatherAlerts = [{
+    id: 'test-alert-1',
+    event: 'Test Weather Alert',
+    description: 'This is a test alert for debugging',
+    start: new Date(),
+    end: new Date(Date.now() + 3600000),
+    processed: false
+  }];
+  
+  console.log('Created test alert, activeWeatherAlerts:', window.activeWeatherAlerts.length);
+  
+  // Force show the indicator
+  showAlertIndicator();
+};
+
+// Force create visible indicator (bypass all logic)
+window.forceCreateIcon = function() {
+  console.log('FORCE: Creating visible alert icon...');
+  
+  // Remove any existing indicator
+  const existing = document.getElementById('weather-alert-indicator');
+  if (existing) {
+    existing.remove();
+    console.log('FORCE: Removed existing indicator');
+  }
+  
+  // Create new indicator
+  const indicator = document.createElement('div');
+  indicator.id = 'weather-alert-indicator';
+  indicator.innerHTML = '⚠️';
+  indicator.title = 'FORCED Weather Alert Icon';
+  
+  // Apply very explicit styles
+  indicator.style.position = 'fixed';
+  indicator.style.top = '100px';
+  indicator.style.right = '100px';
+  indicator.style.zIndex = '99999';
+  indicator.style.background = '#ff0000';
+  indicator.style.color = '#ffffff';
+  indicator.style.width = '60px';
+  indicator.style.height = '60px';
+  indicator.style.borderRadius = '50%';
+  indicator.style.display = 'flex';
+  indicator.style.alignItems = 'center';
+  indicator.style.justifyContent = 'center';
+  indicator.style.fontSize = '24px';
+  indicator.style.cursor = 'pointer';
+  indicator.style.boxShadow = '0 0 20px rgba(255,0,0,0.5)';
+  indicator.style.border = '3px solid #ffffff';
+  
+  document.body.appendChild(indicator);
+  console.log('FORCE: Icon created and added to body');
+  
+  // Click handler
+  indicator.addEventListener('click', () => {
+    alert('Forced alert icon clicked!');
+  });
+  
+  return indicator;
+};
+
+// Test positioning relative to route name
+window.testRouteNamePosition = function() {
+  console.log('Testing route name positioning...');
+  
+  // First, add some text to rutaName if it's empty
+  const rutaName = document.getElementById('rutaName');
+  if (rutaName) {
+    if (!rutaName.textContent.trim()) {
+      rutaName.textContent = 'Ruta de Prueba - Cycling Route';
+      rutaName.style.padding = '10px';
+      rutaName.style.backgroundColor = '#f0f0f0';
+      rutaName.style.margin = '10px 0';
+      rutaName.style.display = 'inline-block';
+      console.log('Added test content to rutaName');
+    }
+    
+    // Create fake alerts and show indicator
+    window.activeWeatherAlerts = [{
+      id: 'test-position',
+      event: 'Test Alert for Positioning',
+      description: 'Testing icon position next to route name',
+      start: new Date(),
+      end: new Date(Date.now() + 3600000),
+      processed: false
+    }];
+    
+    console.log('Created test alerts, calling showAlertIndicator...');
+    showAlertIndicator();
+    
+    return rutaName;
+  } else {
+    console.log('rutaName element not found!');
+    return null;
+  }
+};
+
+// Debug function to check current state
+window.debugAlertPosition = function() {
+  const rutaName = document.getElementById('rutaName');
+  const indicator = document.getElementById('weather-alert-indicator');
+  
+  console.log('=== DEBUG ALERT POSITION ===');
+  console.log('rutaName element:', rutaName);
+  console.log('rutaName content:', rutaName ? rutaName.textContent : 'null');
+  console.log('rutaName parent:', rutaName ? rutaName.parentElement : 'null');
+  console.log('indicator element:', indicator);
+  console.log('indicator parent:', indicator ? indicator.parentElement : 'null');
+  
+  if (indicator) {
+    console.log('indicator styles:', {
+      position: indicator.style.position,
+      top: indicator.style.top,
+      left: indicator.style.left,
+      right: indicator.style.right,
+      marginLeft: indicator.style.marginLeft
+    });
+  }
+  
+  if (rutaName) {
+    console.log('rutaName styles:', {
+      display: rutaName.style.display,
+      alignItems: rutaName.style.alignItems
+    });
+    console.log('rutaName contains indicator:', rutaName.contains(indicator));
+  }
 };
 
 // Check for weather alerts independently of main provider
@@ -2906,13 +3042,26 @@ function processWeatherAlerts(alerts, routePoint, routeTime) {
   if (window.activeWeatherAlerts.some(a => !a.processed)) {
     showWeatherAlerts();
   }
+  
+  // Always show indicator if there are active alerts
+  if (window.activeWeatherAlerts.length > 0) {
+    showAlertIndicator();
+  }
 }
 
 // Display weather alerts in a non-invasive way
 function showWeatherAlerts() {
+  // Check if container already exists and is visible
+  const existingContainer = document.getElementById('weather-alerts-container');
+  if (existingContainer && existingContainer.style.display !== 'none') {
+    // Container is visible, hide it
+    existingContainer.style.display = 'none';
+    return;
+  }
+  
   const alertsToShow = window.activeWeatherAlerts.filter(a => !a.processed);
   
-  // If called from indicator, show all active alerts (reset processed flags)
+  // If called from indicator and no unprocessed alerts, show all active alerts
   if (alertsToShow.length === 0 && window.activeWeatherAlerts.length > 0) {
     resetAlertProcessedFlags();
     return showWeatherAlerts(); // Recursive call with reset flags
@@ -2923,8 +3072,15 @@ function showWeatherAlerts() {
   // Mark alerts as processed
   alertsToShow.forEach(alert => alert.processed = true);
   
-  // Create alert notification
-  const alertsContainer = document.getElementById('weather-alerts-container') || createAlertsContainer();
+  // Create alert notification or reuse existing one
+  const alertsContainer = existingContainer || createAlertsContainer();
+  
+  // Clear existing alerts to prevent duplication
+  if (existingContainer) {
+    // Remove all existing alert elements
+    const existingAlerts = alertsContainer.querySelectorAll('.weather-alert');
+    existingAlerts.forEach(alert => alert.remove());
+  }
   
   alertsToShow.forEach(alert => {
     const alertElement = createAlertElement(alert);
@@ -3065,73 +3221,149 @@ function getSeverityColor(severityClass) {
 
 // Show persistent alert indicator
 function showAlertIndicator() {
+  console.log('showAlertIndicator called, active alerts:', window.activeWeatherAlerts.length);
+  
   let indicator = document.getElementById('weather-alert-indicator');
   
   if (!indicator) {
+    console.log('Creating new alert indicator');
     indicator = document.createElement('div');
     indicator.id = 'weather-alert-indicator';
     indicator.innerHTML = '⚠️';
-    indicator.title = 'Weather alerts available - click to view';
+    indicator.title = 'Weather alerts available - click to toggle';
+    
+    // Simple inline positioning: insert directly next to route name for all screen sizes
+    const updatePosition = () => {
+      const isSmallScreen = window.innerWidth < 701;
+      console.log('Updating position, isSmallScreen:', isSmallScreen, 'window width:', window.innerWidth);
+      
+      // Use rutaName for positioning on all screen sizes (both small and large)
+      const rutaName = document.getElementById('rutaName');
+      console.log('Looking for rutaName element:', rutaName);
+      
+      if (rutaName) {
+        // If rutaName exists but is empty, add placeholder content
+        if (!rutaName.textContent.trim()) {
+          rutaName.textContent = 'Cargando ruta...';
+          rutaName.style.color = '#666';
+          rutaName.style.fontStyle = 'italic';
+          console.log('Added placeholder content to empty rutaName');
+        }
+        
+        // Make rutaName a flex container if it isn't already
+        if (!rutaName.style.display || rutaName.style.display === 'block') {
+          rutaName.style.display = 'inline-flex';
+          rutaName.style.alignItems = 'center';
+          rutaName.style.gap = isSmallScreen ? '6px' : '8px';
+        }
+        
+        // Set indicator for inline display
+        indicator.style.position = 'static !important';
+        indicator.style.top = 'auto !important';
+        indicator.style.left = 'auto !important';
+        indicator.style.right = 'auto !important';
+        indicator.style.zIndex = '1 !important';
+        indicator.style.margin = '0 !important';
+        indicator.style.flexShrink = '0';
+        
+        // Adjust size based on screen size
+        if (isSmallScreen) {
+          indicator.style.width = '32px !important';
+          indicator.style.height = '32px !important';
+          indicator.style.fontSize = '14px !important';
+        } else {
+          indicator.style.width = '40px !important';
+          indicator.style.height = '40px !important';
+          indicator.style.fontSize = '18px !important';
+        }
+        
+        // Move indicator inside rutaName if not already there
+        if (indicator.parentNode !== rutaName) {
+          rutaName.appendChild(indicator);
+        }
+        
+        console.log('Positioned inline within rutaName element');
+      } else {
+        // Fallback to fixed position if rutaName not found
+        if (indicator.parentNode !== document.body) {
+          document.body.appendChild(indicator);
+        }
+        indicator.style.position = 'fixed !important';
+        indicator.style.top = isSmallScreen ? '20px !important' : '100px !important';
+        indicator.style.right = isSmallScreen ? '20px !important' : '50px !important';
+        indicator.style.left = 'auto !important';
+        indicator.style.zIndex = '9999 !important';
+        
+        // Adjust size for fallback position too
+        if (isSmallScreen) {
+          indicator.style.width = '32px !important';
+          indicator.style.height = '32px !important';
+          indicator.style.fontSize = '14px !important';
+        } else {
+          indicator.style.width = '40px !important';
+          indicator.style.height = '40px !important';
+          indicator.style.fontSize = '18px !important';
+        }
+        
+        console.log('Fallback: rutaName not found, using fixed position');
+      }
+    };
     
     indicator.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #ff6b35;
-      color: white;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      cursor: pointer;
-      z-index: 1200;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      animation: alertPulse 2s infinite;
-      font-family: Arial, sans-serif;
+      background: #ff6b35 !important;
+      color: white !important;
+      width: 40px !important;
+      height: 40px !important;
+      border-radius: 50% !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-size: 18px !important;
+      cursor: pointer !important;
+      z-index: 9999 !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+      font-family: Arial, sans-serif !important;
     `;
     
-    // Add pulsing animation
+    // Add responsive styles
     if (!document.getElementById('alert-indicator-style')) {
       const style = document.createElement('style');
       style.id = 'alert-indicator-style';
       style.textContent = `
-        @keyframes alertPulse {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.1); }
-          100% { transform: scale(1); }
-        }
-        @media (max-width: 480px) {
+        @media (max-width: 700px) {
           #weather-alert-indicator {
-            top: 15px !important;
-            right: 15px !important;
-            width: 35px !important;
-            height: 35px !important;
-            font-size: 16px !important;
+            width: 32px !important;
+            height: 32px !important;
+            font-size: 14px !important;
           }
         }
       `;
       document.head.appendChild(style);
     }
     
-    // Click handler to show alerts again
+    // Click handler to toggle alerts
     indicator.addEventListener('click', () => {
+      console.log('Alert indicator clicked');
       showWeatherAlerts();
     });
     
+    // Update position on resize and scroll
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition);
+    
+    // Initially add to body, updatePosition will move it if needed
     document.body.appendChild(indicator);
+    console.log('Alert indicator initially added to body');
+    
+    // Update position immediately and on events
+    updatePosition();
+    setTimeout(updatePosition, 500); // Delayed update in case elements load later
+  } else {
+    console.log('Alert indicator already exists');
   }
   
   indicator.style.display = 'flex';
-  
-  // Hide indicator after 30 seconds if no new alerts
-  setTimeout(() => {
-    if (indicator && !window.activeWeatherAlerts.some(a => !a.processed)) {
-      indicator.style.display = 'none';
-    }
-  }, 30000);
+  console.log('Alert indicator display set to flex');
 }
 
 // Update processWeatherAlerts to reset processed flag when showing indicator
@@ -3139,4 +3371,59 @@ function resetAlertProcessedFlags() {
   window.activeWeatherAlerts.forEach(alert => {
     alert.processed = false;
   });
+}
+
+// Re-validate weather alerts when parameters change (date, speed, etc.)
+async function revalidateWeatherAlerts() {
+  if (getVal("showWeatherAlerts") === false) return;
+  if (!window.weatherData || !window.weatherData.length) return;
+  
+  console.log('Re-validating weather alerts for parameter changes...');
+  
+  // Clear existing alerts
+  window.activeWeatherAlerts = [];
+  
+  // Hide existing alert indicator and container
+  const indicator = document.getElementById('weather-alert-indicator');
+  if (indicator) indicator.style.display = 'none';
+  
+  const container = document.getElementById('weather-alerts-container');
+  if (container) container.style.display = 'none';
+  
+  // Re-check alerts with current parameters
+  const steps = window.weatherData.map(w => ({
+    lat: w.lat,
+    lon: w.lon,
+    time: w.time
+  }));
+  
+  // Generate current time steps
+  const datetimeValue = getVal("datetimeRoute");
+  if (!datetimeValue) return;
+  
+  const startDateTime = getValidatedDateTime();
+  if (isNaN(startDateTime.getTime())) return;
+  
+  const speed = Number(getVal("cyclingSpeed")) || 12;
+  const intervalMinutes = Number(getVal("intervalSelect")) || 15;
+  const totalDistanceM = steps.length > 1 ? 
+    steps.reduce((total, step, i) => {
+      if (i === 0) return 0;
+      return total + haversine(steps[i-1], step);
+    }, 0) * 1000 : 10000;
+  
+  const totalDurationMins = (totalDistanceM / 1000) / speed * 60;
+  const stepsCount = Math.floor(totalDurationMins / intervalMinutes) + 1;
+  
+  const timeSteps = [];
+  for (let i = 0; i < stepsCount; i++) {
+    timeSteps.push(new Date(startDateTime.getTime() + i * intervalMinutes * 60000));
+  }
+  
+  await checkWeatherAlertsIndependent(steps, timeSteps);
+  
+  // Show indicator again if there are active alerts after revalidation
+  if (window.activeWeatherAlerts.length > 0) {
+    showAlertIndicator();
+  }
 }
