@@ -110,15 +110,10 @@
     <div class="config-row">
     </div>
 
-    <!-- NEW: Notice verbosity option -->
-    <div class="config-row">
-      <label class="inline">
-        <input type="checkbox" id="noticeAll" checked />
-        <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
-      </label>
-    </div>
+    <!-- NEW: Notice verbosity option - moved next to debug toggle to save vertical space -->
 
     <!-- NEW: Weather alerts option -->
+    <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="alerts_section_title">Alertas</h4>
     <div class="config-row">
       <label class="inline">
         <input type="checkbox" id="showWeatherAlerts" checked />
@@ -126,11 +121,15 @@
       </label>
     </div>
 
-    <!-- NEW: Debug button visibility option -->
-    <div class="config-row">
+    <!-- NEW: Debug button visibility option and condensed noticeAll on same line -->
+    <div class="config-row compact-inline">
       <label class="inline">
         <input type="checkbox" id="showDebugButton" checked />
         <span data-i18n="show_debug_button_label">Mostrar botón de debug</span>
+      </label>
+      <label class="inline compact-notice">
+        <input type="checkbox" id="noticeAll" checked />
+        <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
       </label>
     </div>
 

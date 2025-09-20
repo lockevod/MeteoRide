@@ -1375,4 +1375,15 @@
       }
     }, false);
   })();
+
+  // Defensive: ensure translations and header localization run when DOM is ready
+  try {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('DOMContentLoaded', () => {
+        try { if (typeof applyTranslations === 'function') applyTranslations(); } catch (e) { /* ignore */ }
+        try { if (typeof localizeHeader === 'function') localizeHeader(); } catch (e) { /* ignore */ }
+      });
+    }
+  } catch (e) { /* ignore */ }
+
 })();

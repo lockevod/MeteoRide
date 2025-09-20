@@ -396,6 +396,24 @@ nav button:hover {
   align-items: center;
   padding: 6px 0; /* give each row some vertical breathing room */
 }
+
+/* Compact inline row: place multiple inline checkbox labels on one line */
+#configMenu .config-row.compact-inline {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+#configMenu .config-row.compact-inline label.inline {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+#configMenu .config-row.compact-inline label.compact-notice { 
+  margin-left: 6px;
+  white-space: nowrap;
+}
 #configMenu .config-row > label {
   /* fixed label column so controls align across rows */
   flex: 0 0 120px;
@@ -434,6 +452,22 @@ nav button:hover {
   line-height: 1.2;
   white-space: normal;
   word-break: break-word;
+}
+
+/* Slightly lift the Alerts heading so it sits closer to the checkboxes above */
+#configMenu h4[data-i18n="alerts_section_title"] {
+  margin-top: 6px; /* move up a bit */
+  margin-bottom: 6px;
+}
+
+/* Add extra space before API Key heading to separate it from the show/debug row */
+#configMenu h4[data-i18n="api_key_init"] {
+  margin-top: 32px; /* more breathing room above API Key */
+}
+
+/* Small extra space under the compact inline row so headings below don't sit too close */
+#configMenu .config-row.compact-inline {
+  margin-bottom: 8px;
 }
 
 /* Make the panel usable on small screens: occupy most width and stack controls vertically */

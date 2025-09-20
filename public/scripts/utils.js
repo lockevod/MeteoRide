@@ -93,6 +93,7 @@
       // Weather alerts messages
       weather_alert_detected: "Alerta meteorológica detectada",
       weather_alert_from: "de",
+      alerts_section_title: "Alertas",
     },
     en: {
       config_saved: "Settings saved",
@@ -183,6 +184,7 @@
       // Weather alerts messages
       weather_alert_detected: "Weather alert detected",
       weather_alert_from: "from",
+      alerts_section_title: "Alerts",
     },
   };
 
@@ -287,12 +289,17 @@
     }
   }
   
-  // Apply translations after loading settings to ensure new elements are translated
-  setTimeout(() => {
-    if (window.applyTranslations) {
-      window.applyTranslations();
+  // Apply translations after loading settings to ensure new elements are translated.
+  // UI script (ui.js) registers window.applyTranslations; it may be loaded after utils.js,
+  // so retry a few times to avoid race conditions.
+  (function tryApplyTranslations(retries = 5, delay = 80) {
+    if (typeof window.applyTranslations === 'function') {
+      try { window.applyTranslations(); } catch (e) { /* ignore */ }
+      return;
     }
-  }, 50);
+    if (retries <= 0) return;
+    setTimeout(() => tryApplyTranslations(retries - 1, delay), delay);
+  })();
   }
   function getVal(id) {
     const el = document.getElementById(id);
