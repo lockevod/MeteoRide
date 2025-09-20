@@ -774,6 +774,14 @@
     const toggleDebugEl = document.getElementById("toggleDebug");
     if (toggleDebugEl) toggleDebugEl.addEventListener("click", toggleDebug);
 
+    // Test alerts button (temporary)
+    const testAlertsEl = document.getElementById("testAlerts");
+    if (testAlertsEl) testAlertsEl.addEventListener("click", () => {
+      if (window.testWeatherAlerts) {
+        window.testWeatherAlerts();
+      }
+    });
+
     // Help button
     const toggleHelpEl = document.getElementById("toggleHelp");
     if (toggleHelpEl) {
@@ -900,6 +908,7 @@
       "apiSource",
       "intervalSelect",
       "noticeAll",
+      "showWeatherAlerts",
       "showDebugButton",
     ].forEach((id) => {
       const el = document.getElementById(id);

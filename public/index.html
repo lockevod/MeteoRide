@@ -98,6 +98,10 @@
   <span class="debug-ico" aria-hidden="true">🐞</span>
   <span class="debug-text" data-i18n="toggle_debug_label">Debug</span>
 </button>
+<!-- TEMP: Test button for weather alerts (hidden) -->
+<button id="testAlerts" title="Test Weather Alerts" style="display: none; background: #ff6b35; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin-left: 5px;">
+  ⚠️ Test Alerts
+</button>
 </nav>
 </header>
 
@@ -111,6 +115,14 @@
       <label class="inline">
         <input type="checkbox" id="noticeAll" checked />
         <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
+      </label>
+    </div>
+
+    <!-- NEW: Weather alerts option -->
+    <div class="config-row">
+      <label class="inline">
+        <input type="checkbox" id="showWeatherAlerts" checked />
+        <span data-i18n="show_weather_alerts_label">Mostrar alertas meteorológicas oficiales</span>
       </label>
     </div>
 

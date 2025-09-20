@@ -73,6 +73,7 @@
       key_http_error: "Error HTTP {status}.",
       key_network_error: "Error de red: {msg}",
      notices_noncritical_label: "Mostrar avisos no críticos",
+     show_weather_alerts_label: "Mostrar alertas meteorológicas oficiales",
      show_debug_button_label: "Mostrar botón de debug",
       // Compare-dates UI
       summary_label: "Resumen",
@@ -89,6 +90,9 @@
       date_too_late: "La {field} no puede ser posterior a 14 días desde hoy.",
       // Route validation messages
       no_route_loaded: "No hay ruta cargada. Por favor, carga una ruta GPX primero.",
+      // Weather alerts messages
+      weather_alert_detected: "Alerta meteorológica detectada",
+      weather_alert_from: "de",
     },
     en: {
       config_saved: "Settings saved",
@@ -159,6 +163,7 @@
       key_http_error: "HTTP error {status}.",
       key_network_error: "Network error: {msg}",
       notices_noncritical_label: "Show non‑critical notices",
+      show_weather_alerts_label: "Show official weather alerts",
       show_debug_button_label: "Show debug button",
       // Compare-dates UI
       summary_label: "Summary",
@@ -175,6 +180,9 @@
       date_too_late: "The {field} cannot be later than 14 days from today.",
       // Route validation messages
       no_route_loaded: "No route loaded. Please load a GPX route first.",
+      // Weather alerts messages
+      weather_alert_detected: "Weather alert detected",
+      weather_alert_from: "from",
     },
   };
 
@@ -212,6 +220,7 @@
       datetimeRoute: getVal("datetimeRoute"),
       intervalSelect: getVal("intervalSelect"),
      noticeAll: !!document.getElementById("noticeAll")?.checked,
+     showWeatherAlerts: !!document.getElementById("showWeatherAlerts")?.checked,
      showDebugButton: !!document.getElementById("showDebugButton")?.checked,
     };
     localStorage.setItem("cwSettings", JSON.stringify(settings));
@@ -223,7 +232,7 @@
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
       "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
-      "noticeAll","showDebugButton",
+      "noticeAll","showWeatherAlerts","showDebugButton",
     ].forEach((id) => {
       const el = document.getElementById(id);
 
@@ -259,6 +268,10 @@
  // Ensure noticeAll default to true when missing
   const na = document.getElementById("noticeAll");
   if (na) na.checked = (s.noticeAll !== false);
+  
+  // Apply showWeatherAlerts configuration
+  const swa = document.getElementById("showWeatherAlerts");
+  if (swa) swa.checked = (s.showWeatherAlerts !== false); // Default to true
   
   // Apply showDebugButton configuration and set initial visibility
   const sdb = document.getElementById("showDebugButton");

@@ -45,6 +45,17 @@ For more detailed information, see the [User Guide (English)](https://app.meteor
 - **Free APIs**: Monthly limits for MeteoBlue and OpenWeather; Open-Meteo has no limits.
 - **Best Practices**: Use routes up to 100-200 km, plan 1-2 days ahead, combine sources, have a backup plan, and carry rain gear.
 
+## Official Weather Alerts
+
+MeteoRide can surface official weather warnings published by national meteorological services when these are available via the OpenWeather One Call API (the API exposes an <code>alerts</code> array). To use this feature:
+
+- Provide your OpenWeather API key in the Settings panel and enable "Show official weather alerts".
+- MeteoRide will check for alerts even if OpenWeather is not your selected primary provider (sampling a representative set of route points to limit API usage).
+- Detected alerts are shown as non‑invasive cards (auto‑hide after 15 seconds) and a persistent ⚠️ indicator allows you to re-open them.
+- Alerts are cached locally for ~1 hour to reduce repeated API calls.
+
+Important: These alerts are informational only. Always consult your country's official meteorological service or competent authorities before making safety-critical decisions. OpenWeather may be incomplete, delayed, or contain errors; MeteoRide is not a substitute for official communications.
+
 ## Troubleshooting
 
 - **GPX/KML Won't Load**: Ensure the file has valid tracks.

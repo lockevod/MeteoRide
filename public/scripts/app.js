@@ -253,8 +253,11 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   if (prov === "openweather") {
     // Units: metric (°C, m/s), imperial (°F, mph). We normalize later.
     const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
+    // Check if weather alerts are enabled
+    const showAlerts = getVal("showWeatherAlerts") !== false; // Default to true if not set
+    const excludeParts = showAlerts ? "minutely" : "minutely,alerts";
     // Hourly is limited (~48h). We include daily to allow fallback.
-    return `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKey}&units=${units}&exclude=minutely,alerts`;
+    return `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKey}&units=${units}&exclude=${excludeParts}`;
   }
   // openmeteo
   return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover&start=${timeAt.toISOString()}&timezone=auto`;
@@ -750,6 +753,11 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       }
 
       if (ok && json) {
+        // Check for weather alerts if using OpenWeather and alerts are enabled
+        if (prov === "openweather" && json.alerts && Array.isArray(json.alerts) && getVal("showWeatherAlerts") !== false) {
+          processWeatherAlerts(json.alerts, p, timeAt);
+        }
+        
         weatherData.push({ ...p, provider: prov, weather: json });
         setCache(keyPrim, json);
         logDebug(`Datos recibidos paso ${i + 1} (${prov})`);
@@ -761,6 +769,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       logDebug(`step ${i+1}/${steps.length} effectiveProv(final)=${prov}`);
     }
 
+  // Check for weather alerts independently if we have OpenWeather API key
+  await checkWeatherAlertsIndependent(steps, timeSteps);
 
   if (!showAllNotices) {
      // Only show notices when fallback is due to key/provider errors (or missing key)
@@ -2766,3 +2776,387 @@ document.addEventListener("DOMContentLoaded", () => {
   hideLoading();
   logDebug(t("app_started"));
 });
+
+// Global variable to store active weather alerts
+window.activeWeatherAlerts = [];
+
+// Test function for weather alerts (for development)
+window.testWeatherAlerts = function() {
+  const testAlerts = [
+    {
+      sender_name: "National Weather Service",
+      event: "Severe Thunderstorm Warning", 
+      start: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
+      end: Math.floor(Date.now() / 1000) + 7200,   // 2 hours from now
+      description: "A severe thunderstorm warning has been issued. Heavy rain, strong winds up to 60 mph, and hail are possible. Avoid outdoor activities and seek shelter immediately.",
+      tags: ["Thunderstorm", "Wind", "Hail"]
+    },
+    {
+      sender_name: "Met Office",
+      event: "Wind Advisory", 
+      start: Math.floor(Date.now() / 1000) - 1800, // 30 minutes ago
+      end: Math.floor(Date.now() / 1000) + 3600,   // 1 hour from now
+      description: "Strong winds expected with gusts up to 45 mph. Be prepared for possible travel disruptions.",
+      tags: ["Wind"]
+    }
+  ];
+  
+  const testPoint = { lat: 40.7128, lng: -74.0060 }; // New York coordinates
+  const testTime = new Date();
+  
+  processWeatherAlerts(testAlerts, testPoint, testTime);
+  
+  console.log('Test weather alerts triggered. Total active alerts:', window.activeWeatherAlerts.length);
+};
+
+// Check for weather alerts independently of main provider
+async function checkWeatherAlertsIndependent(steps, timeSteps) {
+  // Only check if alerts are enabled and we have OpenWeather API key
+  if (getVal("showWeatherAlerts") === false) return;
+  
+  const apiKeyOW = getVal("apiKeyOW");
+  if (!apiKeyOW || apiKeyOW.trim().length < 5) return;
+  
+  console.log('Checking weather alerts independently...');
+  
+  try {
+    // Sample points along the route for alert checking - 2/3 of intervals with minimum of 3
+    const sampleIndices = [];
+    const totalSteps = steps.length;
+    const sampleCount = Math.max(3, Math.floor(totalSteps * 0.67));
+    
+    if (totalSteps <= sampleCount) {
+      // For short routes, check all points
+      for (let i = 0; i < totalSteps; i++) sampleIndices.push(i);
+    } else {
+      // For longer routes, distribute samples evenly across the route
+      for (let i = 0; i < sampleCount; i++) {
+        const index = Math.floor((i * (totalSteps - 1)) / (sampleCount - 1));
+        sampleIndices.push(index);
+      }
+    }
+    
+    console.log(`Weather alerts sampling: ${sampleCount}/${totalSteps} points (~67%, indices: ${sampleIndices.join(', ')})`)
+    
+    for (const i of sampleIndices) {
+      const p = steps[i];
+      const timeAt = timeSteps[i];
+      
+      const tempUnit = getVal("tempUnits");
+      const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
+      
+      // Build OpenWeather URL specifically for alerts (exclude everything else to save bandwidth)
+      const alertsUrl = `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKeyOW}&units=${units}&exclude=minutely,current,hourly,daily`;
+      
+      const cacheKey = `alerts_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.getDate()}`;
+      const cached = getCache(cacheKey);
+      
+      if (cached && cached.alerts) {
+        processWeatherAlerts(cached.alerts, p, timeAt);
+        continue;
+      }
+      
+      try {
+        const response = await fetch(alertsUrl);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.alerts && Array.isArray(data.alerts)) {
+            processWeatherAlerts(data.alerts, p, timeAt);
+            setCache(cacheKey, { alerts: data.alerts }, 3600); // Cache for 1 hour
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch weather alerts:', err.message);
+      }
+      
+      // Small delay between requests
+      await new Promise(r => setTimeout(r, 200));
+    }
+  } catch (err) {
+    console.warn('Error checking weather alerts:', err.message);
+  }
+}
+
+// Process weather alerts from OpenWeather API
+function processWeatherAlerts(alerts, routePoint, routeTime) {
+  if (!alerts || !Array.isArray(alerts)) return;
+  
+  const currentTime = Date.now() / 1000; // Unix timestamp
+  const routeTimeUnix = routeTime.getTime() / 1000;
+  const oneHour = 3600; // 1 hour in seconds
+  
+  // Filter alerts that are active during the route time (±1 hour)
+  const relevantAlerts = alerts.filter(alert => {
+    const alertStart = alert.start || 0;
+    const alertEnd = alert.end || Number.MAX_SAFE_INTEGER;
+    const routeStartCheck = routeTimeUnix - oneHour;
+    const routeEndCheck = routeTimeUnix + oneHour;
+    
+    // Alert is relevant if it overlaps with our route time window
+    return (alertStart <= routeEndCheck && alertEnd >= routeStartCheck);
+  });
+  
+  // Add new alerts to global list, avoiding duplicates
+  relevantAlerts.forEach(alert => {
+    const alertId = `${alert.sender_name}_${alert.event}_${alert.start}_${alert.end}`;
+    const existingAlert = window.activeWeatherAlerts.find(a => a.id === alertId);
+    
+    if (!existingAlert) {
+      window.activeWeatherAlerts.push({
+        id: alertId,
+        senderName: alert.sender_name,
+        event: alert.event,
+        start: alert.start,
+        end: alert.end,
+        description: alert.description,
+        tags: alert.tags || [],
+        routePoint: {
+          lat: routePoint.lat,
+          lng: routePoint.lng
+        },
+        routeTime: routeTimeUnix,
+        processed: false
+      });
+      
+      console.log('New weather alert detected:', alert.event, 'from', alert.sender_name);
+    }
+  });
+  
+  // Show alerts if there are unprocessed ones
+  if (window.activeWeatherAlerts.some(a => !a.processed)) {
+    showWeatherAlerts();
+  }
+}
+
+// Display weather alerts in a non-invasive way
+function showWeatherAlerts() {
+  const alertsToShow = window.activeWeatherAlerts.filter(a => !a.processed);
+  
+  // If called from indicator, show all active alerts (reset processed flags)
+  if (alertsToShow.length === 0 && window.activeWeatherAlerts.length > 0) {
+    resetAlertProcessedFlags();
+    return showWeatherAlerts(); // Recursive call with reset flags
+  }
+  
+  if (alertsToShow.length === 0) return;
+  
+  // Mark alerts as processed
+  alertsToShow.forEach(alert => alert.processed = true);
+  
+  // Create alert notification
+  const alertsContainer = document.getElementById('weather-alerts-container') || createAlertsContainer();
+  
+  alertsToShow.forEach(alert => {
+    const alertElement = createAlertElement(alert);
+    alertsContainer.appendChild(alertElement);
+    
+    // Auto-hide after 15 seconds
+    setTimeout(() => {
+      if (alertElement.parentNode) {
+        alertElement.remove();
+      }
+    }, 15000);
+  });
+  
+  alertsContainer.style.display = 'block';
+  
+  // Show persistent alert indicator
+  showAlertIndicator();
+}
+
+// Create the alerts container if it doesn't exist
+function createAlertsContainer() {
+  const container = document.createElement('div');
+  container.id = 'weather-alerts-container';
+  container.className = 'weather-alerts-container';
+  
+  // Add CSS styles
+  container.style.cssText = `
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    max-width: min(400px, 90vw);
+    z-index: 1100;
+    font-family: Arial, sans-serif;
+    display: none;
+    pointer-events: auto;
+  `;
+  
+  // Add media query for mobile
+  const style = document.createElement('style');
+  style.textContent = `
+    @media (max-width: 480px) {
+      #weather-alerts-container {
+        top: 60px !important;
+        right: 10px !important;
+        left: 10px !important;
+        max-width: none !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  
+  document.body.appendChild(container);
+  return container;
+}
+
+// Create individual alert element
+function createAlertElement(alert) {
+  const alertDiv = document.createElement('div');
+  alertDiv.className = 'weather-alert';
+  
+  // Determine alert severity class
+  const severityClass = getSeverityClass(alert.event);
+  
+  alertDiv.style.cssText = `
+    background: #fff;
+    border-left: 4px solid ${getSeverityColor(severityClass)};
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.4;
+    max-height: 120px;
+    overflow-y: auto;
+  `;
+  
+  const startDate = new Date(alert.start * 1000).toLocaleString();
+  const endDate = new Date(alert.end * 1000).toLocaleString();
+  
+  alertDiv.innerHTML = `
+    <div style="font-weight: bold; color: ${getSeverityColor(severityClass)}; margin-bottom: 4px;">
+      ⚠️ ${alert.event}
+    </div>
+    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+      ${alert.senderName}
+    </div>
+    <div style="color: #333; margin-bottom: 6px;">
+      ${alert.description.substring(0, 200)}${alert.description.length > 200 ? '...' : ''}
+    </div>
+    <div style="font-size: 11px; color: #888;">
+      ${startDate} - ${endDate}
+    </div>
+    <button onclick="this.parentElement.remove()" style="
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      color: #999;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    ">×</button>
+  `;
+  
+  // Make position relative for close button
+  alertDiv.style.position = 'relative';
+  
+  return alertDiv;
+}
+
+// Determine severity class based on alert event
+function getSeverityClass(event) {
+  const eventLower = event.toLowerCase();
+  
+  if (eventLower.includes('warning') || eventLower.includes('severe')) {
+    return 'severe';
+  } else if (eventLower.includes('watch') || eventLower.includes('advisory')) {
+    return 'moderate';
+  } else {
+    return 'minor';
+  }
+}
+
+// Get color for severity level
+function getSeverityColor(severityClass) {
+  switch (severityClass) {
+    case 'severe': return '#d32f2f';
+    case 'moderate': return '#f57c00';
+    case 'minor': return '#1976d2';
+    default: return '#666';
+  }
+}
+
+// Show persistent alert indicator
+function showAlertIndicator() {
+  let indicator = document.getElementById('weather-alert-indicator');
+  
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'weather-alert-indicator';
+    indicator.innerHTML = '⚠️';
+    indicator.title = 'Weather alerts available - click to view';
+    
+    indicator.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ff6b35;
+      color: white;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      z-index: 1200;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      animation: alertPulse 2s infinite;
+      font-family: Arial, sans-serif;
+    `;
+    
+    // Add pulsing animation
+    if (!document.getElementById('alert-indicator-style')) {
+      const style = document.createElement('style');
+      style.id = 'alert-indicator-style';
+      style.textContent = `
+        @keyframes alertPulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
+        @media (max-width: 480px) {
+          #weather-alert-indicator {
+            top: 15px !important;
+            right: 15px !important;
+            width: 35px !important;
+            height: 35px !important;
+            font-size: 16px !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Click handler to show alerts again
+    indicator.addEventListener('click', () => {
+      showWeatherAlerts();
+    });
+    
+    document.body.appendChild(indicator);
+  }
+  
+  indicator.style.display = 'flex';
+  
+  // Hide indicator after 30 seconds if no new alerts
+  setTimeout(() => {
+    if (indicator && !window.activeWeatherAlerts.some(a => !a.processed)) {
+      indicator.style.display = 'none';
+    }
+  }, 30000);
+}
+
+// Update processWeatherAlerts to reset processed flag when showing indicator
+function resetAlertProcessedFlags() {
+  window.activeWeatherAlerts.forEach(alert => {
+    alert.processed = false;
+  });
+}

@@ -411,7 +411,25 @@
     </div>
 
     <div class="section">
-        <h2>🐛 Resolución de Problemas</h2>
+        <h2>� Alertas meteorológicas oficiales</h2>
+        <p>MeteoRide puede mostrar avisos y alertas oficiales que publican los servicios meteorológicos nacionales cuando estos aparecen en las <code>alertas</code> del servicio OpenWeather. Para que las alertas estén disponibles debes introducir tu <strong>OpenWeather API Key</strong> en el panel de configuración y activar la casilla <strong>Mostrar alertas meteorológicas oficiales</strong>.</p>
+
+        <ul>
+            <li><strong>Disponibilidad:</strong> Requiere una OpenWeather API Key. Si la clave está configurada, MeteoRide comprobará alertas aunque no hayas seleccionado OpenWeather como proveedor principal.</li>
+            <li><strong>Visibilidad:</strong> Cuando se detecta una alerta se mostrará una tarjeta informativa en pantalla (auto‑oculta tras 15 segundos). Además se crea un indicador persistente <strong>⚠️</strong> en la interfaz que permite reabrir todas las alertas detectadas.</li>
+            <li><strong>Muestreo y eficiencia:</strong> Para reducir el número de llamadas a la API se comprueba una muestra representativa de puntos a lo largo de la ruta (aprox. 2/3 de los pasos, mínimo 3). Las respuestas de alertas se cachean localmente durante ~1 hora.</li>
+            <li><strong>Compatibilidad temporal:</strong> Solo se considerarán alertas cuyo periodo (start/end) coincida con la ventana temporal del tramo de la ruta (se aplica un filtro de ±1 hora alrededor del paso correspondiente).</li>
+
+        </ul>
+
+        <div class="warning">
+            <h3>⚠️ Aviso importante</h3>
+            <p>Estas alertas se proporcionan solo como información adicional. No confíes exclusivamente en ellas para decisiones de seguridad. Siempre consulta el servicio meteorológico oficial de tu país o las autoridades competentes antes de realizar una actividad que pueda verse afectada por condiciones adversas. OpenWeather puede contener errores, retrasos o no incluir avisos locales específicos; MeteoRide no sustituye a los comunicados oficiales.</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>��🐛 Resolución de Problemas</h2>
         
         <h3>❌ Problemas Comunes</h3>
         <ul>

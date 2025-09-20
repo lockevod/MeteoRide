@@ -408,7 +408,25 @@
     </div>
 
     <div class="section">
-        <h2>🐛 Troubleshooting</h2>
+        <h2>🚨 Official Weather Alerts</h2>
+        <p>MeteoRidºe can display official weather warnings published by national meteorological services when these are exposed in the <code>alerts</code> of the OpenWeather. To enable alerts you must enter your <strong>OpenWeather API Key</strong> in Settings and check <strong>Show official weather alerts</strong>.</p>
+
+        <ul>
+            <li><strong>Availability:</strong> Requires an OpenWeather API Key. If the key is configured MeteoRide will check for alerts even when OpenWeather is not the selected primary provider.</li>
+            <li><strong>Visibility:</strong> When an alert is detected a non‑invasive info card will appear (auto‑hides after 15 seconds). A persistent <strong>⚠️</strong> indicator is also created in the UI so you can re-open all detected alerts.</li>
+            <li><strong>Sampling & efficiency:</strong> To limit API calls MeteoRide samples a representative set of points along the route (approx. 2/3 of steps, minimum 3). Alert responses are cached locally for ~1 hour.</li>
+            <li><strong>Time window:</strong> Only alerts whose period (start/end) overlap the route time windows are considered (a ±1 hour tolerance is applied around the matching step).</li>
+            <li><strong>Testing:</strong> If you are a developer or validating the integration you can trigger test alerts from the browser console: <code>window.testWeatherAlerts()</code>.</li>
+        </ul>
+
+        <div class="warning">
+            <h3>⚠️ Important Notice</h3>
+            <p>These alerts are provided for informational purposes only. Do not rely solely on them for safety-critical decisions. Always verify with your national meteorological service or competent authorities before undertaking activity that may be affected by severe weather. OpenWeather may have errors, delays or may omit local notices; MeteoRide does not replace official communications.</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>�🐛 Troubleshooting</h2>
 
         <h3>❌ Common Issues</h3>
         <ul>
