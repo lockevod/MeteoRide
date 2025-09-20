@@ -2649,14 +2649,14 @@ tr.selected-row:hover {
   box-shadow: 0 6px 18px rgba(0,0,0,0.36);
 }
 
-/* Small screens: hide textual %/value and show only icons separated by slash */
-@media screen and (max-width: 420px) {
-  /* In compact view show numeric values in the data cells and hide the small icons there
-     (the first-column header will still show both icons via the label-ico HTML). */
+/* Compact breakpoint: reduce spacing between cloud% / slash / UV number and hide icons inside data cells */
+@media screen and (max-width: 700px) {
   .cloud-uv-cell .cloud-part i, .cloud-uv-cell .uv-part i { display: none; }
   .cloud-uv-cell .cloud-text, .cloud-uv-cell .uv-text { display: inline-block; }
-  .cloud-uv-cell { gap: 6px; }
-  .cloud-uv-cell .sep { display: inline-block; padding: 0 6px; }
+  /* tighten gaps so the row is less wide */
+  .cloud-uv-cell { gap: 2px; }
+  .cloud-uv-cell .cloud-part, .cloud-uv-cell .uv-part { gap: 1px; }
+  .cloud-uv-cell .sep { display: inline-block; padding: 0 2px; }
   /* Make luminance compact next to icon */
   .icon-with-lum { gap: 6px; }
   .luminance-vert { min-width: 28px; }
