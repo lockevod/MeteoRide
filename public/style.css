@@ -188,6 +188,87 @@ html, body {
   }
 }
 
+/* Styling for the separate app credit control we add to the map */
+.map-app-control {
+  font-size: 11px;
+  color: #333;
+  background: rgba(255,255,255,0.45); /* slightly more transparent */
+  border-radius: 4px;
+  /* enforce exact vertical sizing so height matches Leaflet attribution */
+  --map-control-h: 16px;
+  padding: 0 8px;
+  height: var(--map-control-h);
+  min-height: var(--map-control-h);
+  line-height: var(--map-control-h);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  white-space: nowrap; /* force single-line text */
+  display: inline-flex; /* match attribution */
+  align-items: center;
+  gap: 6px; /* same as attribution */
+  max-width: none;
+  overflow: visible;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.map-app-control a { color: inherit; text-decoration: underline; }
+
+@media screen and (max-width: 700px) {
+  .map-app-control { font-size: 12px; padding: 3px 6px; opacity: 0.95; }
+}
+
+/* Ensure map app control sits above panes and is clickable */
+.map-app-control.leaflet-control { z-index: 1600 !important; pointer-events: auto; }
+.leaflet-control-attribution { z-index: 1500 !important; }
+
+/* Make the app credit sit flush to the bottom-right edge of the map.
+   Override Leaflet's default control margin so the box is attached to the
+   container border. Keep a tiny inner padding so the link is still tappable. */
+.leaflet-bottom .leaflet-right .map-app-control {
+  margin: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  border-radius: 4px; /* match attribution's rounding */
+  box-shadow: none; /* reduce visual lift so it feels 'glued' */
+}
+
+/* On very small screens, keep the control minimally padded but still flush */
+@media screen and (max-width: 420px) {
+  .leaflet-bottom .leaflet-right .map-app-control { padding: 2px 6px !important; font-size: 11px; }
+}
+
+/* Force absolute positioning so the control sits exactly at the container's
+   bottom-right corner and ignores default control margins. This makes it
+   visually identical to the bottom-left attribution but on the right. */
+.leaflet-bottom.leaflet-right .leaflet-control.map-app-control {
+  position: absolute !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  margin: 0 !important;
+}
+/* Ensure the control's container doesn't clip the single-line content */
+.leaflet-bottom.leaflet-right { overflow: visible !important; }
+
+/* Make Leaflet attribution have the same, slightly translucent background */
+.leaflet-control-attribution {
+  /* match the app control styles so both look identical */
+  background: rgba(255,255,255,0.45);
+  font-size: 11px;
+  /* use same vertical sizing as app control */
+  --map-control-h: 16px;
+  padding: 0 8px;
+  height: var(--map-control-h);
+  min-height: var(--map-control-h);
+  line-height: var(--map-control-h);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 0; /* prevent forcing wider size */
+}
+
 /* Header */
 header {
   background: #0B6297; /* matched to icon background */
@@ -438,6 +519,33 @@ nav button:hover {
   }
   
 }
+
+/* Attribution tweaks: allow splitting provider vs app credit for small viewports
+  Keep full attribution present in the DOM (required by tile providers). For
+  narrow viewports, show provider on the left and move the app credit to the
+  right side of the map container to reduce wrapping footprint. */
+.leaflet-control-attribution .map-provider { white-space: nowrap; }
+.leaflet-control-attribution .map-app { white-space: nowrap; }
+.leaflet-control-attribution .map-sep { display: inline; }
+
+@media screen and (max-width: 700px) {
+  /* On small screens, prevent the attribution control from wrapping onto
+    multiple lines. Keep provider/Leaflet elements aligned to the left and
+    move the app credit to the far right. We intentionally target element
+    children so any Leaflet-inserted anchors (e.g. a "Leaflet" link) are
+    grouped to the left alongside our .map-provider span. */
+  .leaflet-control-attribution { display: flex; align-items: center; gap: 8px; }
+  /* All child elements except the app credit should be treated as the
+    left group. Use a safe selector for element children (text nodes are
+    ignored but typical Leaflet links are elements). */
+  .leaflet-control-attribution > *:not(.map-app) { order: 1; margin-right: auto; white-space: nowrap; }
+  .leaflet-control-attribution .map-sep { display: none; } /* hide separator when splitting */
+  .leaflet-control-attribution .map-app { order: 2; margin-left: auto; white-space: nowrap; }
+  /* Ensure links remain visible and don't wrap inside the segments */
+  .leaflet-control-attribution .map-provider a,
+  .leaflet-control-attribution .map-app a { text-decoration: underline; color: inherit; }
+}
+
 #configMenu #closeConfig {
   position: absolute;
   top: 10px;

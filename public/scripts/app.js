@@ -2283,8 +2283,34 @@ function initMap() {
   map = L.map("map", { zoomSnap: 0, zoomDelta: 0.2, wheelPxPerZoomLevel: 100 }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>',
+    attribution: '<span class="map-provider">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>',
   }).addTo(map);
+
+  // Move the built-in attribution control to the bottom-left so provider
+  // credit (Leaflet/OpenStreetMap) appears on the left side of the map.
+  if (map.attributionControl && typeof map.attributionControl.setPosition === 'function') {
+    try {
+      map.attributionControl.setPosition('bottomleft');
+    } catch (e) {
+      // ignore if setPosition isn't supported in this Leaflet build
+    }
+  }
+
+  // Add a lightweight separate control at bottom-right for the app credit.
+  // Create one control instance, set its onAdd, then add it to the map so
+  // the element is actually rendered (previous code created one instance
+  // and added a different one without onAdd).
+  try {
+    const appControl = L.control({ position: 'bottomright' });
+    appControl.onAdd = function() {
+      const div = L.DomUtil.create('div', 'map-app-control leaflet-control');
+      div.innerHTML = 'App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>';
+      return div;
+    };
+    appControl.addTo(map);
+  } catch (e) {
+    /* ignore if control creation fails */
+  }
 
   // Enable clicks on wind markers
   const windPane = map.createPane('windPane');
