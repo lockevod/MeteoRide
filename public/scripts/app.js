@@ -2283,7 +2283,7 @@ function initMap() {
   map = L.map("map", { zoomSnap: 0, zoomDelta: 0.2, wheelPxPerZoomLevel: 100 }).setView([41.3874, 2.1686], 14);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '<span class="map-provider">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>',
+    attribution: '<span class="map-provider">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></span>',
   }).addTo(map);
 
   // Move the built-in attribution control to the bottom-left so provider
@@ -2304,7 +2304,7 @@ function initMap() {
     const appControl = L.control({ position: 'bottomright' });
     appControl.onAdd = function() {
       const div = L.DomUtil.create('div', 'map-app-control leaflet-control');
-      div.innerHTML = 'App by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>';
+      div.innerHTML = 'By <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a>';
       return div;
     };
     appControl.addTo(map);
