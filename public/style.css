@@ -192,7 +192,7 @@ html, body {
 .map-app-control {
   font-size: 11px;
   color: #333;
-  background: rgba(255,255,255,0.45); /* slightly more transparent */
+  background: rgba(255,255,255,0.65); /* more visible */
   border-radius: 4px;
   /* enforce exact vertical sizing so height matches Leaflet attribution */
   --map-control-h: 16px;
@@ -251,7 +251,7 @@ html, body {
 /* Make Leaflet attribution have the same, slightly translucent background */
 .leaflet-control-attribution {
   /* match the app control styles so both look identical */
-  background: rgba(255,255,255,0.45);
+  background: rgba(255,255,255,0.65);
   font-size: 11px;
   /* use same vertical sizing as app control */
   --map-control-h: 16px;
@@ -268,6 +268,30 @@ html, body {
   box-sizing: border-box;
   min-width: 0; /* prevent forcing wider size */
 }
+
+/* Ensure the actual leaflet control elements/wrappers use the exact same
+   styling as our app control. Leaflet may add wrapper classes; target the
+   common permutations to override defaults and make both boxes identical. */
+.leaflet-control.leaflet-control-attribution,
+.leaflet-control.map-app-control,
+.leaflet-control .leaflet-control-attribution,
+.leaflet-control .map-app-control {
+  background: rgba(255,255,255,0.65) !important;
+  padding: 0 8px !important;
+  height: var(--map-control-h) !important;
+  min-height: var(--map-control-h) !important;
+  line-height: var(--map-control-h) !important;
+  font-size: 11px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-sizing: border-box !important;
+  border: none !important;
+  white-space: nowrap !important;
+}
+
 
 /* Header */
 header {
