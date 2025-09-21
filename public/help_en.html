@@ -207,7 +207,7 @@
                 <li><strong>MeteoBlue:</strong> Requires API key, up to 7 days, very accurate</li>
                 <li><strong>OpenWeather:</strong> Requires API key, up to 5 days, detailed data</li>
                 <li><strong>AromeHD:</strong> High-resolution model from MeteoFrance, available via Open-Meteo. Only available for parts of Europe (~39-52°N, 10.5°W-16.5°E) and within 48 hours; otherwise the app falls back to the best provider available through Open-Meteo. Especially useful for wind and short-term precipitation.</li>
-                <li><strong>OpenWeather - AromeHD:</strong> Use OpenWeather for the first two hours, then Open-Meteo up to 36 hours. Routes outside this period are calculated with Open-Meteo. Only available if you provide an OpenWeather API key.</li>
+                <li><strong>OpenWeather - AromeHD:</strong> Use OpenWeather for the first hour, then AromeHD up to 48 hours. Routes outside this period are calculated with Open-Meteo. Only available if you provide an OpenWeather API key. This chain leverages real-time OpenWeather data for immediate planning and hyper-local AROME precision for wind and precipitation forecasting.</li>
                 <li><strong>Compare (Comp.):</strong> Enable comparison mode to evaluate differences between providers.</li>
             </ul>
             <div class="tip">
@@ -230,6 +230,30 @@
 
 
 
+    </div>
+
+    <div class="section">
+        <h2>🌤️ Weather Providers & Advantages</h2>
+        
+        <h3>Provider Comparison</h3>
+        <p>MeteoRide supports multiple weather providers, each with unique strengths:</p>
+        
+        <ul>
+            <li><strong>Open-Meteo:</strong> Free, no API key required, global coverage, up to 14 days. Best for long-term planning and global routes.</li>
+            <li><strong>MeteoBlue:</strong> Requires API key, up to 7 days, very accurate especially for mountain weather. Ideal for alpine routes and complex terrain.</li>
+            <li><strong>OpenWeather:</strong> Requires API key, up to 4 days, excellent real-time data and official weather alerts. Perfect for immediate departures and urban areas.</li>
+            <li><strong>AROME-HD:</strong> High-resolution model (~1-2km) from MeteoFrance, available for Europe within 48 hours. Superior for wind forecasting and short-term precipitation in France and nearby countries.</li>
+        </ul>
+        
+        <h3>Provider Chains</h3>
+        <p>Chains combine the strengths of multiple providers:</p>
+        <ul>
+            <li><strong>OpenWeather → AROME-HD → Open-Meteo:</strong> Uses real-time OpenWeather data for the first hour, hyper-local AROME precision for the next 47 hours, then reliable Open-Meteo for longer forecasts. Requires OpenWeather API key.</li>
+        </ul>
+        
+        <div class="tip">
+            <strong>💡 Tip:</strong> Choose based on your needs: real-time accuracy (OpenWeather), local precision (AROME-HD), mountain terrain (MeteoBlue), or long-term planning (Open-Meteo).
+        </div>
     </div>
 
     <div class="section">

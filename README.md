@@ -6,8 +6,8 @@ You can download de code, execute directly without a server, install in a server
 
 ## Features
 
-- **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), MeteoBlue (API key required, up to 7 days), OpenWeather (API key required, up to 5 days), or Arome-HD (high-resolution for Europe within 48 hours).
-- **Provider chains**: A new chain option is available: "OpenWeather 0–2h → Arome 2–36h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. 
+- **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), MeteoBlue (API key required, up to 7 days), OpenWeather (API key required, up to 4 days), or Arome-HD (high-resolution for Europe within 48 hours).
+- **Provider chains**: A new chain option is available: "OpenWeather 0–1h → Arome 1–48h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. This chain leverages real-time data from OpenWeather for the immediate hour and hyper-local AROME precision for the next 47 hours.
 - **Comparison Mode**: Evaluate differences between providers for better decision-making.
 - **Date Comparison Mode**: Compare weather forecasts between two different dates/times for the same route.
 - **Automatic Fallbacks**: Switches to Open-Meteo if your primary provider fails or exceeds its horizon, with optional notifications.
@@ -23,6 +23,29 @@ You can download de code, execute directly without a server, install in a server
 - **Privacy-Focused**: No data sent to external servers. Only shares coordinates, dates, and API keys with weather providers. This app can be installed locally (only needs a brownser) except if you want to use "share route" with IOS.
 - **Progressive Web App (PWA)**: Installable on mobile and desktop devices for a native app-like experience.
 - **Open Source**: MIT licensed, available on GitHub for contributions.
+
+## Weather Providers & Advantages
+
+MeteoRide supports multiple weather providers, each with unique strengths:
+
+- **Open-Meteo**: 
+  - **Advantages**: Free, no API key required, global coverage, up to 14 days forecast
+  - **Best for**: Long-term planning, global routes, budget-conscious users
+  
+- **MeteoBlue**:
+  - **Advantages**: High accuracy, detailed mountain weather, excellent for complex terrain
+  - **Best for**: Mountain biking, alpine routes, when precision matters
+  
+- **OpenWeather**:
+  - **Advantages**: Real-time data, detailed current conditions, official weather alerts
+  - **Best for**: Immediate departures, urban areas, when current weather is critical
+  
+- **AROME-HD**:
+  - **Advantages**: Hyper-local precision (~1-2km resolution), superior wind forecasting, accurate short-term precipitation
+  - **Best for**: European routes (France + nearby), wind-sensitive activities, short-term planning
+  
+- **Provider Chains**:
+  - **OpenWeather → AROME-HD → Open-Meteo**: Combines real-time data from OpenWeather (first hour) with hyper-local AROME precision (next 47 hours), falling back to reliable Open-Meteo for longer forecasts
 
 ## Howto use
 You can use in your own computer, only download the code and open index.html in your computer.
@@ -40,7 +63,7 @@ For more detailed information, see the [User Guide (English)](https://app.meteor
 
 ## Limitations and Tips
 
-- **Time Horizons**: Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (5 days). Implemented a fallback with Meteoblue and openweathermap (more than standard days fallback to open-meteo)
+- **Time Horizons**: Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (4 days in standard mode, 1 hour in chains)
 - **Accuracy**: Forecasts less reliable beyond 3-4 days.
 - **Free APIs**: Monthly limits for MeteoBlue and OpenWeather; Open-Meteo has no limits.
 - **Best Practices**: Use routes up to 100-200 km, plan 1-2 days ahead, combine sources, have a backup plan, and carry rain gear.

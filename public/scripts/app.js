@@ -55,7 +55,8 @@ const PROB_MIN   = 20;   // muestra gota si prob >= 20%
 // NEW: provider horizons and day-to-ms constant
 const OPENMETEO_MAX_DAYS = 14;
 const METEOBLUE_MAX_DAYS = 7;
-const OPENWEATHER_MAX_DAYS = 2;
+const OPENWEATHER_MAX_DAYS = 4;
+const OPENWEATHER_MAX_HOURS = 1; 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_HOUR = 60 * 60 * 1000;          // NEW
 const AROMEHD_MAX_HOURS = 48;                 // NEW
@@ -495,9 +496,10 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       let prov = apiSource;
 
       // NEW: resolve chain provider (e.g. ow2_arome_openmeteo) per timestamp
+      let isChain = false;
       try {
         const chains = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
-        const isChain = !!chains[String(apiSource || '').toLowerCase()];
+        isChain = !!chains[String(apiSource || '').toLowerCase()];
         if (isChain) {
           const resolver = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp;
           if (typeof resolver === 'function') {
@@ -563,14 +565,15 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           warnedFallback = true;
         }
       }
-      if (prov === "openweather" && daysAhead > OPENWEATHER_MAX_DAYS) {
+      if (prov === "openweather" && ((isChain && hoursAhead > OPENWEATHER_MAX_HOURS) || (!isChain && daysAhead > OPENWEATHER_MAX_DAYS))) {
         prov = "openmeteo";
         p.provider = prov;
         usedFallback = true;
         usedFallbackHorizon = true;
-        horizonDaysUsed = OPENWEATHER_MAX_DAYS;
+        horizonDaysUsed = isChain ? OPENWEATHER_MAX_HOURS / 24 : OPENWEATHER_MAX_DAYS;
         if (!warnedFallback) {
-          logDebug(`OpenWeather excede ${OPENWEATHER_MAX_DAYS} días; usando Open‑Meteo como fallback.`);
+´´          const limit = isChain ? `${OPENWEATHER_MAX_HOURS} horas` : `${OPENWEATHER_MAX_DAYS} días`;
+          logDebug(`OpenWeather excede ${limit}; usando Open‑Meteo como fallback.`);
           warnedFallback = true;
         }
       }
