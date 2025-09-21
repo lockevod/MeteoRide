@@ -50,6 +50,8 @@
       cycling_speed_label: "Velocidad:",
       interval_label: "Inter.:",
       loading_text: "Cargando...",
+  // Recent routes dropdown placeholder
+  recent_routes_count: "{n} rutas recientes",
       // NEW
       horizon_exceeded: "Fecha fuera de horizonte ({days} días). Algunos pasos no tendrán datos.",
       fallback_to_openmeteo: "La previsión supera {days} días; se usa Open‑Meteo como fallback.",
@@ -141,6 +143,8 @@
       cycling_speed_label: "Speed:",
       interval_label: "Inter.:",
       loading_text: "Loading...",
+  // Recent routes dropdown placeholder
+  recent_routes_count: "{n} recent routes",
       // NEW
       horizon_exceeded: "Date beyond forecast horizon ({days} days). Some steps will have no data.",
       fallback_to_openmeteo: "Forecast exceeds {days} days; using Open‑Meteo as fallback.",

@@ -403,7 +403,16 @@
             <li><code>?datetime=2024-03-15T10:00</code></li>
             <li><code>?speed=25</code></li>
         </ul>
-        <h3>💾 Caché local y rendimiento</h3>
+        <h3>�️ Rutas recientes (guardadas localmente)</h3>
+        <p>MeteoRide guarda localmente las últimas rutas GPX que has cargado para que puedas recuperarlas rápidamente sin subir de nuevo el archivo. Esta funcionalidad es totalmente local: <strong>no</strong> se envían las rutas al servidor.</p>
+        <ul>
+            <li><strong>Cómo usarlo:</strong> junto al botón de subir archivo (📁) verás un desplegable con tus rutas recientes. Selecciona una ruta y se cargará exactamente como si la hubieras subido ahora.</li>
+            <li><strong>Límite:</strong> se guardan las últimas <strong>3</strong> rutas por defecto.</li>
+            <li><strong>Tamaño recomendado:</strong> soporta archivos GPX grandes, hasta aproximadamente <strong>750 KB</strong>. Si tu GPX es significativamente más grande, considera recortarlo o usar un host público y cargarlo con <code>?gpx_url=</code>.</li>
+            <li><strong>Privacidad:</strong> Los GPX se almacenan en tu navegador usando IndexedDB (o localStorage como fallback). No se comparten fuera de tu dispositivo.</li>
+            <li><strong>Eficiencia:</strong> Para ahorrar memoria, MeteoRide mantiene en memoria solo la información básica (nombre, tamaño y fecha) y carga el contenido completo solo cuando seleccionas una ruta del desplegable.</li>
+        </ul>
+        <h3>�💾 Caché local y rendimiento</h3>
             <p>
             Las respuestas de los proveedores se almacenan en <code>localStorage</code> durante ~30 minutos por paso/hora.
             Esto acelera recargas frecuentes y reduce peticiones a APIs con límites. Puedes borrar la caché desde las herramientas del navegador.

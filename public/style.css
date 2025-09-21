@@ -239,6 +239,28 @@ html, body {
   box-shadow: none; /* reduce visual lift so it feels 'glued' */
 }
 
+/* Recent routes select: keep compact (approx 17-18 characters) and truncate long names */
+.recent-routes-select {
+  min-width: 10ch;
+  max-width: 18ch; /* approx 17-18 characters */
+  width: auto;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--input-border, #cbd5e1);
+  background: var(--input-bg, #f3f4f6);
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ensure select options are readable on mobile */
+@media (max-width: 420px) {
+  .recent-routes-select { max-width: 14ch; }
+}
+
 /* On very small screens, keep the control minimally padded but still flush */
 @media screen and (max-width: 420px) {
   .leaflet-bottom .leaflet-right .map-app-control { padding: 2px 6px !important; font-size: 11px; }
@@ -1015,6 +1037,41 @@ input[type="file"] {
   text-overflow: ellipsis;
 }
 
+/* Recent routes container */
+.recent-routes-container {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.recent-route-item {
+  display: inline-block;
+  background: #f3f4f6;
+  color: #374151;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: 500;
+  cursor: pointer;
+  margin-right: 4px;
+  margin-bottom: 2px;
+  border: 1px solid #d1d5db;
+  transition: background 120ms ease, border-color 120ms ease;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-route-item:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.recent-route-item:active {
+  background: #d1d5db;
+}
+
 /* Bloque clima/tablas ------------------------------------------------------- */
 #weatherContainer {
   background: white;
@@ -1298,7 +1355,6 @@ input[type="file"] {
   background: #f7f7f7;
   color: #203050;
   font-weight: 700;
-  text-align: left;
 }
 #weatherTable thead tr.icon-row th {
   background: #e3f0fd;           /* igual que thead th */

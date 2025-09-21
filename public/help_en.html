@@ -400,7 +400,16 @@
             <li><code>?datetime=2024-03-15T10:00</code></li>
             <li><code>?speed=25</code></li>
         </ul>
-        <h3>💾 Local cache and performance</h3>
+        <h3>�️ Recent routes (stored locally)</h3>
+        <p>MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. This is a local-only feature — <strong>no</strong> routes are sent to any server.</p>
+        <ul>
+            <li><strong>How to use:</strong> next to the file upload button (📁) you'll find a compact dropdown with your recent routes. Choosing one loads it exactly as if you had uploaded the file now.</li>
+            <li><strong>Limit:</strong> the app stores the last <strong>3</strong> routes by default.</li>
+            <li><strong>Recommended size:</strong> supports larger GPX files up to about <strong>750 KB</strong>. For much larger files consider hosting them and using <code>?gpx_url=</code>.</li>
+            <li><strong>Privacy:</strong> GPX files are saved locally using IndexedDB (with localStorage fallback). They are never sent outside your device.</li>
+            <li><strong>Efficiency:</strong> Only metadata (name, size, timestamp) is kept in memory; the full GPX is loaded from the local store only when you select it.</li>
+        </ul>
+        <h3>�💾 Local cache and performance</h3>
         <p>
             Provider responses are stored in <code>localStorage</code> for ~30 minutes per step/hour.
             This speeds up frequent reloads and reduces requests to rate-limited APIs. You can clear the cache from your browser devtools.

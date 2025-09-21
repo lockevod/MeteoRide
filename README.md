@@ -61,6 +61,10 @@ You can use directly in a web (it's the same code published in Vercel directly).
 
 For more detailed information, see the [User Guide (English)](https://app.meteoride.cc/help_en.html) or [Guía de Usuario (Español)](https://app.meteoride.cc/help.html).
 
+## Recent routes (local)
+
+MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. The feature is local-only (uses IndexedDB with a localStorage fallback) and by default stores the last 3 routes. For details and usage instructions see the User Guide links above.
+
 ## Limitations and Tips
 
 - **Time Horizons**: Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (4 days in standard mode, 1 hour in chains)

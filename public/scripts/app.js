@@ -572,7 +572,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
         usedFallbackHorizon = true;
         horizonDaysUsed = isChain ? OPENWEATHER_MAX_HOURS / 24 : OPENWEATHER_MAX_DAYS;
         if (!warnedFallback) {
-´´          const limit = isChain ? `${OPENWEATHER_MAX_HOURS} horas` : `${OPENWEATHER_MAX_DAYS} días`;
+          const limit = isChain ? `${OPENWEATHER_MAX_HOURS} horas` : `${OPENWEATHER_MAX_DAYS} días`;
           logDebug(`OpenWeather excede ${limit}; usando Open‑Meteo como fallback.`);
           warnedFallback = true;
         }
@@ -627,9 +627,14 @@ async function fetchWeatherForSteps(steps, timeSteps) {
               if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
               const res2 = await fetch(url2);
-              if (res2.ok) { const json2 = await res2.json(); weatherData.push({ ...p, provider: prov2, weather: json2 }); setCache(key2, json2); logDebug(`AROME invalido paso ${i+1}, fallback OM`); continue; }
-              weatherData.push({ ...p, provider: prov2, weather: null });
-              continue;
+              if (res2.ok) { const json2 = await res2.json();
+                weatherData.push({ ...p, provider: prov2, weather: json2 });
+                setCache(key2, json2);
+                continue;
+              } else {
+                weatherData.push({ ...p, provider: prov2, weather: null });
+                continue;
+              }
             }
           }
           ok = true;
@@ -925,11 +930,6 @@ function processWeatherData() {
         const rainH = Number(hourly.rain?.["1h"] ?? 0);
         const snowH = Number(hourly.snow?.["1h"] ?? 0);
         step.precipitation = safeNum(rainH + snowH);
-        step.precipProb = safeNum((Number(hourly.pop) || 0) * 100);
-        step.weatherCode = Array.isArray(hourly.weather) && hourly.weather[0] ? hourly.weather[0].id : null;
-        step.uvindex = safeNum(hourly.uvi ?? w.current?.uvi ?? null);
-        step.cloudCover = safeNum(hourly.clouds);
-        step.luminance = computeLuminance(step);
         step.timeLabel = formatTime(step.time);
       } else if (daily) {
         // Approximate from daily if beyond hourly range
@@ -1452,7 +1452,7 @@ function buildRouteSummaryHTML(sum, tempUnitLabel, windUnitLabel, precipUnitLabe
       <div class="rs-lines">
         <div class="rs-line"><span class="rs-label">${L("Temp", "Temp")}:</span> ${tempTxt}</div>
         <div class="rs-line"><span class="rs-label">${L("Viento", "Wind")}:</span> ${windTxt}${gustTxt}</div>
-        <div class="rs-line"><span class="rs-label">${L("Lluvia", "Rain")}:</span> ${precipTxt}${probTxt}</div>
+                      <div class="rs-line"><span class="rs-label">${L("Lluvia", "Rain")}:</span> ${precipTxt}${probTxt}</div>
       </div>
     </div>
   `;
@@ -2502,6 +2502,9 @@ function ensureTrackVisible() {
 function init() {
   initMap();
   bindUIEvents();
+  if (typeof window.initUI === 'function') {
+    window.initUI();
+  }
   loadSettings();
   applyTranslations();
   updateProviderOptions();
@@ -2737,6 +2740,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Init code only
   initMap();
   bindUIEvents();
+  if (typeof window.initUI === 'function') {
+    window.initUI();
+  }
   loadSettings();
   applyTranslations();
   updateProviderOptions();
@@ -2808,8 +2814,6 @@ window.testAlertIndicator = function() {
     end: new Date(Date.now() + 3600000),
     processed: false
   }];
-  
-  console.log('Created test alert, activeWeatherAlerts:', window.activeWeatherAlerts.length);
   
   // Force show the indicator
   showAlertIndicator();
