@@ -114,7 +114,7 @@
     labelSpan.textContent = '';
     try {
         const img = new Image();
-        img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icons/icon-32.png';
+        img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icons/icon-120.png';
         img.alt = label;
         img.style.width = '26px';
         img.style.height = '26px';
