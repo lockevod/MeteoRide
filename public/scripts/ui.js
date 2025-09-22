@@ -653,8 +653,13 @@
           const children = Array.from(alertContainer.querySelectorAll('.weather-alert'));
           children.forEach(c => c.remove());
         }
-        const indicator = document.getElementById('weather-alert-indicator');
-        if (indicator) indicator.style.display = 'none';
+        try {
+          if (typeof hideAndCleanupAlertIndicator === 'function') hideAndCleanupAlertIndicator();
+          else {
+            const indicator = document.getElementById('weather-alert-indicator');
+            if (indicator) indicator.style.display = 'none';
+          }
+        } catch (e) { /* ignore */ }
 
         // Remove wind and rain markers from map
         try {
@@ -1284,12 +1289,25 @@
         btn.style.right = '12px';
         btn.style.bottom = '100px';
         btn.style.zIndex = 99999;
-        btn.style.padding = '6px 10px';
-        btn.style.background = '#059669';
-        btn.style.color = '#fff';
-        btn.style.border = 'none';
+        btn.style.padding = '6px 4px'; // narrower padding
+        btn.style.background = '#f3f4f6';
+        btn.style.border = '1px solid #d1d5db';
         btn.style.borderRadius = '6px';
-        btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+        btn.style.cursor = 'pointer';
+        btn.style.font = 'inherit';
+        btn.style.color = '#374151';
+        btn.style.marginLeft = '-2px'; // closer to file input
+        // Hover like file button
+        btn.addEventListener('mouseenter', () => {
+          btn.style.background = '#1d4ed8';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#1d4ed8';
+        });
+        btn.addEventListener('mouseleave', () => {
+          btn.style.background = '#f3f4f6';
+          btn.style.color = '#374151';
+          btn.style.borderColor = '#d1d5db';
+        });
         btn.title = 'Generar desde la ruta actual y guardar en el share-server local';
         btn.addEventListener('click', async () => {
           try {
@@ -1547,6 +1565,13 @@
         const addReq = store.add(route);
         addReq.onsuccess = async function (ev) {
           try {
+
+
+
+
+
+
+
             // Trim oldest if necessary
             const keysReq = store.getAllKeys();
             keysReq.onsuccess = function () {
@@ -1578,6 +1603,50 @@
       });
     } catch (e) {
       console.warn('[MeteoRide] idbAddRoute failed', e);
+      throw e;
+    }
+  }
+
+  // Find a route record by name (returns full record or null)
+  async function idbFindRouteByName(name) {
+    try {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.openCursor();
+        req.onsuccess = function (ev) {
+          const cursor = ev.target.result;
+          if (!cursor) return resolve(null);
+          const v = cursor.value || {};
+          if (v.name === name) return resolve(Object.assign({ id: cursor.primaryKey }, v));
+          cursor.continue();
+        };
+        req.onerror = function () { reject(req.error || new Error('cursor failed')); };
+      });
+    } catch (e) {
+      console.warn('[MeteoRide] idbFindRouteByName failed', e);
+      return null;
+    }
+  }
+
+  // Put (insert or replace) a route record; returns the record id/key
+  async function idbPutRoute(route) {
+    try {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        // If route includes id, ensure we set it on the object so put replaces
+        const obj = { name: route.name, size: route.size, lastModified: route.lastModified, timestamp: route.timestamp };
+        if (route.blob) obj.blob = route.blob;
+        if (route.id != null) obj.id = route.id;
+        const req = store.put(obj);
+        req.onsuccess = function (ev) { resolve(ev.target.result); };
+        req.onerror = function () { reject(req.error || new Error('put failed')); };
+      });
+    } catch (e) {
+      console.warn('[MeteoRide] idbPutRoute failed', e);
       throw e;
     }
   }
@@ -1666,12 +1735,21 @@
       return;
     }
 
+    // Option: make the UI button-only (hide native select and badge).
+    // Set to true if you want the same visual on desktop and mobile.
+    const BUTTON_ONLY_UI = true;
+
     if (routes.length === 0) {
       // Keep container hidden when no recent routes exist
       container.style.display = 'none';
       console.log('[MeteoRide] updateRecentRoutesUI: No routes, hiding container');
       return;
     }
+
+    // Show a compact dropdown (select) to save space. The select loads the route on change (lazy blob retrieval).
+    container.innerHTML = '';
+    container.style.display = 'inline-block';
+    console.log('[MeteoRide] updateRecentRoutesUI: Showing container with', routes.length, 'routes (dropdown)');
 
     // Helper: localized placeholder text for recent routes (fallback) --- we will also try the project's i18n
     function recentRoutesPlaceholderTextFallback(count) {
@@ -1680,75 +1758,176 @@
         if (docLang && docLang.toLowerCase().startsWith('es')) {
           return count === 1 ? `${count} ruta reciente` : `${count} rutas recientes`;
         }
-        return count === 1 ? `${count} recent route` : `${count} recent routes`;
-      } catch (e) { return `${count} recent routes`; }
+      } catch (_e) { /* ignore */ }
+      return count === 1 ? `${count} recent route` : `${count} recent routes`;
     }
 
-    // Show a compact dropdown (select) to save space. The select loads the route on change (lazy blob retrieval).
-    container.innerHTML = '';
-    container.style.display = 'inline-block';
-    console.log('[MeteoRide] updateRecentRoutesUI: Showing container with', routes.length, 'routes (dropdown)');
-
-    const select = document.createElement('select');
-    select.id = 'recentRoutesSelect';
-    select.className = 'recent-routes-select';
-    select.style.minWidth = '140px';
-    // Placeholder option (use project's i18n if available)
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
     // Attempt to use project's translation key 'recent_routes_count' with a count param.
     let pText = recentRoutesPlaceholderTextFallback(routes.length);
-    try {
-      if (typeof window.t === 'function') {
-        const maybe = window.t('recent_routes_count', { n: routes.length });
-        if (maybe && typeof maybe === 'string' && maybe !== 'recent_routes_count') {
-          pText = maybe.replace('{{n}}', routes.length).replace('{n}', routes.length);
-        }
+    if (typeof window.t === 'function') {
+      const maybe = window.t('recent_routes_count', { n: routes.length });
+      if (maybe && typeof maybe === 'string' && maybe !== 'recent_routes_count') {
+        pText = maybe.replace('{{n}}', routes.length).replace('{n}', routes.length);
       }
-    } catch (_e) { /* ignore */ }
-  placeholder.textContent = pText;
-    // Keep placeholder selectable so we can programmatically reset the select back to it.
-    placeholder.disabled = false;
-    placeholder.selected = true;
-    select.appendChild(placeholder);
+    }
 
-    routes.forEach((route, index) => {
-      const opt = document.createElement('option');
-      opt.value = String(index);
-      opt.textContent = (route.name || '').replace(/\.[^/.]+$/, "");
-      opt.title = `Load ${route.name} (${new Date(route.timestamp).toLocaleDateString()})`;
-      select.appendChild(opt);
+    // Button-only UI: no select or badge created
+
+    // Create an icon button + popup menu for small screens to avoid layout issues
+    const btn = document.createElement('button');
+    btn.id = 'recentRoutesButton';
+    btn.className = 'recent-routes-button';
+  btn.type = 'button';
+  // Accessible label / tooltip text
+  btn.title = pText;
+  btn.setAttribute('aria-label', pText);
+  btn.setAttribute('aria-haspopup', 'true');
+  // nicer SVG icon (hamburger) and data-tooltip for custom tooltip styling
+  btn.setAttribute('data-tooltip', pText);
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">\n      <path d="M3 6h18"></path>\n      <path d="M3 12h18"></path>\n      <path d="M3 18h18"></path>\n    </svg>';
+    // Style like the file upload button
+    btn.style.display = 'inline-flex';
+    btn.style.alignItems = 'center';
+    btn.style.gap = '6px';
+    btn.style.padding = '6px 4px'; // narrower padding
+    btn.style.background = '#f3f4f6';
+    btn.style.border = '1px solid #d1d5db';
+    btn.style.borderRadius = '6px';
+    btn.style.cursor = 'pointer';
+    btn.style.font = 'inherit';
+    btn.style.color = '#374151';
+    btn.style.marginLeft = '-2px'; // closer to file input
+    // Hover like file button
+    btn.addEventListener('mouseenter', () => {
+      btn.style.background = '#1d4ed8';
+      btn.style.color = '#fff';
+      btn.style.borderColor = '#1d4ed8';
     });
-
-    select.addEventListener('change', async function () {
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = '#f3f4f6';
+      btn.style.color = '#374151';
+      btn.style.borderColor = '#d1d5db';
+    });
+    btn.title = 'Generar desde la ruta actual y guardar en el share-server local';
+    btn.addEventListener('click', async () => {
       try {
-        const idx = Number(this.value);
-        if (!Number.isFinite(idx) || idx < 0 || idx >= routes.length) return;
-        const route = routes[idx];
-        console.log('[MeteoRide] recentRoutesSelect: loading index', idx, 'route', route.name);
-        let full = null;
-        if (route.id != null) full = await idbGetRouteById(route.id);
-        if (!full) {
-          try {
-            const stored = localStorage.getItem(RECENT_ROUTES_KEY);
-            const arr = stored ? JSON.parse(stored) : [];
-            const found = arr.find(r => r.name === route.name && r.timestamp === route.timestamp);
-            if (found) full = { name: found.name, size: found.size, lastModified: found.lastModified, timestamp: found.timestamp, blob: new Blob([found.content], { type: 'application/gpx+xml' }) };
-          } catch (_) { /* ignore */ }
-        }
-        if (!full) {
-          console.warn('[MeteoRide] recentRoutesSelect: Could not retrieve route content for', route.name);
+        const g = exportRouteToGpx(undefined, true);
+        if (!g) {
+          console.warn('No hay datos de ruta para generar GPX');
           return;
         }
-        await loadRecentRoute(full);
-        // Reset select back to localized placeholder to avoid accidental reloads
-        try { this.selectedIndex = 0; this.value = ''; } catch (e) { /* ignore */ }
+        console.log('[MeteoRide] exportRouteToGpx output length=', (g && g.length) || 0);
+        const resp = await uploadGPXToShareServer();
+        // uploadGPXToShareServer may return an object with a url or a payload; handle both
+        if (resp) {
+          const url = (typeof resp === 'string') ? resp : (resp.url || resp.sharedUrl || (resp.payload && resp.payload.url) || null);
+          if (url) {
+            console.log('GPX guardado: ' + url + ' (Enlace copiado al portapapeles si está disponible)');
+            return;
+          }
+          // If no URL, but truthy response, show generic success
+          console.log('GPX guardado');
+          return;
+        }
+        console.error('Error: no se recibió respuesta del servidor al guardar GPX');
       } catch (e) {
-        console.error('[MeteoRide] recentRoutesSelect: error loading selection', e);
+        console.error('Error subiendo GPX: ' + (e && e.message ? e.message : String(e)));
       }
     });
+    container.appendChild(btn);
 
-    container.appendChild(select);
+    const menu = document.createElement('div');
+    menu.id = 'recentRoutesMenu';
+    menu.className = 'recent-routes-menu';
+    menu.style.display = 'none';
+    menu.style.position = 'absolute';
+    menu.style.zIndex = 1200;
+    menu.style.minWidth = '180px';
+    menu.style.background = '#fff';
+    menu.style.border = '1px solid #ccc';
+    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
+    menu.style.borderRadius = '6px';
+    menu.style.padding = '6px 6px';
+    menu.style.maxHeight = '60vh';
+    menu.style.overflow = 'auto';
+    menu.style.display = 'none';
+    container.appendChild(menu);
+
+    // Build menu items
+    function rebuildMenuItems() {
+      menu.innerHTML = '';
+      routes.forEach((route, idx) => {
+        const it = document.createElement('div');
+        it.className = 'recent-routes-menu-item';
+        it.style.padding = '6px 8px';
+        it.style.cursor = 'pointer';
+        it.style.borderRadius = '4px';
+        it.style.fontSize = '14px';
+        it.style.fontFamily = 'Arial, sans-serif';
+        it.textContent = (route.name || '').replace(/\.[^/.]+$/, "");
+        it.addEventListener('click', async function () {
+          try {
+            // behave like selecting the option
+            const route = routes[idx];
+            let full = null;
+            if (route.id != null) full = await idbGetRouteById(route.id);
+            if (!full) {
+              try {
+                const stored = localStorage.getItem(RECENT_ROUTES_KEY);
+                const arr = stored ? JSON.parse(stored) : [];
+                const found = arr.find(r => r.name === route.name && r.timestamp === route.timestamp);
+                if (found) full = { name: found.name, size: found.size, lastModified: found.lastModified, timestamp: found.timestamp, blob: new Blob([found.content], { type: 'application/gpx+xml' }) };
+              } catch (_) { /* ignore */ }
+            }
+            if (!full) {
+              console.warn('[MeteoRide] recentRoutesMenu: Could not retrieve route content for', route.name);
+              return;
+            }
+            await loadRecentRoute(full);
+          } catch (e) { console.error(e); }
+          hideMenu();
+        });
+        menu.appendChild(it);
+      });
+    }
+
+    function showMenu() {
+      rebuildMenuItems();
+      const rect = btn.getBoundingClientRect();
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 6}px`;
+      menu.style.display = 'block';
+      document.addEventListener('click', outsideClickHandler);
+    }
+
+    function hideMenu() {
+      menu.style.display = 'none';
+      document.removeEventListener('click', outsideClickHandler);
+    }
+
+    function outsideClickHandler(ev) {
+      if (!menu.contains(ev.target) && ev.target !== btn) hideMenu();
+    }
+
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (menu.style.display === 'block') hideMenu(); else showMenu();
+    });
+
+    // Responsiveness: show button / hide select on small screens
+    function adaptForScreen() {
+      const isSmall = window.innerWidth <= 420;
+      if (BUTTON_ONLY_UI) {
+        // Force button-only UI regardless of screen size
+        try { select.style.display = 'none'; } catch(_){}
+        try { badge.style.display = 'none'; } catch(_){}
+        try { btn.style.display = 'inline-flex'; } catch(_){}
+      } else {
+        if (isSmall) { select.style.display = 'none'; badge.style.display = 'none'; btn.style.display = 'inline-block'; } else { select.style.display = ''; badge.style.display = (badge.textContent? 'inline-block':'none'); btn.style.display = 'none'; hideMenu(); }
+      }
+    }
+    window.addEventListener('resize', adaptForScreen);
+    adaptForScreen();
     // Apply translations for the rest of the UI, then set the placeholder with the correct count
     try { if (typeof applyTranslations === 'function') applyTranslations(); } catch (_e) {}
     try {
@@ -1782,12 +1961,28 @@
         const blob = file instanceof Blob ? file : new Blob([file], { type: 'application/gpx+xml' });
         const routeRecord = { name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), blob };
 
-        // Persist the blob record
+        // Always overwrite if a route with same name exists
         try {
+          const existing = await idbFindRouteByName(file.name);
+          if (existing && existing.id != null) {
+            // Overwrite existing record
+            routeRecord.id = existing.id;
+            const id = await idbPutRoute(routeRecord);
+            console.log('[MeteoRide] saveRecentRoute: overwrote existing IndexedDB id=', id);
+            // Update in-memory metadata cache
+            const meta = { id: id, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
+            const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
+            if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
+            recentRoutesCache.unshift(meta);
+            if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
+            updateRecentRoutesUI();
+            return;
+          }
+          // Otherwise add new
           const id = await idbAddRoute(routeRecord);
           // Update in-memory metadata cache
           const meta = { id: id, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
-          const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name && r.size === meta.size && r.lastModified === meta.lastModified);
+          const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
           if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
           recentRoutesCache.unshift(meta);
           if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
@@ -1801,8 +1996,17 @@
           try {
             const txt = await file.text();
             const compressedContent = txt.replace(/\s+/g, ' ').trim();
+            // Overwrite by name in localStorage fallback
+            try {
+              const stored = localStorage.getItem(RECENT_ROUTES_KEY);
+              let arr = stored ? JSON.parse(stored) : [];
+              // Remove any existing with same name
+              arr = arr.filter(r => r.name !== file.name);
+              arr.unshift({ name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), content: compressedContent });
+              arr = arr.slice(0, MAX_RECENT_ROUTES);
+              localStorage.setItem(RECENT_ROUTES_KEY, JSON.stringify(arr));
+            } catch (_){ /* ignore localStorage write errors */ }
             recentRoutesCache.unshift({ id: null, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now() });
-            try { localStorage.setItem(RECENT_ROUTES_KEY, JSON.stringify([{ name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), content: compressedContent }])); } catch(_){ }
             updateRecentRoutesUI();
             return;
           } catch (txtErr) {

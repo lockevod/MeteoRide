@@ -3407,15 +3407,17 @@ function showAlertIndicator() {
       document.head.appendChild(style);
     }
     
-    // Click handler to toggle alerts
-    indicator.addEventListener('click', () => {
+    // Click handler to toggle alerts (store for later cleanup)
+    indicator._clickHandler = function () {
       console.log('Alert indicator clicked');
       showWeatherAlerts();
-    });
+    };
+    indicator.addEventListener('click', indicator._clickHandler);
     
-    // Update position on resize and scroll
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition);
+    // Update position on resize and scroll (store handler on element for cleanup)
+    indicator._updatePosition = updatePosition;
+    window.addEventListener('resize', indicator._updatePosition);
+    window.addEventListener('scroll', indicator._updatePosition);
     
     // Initially add to body, updatePosition will move it if needed
     document.body.appendChild(indicator);
@@ -3430,6 +3432,32 @@ function showAlertIndicator() {
   
   indicator.style.display = 'flex';
   console.log('Alert indicator display set to flex');
+}
+
+// Remove alert indicator and associated listeners/styles
+function hideAndCleanupAlertIndicator() {
+  try {
+    const indicator = document.getElementById('weather-alert-indicator');
+    if (!indicator) return;
+    // Remove attached listeners if present
+    if (indicator._updatePosition) {
+      window.removeEventListener('resize', indicator._updatePosition);
+      window.removeEventListener('scroll', indicator._updatePosition);
+      delete indicator._updatePosition;
+    }
+    if (indicator._clickHandler) {
+      indicator.removeEventListener('click', indicator._clickHandler);
+      delete indicator._clickHandler;
+    }
+    // Remove from DOM
+    if (indicator.parentNode) indicator.parentNode.removeChild(indicator);
+    // Hide alerts container too
+    const container = document.getElementById('weather-alerts-container');
+    if (container) container.style.display = 'none';
+    console.log('Alert indicator and container cleaned up');
+  } catch (e) {
+    console.warn('hideAndCleanupAlertIndicator error', e);
+  }
 }
 
 // Update processWeatherAlerts to reset processed flag when showing indicator

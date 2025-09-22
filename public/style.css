@@ -256,6 +256,11 @@ html, body {
   text-overflow: ellipsis;
 }
 
+/* Keep dropdown width independent in browsers: allow the select element to show drop-down normally */
+@supports (appearance: none) {
+  .recent-routes-select { appearance: menulist-button; }
+}
+
 /* Ensure select options are readable on mobile */
 @media (max-width: 420px) {
   .recent-routes-select { max-width: 14ch; }
@@ -1915,6 +1920,70 @@ input[type="file"] {
   text-align: center;
   box-sizing: border-box;
   height: 22px;
+/* Compact badge showing short content-hash next to recent routes select */
+.recent-routes-hash-badge {
+  display: inline-block;
+}
+
+@media (max-width: 420px) {
+  .recent-routes-select { max-width: 140px; }
+  .recent-routes-hash-badge { display: none; }
+}
+
+/* Small-screen menu button and popup menu styles */
+.recent-routes-button {
+  background: transparent;
+  border: 1px solid var(--input-border,#cbd5e1);
+  border-radius: 6px;
+  padding: 6px 8px;
+  height: 36px;
+  cursor: pointer;
+  display: inline-flex; /* show on all screen sizes */
+  align-items: center;
+  margin-left: 6px;
+}
+.recent-routes-menu { font-size: 14px; }
+.recent-routes-menu-item:hover { background: #f5f7fa; }
+
+/* If you prefer to show only the button and hide the native select,
+   you can add: .recent-routes-select { display: none; } */
+
+/* Button visual polish */
+.recent-routes-button svg { display: block; color: #2b6cb0; }
+.recent-routes-button:hover,
+.recent-routes-button:focus { background: rgba(43,108,176,0.06); border-color: #2b6cb0; outline: none; }
+.recent-routes-button:active { transform: translateY(1px); }
+
+/* Custom tooltip using data-tooltip attribute */
+.recent-routes-button[data-tooltip]:after {
+  content: attr(data-tooltip);
+  position: absolute;
+  white-space: nowrap;
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transform: translateY(-120%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 160ms ease;
+}
+.recent-routes-button:hover[data-tooltip]:after,
+.recent-routes-button:focus[data-tooltip]:after {
+  opacity: 1;
+  transform: translateY(-140%);
+}
+
+/* Ensure the tooltip sits above other elements */
+.recent-routes-button { position: relative; z-index: 1100; }
+
+/* When the container is configured to show button-only, hide native select and badge */
+.recent-routes-button-only .recent-routes-select { display: none !important; }
+.recent-routes-button-only .recent-routes-hash-badge { display: none !important; }
+
+/* Allow a small short-hash label inside the button */
+.recent-routes-button .short-hash { margin-left: 6px; font-size: 12px; color: rgba(0,0,0,0.7); background: #eef6ff; padding: 2px 6px; border-radius: 8px; }
   padding: 2px 8px;
   font-size: 12px;
   line-height: 1.2;
