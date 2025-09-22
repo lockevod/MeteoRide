@@ -1629,6 +1629,23 @@
     }
   }
 
+  // Delete a route record by id
+  async function idbDeleteRoute(id) {
+    try {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.delete(id);
+        req.onsuccess = function () { resolve(true); };
+        req.onerror = function () { reject(req.error || new Error('delete failed')); };
+      });
+    } catch (e) {
+      console.warn('[MeteoRide] idbDeleteRoute failed', e);
+      throw e;
+    }
+  }
+
   async function idbSaveAll(routes) {
     // Keep for compatibility but delegate to adding individual routes with blob support.
     try {
@@ -1686,6 +1703,55 @@
       console.log('[MeteoRide] migrateFromLocalStorage: migrated', routes.length, 'routes to IndexedDB');
     } catch (e) {
       console.warn('[MeteoRide] migrateFromLocalStorage: failed', e);
+    }
+  }
+
+  // Clean duplicates from IndexedDB and cache
+  async function cleanDuplicateRoutes() {
+    try {
+      console.log('[MeteoRide] cleanDuplicateRoutes: Starting cleanup...');
+      const allRoutes = await idbGetAllRoutes();
+      
+      // Group by name and find duplicates
+      const nameGroups = {};
+      allRoutes.forEach(route => {
+        if (!nameGroups[route.name]) {
+          nameGroups[route.name] = [];
+        }
+        nameGroups[route.name].push(route);
+      });
+
+      let duplicatesRemoved = 0;
+      
+      // For each group with duplicates, keep only the most recent one
+      for (const [name, routes] of Object.entries(nameGroups)) {
+        if (routes.length > 1) {
+          // Sort by timestamp (most recent first)
+          routes.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          
+          // Keep the first (most recent), delete the rest
+          for (let i = 1; i < routes.length; i++) {
+            try {
+              await idbDeleteRoute(routes[i].id);
+              duplicatesRemoved++;
+              console.log('[MeteoRide] cleanDuplicateRoutes: Removed duplicate', routes[i].name, 'id=', routes[i].id);
+            } catch (e) {
+              console.warn('[MeteoRide] cleanDuplicateRoutes: Failed to delete duplicate id=', routes[i].id, e);
+            }
+          }
+        }
+      }
+
+      // Reload cache from cleaned DB
+      if (duplicatesRemoved > 0) {
+        recentRoutesCache = await idbGetAllRoutes();
+        updateRecentRoutesUI();
+        console.log('[MeteoRide] cleanDuplicateRoutes: Removed', duplicatesRemoved, 'duplicates, cache updated');
+      } else {
+        console.log('[MeteoRide] cleanDuplicateRoutes: No duplicates found');
+      }
+    } catch (e) {
+      console.error('[MeteoRide] cleanDuplicateRoutes: Exception:', e);
     }
   }
 
@@ -1981,7 +2047,11 @@
               arr = arr.slice(0, MAX_RECENT_ROUTES);
               localStorage.setItem(RECENT_ROUTES_KEY, JSON.stringify(arr));
             } catch (_){ /* ignore localStorage write errors */ }
+            // Remove any existing with same name from cache before adding
+            const existingIndex = recentRoutesCache.findIndex(r => r.name === file.name);
+            if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
             recentRoutesCache.unshift({ id: null, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now() });
+            if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
             updateRecentRoutesUI();
             return;
           } catch (txtErr) {
@@ -2092,6 +2162,9 @@
         await migrateFromLocalStorage();
         recentRoutesCache = await idbGetAllRoutes();
         console.log('[MeteoRide] initUI: loaded recentRoutesCache length=', recentRoutesCache.length);
+        
+        // Clean any duplicate routes
+        await cleanDuplicateRoutes();
       } catch (e) {
         console.warn('[MeteoRide] initUI: failed to load recent routes from IDB, will use fallback', e);
         try {

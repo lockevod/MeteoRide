@@ -1080,14 +1080,16 @@ main {
 
 #rutaName {
   margin: 0;          /* elimina margen sobrante */
-  padding: 0;         /* evita relleno interior */
+  padding: 2px 0;     /* añade un poco de padding vertical */
   font-weight: 700;
-  min-height: 18px;   /* reduce altura mínima */
-  display: block;
-  line-height: 16px;     /* coherencia con .ruta-name */
+  min-height: 26px;   /* aumenta altura mínima para acomodar el indicador */
+  display: flex;      /* cambia a flex para mejor control del layout */
+  align-items: center; /* centra verticalmente el contenido */
+  gap: 6px;           /* espacio entre texto e indicador */
+  line-height: 20px;  /* aumenta line-height */
   position: relative;
   top: 0;             /* remove previous 2px offset */
-  height: 16px;       /* align with hint lane height */
+  height: auto;       /* altura automática */
   margin-bottom: 0;
   z-index: 4;        /* render above fades/hint if overlapping */
   /* NEW: prevent text overflow */
@@ -1976,6 +1978,10 @@ input[type="file"] {
   font-size: 0.95rem;
   color: #264d73;
   font-weight: 600;
+  min-height: 26px;   /* aumenta altura mínima para acomodar el indicador */
+  display: flex;      /* cambia a flex para mejor control del layout */
+  align-items: center; /* centra verticalmente el contenido */
+  gap: 6px;           /* espacio entre texto e indicador */
 }
 
 /* Área del selector de fichero situada al final de la fila */

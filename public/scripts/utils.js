@@ -449,6 +449,18 @@
     }
     return idx;
   }
+
+  // Find the next hourly index at or after target (prefer future). If none found, return last index.
+  function findClosestFutureIndex(arr, target) {
+    if (!Array.isArray(arr) || arr.length === 0) return -1;
+    const tgt = target instanceof Date ? target : new Date(target);
+    for (let i = 0; i < arr.length; i++) {
+      const d = arr[i] instanceof Date ? arr[i] : new Date(arr[i]);
+      if (d >= tgt) return i;
+    }
+    // all entries are before target -> return last
+    return arr.length - 1;
+  }
   function offsetLatLng(lat, lon, nx, ny, meters = 12) {
     const dLat = (meters / 111320) * ny;
     const dLon = (meters / (40075000 * Math.cos(lat * Math.PI/180) / 360)) * nx;

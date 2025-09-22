@@ -1,3 +1,62 @@
+// Fallback: derive a simple WMO weathercode from basic precipitation and cloud cover
+// Conservative mapping:
+// - if precipitation > PRECIP_MIN -> return 80 (rain/showers cluster)
+// - else use cloudCover thresholds to return clear(0), partly(1), cloudy(3)
+function fallbackWmoFromBasics(precip, cloudCover) {
+  const p = Number(precip) || 0;
+  const c = Number(cloudCover);
+  if (p > PRECIP_MIN) return 80; // use 80-group for precipitation
+  if (!Number.isFinite(c)) return 0;
+  if (c < 20) return 0; // clear
+  if (c < 60) return 1; // partly
+  return 3; // cloudy/overcast
+}
+// Presentation helper: map a rainy WMO code to a non-precip equivalent using cloudCover
+function mapWmoToNonPrecip(code, cloudCover) {
+  const c = Number(cloudCover);
+  // If no valid code, use the fallback derivation (presentation-only)
+  if (code == null || code === "" || Number.isNaN(Number(code))) {
+    return fallbackWmoFromBasics(0, c);
+  }
+  const kc = Number(code);
+
+  // Keep clear/partly/overcast/fog as-is
+  if (kc === 0 || kc === 1 || kc === 2 || kc === 3 || kc === 45 || kc === 48) return kc;
+
+  // Thunder-related codes: preserve thunder as the non-precip characteristic
+  if (kc >= 95 && kc <= 99) {
+    // map to a generic thunder code (95) to keep thunder visual but avoid rain detail
+    return 95;
+  }
+
+  // Groups of precipitation codes that we want to strip to a cloud-based visual
+  const precipLike = new Set([
+    // Drizzle / light precip
+    51, 53, 55,
+    // Freezing drizzle
+    56, 57,
+    // Rain
+    61, 63, 65,
+    // Freezing rain
+    66, 67,
+    // Snow
+    71, 73, 75, 77, 85, 86,
+    // Showers
+    80, 81, 82
+  ]);
+
+  if (precipLike.has(kc)) {
+    // Use cloudCover to choose between clear/partly/overcast fallback
+    if (!Number.isFinite(c)) return fallbackWmoFromBasics(0, c);
+    if (c < 10) return 0;      // mostly clear despite precip code
+    if (c < 60) return 1;      // partlycloudy
+    return 3;                  // overcast
+  }
+
+  // For any other unknown codes, return original as a safe default
+  return kc;
+}
+// Additional context lines can be added here if necessary
 // Global variables
 window.map = null;
 window.trackLayer = null;
@@ -929,7 +988,19 @@ function processWeatherData() {
     let idx = -1;
     if (prov === "openmeteo" || prov === "aromehd") {
       if (!w.hourly || !w.hourly.time) return;
-      idx = findClosestIndex(w.hourly.time, step.time);
+      // If step minute is 30 or more prefer the next future hourly slot (ceil).
+      // If minute is 0-29 prefer the closest index (nearest, may be previous hour).
+      try {
+        const dt = step.time instanceof Date ? step.time : new Date(step.time);
+        const minute = dt.getMinutes();
+        if (minute >= 30) {
+          idx = (window.findClosestFutureIndex ? window.findClosestFutureIndex(w.hourly.time, step.time) : findClosestIndex(w.hourly.time, step.time));
+        } else {
+          idx = findClosestIndex(w.hourly.time, step.time);
+        }
+      } catch (e) {
+        idx = findClosestIndex(w.hourly.time, step.time);
+      }
     }
     // NEW: OpenWeather extraction (prefer hourly, fallback to daily)
     if (prov === "openweather") {
@@ -1056,10 +1127,10 @@ function processWeatherData() {
       step.windDir = w.hourly.winddirection_10m[idx];
       step.windGust = safeNum(windToUnits(w.hourly.wind_gusts_10m[idx], windUnit));
       step.humidity = safeNum(w.hourly.relative_humidity_2m[idx]);
-      step.precipitation = safeNum(w.hourly.precipitation[idx]);
+  step.precipitation = safeNum(w.hourly.precipitation[idx]);
      // AROME may lack precipitation_probability; merged earlier when available
-      step.precipProb = safeNum(w.hourly.precipitation_probability && w.hourly.precipitation_probability[idx]);
-      step.weatherCode = w.hourly.weathercode[idx];
+  step.precipProb = safeNum(w.hourly.precipitation_probability && w.hourly.precipitation_probability[idx]);
+  step.weatherCode = w.hourly.weathercode[idx];
       step.uvindex = (w.hourly.uv_index && w.hourly.uv_index.length > idx)
         ? safeNum(w.hourly.uv_index[idx])
         : null;
@@ -1075,16 +1146,28 @@ function processWeatherData() {
             step.isDaylight = pos.altitude > 0 ? 1 : 0;
           } catch { /* ignore */ }
         }
-        // If still missing, synthesize; else reconcile OM code with AROME basics when contradictory
+        // If still missing, synthesize
         if (step.weatherCode == null) {
           step.weatherCode = fallbackWmoFromBasics(step.precipitation, step.cloudCover);
         } else {
+          // Reconcile AROME vs Open-Meteo: prefer forward index values; then adjust
           step.weatherCode = reconcileAromeVsOmCode(
             step.weatherCode,
             step.precipitation,
             step.precipProb,
             step.cloudCover
           );
+        }
+
+        // Policy: prefer AROME precipitation as authoritative for icon decisions.
+        // If AROME reports precipitation == 0 for this (future-aligned) step, don't show probability
+        // and avoid displaying a rain icon even if the reconciled weatherCode suggests rain.
+        if (Number(step.precipitation) === 0) {
+          // If AROME reports 0 precipitation, treat probability as not meaningful here.
+          // Do NOT overwrite the canonical step.weatherCode: presentation-only mapping
+          // (removing the rain component) is handled in the icon renderer via
+          // mapWmoToNonPrecip. Keeping the original weatherCode preserves source data.
+          step.precipProb = null;
         }
       }
     }
@@ -1445,10 +1528,20 @@ function computeRouteSummary() {
 
     // Categoría detallada por proveedor (CHANGED: provider-aware)
     const prov = step.provider || apiSource;
+    // Presentation-only code: if AROME claims 0 precipitation, strip rain for summary decisions
+    let presentationCode = step.weatherCode;
+    try {
+      if (prov === 'aromehd' && Number(step?.precipitation) === 0) {
+        presentationCode = mapWmoToNonPrecip(step.weatherCode, step.cloudCover ?? step.cloud_cover ?? 0);
+      }
+    } catch (e) {
+      presentationCode = step.weatherCode;
+    }
+
     let cat = "default";
-    if (prov === "meteoblue") cat = getDetailedCategoryMeteoBlue(step.weatherCode);
-    else if (prov === "openweather") cat = getDetailedCategoryOpenWeather(step.weatherCode);
-    else cat = getDetailedCategoryOpenMeteo(step.weatherCode);
+    if (prov === "meteoblue") cat = getDetailedCategoryMeteoBlue(presentationCode);
+    else if (prov === "openweather") cat = getDetailedCategoryOpenWeather(presentationCode);
+    else cat = getDetailedCategoryOpenMeteo(presentationCode);
 
     // Ajuste por nubosidad alta
     const cc = Number(step?.cloudCover ?? 0);
@@ -1738,12 +1831,24 @@ function renderWeatherTable() {
   viewData.forEach((w, i) => {
     const th = document.createElement("th");
     const prov = w.provider || apiSource;
+    // Presentation-only weather code: if AROME reported 0 precipitation, strip the precipitation
+    // component for the icon while keeping the canonical w.weatherCode unchanged.
+    let presentationCode = w.weatherCode;
+    try {
+      if (prov === 'aromehd' && Number(w?.precipitation) === 0) {
+        presentationCode = mapWmoToNonPrecip(w.weatherCode, w.cloudCover ?? w.cloud_cover ?? 0);
+      }
+    } catch (e) {
+      // fallback to original code on any unexpected error
+      presentationCode = w.weatherCode;
+    }
+
     let iconClass =
       prov === "meteoblue"
-        ? getWeatherIconClassMeteoBlue(w.weatherCode, w.isDaylight)
+        ? getWeatherIconClassMeteoBlue(presentationCode, w.isDaylight)
         : prov === "openweather"
-        ? getWeatherIconClassOpenWeather(w.weatherCode, w.isDaylight)
-        : getWeatherIconClassOpenMeteo(w.weatherCode, w.isDaylight);
+        ? getWeatherIconClassOpenWeather(presentationCode, w.isDaylight)
+        : getWeatherIconClassOpenMeteo(presentationCode, w.isDaylight);
   const icon = document.createElement("i");
   icon.classList.add("wi", iconClass);
   icon.style.fontSize = "28px";
@@ -2164,6 +2269,23 @@ function selectViewCol(col, centerMap = false) {
   const originalIdx = viewOriginalIndexMap[col];
   highlightColumn(col);
   highlightMapStep(originalIdx, centerMap);
+  // Optional debug: dump raw precipitation fields for the selected step
+  try {
+    if (window.METEORIDE_DEBUG_RAIN_INSPECT) {
+      const step = window.weatherData && window.weatherData[originalIdx];
+      if (step) {
+        console.groupCollapsed(`[MeteoRide] Inspect step ${originalIdx} @ ${step.time}`);
+        console.log('provider/apiSource:', step.provider || window.apiSource || 'unknown');
+        console.log('precipitation (mm):', step.precipitation);
+        console.log('precipProb (%):', step.precipProb, step.precipitation_probability, step.pop);
+        console.log('weatherCode / owm id:', step.weatherCode, step.owmId, step.weather && step.weather[0]);
+        console.log('raw step object:', step);
+        console.groupEnd();
+      }
+    }
+  } catch (e) {
+    console.warn('[MeteoRide] debug inspect failed', e);
+  }
 }
 function selectByOriginalIdx(originalIdx, centerMap = false) {
   highlightMapStep(originalIdx, centerMap);
@@ -3395,13 +3517,13 @@ function showAlertIndicator() {
         
         // Adjust size based on screen size
         if (isSmallScreen) {
-          indicator.style.width = '32px !important';
-          indicator.style.height = '32px !important';
-          indicator.style.fontSize = '14px !important';
+          indicator.style.width = '22px !important';
+          indicator.style.height = '22px !important';
+          indicator.style.fontSize = '11px !important';
         } else {
-          indicator.style.width = '32px !important';
-          indicator.style.height = '32px !important';
-          indicator.style.fontSize = '14px !important';
+          indicator.style.width = '22px !important';
+          indicator.style.height = '22px !important';
+          indicator.style.fontSize = '11px !important';
         }
         
         // Move indicator inside rutaName if not already there
@@ -3423,13 +3545,13 @@ function showAlertIndicator() {
         
         // Adjust size for fallback position too
         if (isSmallScreen) {
-          indicator.style.width = '32px !important';
-          indicator.style.height = '32px !important';
-          indicator.style.fontSize = '14px !important';
+          indicator.style.width = '22px !important';
+          indicator.style.height = '22px !important';
+          indicator.style.fontSize = '11px !important';
         } else {
-          indicator.style.width = '40px !important';
-          indicator.style.height = '40px !important';
-          indicator.style.fontSize = '18px !important';
+          indicator.style.width = '22px !important';
+          indicator.style.height = '22px !important';
+          indicator.style.fontSize = '11px !important';
         }
         
         console.log('Fallback: rutaName not found, using fixed position');
@@ -3439,17 +3561,18 @@ function showAlertIndicator() {
     indicator.style.cssText = `
       background: #ff6b35 !important;
       color: white !important;
-      width: 32px !important;
-      height: 32px !important;
+      width: 22px !important;
+      height: 22px !important;
       border-radius: 50% !important;
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
-      font-size: 14px !important;
+      font-size: 11px !important;
       cursor: pointer !important;
       z-index: 9999 !important;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
       font-family: Arial, sans-serif !important;
+      flex-shrink: 0 !important;
     `;
     
     // Add responsive styles
@@ -3459,9 +3582,9 @@ function showAlertIndicator() {
       style.textContent = `
         @media (max-width: 700px) {
           #weather-alert-indicator {
-            width: 32px !important;
-            height: 32px !important;
-            font-size: 14px !important;
+            width: 20px !important;
+            height: 20px !important;
+            font-size: 10px !important;
           }
         }
       `;
