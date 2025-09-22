@@ -56,6 +56,7 @@ const PROB_MIN   = 20;   // muestra gota si prob >= 20%
 const OPENMETEO_MAX_DAYS = 14;
 const METEOBLUE_MAX_DAYS = 7;
 const OPENWEATHER_MAX_DAYS = 4;
+// Match providerChains (ow2_arome_openmeteo uses OpenWeather for 0..1 hour)
 const OPENWEATHER_MAX_HOURS = 1; 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_HOUR = 60 * 60 * 1000;          // NEW
@@ -605,8 +606,51 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       try {
         const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit);
         res = await fetch(urlPrim);
+        // Diagnostic logging for OpenWeather: record status and masked URL (hide appid)
+        if (prov === "openweather") {
+          try {
+            const masked = String(urlPrim).replace(/([&?]appid)=([^&]+)/, "$1=***");
+            logDebug(`OpenWeather fetch step=${i+1} status=${res.status} url=${masked}`);
+          } catch (e) { /* ignore logging errors */ }
+        }
         if (res.ok) {
           json = await res.json();
+          // Sanity-check / normalize payload shape for OpenWeather
+          if (prov === "openweather") {
+            try {
+              // Common variants: { hourly: { data: [...] } } or { hourly: { list: [...] } }
+              let normalized = false;
+              if (json && json.hourly && !Array.isArray(json.hourly)) {
+                if (Array.isArray(json.hourly.data)) {
+                  json.hourly = json.hourly.data;
+                  normalized = true;
+                } else if (Array.isArray(json.hourly.list)) {
+                  json.hourly = json.hourly.list;
+                  normalized = true;
+                } else {
+                  // If hourly is an object keyed by dt indexes, attempt to convert values to array
+                  const vals = Object.values(json.hourly).filter(v => v != null);
+                  if (vals.length && Array.isArray(vals[0])) {
+                    json.hourly = vals[0];
+                    normalized = true;
+                  }
+                }
+              }
+              if (json && json.daily && !Array.isArray(json.daily)) {
+                if (Array.isArray(json.daily.data)) { json.daily = json.daily.data; normalized = true; }
+                else if (Array.isArray(json.daily.list)) { json.daily = json.daily.list; normalized = true; }
+              }
+              const keys = Object.keys(json || {});
+              const hasHourly = Array.isArray(json.hourly) && json.hourly.length > 0;
+              const hasDaily = Array.isArray(json.daily) && json.daily.length > 0;
+              if (normalized) logDebug(`OpenWeather: normalized payload shape; keys=${keys.join(',')}`);
+              if (!hasHourly && !hasDaily) {
+                logDebug(`OpenWeather: unexpected payload keys=${keys.join(',')}`);
+              } else {
+                logDebug(`OpenWeather: payload ok (hourly=${hasHourly?json.hourly.length:0}, daily=${hasDaily?json.daily.length:0})`);
+              }
+            } catch (e) { logDebug('OpenWeather: normalization error'); }
+          }
           if (prov === "aromehd") {
             try {
               const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
@@ -641,6 +685,13 @@ async function fetchWeatherForSteps(steps, timeSteps) {
         } else {
           // existing error handling left unchanged
           const bodyText = await res.text().catch(() => "");
+          // Additional diagnostic for OpenWeather: include small snippet of body when error
+          if (prov === "openweather") {
+            try {
+              const snippet = (bodyText || "").slice(0, 400).replace(/\n/g, ' ');
+              logDebug(`OpenWeather error body snippet: ${snippet}`);
+            } catch (e) {}
+          }
           const code = classifyProviderError(prov, res.status, bodyText);
 
           if (prov === "meteoblue") {
@@ -931,6 +982,14 @@ function processWeatherData() {
         const snowH = Number(hourly.snow?.["1h"] ?? 0);
         step.precipitation = safeNum(rainH + snowH);
         step.timeLabel = formatTime(step.time);
+        // Populate additional hourly fields: weather code, UV, cloud cover, precip probability, luminance
+        step.weatherCode = Array.isArray(hourly.weather) && hourly.weather[0] ? hourly.weather[0].id : null;
+        step.uvindex = safeNum(hourly.uvi ?? w.current?.uvi ?? null);
+        // OpenWeather hourly uses 'clouds' percent; accept alternative names defensively
+        step.cloudCover = safeNum(hourly.clouds ?? hourly.cloud_cover ?? null);
+        // 'pop' is probability of precipitation (0..1) in hourly; convert to percentage
+        step.precipProb = safeNum((Number(hourly.pop) || 0) * 100);
+        step.luminance = computeLuminance(step);
       } else if (daily) {
         // Approximate from daily if beyond hourly range
         const dtemp = (daily.temp && (daily.temp.day ?? daily.temp.max ?? daily.temp.min)) || null;

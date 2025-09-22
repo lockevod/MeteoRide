@@ -638,6 +638,45 @@
       // No mostrar mensaje cuando no hay fichero seleccionado (comportamiento silencioso)
       return;
     }
+    // Reset transient application state to avoid duplication when reloading a GPX
+    (function resetAppStateForNewRoute() {
+      try {
+        // Clear computed weather/state
+        if (window.weatherData && Array.isArray(window.weatherData)) window.weatherData.length = 0;
+        // Clear active weather alerts
+        if (Array.isArray(window.activeWeatherAlerts)) window.activeWeatherAlerts.length = 0; else window.activeWeatherAlerts = [];
+        // Hide and clear alerts UI
+        const alertContainer = document.getElementById('weather-alerts-container');
+        if (alertContainer) {
+          alertContainer.style.display = 'none';
+          // remove child alert elements
+          const children = Array.from(alertContainer.querySelectorAll('.weather-alert'));
+          children.forEach(c => c.remove());
+        }
+        const indicator = document.getElementById('weather-alert-indicator');
+        if (indicator) indicator.style.display = 'none';
+
+        // Remove wind and rain markers from map
+        try {
+          if (Array.isArray(window.windMarkers)) {
+            window.windMarkers.forEach(m => { try { if (m && window.map && typeof m.remove === 'function') m.remove(); } catch(e){} });
+            window.windMarkers.length = 0;
+          }
+          if (Array.isArray(window.rainMarkers)) {
+            window.rainMarkers.forEach(m => { try { if (m && window.map && typeof m.remove === 'function') m.remove(); } catch(e){} });
+            window.rainMarkers.length = 0;
+          }
+        } catch (e) { /* ignore marker cleanup errors */ }
+
+        // Reset selection/index state
+        window.selectedOriginalIdx = null;
+        window.viewOriginalIndexMap = [];
+        window.colIndexByOriginal = {};
+        window.lastAppliedSpeed = null;
+      } catch (e) {
+        console.warn('resetAppStateForNewRoute error', e);
+      }
+    })();
     const reader = new FileReader();
     
     reader.onload = async function (e) {

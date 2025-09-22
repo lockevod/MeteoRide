@@ -479,8 +479,8 @@
       id: 'ow2_arome_openmeteo',
       label: 'OPW → AromeHD',
       steps: [
-        { provider: 'openweather', fromNowHours: 0, toNowHours: 2 },
-        { provider: 'aromehd', fromNowHours: 2, toNowHours: 36 },
+        { provider: 'openweather', fromNowHours: 0, toNowHours: 1 },
+        { provider: 'aromehd', fromNowHours: 1, toNowHours: 36 },
         { provider: 'openmeteo', fromNowHours: 36, toNowHours: Infinity }
       ]
     }
