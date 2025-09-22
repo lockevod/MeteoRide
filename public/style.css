@@ -440,6 +440,23 @@ header {
   }
 }
 
+/* Reduce Leaflet Compass size so it doesn't dominate zoom controls */
+.leaflet-compass .compass-button {
+  display: block !important;
+  float: left !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+
+.leaflet-compass .compass-icon {
+  height: 22px !important;
+  width: 22px !important;
+  margin: 1px !important;
+  background-size: contain !important;
+}
+
 /* Make desktop zoom controls visually match the hover of the recenter button */
 .leaflet-control-zoom .leaflet-control-zoom-in:hover,
 .leaflet-control-zoom .leaflet-control-zoom-out:hover {
