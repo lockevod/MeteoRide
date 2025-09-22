@@ -201,7 +201,7 @@
             <h3>5. Elegir Proveedor Meteorológico</h3>
             <p>Selecciona el proveedor meteorológico que deseas utilizar para obtener los datos.</p>
             <ul>
-                <li><strong>Open-Meteo:</strong> Gratuito, no requiere API key, hasta 14 días de previsión</li>
+                <li><strong>Open-Meteo:</strong> Gratuito, no requiere API key, hasta 14 días de previsión.</li>
                 <li><strong>MeteoBlue:</strong> Requiere API key, hasta 7 días, muy preciso</li>
                 <li><strong>OpenWeather:</strong> Requiere API key, hasta 5 días, datos detallados</li>
                 <li><strong>AromeHD:</strong> Modelo de alta resolución de MeteoFrance, accesible vía Open-Meteo. Solo disponible para Europa (aprox. 39-52°N, 10.5°W-16.5°E) y dentro de 48 horas (fuera de estas horas conmuta directamente al mejor provedor que provee Open-Meteo para esa localización). Es especialmente útil para viento y precipitaciones a corto plazo.</li>
@@ -236,7 +236,7 @@
         <p>MeteoRide soporta múltiples proveedores meteorológicos, cada uno con fortalezas únicas:</p>
         
         <ul>
-            <li><strong>Open-Meteo:</strong> Gratuito, sin API key, cobertura global, hasta 14 días. Ideal para planificación a largo plazo y rutas globales.</li>
+            <li><strong>Open-Meteo:</strong> Gratuito, sin API key, cobertura global, hasta 14 días. OpenMeteo usa su mejor modelo dependiendo de la zona de tu track. Recomendado para todos los escenarios, ideal para planificación a largo plazo y rutas globales.</li>
             <li><strong>MeteoBlue:</strong> Requiere API key, hasta 7 días, muy preciso especialmente para clima de montaña. Perfecto para rutas alpinas y terrenos complejos.</li>
             <li><strong>OpenWeather:</strong> Requiere API key, hasta 4 días, excelente datos en tiempo real y alertas meteorológicas oficiales. Ideal para salidas inmediatas y áreas urbanas.</li>
             <li><strong>AROME-HD:</strong> Modelo de alta resolución (~1-2km) de MeteoFrance, disponible para Europa dentro de 48 horas. Superior para pronósticos de viento y precipitaciones a corto plazo en Francia y países cercanos.</li>
@@ -403,7 +403,7 @@
             <li><code>?datetime=2024-03-15T10:00</code></li>
             <li><code>?speed=25</code></li>
         </ul>
-        <h3>�️ Rutas recientes (guardadas localmente)</h3>
+        <h3>🗺️ Rutas recientes (guardadas localmente)</h3>
         <p>MeteoRide guarda localmente las últimas rutas GPX que has cargado para que puedas recuperarlas rápidamente sin subir de nuevo el archivo. Esta funcionalidad es totalmente local: <strong>no</strong> se envían las rutas al servidor.</p>
         <ul>
             <li><strong>Cómo usarlo:</strong> junto al botón de subir archivo (📁) verás un desplegable con tus rutas recientes. Selecciona una ruta y se cargará exactamente como si la hubieras subido ahora.</li>
@@ -412,7 +412,7 @@
             <li><strong>Privacidad:</strong> Los GPX se almacenan en tu navegador usando IndexedDB (o localStorage como fallback). No se comparten fuera de tu dispositivo.</li>
             <li><strong>Eficiencia:</strong> Para ahorrar memoria, MeteoRide mantiene en memoria solo la información básica (nombre, tamaño y fecha) y carga el contenido completo solo cuando seleccionas una ruta del desplegable.</li>
         </ul>
-        <h3>�💾 Caché local y rendimiento</h3>
+        <h3>💾 Caché local y rendimiento</h3>
             <p>
             Las respuestas de los proveedores se almacenan en <code>localStorage</code> durante ~30 minutos por paso/hora.
             Esto acelera recargas frecuentes y reduce peticiones a APIs con límites. Puedes borrar la caché desde las herramientas del navegador.

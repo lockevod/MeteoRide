@@ -239,7 +239,7 @@
         <p>MeteoRide supports multiple weather providers, each with unique strengths:</p>
         
         <ul>
-            <li><strong>Open-Meteo:</strong> Free, no API key required, global coverage, up to 14 days. Best for long-term planning and global routes.</li>
+            <li><strong>Open-Meteo:</strong> Free, no API key required, global coverage, up to 14 days. OpenMeteo uses its best model for your track, recommended for any situation, the best for long-term planning and global routes.</li>
             <li><strong>MeteoBlue:</strong> Requires API key, up to 7 days, very accurate especially for mountain weather. Ideal for alpine routes and complex terrain.</li>
             <li><strong>OpenWeather:</strong> Requires API key, up to 4 days, excellent real-time data and official weather alerts. Perfect for immediate departures and urban areas.</li>
             <li><strong>AROME-HD:</strong> High-resolution model (~1-2km) from MeteoFrance, available for Europe within 48 hours. Superior for wind forecasting and short-term precipitation in France and nearby countries.</li>
@@ -400,7 +400,7 @@
             <li><code>?datetime=2024-03-15T10:00</code></li>
             <li><code>?speed=25</code></li>
         </ul>
-        <h3>�️ Recent routes (stored locally)</h3>
+        <h3>🗺️ Recent routes (stored locally)</h3>
         <p>MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. This is a local-only feature — <strong>no</strong> routes are sent to any server.</p>
         <ul>
             <li><strong>How to use:</strong> next to the file upload button (📁) you'll find a compact dropdown with your recent routes. Choosing one loads it exactly as if you had uploaded the file now.</li>
@@ -409,7 +409,7 @@
             <li><strong>Privacy:</strong> GPX files are saved locally using IndexedDB (with localStorage fallback). They are never sent outside your device.</li>
             <li><strong>Efficiency:</strong> Only metadata (name, size, timestamp) is kept in memory; the full GPX is loaded from the local store only when you select it.</li>
         </ul>
-        <h3>�💾 Local cache and performance</h3>
+        <h3>💾 Local cache and performance</h3>
         <p>
             Provider responses are stored in <code>localStorage</code> for ~30 minutes per step/hour.
             This speeds up frequent reloads and reduces requests to rate-limited APIs. You can clear the cache from your browser devtools.
