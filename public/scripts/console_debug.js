@@ -153,11 +153,29 @@
     table: console.table ? console.table.bind(console) : console.log.bind(console),
     assert: console.assert ? console.assert.bind(console) : () => {}
   };
-  // Override all console methods to also log to debug
+  // Helper: are debug console outputs enabled by user?
+  function isDebugEnabled() {
+    try {
+      const sdb = document.getElementById('showDebugButton');
+      return !!(sdb && sdb.checked);
+    } catch (e) { return false; }
+  }
+
+  // Override all console methods to also log to debug, but gate based on isDebugEnabled()
   ['log','warn','error','info','debug','trace','group','groupEnd','table','assert'].forEach(fn => {
     console[fn] = function(...args){
-      try { orig[fn](...args); } catch(_){ }
-      try { window.logdebug(...args); } catch(_){ }
+      try {
+        // Only forward non-critical logs to the real console when debug is enabled.
+        if (fn === 'error' || fn === 'warn' || isDebugEnabled()) {
+          orig[fn](...args);
+        }
+      } catch(_){ }
+      try {
+        // Write into the in-page debug panel only when debug enabled or when it's an error
+        if (fn === 'error' || isDebugEnabled()) {
+          window.logdebug(...args);
+        }
+      } catch(_){ }
     };
   });
 
@@ -181,34 +199,38 @@
         if (hidden) sec.removeAttribute('hidden'); else sec.setAttribute('hidden','');
       });
     }
-  } catch(_){}
+  } catch(_){ }
   // Resizer (JS-driven, iOS/desktop)
   try {
       // Log client / browser info once at startup so debug dumps include client details
       try {
-        const clientInfo = {
-          viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
-          screen: { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight },
-          navigator: {
-            userAgent: navigator.userAgent,
-            platform: navigator.platform,
-            vendor: navigator.vendor,
-            language: navigator.language,
-            languages: (navigator.languages || []).slice(0,5),
-            cookieEnabled: navigator.cookieEnabled,
-            doNotTrack: navigator.doNotTrack,
-            hardwareConcurrency: navigator.hardwareConcurrency,
-            maxTouchPoints: navigator.maxTouchPoints,
-            onLine: navigator.onLine
-          },
-          timezone: (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : ''
-        };
-        window.logdebug('--- CLIENT INFO ---');
-        window.logdebug('Viewport:', clientInfo.viewport);
-        window.logdebug('Screen:', clientInfo.screen);
-        window.logdebug('Navigator:', clientInfo.navigator);
-        window.logdebug('Timezone:', clientInfo.timezone || 'unknown');
-        window.logdebug('-------------------');
+        // Only log client info if debug is enabled by the checkbox to avoid noise
+        const showDbg = !!(document.getElementById('showDebugButton') && document.getElementById('showDebugButton').checked);
+        if (showDbg) {
+          const clientInfo = {
+            viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+            screen: { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight },
+            navigator: {
+              userAgent: navigator.userAgent,
+              platform: navigator.platform,
+              vendor: navigator.vendor,
+              language: navigator.language,
+              languages: (navigator.languages || []).slice(0,5),
+              cookieEnabled: navigator.cookieEnabled,
+              doNotTrack: navigator.doNotTrack,
+              hardwareConcurrency: navigator.hardwareConcurrency,
+              maxTouchPoints: navigator.maxTouchPoints,
+              onLine: navigator.onLine
+            },
+            timezone: (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : ''
+          };
+          window.logdebug('--- CLIENT INFO ---');
+          window.logdebug('Viewport:', clientInfo.viewport);
+          window.logdebug('Screen:', clientInfo.screen);
+          window.logdebug('Navigator:', clientInfo.navigator);
+          window.logdebug('Timezone:', clientInfo.timezone || 'unknown');
+          window.logdebug('-------------------');
+        }
       } catch(_) {}
   const sec = document.getElementById('debugSection');
   if (sec && !document.getElementById('debugResizerLeft') && !document.getElementById('debugResizerRight')) {

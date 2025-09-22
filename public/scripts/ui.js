@@ -1297,6 +1297,10 @@
         btn.style.font = 'inherit';
         btn.style.color = '#374151';
         btn.style.marginLeft = '-2px'; // closer to file input
+        btn.title = 'Generar desde la ruta actual y guardar en el share-server local';
+        // The recent routes button should only toggle the menu; do not attach upload behavior here.
+        // (Previously this handler exported the current route and POSTed it to /share — removed.)
+        
         // Hover like file button
         btn.addEventListener('mouseenter', () => {
           btn.style.background = '#1d4ed8';
@@ -1307,32 +1311,6 @@
           btn.style.background = '#f3f4f6';
           btn.style.color = '#374151';
           btn.style.borderColor = '#d1d5db';
-        });
-        btn.title = 'Generar desde la ruta actual y guardar en el share-server local';
-        btn.addEventListener('click', async () => {
-          try {
-            const g = exportRouteToGpx(undefined, true);
-            if (!g) {
-              console.warn('No hay datos de ruta para generar GPX');
-              return;
-            }
-            console.log('[MeteoRide] exportRouteToGpx output length=', (g && g.length) || 0);
-            const resp = await uploadGPXToShareServer();
-            // uploadGPXToShareServer may return an object with a url or a payload; handle both
-            if (resp) {
-              const url = (typeof resp === 'string') ? resp : (resp.url || resp.sharedUrl || (resp.payload && resp.payload.url) || null);
-              if (url) {
-                console.log('GPX guardado: ' + url + ' (Enlace copiado al portapapeles si está disponible)');
-                return;
-              }
-              // If no URL, but truthy response, show generic success
-              console.log('GPX guardado');
-              return;
-            }
-            console.error('Error: no se recibió respuesta del servidor al guardar GPX');
-          } catch (e) {
-            console.error('Error subiendo GPX: ' + (e && e.message ? e.message : String(e)));
-          }
         });
         document.body.appendChild(btn);
       }
@@ -1808,39 +1786,12 @@
       btn.style.color = '#374151';
       btn.style.borderColor = '#d1d5db';
     });
-    btn.title = 'Generar desde la ruta actual y guardar en el share-server local';
-    btn.addEventListener('click', async () => {
-      try {
-        const g = exportRouteToGpx(undefined, true);
-        if (!g) {
-          console.warn('No hay datos de ruta para generar GPX');
-          return;
-        }
-        console.log('[MeteoRide] exportRouteToGpx output length=', (g && g.length) || 0);
-        const resp = await uploadGPXToShareServer();
-        // uploadGPXToShareServer may return an object with a url or a payload; handle both
-        if (resp) {
-          const url = (typeof resp === 'string') ? resp : (resp.url || resp.sharedUrl || (resp.payload && resp.payload.url) || null);
-          if (url) {
-            console.log('GPX guardado: ' + url + ' (Enlace copiado al portapapeles si está disponible)');
-            return;
-          }
-          // If no URL, but truthy response, show generic success
-          console.log('GPX guardado');
-          return;
-        }
-        console.error('Error: no se recibió respuesta del servidor al guardar GPX');
-      } catch (e) {
-        console.error('Error subiendo GPX: ' + (e && e.message ? e.message : String(e)));
-      }
-    });
     container.appendChild(btn);
 
     const menu = document.createElement('div');
     menu.id = 'recentRoutesMenu';
     menu.className = 'recent-routes-menu';
-    menu.style.display = 'none';
-    menu.style.position = 'absolute';
+    menu.style.position = 'fixed';
     menu.style.zIndex = 1200;
     menu.style.minWidth = '180px';
     menu.style.background = '#fff';
@@ -1894,9 +1845,33 @@
     function showMenu() {
       rebuildMenuItems();
       const rect = btn.getBoundingClientRect();
-      menu.style.left = `${rect.left}px`;
-      menu.style.top = `${rect.bottom + 6}px`;
+      const margin = 8;
+
+      // Make visible but hidden to measure dimensions
       menu.style.display = 'block';
+      menu.style.visibility = 'hidden';
+
+      // Allow browser to compute sizes
+      const mw = menu.offsetWidth || parseInt(getComputedStyle(menu).minWidth) || 180;
+      const mh = menu.offsetHeight || menu.scrollHeight || Math.min(window.innerHeight * 0.6, 300);
+
+      // Compute left so menu fits in viewport
+      let left = rect.left;
+      if (left + mw + margin > window.innerWidth) {
+        left = Math.max(margin, window.innerWidth - mw - margin);
+      }
+      if (left < margin) left = margin;
+
+      // Compute top: prefer below button, but open above if not enough space
+      let top = rect.bottom + 6;
+      if (top + mh + margin > window.innerHeight) {
+        const altTop = rect.top - mh - 6;
+        if (altTop >= margin) top = altTop; else top = Math.max(margin, window.innerHeight - mh - margin);
+      }
+
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+      menu.style.visibility = 'visible';
       document.addEventListener('click', outsideClickHandler);
     }
 
