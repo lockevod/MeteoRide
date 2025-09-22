@@ -362,6 +362,92 @@ header {
 .icon-btn.primary:hover { background: #2563eb; color: #fff; }
 .icon-btn[aria-pressed="true"] { box-shadow: 0 0 0 2px rgba(11,98,151,0.18) inset; }
 
+/* Recenter control styling in the map */
+.leaflet-control-recenter {
+  margin: 6px 6px 0 0; /* align near top-right controls */
+}
+.leaflet-control-recenter-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  background: #fff !important;
+  color: var(--btn-bg);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  border: 1px solid rgba(0,0,0,0.06);
+  cursor: pointer;
+  text-decoration: none;
+  position: relative;
+  box-sizing: border-box;
+}
+.leaflet-control-recenter-button svg { 
+  width: 16px; 
+  height: 16px; 
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.leaflet-control-recenter-button:hover { background: #e5e7eb !important; color: #111 !important; }
+.leaflet-control-recenter-button:active { transform: translateY(0); }
+.leaflet-control-recenter-button:focus { outline: 2px solid rgba(11,98,151,0.14); outline-offset: 2px; }
+
+/* Override icon-btn classes that cause blue hover */
+.leaflet-control-recenter-button.icon-btn:hover,
+.leaflet-control-recenter-button.icon-btn.primary:hover {
+  background: #e5e7eb !important;
+  color: #111 !important;
+  transform: none !important;
+}
+
+/* Group recenter with zoom controls when present */
+.leaflet-control-zoom + .leaflet-control-recenter,
+.leaflet-control-recenter + .leaflet-control-zoom {
+  margin-top: 6px; /* small gap between zoom and recenter */
+}
+
+/* Make map controls more discreet on small screens */
+@media screen and (max-width: 700px) {
+  /* Make controls smaller and more discreet on small screens */
+  .leaflet-control-zoom .leaflet-control-zoom-in,
+  .leaflet-control-zoom .leaflet-control-zoom-out,
+  .leaflet-control-recenter-button {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.9);
+    color: #374151; /* neutral text color */
+    opacity: 0.95;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  /* Slightly smaller icon inside */
+  .leaflet-control-recenter-button svg { width: 14px; height: 14px; }
+  .leaflet-control-zoom .leaflet-control-zoom-in span,
+  .leaflet-control-zoom .leaflet-control-zoom-out span {
+    font-size: 16px;
+    line-height: 1;
+  }
+  /* Hover remains subtle on mobile */
+  .leaflet-control-recenter-button:hover,
+  .leaflet-control-zoom .leaflet-control-zoom-in:hover,
+  .leaflet-control-zoom .leaflet-control-zoom-out:hover {
+    transform: none !important;
+    background: #e5e7eb !important;
+    color: #111 !important;
+  }
+}
+
+/* Make desktop zoom controls visually match the hover of the recenter button */
+.leaflet-control-zoom .leaflet-control-zoom-in:hover,
+.leaflet-control-zoom .leaflet-control-zoom-out:hover {
+  background: #e5e7eb !important;
+  color: #111 !important;
+  transform: none !important;
+}
+
 /* Align icon buttons next to date inputs nicely */
 .date-row .icon-btn { margin-left: 6px; }
 

@@ -2510,6 +2510,67 @@ function initMap() {
     position: 'topright'
   });
   compass.addTo(map);
+  // Recenter control: a small button next to the compass to refit the route bounds
+  (function addRecenterControl(){
+    const RecenterControl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function(map){
+        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-recenter');
+        const btn = L.DomUtil.create('a', 'leaflet-control-recenter-button', container);
+        btn.href = '#';
+        try {
+          btn.title = (typeof t === 'function') ? t('recenter_route') : 'Recentrar ruta';
+        } catch (e) {
+          btn.title = 'Recentrar ruta';
+        }
+  // Use an inline SVG for a nicer icon (target/reticle style). Keep color via currentColor.
+  btn.innerHTML = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6"></circle><path d="M12 6v-2M12 20v-2M6 12H4M20 12h-2"/></g></svg>';
+  btn.className = 'leaflet-control-recenter-button icon-btn primary';
+        btn.setAttribute('role', 'button');
+        btn.setAttribute('aria-label', btn.title);
+        btn.tabIndex = 0;
+
+        // Prevent map interactions when clicking this control
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+
+        const activate = () => {
+          try { ensureTrackVisible(); } catch (e) { console.debug('Recenter failed:', e?.message); }
+        };
+
+        L.DomEvent.on(btn, 'click', L.DomEvent.stop)
+                 .on(btn, 'click', L.DomEvent.preventDefault)
+                 .on(btn, 'click', activate);
+
+        // Keyboard support (Enter/Space)
+        L.DomEvent.on(btn, 'keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            L.DomEvent.preventDefault(ev);
+            activate();
+          }
+        });
+
+        return container;
+      }
+    });
+    try {
+      // Add the control after default zoom control so it appears grouped with +/-
+      const rc = new RecenterControl();
+      map.addControl(rc);
+      // If Leaflet zoom control exists, attempt to move the recenter button directly
+      // into the zoom control container for tighter grouping (best-effort).
+      try {
+        const zoomContainer = document.querySelector('.leaflet-control-zoom');
+        const recenterEl = document.querySelector('.leaflet-control-recenter');
+        if (zoomContainer && recenterEl && zoomContainer.parentNode) {
+          // Insert recenter element just after zoomContainer to keep stacking
+          zoomContainer.parentNode.insertBefore(recenterEl, zoomContainer.nextSibling);
+        }
+      } catch (_) {}
+    } catch (e) {
+      console.debug('Could not add recenter control:', e?.message);
+    }
+  })();
   
 }
 let resizeDebTimer = null; // for debounced resize
