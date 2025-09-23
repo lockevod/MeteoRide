@@ -2309,6 +2309,7 @@ input[type="number"] {
   /* NEW: prevent container overflow */
   max-width: 100%;
   min-width: 0;            /* allow flex shrinking */
+  margin-bottom: 8px;    /* separation from sun-wrap when in combined-header */
 }
 .route-summary .rs-icon {
   font-size: 26px;

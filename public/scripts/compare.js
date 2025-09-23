@@ -609,43 +609,12 @@
   const sunB = buildSunHeaderFull(latB, lonB, dateLikeB);
   // Local summary from provided arrays (do not mutate global state)
     function computeRouteSummaryFrom(arr) {
-      const sevRank = {
-        thunder_hail: 10, thunderstorm: 9, snow_heavy: 8, snow: 7, snow_showers: 6,
-        snow_light: 5, freezing_rain: 5, hail: 5, sleet: 5, freezing_drizzle: 4,
-        rain_heavy: 4, rain: 3, showers: 3, rain_light: 2, drizzle: 2, fog: 1,
-        overcast: 0.8, cloudy: 0.7, partlycloudy: 0.5, clearsky: 0, default: -1
-      };
-      const median = (vals=[]) => { const v = vals.map(Number).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b); const n=v.length; if(!n) return null; const m=Math.floor(n/2); return n%2? v[m] : (v[m-1]+v[m])/2; };
-      if (!Array.isArray(arr) || arr.length === 0) return null;
-      let temps=[], winds=[], gustMax=null, precipMax=null, probMax=null;
-      let bestCat="default", bestRank=-1;
-      const isDay = (arr[0]?.isDaylight === 1) ? "day" : "night";
-      for (const step of arr) {
-        if (step?.temp != null && Number.isFinite(Number(step.temp))) temps.push(Number(step.temp));
-        if (step?.windSpeed != null && Number.isFinite(Number(step.windSpeed))) winds.push(Number(step.windSpeed));
-        if (step?.windGust != null && Number.isFinite(Number(step.windGust))) gustMax = (gustMax==null)? Number(step.windGust) : Math.max(gustMax, Number(step.windGust));
-        if (step?.precipitation != null && Number.isFinite(Number(step.precipitation))) precipMax = (precipMax==null)? Number(step.precipitation) : Math.max(precipMax, Number(step.precipitation));
-        if (step?.precipProb != null && Number.isFinite(Number(step.precipProb))) probMax = (probMax==null)? Number(step.precipProb) : Math.max(probMax, Number(step.precipProb));
-        // Provider-aware category
-        const prov = step._effProv || step.provider;
-        let cat = "default";
-        try {
-          if (prov === "meteoblue") cat = (window.cw.getDetailedCategoryMeteoBlue ? window.cw.getDetailedCategoryMeteoBlue(step.weatherCode) : cat);
-          else if (prov === "openweather") cat = (window.cw.getDetailedCategoryOpenWeather ? window.cw.getDetailedCategoryOpenWeather(step.weatherCode) : cat);
-          else cat = (window.cw.getDetailedCategoryOpenMeteo ? window.cw.getDetailedCategoryOpenMeteo(step.weatherCode) : cat);
-        } catch {}
-        const cc = Number(step?.cloudCover ?? 0);
-        if ((cat === "partlycloudy" || cat === "clearsky") && cc >= 80) cat = "overcast";
-        const rank = sevRank[cat] ?? -1;
-        if (rank > bestRank) { bestRank = rank; bestCat = cat; }
+      // Delegate to shared implementation when available to ensure consistency
+      if (window.cw && window.cw.summary && typeof window.cw.summary.computeRouteSummaryFromArray === 'function') {
+        return window.cw.summary.computeRouteSummaryFromArray(arr);
       }
-      const tempAvg = median(temps);
-      const windAvg = median(winds);
-      const tempMin = temps.length ? Math.min(...temps) : null;
-      const tempMax = temps.length ? Math.max(...temps) : null;
-      // Use local mapper to ensure an icon always appears
-      const iconClass = categoryToIconClass(bestCat, (arr[0]?.isDaylight === 1) ? 1 : 0) || "wi-cloud";
-      return { iconClass, tempAvg, tempMin, tempMax, windAvg, gustMax, precipMax, probMax };
+      // Fallback to previous local behavior (shouldn't normally be used)
+      return null;
     }
     const tempUnit = (document.getElementById("tempUnits")?.value || "C").toString();
     const windUnit = (document.getElementById("windUnits")?.value || "kmh").toString();
@@ -773,6 +742,7 @@
     // Ensure min-width similar to compare-mode so columns don't squish,
     // but derive first column width from actual content (date label) to avoid oversized sticky.
     (function ensureMinWidthDates() {
+      const vw = window.innerWidth || document.documentElement.clientWidth || 1024;
       const root = getComputedStyle(document.documentElement);
       const toPx = (v) => parseFloat(v) || 0;
       const colMin  = toPx(root.getPropertyValue('--cw-col-min')) || 64;
@@ -1153,40 +1123,10 @@
 
   // Compute a small route summary from a provider's array (keeps same shape as other summary helpers)
   function computeProviderSummary(arr) {
-    if (!Array.isArray(arr) || arr.length === 0) return null;
-    const sevRank = {
-      thunder_hail: 10, thunderstorm: 9, snow_heavy: 8, snow: 7, snow_showers: 6,
-      snow_light: 5, freezing_rain: 5, hail: 5, sleet: 5, freezing_drizzle: 4,
-      rain_heavy: 4, rain: 3, showers: 3, rain_light: 2, drizzle: 2, fog: 1,
-      overcast: 0.8, cloudy: 0.7, partlycloudy: 0.5, clearsky: 0, default: -1
-    };
-    let temps = [], winds = [], gustMax = null, precipMax = null, probMax = null;
-    let bestCat = 'default', bestRank = -1;
-    for (const step of arr) {
-      if (step?.temp != null && Number.isFinite(Number(step.temp))) temps.push(Number(step.temp));
-      if (step?.windSpeed != null && Number.isFinite(Number(step.windSpeed))) winds.push(Number(step.windSpeed));
-      if (step?.windGust != null && Number.isFinite(Number(step.windGust))) gustMax = (gustMax==null)? Number(step.windGust) : Math.max(gustMax, Number(step.windGust));
-      if (step?.precipitation != null && Number.isFinite(Number(step.precipitation))) precipMax = (precipMax==null)? Number(step.precipitation) : Math.max(precipMax, Number(step.precipitation));
-      if (step?.precipProb != null && Number.isFinite(Number(step.precipProb))) probMax = (probMax==null)? Number(step.precipProb) : Math.max(probMax, Number(step.precipProb));
-      const prov = step._effProv || step.provider;
-      let cat = 'default';
-      try {
-        if (prov === 'meteoblue') cat = (window.cw.getDetailedCategoryMeteoBlue ? window.cw.getDetailedCategoryMeteoBlue(step.weatherCode) : cat);
-        else if (prov === 'openweather') cat = (window.cw.getDetailedCategoryOpenWeather ? window.cw.getDetailedCategoryOpenWeather(step.weatherCode) : cat);
-        else cat = (window.cw.getDetailedCategoryOpenMeteo ? window.cw.getDetailedCategoryOpenMeteo(step.weatherCode) : cat);
-      } catch(_) {}
-      const cc = Number(step?.cloudCover ?? 0);
-      if ((cat === 'partlycloudy' || cat === 'clearsky') && cc >= 80) cat = 'overcast';
-      const rank = sevRank[cat] ?? -1;
-      if (rank > bestRank) { bestRank = rank; bestCat = cat; }
+    if (window.cw && window.cw.summary && typeof window.cw.summary.computeRouteSummaryFromArray === 'function') {
+      return window.cw.summary.computeRouteSummaryFromArray(arr);
     }
-    const median = (vals=[]) => { const v = vals.map(Number).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b); const n=v.length; if(!n) return null; const m=Math.floor(n/2); return n%2? v[m] : (v[m-1]+v[m])/2; };
-    return {
-      // Prefer any global override, otherwise use local categoryToIconClass defined in this file
-      iconClass: (window.categoryToIconClass ? window.categoryToIconClass(bestCat, (arr[0]?.isDaylight===1)?1:0) : categoryToIconClass(bestCat, (arr[0]?.isDaylight===1)?1:0)),
-      tempAvg: median(temps), tempMin: temps.length? Math.min(...temps):null, tempMax: temps.length? Math.max(...temps):null,
-      windAvg: median(winds), gustMax, precipMax, probMax
-    };
+    return null;
   }
 
     // Keep only those present in compareData; append any others (unexpected) at end
@@ -1237,16 +1177,35 @@
           tempPart = `${Math.round(summary.tempAvg)}${tempUnitLabel}`;
         }
         let windPart = '';
-        if (summary && summary.windAvg != null) {
+        // Prefer showing min-max interval for wind when available, otherwise average
+        if (summary && (summary.windMin != null && summary.windMax != null)) {
+          windPart = `${Math.round(summary.windMin)}-${Math.round(summary.windMax)}${windUnitLabel}`;
+        } else if (summary && summary.windAvg != null) {
           windPart = `${Math.round(summary.windAvg)}${windUnitLabel}`;
-          if (summary.gustMax != null) windPart += ` (${Math.round(summary.gustMax)})`;
         }
+  if (summary && summary.gustMax != null) windPart += ` <span class="rs-paren">(${Math.round(summary.gustMax)})</span>`;
+
         let precipPart = '';
-        if (summary && summary.precipMax != null) {
-          const pm = Number(summary.precipMax) || 0;
-          precipPart = `${pm.toFixed(1)}${precipUnitLabel}`;
-          if (summary.probMax != null) precipPart += ` (${Math.round(summary.probMax)}%)`;
+        // Show precipitation interval min-max when available; probability remains as max
+        if (summary && (summary.precipMin != null && summary.precipMax != null)) {
+          const precipMinVal = Number(summary.precipMin);
+          const precipMaxVal = Number(summary.precipMax);
+          // Special case: if both values are < 0.5, show single "0" instead of "0-0"
+          if (precipMinVal < 0.5 && precipMaxVal < 0.5) {
+            precipPart = `0${precipUnitLabel}`;
+          } else {
+            const minDisp = Math.round(precipMinVal);
+            const maxDisp = Math.round(precipMaxVal);
+            if (minDisp === maxDisp) {
+              precipPart = `${minDisp}${precipUnitLabel}`;
+            } else {
+              precipPart = `${minDisp}-${maxDisp}${precipUnitLabel}`;
+            }
+          }
+        } else if (summary && summary.precipMax != null) {
+          precipPart = `${Math.round(Number(summary.precipMax))}${precipUnitLabel}`;
         }
+  if (summary && summary.probMax != null) precipPart += ` <span class="rs-paren">(${Math.round(summary.probMax)}%)</span>`;
         const compactHtml = `
           <div style="display:flex;align-items:center;gap:6px;min-width:0">
             ${iconHtml}

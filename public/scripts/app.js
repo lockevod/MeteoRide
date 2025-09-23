@@ -1485,10 +1485,9 @@ function median(arr = []) {
   return n % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
 }
 
-function computeRouteSummary() {
-  if (!Array.isArray(weatherData) || weatherData.length === 0) {
-    return null;
-  }
+function computeRouteSummaryFromArray(srcArr) {
+  const dataArr = Array.isArray(srcArr) ? srcArr : [];
+  if (!Array.isArray(dataArr) || dataArr.length === 0) return null;
   // Ranking detallado (mayor severidad = mayor número)
   const sevRank = {
     thunder_hail: 10,
@@ -1514,26 +1513,29 @@ function computeRouteSummary() {
     default: -1
   };
 
-  let temps = [], winds = [], gustMax = null, precipMax = null, probMax = null;
+  let temps = [], winds = [], gustMax = null, precipMin = null, precipMax = null, probMax = null;
   let cloudSum = 0, cloudCnt = 0;
 
   let bestCat = "default", bestRank = -1;
   const isDay = (weatherData[0]?.isDaylight === 1) ? "day" : "night";
 
-  for (const step of weatherData) {
+  for (const step of dataArr) {
     if (step?.temp != null && Number.isFinite(Number(step.temp))) temps.push(Number(step.temp));
     if (step?.windSpeed != null && Number.isFinite(Number(step.windSpeed))) winds.push(Number(step.windSpeed));
     if (step?.windGust != null && Number.isFinite(Number(step.windGust))) {
       gustMax = (gustMax == null) ? Number(step.windGust) : Math.max(gustMax, Number(step.windGust));
     }
     if (step?.precipitation != null && Number.isFinite(Number(step.precipitation))) {
-      precipMax = (precipMax == null) ? Number(step.precipitation) : Math.max(precipMax, Number(step.precipitation));
+      const p = Number(step.precipitation);
+      precipMin = (precipMin == null) ? p : Math.min(precipMin, p);
+      precipMax = (precipMax == null) ? p : Math.max(precipMax, p);
     }
     if (step?.precipProb != null && Number.isFinite(Number(step.precipProb))) {
       probMax = (probMax == null) ? Number(step.precipProb) : Math.max(probMax, Number(step.precipProb));
     }
     if (step?.cloudCover != null && Number.isFinite(Number(step.cloudCover))) {
-      cloudSum += Number(step.cloudCover); cloudCnt++;
+      cloudSum += Number(step.cloudCover);
+      cloudCnt++;
     }
 
     // Categoría detallada por proveedor (CHANGED: provider-aware)
@@ -1568,6 +1570,8 @@ function computeRouteSummary() {
   const windAvg = median(winds);
   const tempMin = temps.length ? Math.min(...temps) : null;
   const tempMax = temps.length ? Math.max(...temps) : null;
+  const windMin = winds.length ? Math.min(...winds) : null;
+  const windMax = winds.length ? Math.max(...winds) : null;
 
   const iconClass = (weatherIconsMap[bestCat] || weatherIconsMap.default)[isDay];
 
@@ -1577,10 +1581,18 @@ function computeRouteSummary() {
     tempMin,
     tempMax,
     windAvg,
+    windMin,
+    windMax,
     gustMax,
+    precipMin,
     precipMax,
     probMax
   };
+}
+
+function computeRouteSummary() {
+  // backward-compatible wrapper using the global weatherData
+  return computeRouteSummaryFromArray(weatherData);
 }
 
 function buildRouteSummaryHTML(sum, tempUnitLabel, windUnitLabel, precipUnitLabel) {
@@ -1599,14 +1611,35 @@ function buildRouteSummaryHTML(sum, tempUnitLabel, windUnitLabel, precipUnitLabe
   const tempTxt = !hasRange ? "-" : `${lo}–${hi}${tempUnitLabel}`;
 
   // CHANGED: wrap units to force lowercase in header
-  const windTxt = (sum.windAvg == null)
+  // Wind: show interval if min/max available, keep gust as max
+  const windHasRange = (sum.windMin != null) && (sum.windMax != null);
+  const windLo = windHasRange ? Math.round(Number(sum.windMin)) : null;
+  const windHi = windHasRange ? Math.round(Number(sum.windMax)) : null;
+  const windTxt = (!windHasRange && sum.windAvg == null)
     ? "-"
-    : `${Number(sum.windAvg).toFixed(1)} <span class="unit-lower">${windUnitLc}</span>`;
-  const gustTxt = (sum.gustMax == null) ? "" : ` (${Number(sum.gustMax).toFixed(1)})`;
-  const precipTxt = (sum.precipMax == null)
-    ? "-"
-    : `${Number(sum.precipMax).toFixed(1)} <span class="unit-lower">${precipUnitLc}</span>`;
-  const probTxt = (sum.probMax == null || Number(sum.probMax) <= 0) ? "" : ` (${Math.round(Number(sum.probMax))}%)`;
+    : (windHasRange ? `${windLo}–${windHi} <span class="unit-lower">${windUnitLc}</span>` : `${Math.round(Number(sum.windAvg))} <span class="unit-lower">${windUnitLc}</span>`);
+  const gustTxt = (sum.gustMax == null) ? "" : ` <span class="rs-paren">(${Math.round(Number(sum.gustMax))})</span>`;
+  // Precipitation: show min–max interval when available, and probability as max in parens
+  const precipHasRange = (sum.precipMin != null) && (sum.precipMax != null);
+  // display rounding: use integers for compactness; if both round to same value, show single value
+  const precipLoRaw = precipHasRange ? Number(sum.precipMin) : null;
+  const precipHiRaw = precipHasRange ? Number(sum.precipMax) : null;
+  const precipLoDisp = precipHasRange ? Math.round(precipLoRaw) : null;
+  const precipHiDisp = precipHasRange ? Math.round(precipHiRaw) : null;
+  let precipTxt = "-";
+  if (!precipHasRange && sum.precipMax != null) {
+    precipTxt = `${Math.round(Number(sum.precipMax))} <span class="unit-lower">${precipUnitLc}</span>`;
+  } else if (precipHasRange) {
+    // Special case: if both raw values are < 0.5 (round to 0), show single "0" instead of "0–0"
+    if (precipLoRaw < 0.5 && precipHiRaw < 0.5) {
+      precipTxt = `0 <span class="unit-lower">${precipUnitLc}</span>`;
+    } else if (precipLoDisp === precipHiDisp) {
+      precipTxt = `${precipLoDisp} <span class="unit-lower">${precipUnitLc}</span>`;
+    } else {
+      precipTxt = `${precipLoDisp}–${precipHiDisp} <span class="unit-lower">${precipUnitLc}</span>`;
+    }
+  }
+  const probTxt = (sum.probMax == null || Number(sum.probMax) <= 0) ? "" : ` <span class="rs-paren">(${Math.round(Number(sum.probMax))}%)</span>`;
  
   return `
     <div class="route-summary">
@@ -1644,7 +1677,21 @@ function renderWeatherTable() {
     return;
   }
 
-  // If in compare mode, trigger compare render instead
+  // Check for pending compare mode restoration after reload
+  if (window._pendingCompareRestore) {
+    window._pendingCompareRestore = false;
+    // Set apiSource back to compare mode
+    const sel = document.getElementById("apiSource");
+    if (sel) sel.value = "compare";
+    window.apiSource = "compare";
+    // Trigger compare mode
+    if (window.cw?.runCompareMode) {
+      setTimeout(() => window.cw.runCompareMode(), 0);
+      return;
+    }
+  }
+
+  // If in compare mode, trigger compare render instead  
   const sel = document.getElementById("apiSource");
   if (sel && sel.value === "compare") {
     if (window.cw?.runCompareMode) window.cw.runCompareMode();
@@ -2968,6 +3015,7 @@ try {
   // Summary/header builders and time formatter
   window.cw.summary = {
     computeRouteSummary,
+    computeRouteSummaryFromArray,
     buildRouteSummaryHTML,
     buildCombinedHeaderHTML,
     buildSunHeaderCell,

@@ -1116,8 +1116,6 @@
           }
         } else {
           row.style.display = 'none';
-          // Re-render default table
-          window.renderWeatherTable();
           // Clear compare mode class on table if present
           const wt = document.getElementById('weatherTable');
           if (wt) wt.classList.remove('compare-dates-mode');
@@ -1132,6 +1130,16 @@
           }
           if (compareNowBtn) compareNowBtn.style.display = 'none';
           explicitCompareActive = false;
+          
+          // Check if we should return to compare-providers mode after reloading
+          const apiSel = document.getElementById("apiSource");
+          const shouldReturnToCompare = apiSel && apiSel.value === "compare";
+          
+          // Store flag to restore compare mode after reload completes
+          if (shouldReturnToCompare) {
+            window._pendingCompareRestore = true;
+          }
+          
           // Recalculate normal weather data when exiting compare-dates mode
           window.reloadFull();
         }
@@ -1770,10 +1778,40 @@
     }
   }
 
-  function updateRecentRoutesUI() {
+  async function updateRecentRoutesUI() {
     console.log('[MeteoRide] updateRecentRoutesUI: Starting');
     const routes = getRecentRoutes();
-    console.log('[MeteoRide] updateRecentRoutesUI: Found routes:', routes.length);
+    console.log('[MeteoRide] updateRecentRoutesUI: Found routes (metadata):', routes.length);
+
+    // Filter routes to only those that have retrievable content (blob in IDB or content in localStorage)
+    const filtered = [];
+    for (const r of routes) {
+      try {
+        let ok = false;
+        if (r.id != null) {
+          try {
+            const rec = await idbGetRouteById(r.id);
+            if (rec && (rec.blob || rec.content)) ok = true;
+          } catch (e) {
+            // ignore per-record errors
+            console.warn('[MeteoRide] updateRecentRoutesUI: idbGetRouteById failed for id=', r.id, e);
+          }
+        }
+        // If not found by id, try localStorage fallback matching by name/timestamp
+        if (!ok) {
+          try {
+            const stored = localStorage.getItem(RECENT_ROUTES_KEY);
+            if (stored) {
+              const arr = JSON.parse(stored || '[]');
+              const found = arr.find(x => x && x.name === r.name && (r.timestamp == null || x.timestamp === r.timestamp) && x.content && x.content.length > 20);
+              if (found) ok = true;
+            }
+          } catch (_e) { /* ignore localStorage parse errors */ }
+        }
+        if (ok) filtered.push(r); else console.warn('[MeteoRide] updateRecentRoutesUI: Skipping recent route without stored content:', r.name);
+      } catch (e) { console.warn('[MeteoRide] updateRecentRoutesUI: error checking route', r, e); }
+    }
+    console.log('[MeteoRide] updateRecentRoutesUI: Showing routes after existence filter:', filtered.length);
     
     const container = document.getElementById('recentRoutesContainer');
     console.log('[MeteoRide] updateRecentRoutesUI: Container found?', !!container);
@@ -1787,17 +1825,17 @@
     // Set to true if you want the same visual on desktop and mobile.
     const BUTTON_ONLY_UI = true;
 
-    if (routes.length === 0) {
-      // Keep container hidden when no recent routes exist
+    if (filtered.length === 0) {
+      // Keep container hidden when no recent routes with content exist
       container.style.display = 'none';
-      console.log('[MeteoRide] updateRecentRoutesUI: No routes, hiding container');
+      console.log('[MeteoRide] updateRecentRoutesUI: No retrievable routes, hiding container');
       return;
     }
 
     // Show a compact dropdown (select) to save space. The select loads the route on change (lazy blob retrieval).
     container.innerHTML = '';
     container.style.display = 'inline-block';
-    console.log('[MeteoRide] updateRecentRoutesUI: Showing container with', routes.length, 'routes (dropdown)');
+  console.log('[MeteoRide] updateRecentRoutesUI: Showing container with', filtered.length, 'routes (dropdown)');
 
     // Helper: localized placeholder text for recent routes (fallback) --- we will also try the project's i18n
     function recentRoutesPlaceholderTextFallback(count) {
@@ -1877,7 +1915,7 @@
     // Build menu items
     function rebuildMenuItems() {
       menu.innerHTML = '';
-      routes.forEach((route, idx) => {
+      filtered.forEach((route, idx) => {
         const it = document.createElement('div');
         it.className = 'recent-routes-menu-item';
         it.style.padding = '6px 8px';
@@ -1889,14 +1927,14 @@
         it.addEventListener('click', async function () {
           try {
             // behave like selecting the option
-            const route = routes[idx];
+            const route = filtered[idx];
             let full = null;
             if (route.id != null) full = await idbGetRouteById(route.id);
             if (!full) {
               try {
                 const stored = localStorage.getItem(RECENT_ROUTES_KEY);
                 const arr = stored ? JSON.parse(stored) : [];
-                const found = arr.find(r => r.name === route.name && r.timestamp === route.timestamp);
+                const found = arr.find(r => r.name === route.name && (route.timestamp == null || r.timestamp === route.timestamp));
                 if (found) full = { name: found.name, size: found.size, lastModified: found.lastModified, timestamp: found.timestamp, blob: new Blob([found.content], { type: 'application/gpx+xml' }) };
               } catch (_) { /* ignore */ }
             }
@@ -2109,6 +2147,35 @@
           console.log('[MeteoRide] loadRecentRoute: Recovered GPX text from field', found.key);
           full.blob = new Blob([found.value], { type: 'application/gpx+xml' });
         }
+      }
+
+      // Additional attempts: try to find by name in IndexedDB, or fallback to localStorage entries
+      if (!full.blob && routeData && routeData.name) {
+        try {
+          console.log('[MeteoRide] loadRecentRoute: attempting recovery by name for', routeData.name);
+          const byName = await idbFindRouteByName(routeData.name);
+          if (byName && (byName.blob || byName.content)) {
+            console.log('[MeteoRide] loadRecentRoute: found record by name in IndexedDB');
+            full = Object.assign({}, byName);
+            if (!full.blob && full.content) full.blob = new Blob([full.content], { type: 'application/gpx+xml' });
+          }
+        } catch (e) {
+          console.warn('[MeteoRide] loadRecentRoute: idbFindRouteByName failed', e);
+        }
+      }
+
+      if (!full.blob && routeData && routeData.name) {
+        try {
+          const stored = localStorage.getItem(RECENT_ROUTES_KEY);
+          if (stored) {
+            const arr = JSON.parse(stored || '[]');
+            const entry = arr.find(r => r && r.name === routeData.name && r.content);
+            if (entry) {
+              console.log('[MeteoRide] loadRecentRoute: recovered GPX from localStorage fallback for', routeData.name);
+              full.blob = new Blob([entry.content], { type: 'application/gpx+xml' });
+            }
+          }
+        } catch (e) { /* ignore parsing/localStorage errors */ }
       }
 
       if (!full.blob) {
