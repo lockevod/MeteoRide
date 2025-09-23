@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.20
+// @version      0.21
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -90,7 +90,7 @@
     btn.style.right = '10px';
     btn.style.bottom = '20px';
     // reduced vertical padding to avoid large blue area underneath
-    btn.style.padding = '6px 10px';
+    btn.style.padding = '2px 10px';
     btn.style.background = '#0077cc';
     btn.style.color = '#fff';
     btn.style.border = 'none';
@@ -116,8 +116,8 @@
         const img = new Image();
         img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icons/icon-120.png';
         img.alt = label;
-        img.style.width = '26px';
-        img.style.height = '26px';
+        img.style.width = '36px';
+        img.style.height = '36px';
         img.style.display = 'block';
         img.style.opacity = '0.85';
         img.style.filter = 'grayscale(100%) brightness(1.15)';
