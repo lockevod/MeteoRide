@@ -10,7 +10,16 @@
     if (!sel) return;
 
     // Run compare when selected or when table mutates after route load
+    // NOTE: Do NOT auto-run when the table is in compare-dates-mode. That mode
+    // relies on an explicit "run" button and should not auto-refresh on control
+    // changes.
     const runIfCompare = () => {
+      try {
+        const tableEl = document.getElementById("weatherTable");
+        // If user explicitly selected compare but the table is currently in
+        // compare-dates-mode, don't auto-refresh (preserve explicit button behavior)
+        if (tableEl && tableEl.classList.contains('compare-dates-mode')) return;
+      } catch (_) {}
       if (sel.value === "compare" && !compareRendering) {
         // Force a fresh render even if key matches previous (user explicitly switched)
         lastCompareKey = "";
@@ -100,6 +109,19 @@
     if (sel.value === "compare") {
       runIfCompare();
     }
+
+    // Auto-refresh compare mode when controls change
+    ['intervalSelect', 'tempUnits', 'windUnits', 'precipUnits', 'distanceUnits', 'apiKey', 'apiKeyOW', 'datetimeRoute'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const ev = (id === 'apiKey' || id === 'apiKeyOW') ? 'input' : 'change';
+      el.addEventListener(ev, () => {
+        const tableEl = document.getElementById('weatherTable');
+        if (sel.value === 'compare' && tableEl?.classList.contains('compare-mode') && !compareRendering) {
+          setTimeout(() => window.reloadFull?.(), 150);
+        }
+      });
+    });
   });
 
   function isReady() {
@@ -1167,8 +1189,9 @@
       } catch(_) {}
       try {
         // Build a compact, label-free summary: icon + numeric-only values
-        const ic = summary?.iconClass || (window.categoryToIconClass ? window.categoryToIconClass('default', 1) : 'wi-cloud');
-  const iconHtml = `<i class="wi ${ic}" style="font-size:31px;margin-right:8px;color:#29519b;flex-shrink:0"></i>`;
+    const ic = summary?.iconClass || (window.categoryToIconClass ? window.categoryToIconClass('default', 1) : 'wi-cloud');
+  // Fixed-size icon container so the following summary text is consistently aligned
+  const iconHtml = `<div style="width:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:8px"><i class="wi ${ic}" style="font-size:22px;line-height:1;color:#29519b"></i></div>`;
         // Build stacked values like other rows (combined-top / combined-bottom)
         let tempPart = '';
         if (summary && (summary.tempMin != null && summary.tempMax != null)) {

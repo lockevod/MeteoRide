@@ -985,6 +985,11 @@
               }
               // In explicit mode, do not auto-run; just save settings
               return;
+            } else if (el.value === "compare" && window.cw?.runCompareMode) {
+              // If switching TO compare-providers mode, run compare
+              window.saveSettings();
+              window.cw.runCompareMode();
+              return;
             }
           }
           if (id === "apiKey" || id === "apiKeyOW") {
