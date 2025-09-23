@@ -2825,6 +2825,15 @@ window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint 
       window.lastGPXFile = { name: nameHint || 'route.gpx', _text: gpxText };
     }
 
+    // Save programmatically loaded routes to recent routes for consistency
+    if (typeof window.saveRecentRoute === 'function' && window.lastGPXFile) {
+      try {
+        window.saveRecentRoute(window.lastGPXFile);
+      } catch (e) {
+        console.warn('[cw] failed to save recent route', e);
+      }
+    }
+
     if (trackLayer) {
       try {
         map.removeLayer(trackLayer);

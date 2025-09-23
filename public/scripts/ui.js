@@ -1418,6 +1418,10 @@
         // Try to set a name property for compatibility
         try { blob.name = name; } catch (e) { /* ignore */ }
         window.lastGPXFile = blob;
+        // Save to recent routes (same as when loading from file input)
+        if (typeof window.saveRecentRoute === 'function') {
+          window.saveRecentRoute(blob);
+        }
         // If the app exposes the programmatic loader, use it; otherwise fall back to reloadFull
         if (typeof window.cwLoadGPXFromString === 'function') {
           try { window.cwLoadGPXFromString(msg.gpx, name); } catch (e) {
@@ -2227,6 +2231,8 @@
 
   // Expose init function to window
   window.initUI = initUI;
+  // Expose saveRecentRoute for programmatic GPX loading (e.g., from userscript)
+  window.saveRecentRoute = saveRecentRoute;
 
   // Call initUI on script load
   initUI();
