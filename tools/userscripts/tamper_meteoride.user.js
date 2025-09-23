@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.21
+// @version      0.22
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -90,7 +90,7 @@
     btn.style.right = '10px';
     btn.style.bottom = '20px';
     // reduced vertical padding to avoid large blue area underneath
-    btn.style.padding = '2px 10px';
+    btn.style.padding = '2px 2px';
     btn.style.background = '#0077cc';
     btn.style.color = '#fff';
     btn.style.border = 'none';
@@ -100,7 +100,7 @@
     // Use flex layout to vertically center icon and label and avoid extra height
     btn.style.display = 'flex';
     btn.style.alignItems = 'center';
-    btn.style.gap = '6px';
+    btn.style.gap = '2px';
     btn.className = 'meteoride-export-btn global' + (extraClass ? ' ' + extraClass : '');
     // create icon img
     // create icon img and a stable label span (we will toggle the span instead of replacing button text)
@@ -116,8 +116,8 @@
         const img = new Image();
         img.src = (METEORIDE_URL.replace(/[#?].*$/, '').replace(/\/$/, '')) + '/icons/icon-120.png';
         img.alt = label;
-        img.style.width = '36px';
-        img.style.height = '36px';
+        img.style.width = '38px';
+        img.style.height = '38px';
         img.style.display = 'block';
         img.style.opacity = '0.85';
         img.style.filter = 'grayscale(100%) brightness(1.15)';
