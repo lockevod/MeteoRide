@@ -19,3 +19,4 @@ public/es/.DS_Store
 public/assets/.DS_Store
 tools/localDEV/pids/caddy.pid
 tools/localDEV/pids/share-server.pid
+**/.DS_Store
