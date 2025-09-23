@@ -917,7 +917,12 @@
         step.cloudCover = safeNum(raw.total_cloud_cover?.[0] ?? raw.cloudcover?.[0]);
       }
 
-      if (step.precipitation != null && Number(step.precipitation) === 0) step.precipProb = null;
+      if (step.precipitation != null && Number(step.precipitation) === 0) {
+        // Keep precipProb when it's meaningful: show it if >= 20%
+        if (step.precipProb == null || Number(step.precipProb) < 20) {
+          step.precipProb = null;
+        }
+      }
       step.luminance = window.cw.computeLuminance ? window.cw.computeLuminance(step) : null;
       return step;
     } catch {

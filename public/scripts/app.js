@@ -1099,7 +1099,12 @@ function processWeatherData() {
 
       // If no precip, hide probability
       if (step.precipitation != null && Number(step.precipitation) === 0) {
-        step.precipProb = null;
+        // Allow showing probability when it's meaningful (>=20%). This avoids hiding
+        // isolated/light precipitation chances reported as a percent. Presentation
+        // of icons and summary remains governed elsewhere (AROME policy + mapWmoToNonPrecip).
+        if (step.precipProb == null || Number(step.precipProb) < 20) {
+          step.precipProb = null;
+        }
       }
 
       step.windCombined = formatWindCell(step.windSpeed, step.windGust, step.windDir);
@@ -1163,18 +1168,23 @@ function processWeatherData() {
         // If AROME reports precipitation == 0 for this (future-aligned) step, don't show probability
         // and avoid displaying a rain icon even if the reconciled weatherCode suggests rain.
         if (Number(step.precipitation) === 0) {
-          // If AROME reports 0 precipitation, treat probability as not meaningful here.
-          // Do NOT overwrite the canonical step.weatherCode: presentation-only mapping
-          // (removing the rain component) is handled in the icon renderer via
-          // mapWmoToNonPrecip. Keeping the original weatherCode preserves source data.
-          step.precipProb = null;
+          // If AROME reports 0 precipitation, prefer not to show small probabilities.
+          // Keep precipProb when it's meaningful (>=20%) so users see isolated/spotty chances.
+          if (step.precipProb == null || Number(step.precipProb) < 20) {
+            step.precipProb = null;
+          }
         }
       }
     }
 
     // Si no hay precipitación, no tiene sentido mostrar probabilidad
     if (step.precipitation != null && Number(step.precipitation) === 0) {
-      step.precipProb = null;
+      // Allow showing probability when it's meaningful (>=20%). This avoids hiding
+      // isolated/light precipitation chances reported as a percent. Presentation
+      // of icons and summary remains governed elsewhere (AROME policy + mapWmoToNonPrecip).
+      if (step.precipProb == null || Number(step.precipProb) < 20) {
+        step.precipProb = null;
+      }
     }
 
     step.windCombined = formatWindCell(step.windSpeed, step.windGust, step.windDir);
@@ -2927,6 +2937,7 @@ try {
     : []);
   // Units and horizons
   window.cw.getUnits = () => ({
+
     temp: document.getElementById("tempUnits")?.value,
     wind: document.getElementById("windUnits")?.value,
     precip: document.getElementById("precipUnits")?.value,
@@ -3579,7 +3590,7 @@ function showAlertIndicator() {
       font-size: 11px !important;
       cursor: pointer !important;
       z-index: 9999 !important;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+      box-shadow: 0 2px 8px rgba(255,0,0,0.2) !important;
       font-family: Arial, sans-serif !important;
       flex-shrink: 0 !important;
     `;
