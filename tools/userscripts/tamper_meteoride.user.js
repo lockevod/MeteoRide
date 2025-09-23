@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot and Bikemap
 // @namespace    github.com/lockevod
-// @version      0.22
+// @version      0.23
 // @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -414,15 +414,13 @@
     }
 
     function refreshButtons() {
+        // Remove all existing buttons first to handle page changes
+        document.querySelectorAll('.meteoride-export-btn.global').forEach(btn => btn.remove());
+        
         const hadKomoot = tryKomoot();
         const hadBikemap = tryBikemap();
         if (!hadKomoot && !hadBikemap) {
             addGenericButtonIfPossible();
-        }
-        else {
-            // remove generic if site specific present
-            const generic = document.querySelector('.meteoride-export-btn.global.generic');
-            if (generic) generic.remove();
         }
     }
 
