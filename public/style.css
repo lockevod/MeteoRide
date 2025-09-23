@@ -179,6 +179,57 @@ html, body {
   --btn-muted-bg: #eef2f7;
   --btn-muted-fg: #1f3a56;
 }
+
+/* Compare-mode tweaks: narrow provider name column (since icon removed) and
+   make the compact summary column larger than a normal step column. */
+.compare-mode th.provider-cell, .compare-mode td.provider-cell {
+  /* Provider column to 75% of normal first-col width */
+  max-width: calc(var(--cw-first-col) * 0.75) !important;
+  width: calc(var(--cw-first-col) * 0.75) !important;
+  min-width: calc(var(--cw-first-col) * 0.75) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Override the general #weatherTable first-child rules specifically for compare mode */
+.compare-mode#weatherTable thead tr:first-child th:first-child,
+.compare-mode#weatherTable thead tr:not(.icon-row):not(:first-child) th:first-child,
+.compare-mode#weatherTable tbody th:first-child {
+  width: calc(var(--cw-first-col) * 0.75) !important;
+  min-width: calc(var(--cw-first-col) * 0.75) !important;
+  max-width: calc(var(--cw-first-col) * 0.75) !important;
+}
+.compare-mode td.summary-cell, .compare-mode th.summary-header {
+  /* approximate 75% wider than --cw-col-min */
+  min-width: calc(var(--cw-col-min) * 1.75);
+  max-width: calc(var(--cw-col-min) * 2.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-summary-cell .cs-temp, .compact-summary-cell .cs-wind, .compact-summary-cell .cs-precip {
+  display: block; /* stacked behavior like other compare rows */
+  font-size: 12px;
+  line-height: 1.05;
+  color: #274a7a;
+  margin: 0;
+  padding: 0;
+}
+
+.compact-summary-cell i.wi {
+  font-size: 20px !important;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.compact-summary-cell .cs-temp strong {
+  font-weight: 700;
+  font-size: 13px;
+}
+.compact-summary-cell .combined-top { display:block; font-weight:700; font-size:13px; margin-bottom:2px; }
+.compact-summary-cell .combined-bottom { display:block; font-size:11px; margin:0; color:#3a577a }
+.compact-summary-cell .cs-sep { display: inline-block; margin: 0 4px; color: #a8c0dd; }
 /* On very wide screens, compress a bit more */
 @media screen and (min-width: 1200px) {
   :root {

@@ -1078,6 +1078,17 @@
       ? window.cw.summary.buildCombinedHeaderHTML(summaryHTML, sunHTML)
       : (summaryHTML + sunHTML);
     row.appendChild(firstCell);
+    // Insert an empty placeholder header cell so the times header aligns
+    // with the new compact summary column added to provider rows.
+    const placeholderHeader = document.createElement('th');
+    placeholderHeader.classList.add('summary-header');
+    // Match default column sizing using --cw-col-min when available
+    try {
+      const root = getComputedStyle(document.documentElement);
+      const colMin = parseFloat(root.getPropertyValue('--cw-col-min')) || 64;
+      placeholderHeader.style.minWidth = `${Math.ceil(colMin * 1.75)}px`;
+    } catch(_) {}
+    row.appendChild(placeholderHeader);
 
     (function upsertCompactSummarySunOnly() {
       try {
@@ -1135,10 +1146,52 @@
     thead.appendChild(row);
 
   const tbody = document.createElement("tbody");
-  // User-requested fixed order
-  const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"]; // FIXED ORDER
-  // Keep only those present in compareData; append any others (unexpected) at end
-  let provOrder = desiredOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !desiredOrder.includes(p)));
+  // Small helper: unit labels for summary builder
+  const tempUnitLabel = (units && units.temp && String(units.temp).toLowerCase().startsWith('f')) ? 'ºF' : 'ºC';
+  const windUnitLabel = (units && units.wind === 'ms') ? 'm/s' : ((units && String(units.wind).toLowerCase().startsWith('mph')) ? 'mph' : 'km/h');
+  const precipUnitLabel = (units && units.precip) ? String(units.precip) : 'mm';
+
+  // Compute a small route summary from a provider's array (keeps same shape as other summary helpers)
+  function computeProviderSummary(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const sevRank = {
+      thunder_hail: 10, thunderstorm: 9, snow_heavy: 8, snow: 7, snow_showers: 6,
+      snow_light: 5, freezing_rain: 5, hail: 5, sleet: 5, freezing_drizzle: 4,
+      rain_heavy: 4, rain: 3, showers: 3, rain_light: 2, drizzle: 2, fog: 1,
+      overcast: 0.8, cloudy: 0.7, partlycloudy: 0.5, clearsky: 0, default: -1
+    };
+    let temps = [], winds = [], gustMax = null, precipMax = null, probMax = null;
+    let bestCat = 'default', bestRank = -1;
+    for (const step of arr) {
+      if (step?.temp != null && Number.isFinite(Number(step.temp))) temps.push(Number(step.temp));
+      if (step?.windSpeed != null && Number.isFinite(Number(step.windSpeed))) winds.push(Number(step.windSpeed));
+      if (step?.windGust != null && Number.isFinite(Number(step.windGust))) gustMax = (gustMax==null)? Number(step.windGust) : Math.max(gustMax, Number(step.windGust));
+      if (step?.precipitation != null && Number.isFinite(Number(step.precipitation))) precipMax = (precipMax==null)? Number(step.precipitation) : Math.max(precipMax, Number(step.precipitation));
+      if (step?.precipProb != null && Number.isFinite(Number(step.precipProb))) probMax = (probMax==null)? Number(step.precipProb) : Math.max(probMax, Number(step.precipProb));
+      const prov = step._effProv || step.provider;
+      let cat = 'default';
+      try {
+        if (prov === 'meteoblue') cat = (window.cw.getDetailedCategoryMeteoBlue ? window.cw.getDetailedCategoryMeteoBlue(step.weatherCode) : cat);
+        else if (prov === 'openweather') cat = (window.cw.getDetailedCategoryOpenWeather ? window.cw.getDetailedCategoryOpenWeather(step.weatherCode) : cat);
+        else cat = (window.cw.getDetailedCategoryOpenMeteo ? window.cw.getDetailedCategoryOpenMeteo(step.weatherCode) : cat);
+      } catch(_) {}
+      const cc = Number(step?.cloudCover ?? 0);
+      if ((cat === 'partlycloudy' || cat === 'clearsky') && cc >= 80) cat = 'overcast';
+      const rank = sevRank[cat] ?? -1;
+      if (rank > bestRank) { bestRank = rank; bestCat = cat; }
+    }
+    const median = (vals=[]) => { const v = vals.map(Number).filter(n=>Number.isFinite(n)).sort((a,b)=>a-b); const n=v.length; if(!n) return null; const m=Math.floor(n/2); return n%2? v[m] : (v[m-1]+v[m])/2; };
+    return {
+      // Prefer any global override, otherwise use local categoryToIconClass defined in this file
+      iconClass: (window.categoryToIconClass ? window.categoryToIconClass(bestCat, (arr[0]?.isDaylight===1)?1:0) : categoryToIconClass(bestCat, (arr[0]?.isDaylight===1)?1:0)),
+      tempAvg: median(temps), tempMin: temps.length? Math.min(...temps):null, tempMax: temps.length? Math.max(...temps):null,
+      windAvg: median(winds), gustMax, precipMax, probMax
+    };
+  }
+
+    // Keep only those present in compareData; append any others (unexpected) at end
+    const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"]; // FIXED ORDER
+    let provOrder = desiredOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !desiredOrder.includes(p)));
 
     provOrder.forEach((prov, rowIndex) => {
       const r = document.createElement("tr");
@@ -1146,20 +1199,76 @@
       // store provider id for reliable lookups when a row is clicked
       r.dataset.prov = prov;
       const th = document.createElement("th");
-      th.innerHTML = `<i class="wi wi-cloud label-ico" aria-hidden="true"></i> <span class="label-text">${labelForProvider(prov)}</span><span class="label-abbrev">${getProviderAbbrev(prov)}</span>`;
+      // Provider name only (no icon as requested)
+      th.innerHTML = `<span class="label-text">${labelForProvider(prov)}</span><span class="label-abbrev">${getProviderAbbrev(prov)}</span>`;
       th.classList.add("provider-cell");
       th.scope = "row";
       r.appendChild(th);
+      // Insert compact summary column immediately after provider name
       const arr = compareData[prov] || [];
-      for (let i = 0; i < baseline.length; i++) {
-        const td = document.createElement("td");
-        td.innerHTML = buildCompareCell(arr[i]);
-        td.dataset.col = String(i);
-        td.dataset.ori = String(i);
-        r.appendChild(td);
-      }
-      tbody.appendChild(r);
-    });
+      const summary = computeProviderSummary(arr);
+      const summaryTd = document.createElement('td');
+      summaryTd.classList.add('summary-cell');
+      // Set provider column to 75% of normal width and expand summary column
+      try {
+        const firstColW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw-first-col')) || 224;
+        const colMin = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cw-col-min')) || 64;
+        const providerWidth = Math.round(firstColW * 0.75) + 'px';
+        // Set provider name column to 75% of --cw-first-col
+        th.style.width = providerWidth;
+        th.style.maxWidth = providerWidth;
+        th.style.minWidth = providerWidth;
+        th.style.overflow = 'hidden';
+        th.style.textOverflow = 'ellipsis';
+        th.style.whiteSpace = 'nowrap';
+        // Expand summary column
+        summaryTd.style.minWidth = Math.ceil(colMin * 1.75) + 'px';
+        summaryTd.style.maxWidth = Math.ceil(colMin * 2.25) + 'px';
+      } catch(_) {}
+      try {
+        // Build a compact, label-free summary: icon + numeric-only values
+        const ic = summary?.iconClass || (window.categoryToIconClass ? window.categoryToIconClass('default', 1) : 'wi-cloud');
+  const iconHtml = `<i class="wi ${ic}" style="font-size:31px;margin-right:8px;color:#29519b;flex-shrink:0"></i>`;
+        // Build stacked values like other rows (combined-top / combined-bottom)
+        let tempPart = '';
+        if (summary && (summary.tempMin != null && summary.tempMax != null)) {
+          tempPart = `${Math.round(summary.tempMin)}-${Math.round(summary.tempMax)}${tempUnitLabel}`;
+        } else if (summary && summary.tempAvg != null) {
+          tempPart = `${Math.round(summary.tempAvg)}${tempUnitLabel}`;
+        }
+        let windPart = '';
+        if (summary && summary.windAvg != null) {
+          windPart = `${Math.round(summary.windAvg)}${windUnitLabel}`;
+          if (summary.gustMax != null) windPart += ` (${Math.round(summary.gustMax)})`;
+        }
+        let precipPart = '';
+        if (summary && summary.precipMax != null) {
+          const pm = Number(summary.precipMax) || 0;
+          precipPart = `${pm.toFixed(1)}${precipUnitLabel}`;
+          if (summary.probMax != null) precipPart += ` (${Math.round(summary.probMax)}%)`;
+        }
+        const compactHtml = `
+          <div style="display:flex;align-items:center;gap:6px;min-width:0">
+            ${iconHtml}
+            <div style="min-width:0;align-items:flex-start;flex-shrink:1">
+              ${tempPart ? `<span class="combined-top">${tempPart}</span>` : ''}
+              ${windPart ? `<span class="combined-bottom">${windPart}</span>` : ''}
+              ${precipPart ? `<span class="combined-bottom">${precipPart}</span>` : ''}
+            </div>
+          </div>`;
+        summaryTd.innerHTML = `<div class="compact-summary-cell">${compactHtml}</div>`;
+      } catch(e) { summaryTd.textContent = ''; }
+      r.appendChild(summaryTd);
+      // reuse 'arr' declared earlier for the provider's data
+       for (let i = 0; i < baseline.length; i++) {
+         const td = document.createElement("td");
+         td.innerHTML = buildCompareCell(arr[i]);
+         td.dataset.col = String(i);
+         td.dataset.ori = String(i);
+         r.appendChild(td);
+       }
+       tbody.appendChild(r);
+     });
 
     table.appendChild(thead);
     table.appendChild(tbody);
@@ -1167,9 +1276,13 @@
     (function ensureMinWidth() {
       const root = getComputedStyle(document.documentElement);
       const toPx = (v) => parseFloat(v) || 0;
-      const firstCol = toPx(root.getPropertyValue('--cw-first-col'));
+      let firstCol = toPx(root.getPropertyValue('--cw-first-col'));
       const colMin  = toPx(root.getPropertyValue('--cw-col-min'));
       const cols = baseline.length;
+      // In compare-mode, prefer a smaller first column since provider names are compact now
+      if (table.classList.contains('compare-mode')) {
+        try { firstCol = Math.round(firstCol * 0.45); } catch(_) { firstCol = Math.max(80, firstCol/2); }
+      }
       const minW = Math.max(600, Math.ceil(firstCol + Math.max(0, cols) * colMin));
       table.style.minWidth = `${minW}px`;
     })();
