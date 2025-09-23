@@ -1,3 +1,7 @@
+/*
+  # Prevent Cloudflare from injecting the analytics beacon
+  Cache-Control: public, no-transform
+
 /shared/*.gpx
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, HEAD, OPTIONS, DELETE
