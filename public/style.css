@@ -2916,9 +2916,9 @@ body.dragging { user-select: none; }
   }
   /* Nudge the left summary up for optical alignment with sun times (raised a couple of pixels) */
   /* Optical nudge: lower the route-summary slightly so it visually centers with the sun block */
-  #compactSummary .route-summary { transform: translateY(2px); }
+  #compactSummary .route-summary { transform: translateY(4px); }
   /* Slightly lower the icon as well to keep its baseline aligned with the text */
-  #compactSummary .route-summary .rs-icon { transform: translateY(2px); }
+  #compactSummary .route-summary .rs-icon { transform: translateY(4px); }
 }
 
 #configMenu .config-row label.inline {
