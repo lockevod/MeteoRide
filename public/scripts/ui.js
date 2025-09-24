@@ -2036,7 +2036,27 @@
         console.log('[MeteoRide] saveRecentRoute: recent routes disabled, skipping');
         return;
       }
-      console.log('[MeteoRide] saveRecentRoute: Starting to save route', file.name, 'size:', file.size);
+      // Prefer the displayed route name in the UI when available (rutaName element)
+      const displayed = (document.getElementById('rutaName')?.textContent || '').toString().trim();
+      const MAX_NAME_LEN = 64;
+      function sanitizeName(n) {
+        if (!n) return '';
+        // remove path separators and non-printable chars
+        let s = String(n).replace(/[\\/\n\r\t]+/g, '-').trim();
+        // collapse multiple spaces
+        s = s.replace(/\s+/g, ' ');
+        // truncate sensibly
+        if (s.length > MAX_NAME_LEN) s = s.substring(0, MAX_NAME_LEN).trim();
+        return s;
+      }
+      const baseFromUI = sanitizeName(displayed);
+      // If we have a nice UI name, use it; otherwise fall back to file.name
+      const rawSourceName = (file && file.name) ? String(file.name) : 'route.gpx';
+      const fallbackBase = sanitizeName(rawSourceName.replace(/\.gpx$/i, '').replace(/\.[^/.]+$/, '')) || 'route';
+      const chosenBase = baseFromUI || fallbackBase;
+      let chosenName = chosenBase;
+      if (!/\.gpx$/i.test(chosenName)) chosenName = `${chosenName}.gpx`;
+      console.log('[MeteoRide] saveRecentRoute: Starting to save route, sourceName=', rawSourceName, 'chosenName=', chosenName, 'size:', file.size);
 
       // Skip files that are too large (configurable) to avoid huge storage usage in the UI
       if (file.size > MAX_RECENT_ROUTE_SIZE) {
@@ -2046,19 +2066,19 @@
 
       // We store the original file as a Blob in IndexedDB and only keep metadata in memory.
       try {
-        const blob = file instanceof Blob ? file : new Blob([file], { type: 'application/gpx+xml' });
-        const routeRecord = { name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), blob };
+  const blob = file instanceof Blob ? file : new Blob([file], { type: 'application/gpx+xml' });
+  const routeRecord = { name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), blob };
 
         // Always overwrite if a route with same name exists
         try {
-          const existing = await idbFindRouteByName(file.name);
+          const existing = await idbFindRouteByName(chosenName);
           if (existing && existing.id != null) {
             // Overwrite existing record
             routeRecord.id = existing.id;
             const id = await idbPutRoute(routeRecord);
             console.log('[MeteoRide] saveRecentRoute: overwrote existing IndexedDB id=', id);
             // Update in-memory metadata cache
-            const meta = { id: id, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
+            const meta = { id: id, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
             const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
             if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
             recentRoutesCache.unshift(meta);
@@ -2069,7 +2089,7 @@
           // Otherwise add new
           const id = await idbAddRoute(routeRecord);
           // Update in-memory metadata cache
-          const meta = { id: id, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
+          const meta = { id: id, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
           const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
           if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
           recentRoutesCache.unshift(meta);
@@ -2089,15 +2109,15 @@
               const stored = localStorage.getItem(RECENT_ROUTES_KEY);
               let arr = stored ? JSON.parse(stored) : [];
               // Remove any existing with same name
-              arr = arr.filter(r => r.name !== file.name);
-              arr.unshift({ name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), content: compressedContent });
+              arr = arr.filter(r => r.name !== chosenName);
+              arr.unshift({ name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), content: compressedContent });
               arr = arr.slice(0, MAX_RECENT_ROUTES);
               localStorage.setItem(RECENT_ROUTES_KEY, JSON.stringify(arr));
             } catch (_){ /* ignore localStorage write errors */ }
             // Remove any existing with same name from cache before adding
-            const existingIndex = recentRoutesCache.findIndex(r => r.name === file.name);
+            const existingIndex = recentRoutesCache.findIndex(r => r.name === chosenName);
             if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-            recentRoutesCache.unshift({ id: null, name: file.name, size: file.size, lastModified: file.lastModified, timestamp: Date.now() });
+            recentRoutesCache.unshift({ id: null, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now() });
             if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
             updateRecentRoutesUI();
             return;

@@ -2734,7 +2734,7 @@ body.dragging { user-select: none; }
   #compactSummary.compact-summary .combined-header {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center; /* center vertically so route-summary and sun block align */
     justify-content: space-between;   /* push sun block to the right */
     gap: 10px;
     flex-wrap: nowrap;                /* prevent sun from going below */
@@ -2812,7 +2812,7 @@ body.dragging { user-select: none; }
 
 /* Small-screen: collapse first column to icons only (keep hours/km row intact) */
 @media screen and (max-width: 700px) {
-  :root { --cw-first-col: 56px; } /* narrow sticky first column */
+  :root { --cw-first-col: 65px; } /* narrow sticky first column */
 
   /* Show the compact summary and hide the large combined header inside the table */
   #compactSummary.compact-summary { display: flex; }
@@ -2915,12 +2915,10 @@ body.dragging { user-select: none; }
     align-items: center; /* ensure centered alignment */
   }
   /* Nudge the left summary up for optical alignment with sun times (raised a couple of pixels) */
-  #compactSummary .route-summary {
-    transform: translateY(-3px); /* was -1px */
-  }
-  #compactSummary .route-summary .rs-icon {
-    transform: translateY(-3px); /* was -1px */
-  }
+  /* Optical nudge: lower the route-summary slightly so it visually centers with the sun block */
+  #compactSummary .route-summary { transform: translateY(2px); }
+  /* Slightly lower the icon as well to keep its baseline aligned with the text */
+  #compactSummary .route-summary .rs-icon { transform: translateY(2px); }
 }
 
 #configMenu .config-row label.inline {

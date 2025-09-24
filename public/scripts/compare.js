@@ -647,10 +647,42 @@
     const precipUnitLabel = precipUnit;
     const sumA = computeRouteSummaryFrom(dataA || []);
     const sumB = computeRouteSummaryFrom(dataB || []);
-    const summaryHTML_A = (window.cw.summary && window.cw.summary.buildRouteSummaryHTML)
-      ? window.cw.summary.buildRouteSummaryHTML(sumA, tempUnitLabel, windUnitLabel, precipUnitLabel) : "";
-    const summaryHTML_B = (window.cw.summary && window.cw.summary.buildRouteSummaryHTML)
-      ? window.cw.summary.buildRouteSummaryHTML(sumB, tempUnitLabel, windUnitLabel, precipUnitLabel) : "";
+    // Build a compact numeric-only summary (no labels) for compare-dates mode
+    function buildNumericSummaryHTML(summary, tUnit, wUnit, pUnit) {
+      if (!summary) return "";
+      let tempPart = "";
+      if (summary.tempMin != null && summary.tempMax != null) tempPart = `${Math.round(summary.tempMin)}-${Math.round(summary.tempMax)}${tUnit}`;
+      else if (summary.tempAvg != null) tempPart = `${Math.round(summary.tempAvg)}${tUnit}`;
+      let windPart = "";
+      if (summary.windMin != null && summary.windMax != null) windPart = `${Math.round(summary.windMin)}-${Math.round(summary.windMax)}${wUnit}`;
+      else if (summary.windAvg != null) windPart = `${Math.round(summary.windAvg)}${wUnit}`;
+      if (summary.gustMax != null) windPart += ` <span class="rs-paren">(${Math.round(summary.gustMax)})</span>`;
+      let precipPart = "";
+      if (summary.precipMin != null && summary.precipMax != null) {
+        const precipMinVal = Number(summary.precipMin);
+        const precipMaxVal = Number(summary.precipMax);
+        if (precipMinVal < 0.5 && precipMaxVal < 0.5) precipPart = `0${pUnit}`;
+        else {
+          const minDisp = Math.round(precipMinVal);
+          const maxDisp = Math.round(precipMaxVal);
+          precipPart = (minDisp === maxDisp) ? `${minDisp}${pUnit}` : `${minDisp}-${maxDisp}${pUnit}`;
+        }
+      } else if (summary.precipMax != null) {
+        precipPart = `${Math.round(Number(summary.precipMax))}${pUnit}`;
+      }
+      if (summary.probMax != null) precipPart += ` <span class="rs-paren">(${Math.round(summary.probMax)}%)</span>`;
+
+      // Build inline HTML without labels
+      const parts = [];
+      if (tempPart) parts.push(`<span class="combined-top">${tempPart}</span>`);
+      if (windPart) parts.push(`<span class="combined-bottom">${windPart}</span>`);
+      if (precipPart) parts.push(`<span class="combined-bottom">${precipPart}</span>`);
+      if (!parts.length) return "";
+      return `<div style="display:flex;flex-direction:column;align-items:flex-start">${parts.join('')}</div>`;
+    }
+
+    const summaryHTML_A = buildNumericSummaryHTML(sumA, tempUnitLabel, windUnitLabel, precipUnitLabel);
+    const summaryHTML_B = buildNumericSummaryHTML(sumB, tempUnitLabel, windUnitLabel, precipUnitLabel);
     const combinedHeader = (summaryHTML, sunHTML) => {
       return (window.cw.summary && window.cw.summary.buildCombinedHeaderHTML)
         ? window.cw.summary.buildCombinedHeaderHTML(summaryHTML, sunHTML)
