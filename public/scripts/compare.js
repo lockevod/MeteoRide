@@ -234,8 +234,9 @@
         }
 
         // Cache key (use effective provider for data source)
-        const key = `cw_weather_${effProv}_${dateStr}_${units.temp}_${units.wind}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
-        const cached = window.cw.getCache && window.cw.getCache(key);
+  const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+  const key = mk(effProv, dateStr, units.temp, units.wind, p.lat, p.lon, timeAt);
+  const cached = window.cw.getCache && window.cw.getCache(key);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, p, units.wind);
           // Keep row label as original provider while using effProv data
@@ -507,8 +508,10 @@
         if (effProv === 'openweather' && !(document.getElementById('apiKeyOW')?.value || '').trim()) effProv = 'openmeteo';
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
-        const key = `cw_weather_${effProv}_${units.temp}_${units.wind}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
-        const cached = window.cw.getCache && window.cw.getCache(key);
+  const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+  const dateStr2 = (function () { const dt = document.getElementById('datetimeRoute')?.value || ''; return dt ? dt.substring(0,10) : new Date().toISOString().substring(0,10); })();
+  const key = mk2(effProv, dateStr2, units.temp, units.wind, p.lat, p.lon, timeAt);
+  const cached = window.cw.getCache && window.cw.getCache(key);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, baseForIndex, units.wind);
           s.provider = effProv;

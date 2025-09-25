@@ -672,8 +672,9 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       // After all fallbacks, update provider on step before cache/fetch
       p.provider = prov;
 
-      const keyPrim = `cw_weather_${prov}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
-      const cachedPrim = getCache(keyPrim);
+  const mkPrim = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+  const keyPrim = mkPrim(prov, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
+  const cachedPrim = getCache(keyPrim);
       if (cachedPrim) {
         weatherData.push({ ...p, provider: prov, weather: cachedPrim });
         logDebug(`Cache usado paso ${i + 1} (${prov})`);
@@ -750,7 +751,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             } catch (_) {}
             if (aromeResponseLooksInvalid(json)) {
               const prov2 = "openmeteo";
-              const key2 = `cw_weather_${prov2}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
+              const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+              const key2 = mk2(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
               const cached2 = getCache(key2);
               if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
@@ -801,7 +803,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
             // Fallback to OM for this step
             const prov2 = "openmeteo";
-            const key2 = `cw_weather_${prov2}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
+            const mk3 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+            const key2 = mk3(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             usedFallback = true;
             usedFallbackError = true;
@@ -843,7 +846,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
             // Fallback to Open‑Meteo for this step
             const prov2 = "openmeteo";
-            const key2 = `cw_weather_${prov2}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
+            const mk4 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+            const key2 = mk4(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             usedFallback = true;
             usedFallbackError = true;

@@ -336,6 +336,22 @@
   function setCache(key, data) {
     try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch {}
   }
+  // Canonical cache key builder for weather payloads
+  function makeCacheKey(providerId, dateStr, tempUnit, windUnit, lat, lon, timeAt) {
+    try {
+      const prov = String(providerId || '').toLowerCase();
+      const datePart = String(dateStr || '').substring(0, 10);
+      const tUnit = String(tempUnit || '').toString();
+      const wUnit = String(windUnit || '').toString();
+      const la = (typeof lat === 'number') ? lat : Number(lat);
+      const lo = (typeof lon === 'number') ? lon : Number(lon);
+      const tIso = (timeAt && timeAt.toISOString) ? timeAt.toISOString() : new Date(timeAt).toISOString();
+      return `cw_weather_${prov}_${datePart}_${tUnit}_${wUnit}_${la.toFixed(3)}_${lo.toFixed(3)}_${tIso}`;
+    } catch (e) {
+      // Fallback to a simpler key if formatting fails
+      try { return `cw_weather_${String(providerId || '')}_${String(dateStr || '')}_${String(timeAt || '')}`; } catch (_) { return `cw_weather_invalid`; }
+    }
+  }
   function getValidatedDateTime() {
     const datetimeValue = getVal("datetimeRoute");
     const now = new Date();
