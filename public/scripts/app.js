@@ -673,7 +673,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       p.provider = prov;
 
   const mkPrim = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-  const keyPrim = mkPrim(prov, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
+  const keyPrim = mkPrim(prov, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
+  try { window.logDebug && window.logDebug(`cache lookup key=${keyPrim} provider=${prov}`); } catch(e){}
   const cachedPrim = getCache(keyPrim);
       if (cachedPrim) {
         weatherData.push({ ...p, provider: prov, weather: cachedPrim });
@@ -737,6 +738,13 @@ async function fetchWeatherForSteps(steps, timeSteps) {
               const resStd = await fetch(urlStd);
               if (resStd.ok) {
                 const std = await resStd.json();
+                try {
+                  // Cache the standard Open‑Meteo response so future Open‑Meteo-only requests
+                  // for the same step/time/coords can reuse it instead of re-fetching.
+                  const mkStd = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+                  const keyStd = mkStd('openmeteo', timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
+                  try { setCache(keyStd, std); } catch (e) { /* ignore cache set errors */ }
+                } catch (e) { /* ignore cache instrumentation errors */ }
                 const stdH = std?.hourly || {};
                 const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
                 json.hourly = json.hourly || {};
@@ -752,7 +760,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             if (aromeResponseLooksInvalid(json)) {
               const prov2 = "openmeteo";
               const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-              const key2 = mk2(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
+              const key2 = mk2(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
               const cached2 = getCache(key2);
               if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
@@ -804,13 +812,13 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             // Fallback to OM for this step
             const prov2 = "openmeteo";
             const mk3 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            const key2 = mk3(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
+            const key2 = mk3(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             usedFallback = true;
             usedFallbackError = true;
 
             if (cached2) {
-              weatherData.push({ ...p, provider: prov2, weather: cached2 });
+              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
@@ -847,13 +855,13 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             // Fallback to Open‑Meteo for this step
             const prov2 = "openmeteo";
             const mk4 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            const key2 = mk4(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
+            const key2 = mk4(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             usedFallback = true;
             usedFallbackError = true;
 
             if (cached2) {
-              weatherData.push({ ...p, provider: prov2, weather: cached2 });
+              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
@@ -871,10 +879,10 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             // NEW: On AROME error, try standard Open‑Meteo (no fallback flags/notices)
             const prov2 = "openmeteo";
             const mk5 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            const key2 = mk5(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
+            const key2 = mk5(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             if (cached2) {
-              weatherData.push({ ...p, provider: prov2, weather: cached2 });
+              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
@@ -906,8 +914,31 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           processWeatherAlerts(json.alerts, p, timeAt);
         }
         
+        // For OpenWeather: the response contains an array of hourly entries. Cache
+        // the entire payload under the primary key, but also cache per-hour payload
+        // entries so later lookups for a different step/time find a cached value.
+        if (prov === 'openweather' && Array.isArray(json.hourly) && json.hourly.length) {
+          try {
+            const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+            // Cache the full payload under the original primary key too
+            setCache(keyPrim, json);
+            window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`);
+            // Iterate hourly list and store each hour under its own canonical key
+            for (let hi = 0; hi < json.hourly.length; hi++) {
+              const h = json.hourly[hi];
+              // openweather hourly entries may use 'dt' (seconds) or 'time' (ISO)
+              let ht = null;
+              if (h && h.dt) ht = new Date(Number(h.dt) * 1000);
+              else if (h && h.time) ht = new Date(h.time);
+              if (!ht || isNaN(ht.getTime())) continue;
+              const keyH = mk('openweather', ht.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, ht);
+              try { setCache(keyH, json); window.logDebug && window.logDebug(`setCache key=${keyH} provider=openweather (hourly)`); } catch (e) { /* ignore */ }
+            }
+          } catch (e) { /* ignore per-hour cache failures */ }
+        } else {
+          try { setCache(keyPrim, json); window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`); } catch(e) {}
+        }
         weatherData.push({ ...p, provider: prov, weather: json });
-        setCache(keyPrim, json);
         logDebug(`Datos recibidos paso ${i + 1} (${prov})`);
         await new Promise(r => setTimeout(r, 70));
       } else {
@@ -1258,7 +1289,14 @@ function processWeatherData() {
   });
 
   renderWeatherTable();
-  renderWindMarkers();
+  // Ensure wind/rain markers are rendered in normal mode (do not run in compare mode)
+  try {
+    const isCompareMode = (document.getElementById('apiSource')?.value || '').toLowerCase() === 'compare';
+    if (!isCompareMode && window.cw && typeof window.cw.renderWindMarkers === 'function') {
+      window.cw.renderWindMarkers();
+    }
+  } catch (e) { /* tolerate any DOM errors */ }
+
   // Improved route fitting: attempt several times to catch late layout/tile size changes
   function fitRouteOnce(padding = [10,10]) {
     if (!map || !trackLayer) return;
@@ -2064,6 +2102,7 @@ function renderWeatherTable() {
       if (raw.indexOf('UV') !== -1) {
         const parts = raw.split('UV');
         // Desktop: show full label with UV icon near the UV text
+        // Compact-only: show a small separator '/' and the UV icon immediately next to the cloud icon
         // Compact-only: show a small separator '/' and the UV icon immediately next to the cloud icon
   labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text desktop-only">${parts[0]}<i class="wi wi-hot label-ico-inline" aria-hidden="true" style="margin:0 6px 0 4px"></i>UV${parts[1] || ''}</span>`;
       } else {
@@ -2881,6 +2920,17 @@ function init() {
     const rounded = roundToNextQuarterISO(new Date());
     dt.value = rounded;
   }
+  // Defensive fallback: if some other script cleared the value, set it after a short delay
+  // so the input always contains a sensible rounded default on page load.
+  setTimeout(() => {
+    try {
+      const _dt = document.getElementById('datetimeRoute');
+      if (_dt && (!_dt.value || String(_dt.value).trim() === '')) {
+        _dt.value = roundToNextQuarterISO(new Date());
+        try { logDebug && logDebug('datetimeRoute: fallback auto-set'); } catch (e) {}
+      }
+    } catch (e) { /* ignore */ }
+  }, 150);
 
   // Observe map container size changes and window resizes to keep track centered
   const mapEl = document.getElementById("map");

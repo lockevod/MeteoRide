@@ -336,29 +336,81 @@
   function getCache(key) {
     try {
       const item = localStorage.getItem(key);
-      if (!item) return null;
+      if (!item) {
+        logDebug(`getCache miss key=${key} item=null`);
+        return null;
+      }
       const obj = JSON.parse(item);
-      if (!obj || !obj.timestamp) return null;
-      if (Date.now() - obj.timestamp > cacheTTL) return null;
+      if (!obj || !obj.timestamp) {
+        logDebug(`getCache invalid key=${key} obj=${JSON.stringify(obj)}`);
+        return null;
+      }
+      const now = Date.now();
+      const age = now - obj.timestamp;
+      if (age > cacheTTL) {
+        logDebug(`getCache expired key=${key} age=${age}ms > ${cacheTTL}ms`);
+        return null;
+      }
+      logDebug(`getCache hit key=${key} age=${age}ms`);
       return obj.data;
-    } catch { return null; }
+    } catch (e) {
+      logDebug(`getCache error key=${key} error=${e.message}`, true);
+      return null;
+    }
   }
   function setCache(key, data) {
-    try { localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() })); } catch {}
+    try {
+      const item = JSON.stringify({ data, timestamp: Date.now() });
+      localStorage.setItem(key, item);
+      logDebug(`setCache success key=${key} data=exists`);
+    } catch (e) {
+      logDebug(`setCache error=${e.message} key=${key}`, true);
+      if (e.name === 'QuotaExceededError' || e.message.includes('quota')) {
+        // Clear old cache entries to free space
+        try {
+          const keys = Object.keys(localStorage).filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'));
+          if (keys.length > 0) {
+            // Sort by timestamp (assuming keys have timestamps, but to be safe, remove oldest by access time if possible)
+            // For simplicity, remove the first 10 oldest assuming they are weather caches
+            keys.slice(0, 10).forEach(k => {
+              localStorage.removeItem(k);
+              logDebug(`Cleared old cache key=${k}`);
+            });
+            // Retry setting the cache
+            try {
+              localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
+              logDebug(`setCache retry success key=${key} data=exists`);
+            } catch (e2) {
+              logDebug(`setCache retry failed=${e2.message} key=${key}`, true);
+            }
+          }
+        } catch (clearErr) {
+          logDebug(`Failed to clear cache: ${clearErr.message}`, true);
+        }
+      }
+    }
   }
   // Canonical cache key builder for weather payloads
   function makeCacheKey(providerId, dateStr, tempUnit, windUnit, lat, lon, timeAt) {
     try {
-      const prov = String(providerId || '').toLowerCase();
+      // Normalize provider id so equivalent AROME variants share the same cache key.
+      const provRaw = String(providerId || '').toLowerCase();
+      let prov = provRaw;
+      // Treat any provider id mentioning "arome" as the canonical aromehd family.
+      if (provRaw.indexOf('arome') !== -1) prov = 'aromehd';
       const datePart = String(dateStr || '').substring(0, 10);
       const tUnit = String(tempUnit || '').toString();
-    // Ensure any stored MeteoBlue API key is cleared so it never becomes active
-    try { if (s && s.apiKey) s.apiKey = ""; } catch (e){}
       const wUnit = String(windUnit || '').toString();
       const la = (typeof lat === 'number') ? lat : Number(lat);
       const lo = (typeof lon === 'number') ? lon : Number(lon);
-      const tIso = (timeAt && timeAt.toISOString) ? timeAt.toISOString() : new Date(timeAt).toISOString();
-      return `cw_weather_${prov}_${datePart}_${tUnit}_${wUnit}_${la.toFixed(3)}_${lo.toFixed(3)}_${tIso}`;
+  // Normalize timestamp to a canonical 15-minute-aligned ISO (no seconds/ms)
+  const dt = (timeAt && (timeAt instanceof Date || timeAt.toISOString)) ? new Date(timeAt) : new Date(timeAt);
+  // round down to nearest 15 minutes to match step granularity
+  const mins = dt.getMinutes();
+  const q = Math.floor(mins / 15) * 15;
+  dt.setMinutes(q, 0, 0);
+  const tIso = dt.toISOString();
+  return `cw_weather_${prov}_${datePart}_${tUnit}_${wUnit}_${la.toFixed(3)}_${lo.toFixed(3)}_${tIso}`;
     } catch (e) {
       // Fallback to a simpler key if formatting fails
       try { return `cw_weather_${String(providerId || '')}_${String(dateStr || '')}_${String(timeAt || '')}`; } catch (_) { return `cw_weather_invalid`; }
@@ -714,6 +766,7 @@
     window.cw.utils = {
        cacheTTL,
        i18n,
+       makeCacheKey,
        t,
        logDebug,
        saveSettings,
@@ -748,4 +801,6 @@
        resolveProviderForTimestamp,
        requestWeatherByChain
      };
+    // Also expose a global alias for legacy callers that expect a top-level function
+    try { window.makeCacheKey = makeCacheKey; } catch (e) { /* ignore */ }
    })();

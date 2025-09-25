@@ -229,50 +229,19 @@
     } catch (e) { console.warn('updateProviderOptions error', e); }
   }
 
-  // Inline status helper for API key check
-  function setKeyStatus(msg, cls = "") {
-    const el = document.getElementById("apiKeyStatus");
+  // Inline status helper for API key check. Accept optional element id (defaults to OpenWeather status)
+  function setKeyStatus(msg, cls = "", elId = 'apiKeyStatusOW') {
+    const el = document.getElementById(elId);
     if (!el) return;
     el.className = "key-status" + (cls ? " " + cls : "");
     el.textContent = msg || "";
   }
 
-  // Test MeteoBlue API key
+  // Test MeteoBlue key is intentionally disabled in the UI — provide a no-op to avoid errors
   async function testMeteoBlueKey() {
-    const btn = document.getElementById("checkApiKey");
-  const apiKey = "";
-    if (!apiKey) {
-      window.setKeyStatus(window.t("key_test_missing"), "warn");
-      return;
-    }
-    try {
-      if (btn) { btn.disabled = true; btn.classList.add("testing"); }
-      window.setKeyStatus(window.t("key_testing"), "testing");
-
-      const center = (typeof window.map !== "undefined" && window.map?.getCenter) ? window.map.getCenter() : { lat: 41.3874, lng: 2.1686 };
-      const p = { lat: center.lat, lon: center.lng };
-      const timeAt = new Date();
-
-      const url = window.buildProviderUrl("meteoblue", p, timeAt, apiKey, window.getVal("windUnits"), window.getVal("tempUnits"));
-      const res = await fetch(url);
-      if (res.ok) {
-        window.setKeyStatus(window.t("key_valid"), "ok");
-        return;
-      }
-      const bodyText = await res.text().catch(() => "");
-      const code = window.classifyProviderError("meteoblue", res.status, bodyText);
-      if (code === "quota") {
-        window.setKeyStatus(window.t("key_quota"), "warn");
-      } else if (code === "invalid_key" || code === "forbidden") {
-        window.setKeyStatus(window.t("key_invalid"), "error");
-      } else {
-        window.setKeyStatus(window.t("key_http_error", { status: res.status }), "error");
-      }
-    } catch (err) {
-      window.setKeyStatus(window.t("key_network_error", { msg: err.message }), "error");
-    } finally {
-      if (btn) { btn.disabled = false; btn.classList.remove("testing"); }
-    }
+    // UI for MeteoBlue removed; nothing to test.
+    try { setKeyStatus(window.t('key_test_missing'), 'warn', 'apiKeyStatusOW'); } catch (e) {}
+    return;
   }
 
   // Test OpenWeather API key
@@ -284,8 +253,8 @@
       return;
     }
     try {
-      if (btn) { btn.disabled = true; btn.classList.add("testing"); }
-      window.setKeyStatus(window.t("key_testing"), "testing");
+  if (btn) { btn.disabled = true; btn.classList.add("testing"); }
+  setKeyStatus(window.t("key_testing"), "testing", 'apiKeyStatusOW');
 
       const center = (typeof window.map !== "undefined" && window.map?.getCenter) ? window.map.getCenter() : { lat: 41.3874, lng: 2.1686 };
       const p = { lat: center.lat, lon: center.lng };
@@ -294,20 +263,20 @@
       const url = window.buildProviderUrl("openweather", p, timeAt, apiKey, window.getVal("windUnits"), window.getVal("tempUnits"));
       const res = await fetch(url);
       if (res.ok) {
-        window.setKeyStatus(window.t("key_valid"), "ok");
+  setKeyStatus(window.t("key_valid"), "ok", 'apiKeyStatusOW');
         return;
       }
       const bodyText = await res.text().catch(() => "");
       const code = window.classifyProviderError("openweather", res.status, bodyText);
       if (code === "quota") {
-        window.setKeyStatus(window.t("key_quota"), "warn");
+        setKeyStatus(window.t("key_quota"), "warn", 'apiKeyStatusOW');
       } else if (code === "invalid_key" || code === "forbidden") {
-        window.setKeyStatus(window.t("key_invalid"), "error");
+        setKeyStatus(window.t("key_invalid"), "error", 'apiKeyStatusOW');
       } else {
-        window.setKeyStatus(window.t("key_http_error", { status: res.status }), "error");
+        setKeyStatus(window.t("key_http_error", { status: res.status }), "error", 'apiKeyStatusOW');
       }
     } catch (err) {
-      window.setKeyStatus(window.t("key_network_error", { msg: err.message }), "error");
+      setKeyStatus(window.t("key_network_error", { msg: err.message }), "error", 'apiKeyStatusOW');
     } finally {
       if (btn) { btn.disabled = false; btn.classList.remove("testing"); }
     }
@@ -1287,8 +1256,11 @@
 
     // Update options when API keys change so options can be enabled/disabled live
     const apiKeyEl = document.getElementById('apiKey');
-  const apiKeyMBEl = document.getElementById('apiKey');
-  if (apiKeyMBEl) { apiKeyMBEl.value = ''; apiKeyMBEl.disabled = true; apiKeyMBEl.addEventListener('input', () => { apiKeyMBEl.value = ''; }); }
+    const apiKeyOWEl = document.getElementById('apiKeyOW');
+    const apiKeyMBEl = document.getElementById('apiKey');
+    // MeteoBlue key input is intentionally disabled and always kept empty
+    if (apiKeyMBEl) { apiKeyMBEl.value = ''; apiKeyMBEl.disabled = true; apiKeyMBEl.addEventListener('input', () => { apiKeyMBEl.value = ''; }); }
+    // Wire OpenWeather and generic apiKey inputs to update provider options when changed
     if (apiKeyEl) apiKeyEl.addEventListener('input', () => { updateProviderOptions(); });
     if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); });
 
