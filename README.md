@@ -6,7 +6,7 @@ You can download de code, execute directly without a server, install in a server
 
 ## Features
 
-- **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), MeteoBlue (API key required, up to 7 days), OpenWeather (API key required, up to 4 days), or Arome-HD (high-resolution for Europe within 48 hours).
+- **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), OpenWeather (API key required, up to 4 days), or Arome-HD (high-resolution for Europe within 48 hours).
 - **Provider chains**: A new chain option is available: "OpenWeather 0–1h → Arome 1–48h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. This chain leverages real-time data from OpenWeather for the immediate hour and hyper-local AROME precision for the next 47 hours.
 - **Comparison Mode**: Evaluate differences between providers for better decision-making.
 - **Date Comparison Mode**: Compare weather forecasts between two different dates/times for the same route.
@@ -32,9 +32,7 @@ MeteoRide supports multiple weather providers, each with unique strengths:
   - **Advantages**: Free, no API key required, global coverage, up to 14 days forecast
   - **Best for**: Long-term planning, global routes, budget-conscious users
   
-- **MeteoBlue**:
-  - **Advantages**: High accuracy, detailed mountain weather, excellent for complex terrain
-  - **Best for**: Mountain biking, alpine routes, when precision matters
+<!-- MeteoBlue provider details removed from public docs per project policy -->
   
 - **OpenWeather**:
   - **Advantages**: Real-time data, detailed current conditions, official weather alerts
@@ -67,9 +65,9 @@ MeteoRide keeps a short list of the most recent GPX files you loaded so you can 
 
 ## Limitations and Tips
 
-- **Time Horizons**: Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (4 days in standard mode, 1 hour in chains)
+- **Time Horizons**: Open-Meteo (14 days), OpenWeather (4 days in standard mode, 1 hour in chains)
 - **Accuracy**: Forecasts less reliable beyond 3-4 days.
-- **Free APIs**: Monthly limits for MeteoBlue and OpenWeather; Open-Meteo has no limits.
+- **Free APIs**: Monthly limits for OpenWeather; Open-Meteo has no limits.
 - **Best Practices**: Use routes up to 100-200 km, plan 1-2 days ahead, combine sources, have a backup plan, and carry rain gear.
 
 ## Official Weather Alerts
@@ -194,9 +192,10 @@ Security
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-Bikemap, Komoot, OpenWeatherMaps, Openmeteo, Meteoblue and Hammerhead are registerer marks. They can have specific propietary licenses, please if you use this code or the published webapp you have to comply with them. If you don't want you cannot use this code or the app.
 
-This code and the webapp are designed with "zero trust" security in mind but it isn't a commercial code or service, the code and web app is provide as is, any liability or warranty is given with this code and webapp. You accept this if you donwload this repo, use the code or use the webapp. 
+Bikemap, Komoot, OpenWeatherMaps, Openmeteo and Hammerhead are registered marks. They may have specific proprietary licenses; if you use this code or the published webapp you must comply with them.
+
+This code and the webapp are provided as-is without warranty. By using this repository or the webapp you accept these terms.
 
 
 ## Privacy and Data
@@ -217,11 +216,11 @@ To obtain forecasts, MeteoRide only shares:
 
 - **Geographic coordinates** of the points in your route
 - **Dates and times** for which you request forecasts
-- **Your API Key** (only if you configure one for providers such as MeteoBlue or OpenWeather)
+- **Your API Key** (only if you configure one for providers such as OpenWeather)
 
 Note about API keys: API keys are stored in your browser localStorage. While the risk from storing a free API key locally is low, be mindful that they could be accessed by other scripts running in your browser if your environment is compromised. If you prefer, avoid supplying provider API keys and rely on providers that do not require keys (for example Open‑Meteo / AromeHD where available).
 
-> **Note:** Weather providers (Open‑Meteo, MeteoBlue, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting forecast data from those services.
+> **Note:** Weather providers (Open‑Meteo, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting forecast data from those services.
 
 ### What is stored locally
 
@@ -236,7 +235,7 @@ If you need stricter privacy guarantees, consider running MeteoRide completely o
 ## Technologies
 
 - **Maps**: OpenStreetMap
-- **Weather Data**: Open-Meteo, MeteoBlue, OpenWeather
+- **Weather Data**: Open-Meteo, OpenWeather
 - **Icons**: Weather Icons by Erik Flowers
 - **Libraries**: Leaflet.js, SunCalc, GPX parser
 - **Hosting**: Cloudfare Pages (only if you use web)

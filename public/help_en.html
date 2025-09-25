@@ -48,14 +48,14 @@
           "text": "GPX and KML. You can paste a shared URL or upload the file."
         }
       },
-      {
-        "@type": "Question",
-        "name": "Which weather providers are used?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Open-Meteo, MeteoBlue, OpenWeather and AromeHD."
-        }
-      }
+            {
+                "@type": "Question",
+                "name": "Which weather providers are used?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Open-Meteo, OpenWeather and AromeHD."
+                }
+            }
     ]
   }
   </script>
@@ -204,7 +204,7 @@
             <p>Select the weather provider you want to use to obtain the data.</p>
             <ul>
                 <li><strong>Open-Meteo:</strong> Free, no API key required, up to 14 days forecast</li>
-                <li><strong>MeteoBlue:</strong> Requires API key, up to 7 days, very accurate</li>
+                <!-- MeteoBlue removed from UI; provider not advertised -->
                 <li><strong>OpenWeather:</strong> Requires API key, up to 5 days, detailed data</li>
                 <li><strong>AromeHD:</strong> High-resolution model from MeteoFrance, available via Open-Meteo. Only available for parts of Europe (~39-52°N, 10.5°W-16.5°E) and within 48 hours; otherwise the app falls back to the best provider available through Open-Meteo. Especially useful for wind and short-term precipitation.</li>
                 <li><strong>OpenWeather - AromeHD:</strong> Use OpenWeather for the first hour, then AromeHD up to 48 hours. Routes outside this period are calculated with Open-Meteo. Only available if you provide an OpenWeather API key. This chain leverages real-time OpenWeather data for immediate planning and hyper-local AROME precision for wind and precipitation forecasting.</li>
@@ -240,7 +240,7 @@
         
         <ul>
             <li><strong>Open-Meteo:</strong> Free, no API key required, global coverage, up to 14 days. OpenMeteo uses its best model for your track, recommended for any situation, the best for long-term planning and global routes.</li>
-            <li><strong>MeteoBlue:</strong> Requires API key, up to 7 days, very accurate especially for mountain weather. Ideal for alpine routes and complex terrain.</li>
+            <!-- MeteoBlue provider reference removed -->
             <li><strong>OpenWeather:</strong> Requires API key, up to 4 days, excellent real-time data and official weather alerts. Perfect for immediate departures and urban areas.</li>
             <li><strong>AROME-HD:</strong> High-resolution model (~1-2km) from MeteoFrance, available for Europe within 48 hours. Superior for wind forecasting and short-term precipitation in France and nearby countries.</li>
         </ul>
@@ -252,7 +252,7 @@
         </ul>
         
         <div class="tip">
-            <strong>💡 Tip:</strong> Choose based on your needs: real-time accuracy (OpenWeather), local precision (AROME-HD), mountain terrain (MeteoBlue), or long-term planning (Open-Meteo).
+            <strong>💡 Tip:</strong> Choose based on your needs: real-time accuracy (OpenWeather), local precision (AROME-HD), or long-term planning (Open-Meteo).
         </div>
     </div>
 
@@ -302,16 +302,15 @@
         <h2>🛠️ Settings</h2>
 
         <h3>🔑 API Keys</h3>
-        <p>For MeteoBlue and OpenWeather you need to register and obtain a free API key:</p>
+        <p>For OpenWeather you need to register and obtain a free API key if you want to use that provider:</p>
         <ul>
-            <li><strong>MeteoBlue:</strong> <a href="https://meteoblue.com/weather-api" target="_blank">meteoblue.com/weather-api</a></li>
             <li><strong>OpenWeather (One Call API):</strong> <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></li>
         </ul>
         <p>Use the <strong>🔍 Check</strong> button to verify your API key works correctly.</p>
 
         <h3>🔑 API Key Tests and Notices</h3>
         <p>
-            In the settings panel there are <code>Check</code> buttons for MeteoBlue and OpenWeather. When pressed the app makes a simple request and the status is shown next to the field (valid / invalid / quota / HTTP).
+            In the settings panel there is a <code>Check</code> button for OpenWeather. When pressed the app makes a simple request and the status is shown next to the field (valid / invalid / quota / HTTP).
         </p>
         <p>
             There is also a checkbox <strong>Show non-critical notices</strong> that controls notification verbosity: if enabled you will see informational banners when fallbacks occur due to horizon limits, quota or API errors; if disabled only critical errors are shown.
@@ -422,9 +421,9 @@
         <div class="warning">
             <h3>🚨 Important Limits</h3>
             <ul>
-                <li><strong>Time horizon:</strong> Open-Meteo (14 days), MeteoBlue (7 days), OpenWeather (2 days)</li>
+                <li><strong>Time horizon:</strong> Open-Meteo (14 days), OpenWeather (2 days)</li>
                 <li><strong>Accuracy:</strong> Forecasts are less reliable from day 3-4 onwards</li>
-                <li><strong>Free APIs:</strong> MeteoBlue and OpenWeather free tiers have usage limits (Open-Meteo does not require an API key)</li>
+                <li><strong>Free APIs:</strong> OpenWeather free tier has usage limits (Open-Meteo does not require an API key)</li>
             </ul>
         </div>
 
@@ -490,11 +489,11 @@
         <ul>
             <li><strong>Geographic coordinates</strong> of the points in your route</li>
             <li><strong>Dates and times</strong> for which you need the forecast</li>
-            <li><strong>Your API Key</strong> (if you use MeteoBlue or OpenWeather). They will now be stored in the local storage of your device. This means they could, hypothetically, be accessible by a third party. The risk with this type of keys is low, but it is recommended to use a free key from these providers with data that would not supose a problem in case of a leak. Alternatively, you can avoid using them and rely on providers (such as openmeteo-Arome) that do not require an API key.</li>
+            <li><strong>Your API Key</strong> (if you use OpenWeather). It will be stored in the local storage of your device. This means it could, hypothetically, be accessible by a third party. The risk with this type of key is low, but it is recommended to use a free key with limited permissions. Alternatively, you can avoid using keys and rely on providers (such as Open‑Meteo/AROME) that do not require an API key.</li>
         </ul>
 
         <div class="tip">
-            <strong>💡 Note:</strong> Weather providers (Open-Meteo, MeteoBlue, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting the forecast data you need.
+            <strong>💡 Note:</strong> Weather providers (Open‑Meteo, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting the forecast data you need.
         </div>
 
         <h3>🗂️ What is stored locally</h3>
@@ -529,7 +528,7 @@
         <h3>🙏 Technologies and Services</h3>
         <ul>
             <li><strong>Maps:</strong> OpenStreetMap and contributors</li>
-            <li><strong>Weather Data:</strong> Open-Meteo, MeteoBlue, OpenWeather</li>
+            <li><strong>Weather Data:</strong> Open-Meteo, OpenWeather</li>
             <li><strong>Weather Icons:</strong> Weather Icons by Erik Flowers</li>
             <li><strong>Libraries:</strong> Leaflet.js, SunCalc, GPX parser</li>
             <li><strong>Hosting:</strong> GitHub Pages (optional)</li>
@@ -555,9 +554,8 @@
             <li>Translate to new languages</li>
             <li>Improve the documentation</li>
         </ul>
-         <p>Bikemap, Komoot, OpenWeatherMaps, Openmeteo, Meteoblue and Hammerhead are registerer marks. They can have specific propietary licenses, please if you use this code or the published webapp you have to comply with them. If you don't want you cannot use this code or the app.
-        This code and the webapp are designed with "zero trust" security in mind but it isn't a commercial code or service, the code and web app is provide as is, any liability or warranty is given with this code and webapp. You accept this if you donwload this repo, use the code or use the webapp. 
-        </p>
+    <p>Bikemap, Komoot, OpenWeatherMaps, Openmeteo and Hammerhead are registered marks. They may have specific proprietary licenses; if you use this code or the published webapp you must comply with them. This code and the webapp are provided as-is without warranty or liability. By using this repository or the webapp you accept these terms.
+    </p>
         <p> Updated information about this app is always in <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. You accept all updated information, liabilities and restrictions in the github page linked if you use this app.</p>
        
 

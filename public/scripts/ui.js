@@ -203,7 +203,7 @@
 
       // Disable options that require API keys when keys missing
       const hasOW = !!getVal('apiKeyOW');
-      const hasMB = !!getVal('apiKey');
+    const hasMB = false;
       // Helper to set disabled state
       function setDisabled(val, disabled) {
         const opt = Array.from(sel.options).find(o => o.value === val);
@@ -213,7 +213,7 @@
       setDisabled('openweather', !hasOW);
       setDisabled('ow2_arome_openmeteo', !hasOW);
       // MeteoBlue option (if exists)
-      setDisabled('meteoblue', !hasMB);
+  setDisabled('meteoblue', true);
 
       // If the currently selected option is disabled, pick first non-disabled option
       const curOpt = sel.options[sel.selectedIndex];
@@ -240,7 +240,7 @@
   // Test MeteoBlue API key
   async function testMeteoBlueKey() {
     const btn = document.getElementById("checkApiKey");
-    const apiKey = window.getVal("apiKey");
+  const apiKey = "";
     if (!apiKey) {
       window.setKeyStatus(window.t("key_test_missing"), "warn");
       return;
@@ -1267,6 +1267,8 @@
 
     // API key test buttons
     const chk = document.getElementById("checkApiKey");
+  // Disable MeteoBlue key test UI if present
+  try { if (chk) { chk.disabled = true; chk.classList.remove('testing'); } } catch(e){}
     if (chk) chk.addEventListener("click", testMeteoBlueKey);
 
     const chkOW = document.getElementById("checkApiKeyOW");
@@ -1285,7 +1287,8 @@
 
     // Update options when API keys change so options can be enabled/disabled live
     const apiKeyEl = document.getElementById('apiKey');
-    const apiKeyOWEl = document.getElementById('apiKeyOW');
+  const apiKeyMBEl = document.getElementById('apiKey');
+  if (apiKeyMBEl) { apiKeyMBEl.value = ''; apiKeyMBEl.disabled = true; apiKeyMBEl.addEventListener('input', () => { apiKeyMBEl.value = ''; }); }
     if (apiKeyEl) apiKeyEl.addEventListener('input', () => { updateProviderOptions(); });
     if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); });
 

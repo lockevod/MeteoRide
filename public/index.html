@@ -135,18 +135,12 @@
 
     <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="api_key_init">API Key</h4>
     <div class="config-row">
-      <label for="apiKey" data-i18n="api_key_label">MeteoBlue:</label>
-  <input type="text" id="apiKey" placeholder="" />
-      <button type="button" id="checkApiKey" data-i18n="check_key">Check</button>
-    </div>
-    <div id="apiKeyStatus" class="key-status" aria-live="polite"></div>
-
-    <div class="config-row">
       <label for="apiKeyOW" data-i18n="api_key_label_ow">OpenWeather:</label>
   <input type="text" id="apiKeyOW" placeholder="" />
       <button type="button" id="checkApiKeyOW" data-i18n="check_key">Check</button>
     </div>
     <div id="apiKeyStatusOW" class="key-status" aria-live="polite"></div>
+    <div id="apiKeyStatus" class="key-status" aria-live="polite"></div>
 
     <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="units_label">Localización</h4>
     <div class="config-row">
@@ -242,7 +236,6 @@
       <div class="param-row provider-row" style="display:flex;gap:8px;align-items:center;">
         <label for="apiSource" data-i18n="provider_label">Proveedor:</label>
         <select id="apiSource" style="flex:0 0 auto;">
-          <option value="meteoblue">MeteoBlue</option>
           <option value="openmeteo" selected>OpenMeteo</option>
           <option value="openweather">OpenWeather</option>
           <option value="aromehd">AromeHD</option>

@@ -234,32 +234,42 @@
       distanceUnits: getVal("distanceUnits"), // NEW
       precipUnits: getVal("precipUnits"),     // NEW
       cyclingSpeed: Number(getVal("cyclingSpeed")),
-      apiKey: getVal("apiKey"),
+      // Do NOT persist MeteoBlue API key to avoid accidental storage — always keep empty
+      apiKey: "",
       apiKeyOW: getVal("apiKeyOW"),
       apiSource: getVal("apiSource"),
       datetimeRoute: getVal("datetimeRoute"),
       intervalSelect: getVal("intervalSelect"),
-     noticeAll: !!document.getElementById("noticeAll")?.checked,
-     showWeatherAlerts: !!document.getElementById("showWeatherAlerts")?.checked,
-     showDebugButton: !!document.getElementById("showDebugButton")?.checked,
+      noticeAll: !!document.getElementById("noticeAll")?.checked,
+      showWeatherAlerts: !!document.getElementById("showWeatherAlerts")?.checked,
+      showDebugButton: !!document.getElementById("showDebugButton")?.checked,
     };
-    localStorage.setItem("cwSettings", JSON.stringify(settings));
+    try { localStorage.setItem("cwSettings", JSON.stringify(settings)); } catch (e) { /* ignore */ }
     logDebug(t("config_saved"));
   }
+
   function loadSettings() {
-  const raw = localStorage.getItem("cwSettings");
-  const s = raw ? JSON.parse(raw) : {};
+    const raw = localStorage.getItem("cwSettings");
+    const s = raw ? JSON.parse(raw) : {};
+    // Ensure any stored MeteoBlue API key is cleared so it never becomes active
+    try { if (s && s.apiKey) s.apiKey = ""; } catch (e) { /* ignore */ }
+
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
       "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
       "noticeAll","showWeatherAlerts","showDebugButton",
     ].forEach((id) => {
       const el = document.getElementById(id);
-
-    if (!el) return;
-     if (el.type === "checkbox") el.checked = !!s[id];
-     else if (s[id] != null) el.value = s[id];
+      if (!el) return;
+      // For MeteoBlue API key input always force empty and do not populate from settings
+      if (id === 'apiKey') {
+        if (el.type === 'checkbox') el.checked = false; else el.value = '';
+        return;
+      }
+      if (el.type === "checkbox") el.checked = !!s[id];
+      else el.value = s[id] != null ? s[id] : "";
     });
+
     // Apply sensible defaults when missing and persist them so subsequent loads are consistent
     let changed = false;
     if (s.apiSource) apiSource = s.apiSource;
@@ -285,39 +295,39 @@
     logDebug(t("config_loaded"));
     const csNum = Number(s.cyclingSpeed ?? document.getElementById("cyclingSpeed")?.value);
     lastAppliedSpeed = Number.isFinite(csNum) ? csNum : null;
- // Ensure noticeAll default to true when missing
-  const na = document.getElementById("noticeAll");
-  if (na) na.checked = (s.noticeAll !== false);
-  
-  // Apply showWeatherAlerts configuration
-  const swa = document.getElementById("showWeatherAlerts");
-  if (swa) swa.checked = (s.showWeatherAlerts !== false); // Default to true
-  
-  // Apply showDebugButton configuration and set initial visibility
-  const sdb = document.getElementById("showDebugButton");
-  const debugButton = document.getElementById("toggleDebug");
-  if (sdb && debugButton) {
-    sdb.checked = (s.showDebugButton !== false); // Default to true
-    console.log(`Initial debug button visibility: ${sdb.checked}`);
-    if (sdb.checked) {
-      debugButton.classList.remove('debug-hidden');
-      debugButton.style.display = ''; // Reset any inline styles
-    } else {
-      debugButton.classList.add('debug-hidden');
+
+    // Ensure noticeAll default to true when missing
+    const na = document.getElementById("noticeAll");
+    if (na) na.checked = (s.noticeAll !== false);
+
+    // Apply showWeatherAlerts configuration
+    const swa = document.getElementById("showWeatherAlerts");
+    if (swa) swa.checked = (s.showWeatherAlerts !== false); // Default to true
+
+    // Apply showDebugButton configuration and set initial visibility
+    const sdb = document.getElementById("showDebugButton");
+    const debugButton = document.getElementById("toggleDebug");
+    if (sdb && debugButton) {
+      sdb.checked = (s.showDebugButton !== false); // Default to true
+      if (sdb.checked) {
+        debugButton.classList.remove('debug-hidden');
+        debugButton.style.display = ''; // Reset any inline styles
+      } else {
+        debugButton.classList.add('debug-hidden');
+      }
     }
-  }
-  
-  // Apply translations after loading settings to ensure new elements are translated.
-  // UI script (ui.js) registers window.applyTranslations; it may be loaded after utils.js,
-  // so retry a few times to avoid race conditions.
-  (function tryApplyTranslations(retries = 5, delay = 80) {
-    if (typeof window.applyTranslations === 'function') {
-      try { window.applyTranslations(); } catch (e) { /* ignore */ }
-      return;
-    }
-    if (retries <= 0) return;
-    setTimeout(() => tryApplyTranslations(retries - 1, delay), delay);
-  })();
+
+    // Apply translations after loading settings to ensure new elements are translated.
+    // UI script (ui.js) registers window.applyTranslations; it may be loaded after utils.js,
+    // so retry a few times to avoid race conditions.
+    (function tryApplyTranslations(retries = 5, delay = 80) {
+      if (typeof window.applyTranslations === 'function') {
+        try { window.applyTranslations(); } catch (e) { /* ignore */ }
+        return;
+      }
+      if (retries <= 0) return;
+      setTimeout(() => tryApplyTranslations(retries - 1, delay), delay);
+    })();
   }
   function getVal(id) {
     const el = document.getElementById(id);
@@ -328,7 +338,7 @@
       const item = localStorage.getItem(key);
       if (!item) return null;
       const obj = JSON.parse(item);
-      if (!obj.timestamp) return null;
+      if (!obj || !obj.timestamp) return null;
       if (Date.now() - obj.timestamp > cacheTTL) return null;
       return obj.data;
     } catch { return null; }
@@ -342,6 +352,8 @@
       const prov = String(providerId || '').toLowerCase();
       const datePart = String(dateStr || '').substring(0, 10);
       const tUnit = String(tempUnit || '').toString();
+    // Ensure any stored MeteoBlue API key is cleared so it never becomes active
+    try { if (s && s.apiKey) s.apiKey = ""; } catch (e){}
       const wUnit = String(windUnit || '').toString();
       const la = (typeof lat === 'number') ? lat : Number(lat);
       const lo = (typeof lon === 'number') ? lon : Number(lon);
@@ -352,6 +364,7 @@
       try { return `cw_weather_${String(providerId || '')}_${String(dateStr || '')}_${String(timeAt || '')}`; } catch (_) { return `cw_weather_invalid`; }
     }
   }
+
   function getValidatedDateTime() {
     const datetimeValue = getVal("datetimeRoute");
     const now = new Date();
@@ -697,43 +710,42 @@
   window.validateDateRange = validateDateRange;
   window.validateRouteLoaded = validateRouteLoaded;
 
-  // Also via window.cw for modularity
-  window.cw = window.cw || {};
-  window.cw.utils = {
-     cacheTTL,
-     i18n,
-     t,
-     logDebug,
-     saveSettings,
-     loadSettings,
-     getVal,
-     getCache,
-     setCache,
-     getValidatedDateTime,
-     validateDateRange,
-     validateRouteLoaded,
-     roundToNextQuarterISO,
-     roundUpToNextQuarterDate,
-     setupDateLimits,
-     haversine,
-     formatTime,
-     isValidDate,
-     fmtSafe,
-     updateUnits,
-     safeNum,
-     normalUnit,
-     clamp01,
-     findClosestIndex,
-     offsetLatLng,
-     beaufortIntensity,
-     windToUnits,
-     windIntensityValue,
-     providerChains,
-     getProviderForTimestamp,
-     assignProvidersToTimestamps,
-     pickProvidersForRoute,
-     summarizeProviderSegments,
-     resolveProviderForTimestamp,
-     requestWeatherByChain
-   };
- })();
+    window.cw = window.cw || {};
+    window.cw.utils = {
+       cacheTTL,
+       i18n,
+       t,
+       logDebug,
+       saveSettings,
+       loadSettings,
+       getVal,
+       getCache,
+       setCache,
+       getValidatedDateTime,
+       validateDateRange,
+       validateRouteLoaded,
+       roundToNextQuarterISO,
+       roundUpToNextQuarterDate,
+       setupDateLimits,
+       haversine,
+       formatTime,
+       isValidDate,
+       fmtSafe,
+       updateUnits,
+       safeNum,
+       normalUnit,
+       clamp01,
+       findClosestIndex,
+       offsetLatLng,
+       beaufortIntensity,
+       windToUnits,
+       windIntensityValue,
+       providerChains,
+       getProviderForTimestamp,
+       assignProvidersToTimestamps,
+       pickProvidersForRoute,
+       summarizeProviderSegments,
+       resolveProviderForTimestamp,
+       requestWeatherByChain
+     };
+   })();
