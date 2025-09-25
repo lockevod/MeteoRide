@@ -20,3 +20,4 @@ public/assets/.DS_Store
 tools/localDEV/pids/caddy.pid
 tools/localDEV/pids/share-server.pid
 **/.DS_Store
+tools/tests/test_minutely_url.js

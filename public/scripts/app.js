@@ -303,9 +303,19 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   if (prov === "aromehd") {
     // Open‑Meteo with AROME‑HD model; same hourly variables as standard OM
     // Note: models=meteofrance_arome_hd is the AROME high‑resolution variant.
+    // Decide whether to request higher-resolution minutely_15 for near-term (first 6 hours)
+    // NOTE: minutely_15 on Open-Meteo expects a comma-separated list of variables
+    // (works like `hourly=`). We'll request precipitation and its probability by default.
+    const nowMs = Date.now();
+    const tMs = (timeAt && timeAt.getTime) ? timeAt.getTime() : new Date(timeAt).getTime();
+    const hoursFromNow = (tMs - nowMs) / (1000 * 60 * 60);
+  const wantMinutely = (typeof hoursFromNow === 'number' && hoursFromNow >= - (1/60) && hoursFromNow <= 5);
+    const hourlyVars = 'temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover';
+    const minutelyVars = hourlyVars; // request same variables in minutely_15 as in hourly
     return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
-      // CHANGED: ask for precipitation_probability too (model may not fill it, but try)
-      `&hourly=temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover` +
+      // CHANGED: ask for a full hourly variable set (model may not fill everything)
+      `&hourly=${hourlyVars}` +
+      `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
       `&start=${timeAt.toISOString()}&timezone=auto&models=arome_france_hd`;
   }
   if (prov === "meteoblue") {
@@ -321,7 +331,17 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
     return `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKey}&units=${units}&exclude=${excludeParts}`;
   }
   // openmeteo
-  return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover&start=${timeAt.toISOString()}&timezone=auto`;
+  // For Open-Meteo, enable minutely_15 in near-term to get denser data for the first ~6 hours
+  // NOTE: minutely_15 expects a list of variables like hourly; request precipitation + probability
+  const nowMs = Date.now();
+  const tMs = (timeAt && timeAt.getTime) ? timeAt.getTime() : new Date(timeAt).getTime();
+  const hoursFromNow = (tMs - nowMs) / (1000 * 60 * 60);
+  const wantMinutely = (typeof hoursFromNow === 'number' && hoursFromNow >= - (1/60) && hoursFromNow <= 5);
+  const hourlyVars = 'temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover';
+  const minutelyVars = hourlyVars;
+  return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=${hourlyVars}` +
+    `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
+    `&start=${timeAt.toISOString()}&timezone=auto`;
 }
 
 
@@ -720,7 +740,12 @@ async function fetchWeatherForSteps(steps, timeSteps) {
                 const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
                 json.hourly = json.hourly || {};
                 mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-                if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+                  if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+                  // If the standard Open-Meteo response included minutely_15, copy it so
+                  // the AROME payload can benefit from higher-resolution near-term data.
+                  if (std && std.minutely_15 && typeof std.minutely_15 === 'object') {
+                    json.minutely_15 = std.minutely_15;
+                  }
               }
             } catch (_) {}
             if (aromeResponseLooksInvalid(json)) {
@@ -987,9 +1012,10 @@ function processWeatherData() {
     const w = step.weather;
     let idx = -1;
     if (prov === "openmeteo" || prov === "aromehd") {
+      // Ensure we have at least hourly data shape to work with
       if (!w.hourly || !w.hourly.time) return;
-      // If step minute is 30 or more prefer the next future hourly slot (ceil).
-      // If minute is 0-29 prefer the closest index (nearest, may be previous hour).
+
+      // Compute closest hourly index (existing behaviour)
       try {
         const dt = step.time instanceof Date ? step.time : new Date(step.time);
         const minute = dt.getMinutes();
@@ -1000,6 +1026,27 @@ function processWeatherData() {
         }
       } catch (e) {
         idx = findClosestIndex(w.hourly.time, step.time);
+      }
+
+      // If provider returned minutely_15 data, prefer it for this step when the
+      // step timestamp falls within the minutely_15 time range (near-term).
+      // minutely_15 has its own `.time` array and variable arrays mirroring hourly.
+      step.__useMinutely = false; // debug flag
+      let minIdx = -1;
+      if (w.minutely_15 && Array.isArray(w.minutely_15.time)) {
+        try {
+          const mTimes = w.minutely_15.time;
+          minIdx = (window.findClosestFutureIndex ? window.findClosestFutureIndex(mTimes, step.time) : findClosestIndex(mTimes, step.time));
+          const firstM = new Date(mTimes[0]).getTime();
+          const lastM = new Date(mTimes[mTimes.length - 1]).getTime();
+          const stepMs = (step.time instanceof Date ? step.time.getTime() : new Date(step.time).getTime());
+          if (stepMs >= firstM && stepMs <= lastM && minIdx !== -1) {
+            step.__useMinutely = true;
+            step.__minutelyIndex = minIdx;
+          }
+        } catch (e) {
+          /* ignore minutely parsing errors and fall back to hourly */
+        }
       }
     }
     // NEW: OpenWeather extraction (prefer hourly, fallback to daily)
@@ -1126,20 +1173,33 @@ function processWeatherData() {
       step.cloudCover = safeNum(w.total_cloud_cover?.[idx] ?? w.cloudcover?.[idx]);
       step.luminance = computeLuminance(step);
 
-    } else if ((prov === "openmeteo" || prov === "aromehd") && idx !== -1) {
-      step.temp = safeNum(w.hourly.temperature_2m[idx]);
-      step.windSpeed = safeNum(windToUnits(w.hourly.wind_speed_10m[idx], windUnit));
-      step.windDir = w.hourly.winddirection_10m[idx];
-      step.windGust = safeNum(windToUnits(w.hourly.wind_gusts_10m[idx], windUnit));
-      step.humidity = safeNum(w.hourly.relative_humidity_2m[idx]);
-  step.precipitation = safeNum(w.hourly.precipitation[idx]);
-     // AROME may lack precipitation_probability; merged earlier when available
-  step.precipProb = safeNum(w.hourly.precipitation_probability && w.hourly.precipitation_probability[idx]);
-  step.weatherCode = w.hourly.weathercode[idx];
-      step.uvindex = (w.hourly.uv_index && w.hourly.uv_index.length > idx)
-        ? safeNum(w.hourly.uv_index[idx])
-        : null;
-      step.isDaylight = w.hourly.is_day[idx];
+    } else if ((prov === "openmeteo" || prov === "aromehd") && (idx !== -1 || step.__useMinutely)) {
+      // Prefer minutely_15 values when available for this step
+      const useMin = !!step.__useMinutely && w.minutely_15 && Array.isArray(w.minutely_15.time);
+      const hIdx = idx;
+      const mIdx = step.__minutelyIndex || -1;
+
+      const getVar = (varName) => {
+        if (useMin && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx) {
+          return w.minutely_15[varName][mIdx];
+        }
+        if (w.hourly[varName] && Array.isArray(w.hourly[varName]) && w.hourly[varName].length > hIdx) {
+          return w.hourly[varName][hIdx];
+        }
+        return null;
+      };
+
+      step.temp = safeNum(getVar('temperature_2m'));
+      step.windSpeed = safeNum(windToUnits(getVar('wind_speed_10m'), windUnit));
+      step.windDir = getVar('winddirection_10m') || 0;
+      step.windGust = safeNum(windToUnits(getVar('wind_gusts_10m'), windUnit));
+      step.humidity = safeNum(getVar('relative_humidity_2m'));
+      step.precipitation = safeNum(getVar('precipitation'));
+      // AROME may lack precipitation_probability; merged earlier when available
+      step.precipProb = safeNum(getVar('precipitation_probability'));
+      step.weatherCode = getVar('weathercode');
+      step.uvindex = (getVar('uv_index') != null) ? safeNum(getVar('uv_index')) : null;
+      step.isDaylight = getVar('is_day');
       step.cloudCover = safeNum(w.hourly.cloud_cover?.[idx]); // 0–100
       step.luminance = computeLuminance(step);
 
