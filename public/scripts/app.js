@@ -870,7 +870,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           } else if (prov === "aromehd") {
             // NEW: On AROME error, try standard Open‑Meteo (no fallback flags/notices)
             const prov2 = "openmeteo";
-            const key2 = `cw_weather_${prov2}_${date}_${tempUnit}_${windUnit}_${p.lat.toFixed(3)}_${p.lon.toFixed(3)}_${timeAt.toISOString()}`;
+            const mk5 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+            const key2 = mk5(prov2, date, tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             if (cached2) {
               weatherData.push({ ...p, provider: prov2, weather: cached2 });
@@ -2905,7 +2906,7 @@ function hasParsableGpxText(txt) {
 // Nota: si ya existía, se sobrescribe con más logging y validación.
 window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint = "route.gpx") {
   try {
-    const head = (typeof gpxText === "string") ? gpxText.slice(0, 120) : String(gpxText);
+    const head = (typeof gpxText === "string") ? gpxText.slice(0,  120) : String(gpxText);
     logDebug(`cwLoadGPXFromString: called, len=${(gpxText && gpxText.length) || 0}, name=${nameHint}`);
     console.debug("[cw] loader input head:", head);
 

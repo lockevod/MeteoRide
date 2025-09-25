@@ -21,3 +21,4 @@ tools/localDEV/pids/caddy.pid
 tools/localDEV/pids/share-server.pid
 **/.DS_Store
 tools/tests/test_minutely_url.js
+tools/tests/test_cache_key_consistency.js
