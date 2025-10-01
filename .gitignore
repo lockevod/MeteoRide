@@ -29,3 +29,4 @@ tools/localDEV/purge_nextdns_from_networkextension.sh
 tools/localDEV/read
 tools/localDEV/reader
 tools/localDEV/scutil
+tools/userscripts/hammerhead_export.user.js
