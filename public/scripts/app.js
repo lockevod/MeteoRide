@@ -2063,7 +2063,7 @@ function renderWeatherTable() {
   ];
 
   // Small icon for each metric row
-  const getRowIconHTML = (key) => {
+  const getRowIconHTML = (key, title) => {
     const cls = (() => {
       switch (key) {
         case "temp":        return "wi-thermometer";
@@ -2075,7 +2075,8 @@ function renderWeatherTable() {
       }
     })();
     // Return a single icon (for cloud_uv we'll add the second icon after the label text)
-    return `<i class="wi ${cls} label-ico" aria-hidden="true"></i>`;
+    const safeTitle = (title || '').toString().replace(/"/g, '&quot;');
+    return `<i class="wi ${cls} label-ico" aria-hidden="true" data-tooltip="${safeTitle}"></i>`;
   };
 
   // Construye etiquetas con unidades para los keys interesados + icono + envoltorio de texto
@@ -2089,7 +2090,15 @@ function renderWeatherTable() {
     } else if (key === "rainCombined") {
       base = `${txt} (<span class="unit-lower" style="text-transform:lowercase">${precipUnitLabel || 'mm'}</span>)`;
     }
-    return `${getRowIconHTML(key)} <span class="label-text">${base}</span>`;
+    // Provide tooltip titles for icons (only used in compact mode via CSS/JS)
+    const titleMap = {
+      temp: (lang === 'es') ? 'Temperatura' : 'Temperature',
+      windCombined: (lang === 'es') ? 'Viento y racha' : 'Wind and gusts',
+      rainCombined: (lang === 'es') ? 'Lluvia y probabilidad' : 'Rain and probability',
+      humidity: (lang === 'es') ? 'Humedad relativa' : 'Relative humidity',
+      cloud_uv: (lang === 'es') ? 'Nubes y UV' : 'Clouds and UV'
+    };
+    return `${getRowIconHTML(key, titleMap[key])} <span class="label-text">${base}</span>`;
   });
 
   // Post-process labelsHTML so cloud_uv shows icon + label + second icon (not adjacent)
@@ -2291,30 +2300,52 @@ function renderWeatherTable() {
     const table = document.getElementById('weatherTable');
     if (!table) return;
     let touchTimer = null;
-    table.addEventListener('mouseover', (ev) => {
-      const t = ev.target.closest('[data-tooltip]');
+    // Tooltip only active for icon labels in compact mode (<=700px). Use matchMedia so it updates on resize.
+    const mm = window.matchMedia('(max-width: 700px)');
+
+    function onMouseOver(ev) {
+      // restrict to icon elements in compact mode
+      const t = ev.target.closest('.label-ico[data-tooltip]');
       if (!t) return;
       showTooltipAt(t, t.getAttribute('data-tooltip'));
-    });
-    table.addEventListener('mouseout', (ev) => {
+    }
+    function onMouseOut(ev) {
       const related = ev.relatedTarget;
       if (related && related.closest && related.closest('#cw-tooltip')) return;
       hideTooltip();
-    });
-    // touch support: show on touchstart and hide after 3s or on next touch
-    table.addEventListener('touchstart', (ev) => {
-      const t = ev.target.closest('[data-tooltip]');
+    }
+    function onTouchStart(ev) {
+      const t = ev.target.closest('.label-ico[data-tooltip]');
       if (!t) return;
       if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
       const touch = ev.touches && ev.touches[0];
       showTooltipAt(t, t.getAttribute('data-tooltip'), touch ? touch.clientX : undefined, touch ? touch.clientY : undefined);
       touchTimer = setTimeout(() => { hideTooltip(); touchTimer = null; }, 3000);
-    }, { passive: true });
-    // hide tooltip when tapping elsewhere
-    document.addEventListener('touchstart', (ev) => {
-      const t = ev.target.closest('[data-tooltip]');
+    }
+
+    function enableTooltipHandlers() {
+      table.addEventListener('mouseover', onMouseOver);
+      table.addEventListener('mouseout', onMouseOut);
+      table.addEventListener('touchstart', onTouchStart, { passive: true });
+      // hide tooltip when tapping elsewhere
+      document.addEventListener('touchstart', documentTouchHandler, { passive: true });
+    }
+    function disableTooltipHandlers() {
+      table.removeEventListener('mouseover', onMouseOver);
+      table.removeEventListener('mouseout', onMouseOut);
+      table.removeEventListener('touchstart', onTouchStart, { passive: true });
+      document.removeEventListener('touchstart', documentTouchHandler, { passive: true });
+      hideTooltip();
+    }
+    function documentTouchHandler(ev) {
+      const t = ev.target.closest('.label-ico[data-tooltip]');
       if (!t) hideTooltip();
-    }, { passive: true });
+    }
+
+    // Initialize based on current viewport
+    if (mm.matches) enableTooltipHandlers();
+    // Listen to changes
+    mm.addEventListener && mm.addEventListener('change', (e) => { if (e.matches) enableTooltipHandlers(); else disableTooltipHandlers(); });
   }
 }
 function luminanceBarHTML(val) {
