@@ -22,3 +22,10 @@ tools/localDEV/pids/share-server.pid
 **/.DS_Store
 tools/tests/test_minutely_url.js
 tools/tests/test_cache_key_consistency.js
+tools/localDEV/clear_nextdns_safe.sh
+tools/localDEV/extension
+tools/localDEV/nuke_nextdns.sh
+tools/localDEV/purge_nextdns_from_networkextension.sh
+tools/localDEV/read
+tools/localDEV/reader
+tools/localDEV/scutil

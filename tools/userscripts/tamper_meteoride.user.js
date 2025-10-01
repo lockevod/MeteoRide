@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MeteoRide Import from Komoot and Bikemap
+// @name         MeteoRide Import from Komoot, Bikemap and Hammerhead
 // @namespace    github.com/lockevod
-// @version      0.23
-// @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
+// @version      0.24
+// @description  Add a button on Komoot, Bikemap and Hammerhead to open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
 // @homepageURL  https://app.meteoride.cc/
@@ -17,12 +17,14 @@
 // @include      https://*.komoot.com/*
 // @include      https://*.komoot.de/*
 // @include      https://*.bikemap.net/*
+// @include      https://dashboard.hammerhead.io/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_openInTab
 // @connect      raw.githubusercontent.com
 // @connect      komoot.com
 // @connect      komoot.de
 // @connect      bikemap.net
+// @connect      hammerhead.io
 // ==/UserScript==
 
 // Install (one-click - raw): https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
@@ -35,7 +37,7 @@
     const METEORIDE_URL = (location.hostname.includes('localhost') || location.hostname.includes('127.0.0.1')) ? 'http://localhost:8080/' : 'https://app.meteoride.cc/';
 
     // --- Debug helpers ---
-    const DEBUG = false; // set false to silence
+    const DEBUG = true; // set false to silence
     function d(...args) { if (DEBUG) console.log('[MR-UX]', ...args); }
     d('Userscript init starting', { url: location.href });
 
@@ -282,6 +284,287 @@
         return false;
     }
 
+    // --- Hammerhead helpers ---
+    function getHammerheadRouteId(url) {
+        const u = url || location.pathname;
+        // Patterns: /routes/123456.route.uuid or /routes/123456
+        const m = u.match(/\/routes?\/(\d+)/);
+        const id = m ? m[1] : null;
+        d('getHammerheadRouteId', u, '=>', id);
+        return id;
+    }
+
+    function getHammerheadRouteUUID(url) {
+        const u = url || location.pathname;
+        // Pattern: /routes/65206.route.37d6d731-9269-464d-9646-6e38218ffd8b
+        const m = u.match(/\/routes?\/\d+\.route\.([a-f0-9-]+)/);
+        const uuid = m ? m[1] : null;
+        d('getHammerheadRouteUUID', u, '=>', uuid);
+        return uuid;
+    }
+
+    // Helper: Extract JWT token from Hammerhead page
+    function getHammerheadAuthToken() {
+        // Try to find JWT in localStorage
+        try {
+            const keys = Object.keys(localStorage);
+            for (const key of keys) {
+                const val = localStorage.getItem(key);
+                if (val && (val.includes('eyJ') || key.toLowerCase().includes('token') || key.toLowerCase().includes('auth'))) {
+                    d('Found potential token in localStorage:', key);
+                    // Try to parse if it's JSON
+                    try {
+                        const parsed = JSON.parse(val);
+                        if (parsed.token || parsed.accessToken || parsed.access_token) {
+                            return parsed.token || parsed.accessToken || parsed.access_token;
+                        }
+                    } catch(e) {
+                        // Not JSON, might be the token itself
+                        if (val.startsWith('eyJ')) return val;
+                    }
+                }
+            }
+        } catch(e) { d('Error reading localStorage:', e); }
+
+        // Try sessionStorage
+        try {
+            const keys = Object.keys(sessionStorage);
+            for (const key of keys) {
+                const val = sessionStorage.getItem(key);
+                if (val && (val.includes('eyJ') || key.toLowerCase().includes('token') || key.toLowerCase().includes('auth'))) {
+                    d('Found potential token in sessionStorage:', key);
+                    try {
+                        const parsed = JSON.parse(val);
+                        if (parsed.token || parsed.accessToken || parsed.access_token) {
+                            return parsed.token || parsed.accessToken || parsed.access_token;
+                        }
+                    } catch(e) {
+                        if (val.startsWith('eyJ')) return val;
+                    }
+                }
+            }
+        } catch(e) { d('Error reading sessionStorage:', e); }
+
+        // Try to find in script tags or __NEXT_DATA__
+        try {
+            const scripts = Array.from(document.querySelectorAll('script'));
+            for (const script of scripts) {
+                const content = script.textContent || '';
+                const match = content.match(/["\']?(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)["\']?/);
+                if (match) {
+                    d('Found JWT in script tag');
+                    return match[1];
+                }
+            }
+        } catch(e) { d('Error searching scripts:', e); }
+
+        return null;
+    }
+
+    // Helper: Extract route UUID and userId from page
+    function getHammerheadRouteData(routeId) {
+        // Try __NEXT_DATA__ or similar
+        try {
+            const nextData = document.getElementById('__NEXT_DATA__');
+            if (nextData) {
+                const data = JSON.parse(nextData.textContent);
+                d('__NEXT_DATA__ found');
+                // Search for route data recursively
+                function findRouteData(obj, depth = 0) {
+                    if (depth > 10 || !obj || typeof obj !== 'object') return null;
+
+                    // Look for route object with our routeId
+                    if (obj.id === routeId || obj.routeId === routeId || String(obj.id) === String(routeId)) {
+                        return obj;
+                    }
+
+                    // Recursively search
+                    for (const key of Object.keys(obj)) {
+                        const val = obj[key];
+                        if (val && typeof val === 'object') {
+                            const found = findRouteData(val, depth + 1);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                }
+
+                const routeData = findRouteData(data);
+                if (routeData) {
+                    d('Found route data:', routeData);
+                    return routeData;
+                }
+            }
+        } catch(e) { d('Error parsing __NEXT_DATA__:', e); }
+
+        // Try to find in window object
+        try {
+            if (window.__INITIAL_STATE__ || window.__PRELOADED_STATE__) {
+                const state = window.__INITIAL_STATE__ || window.__PRELOADED_STATE__;
+                d('Found initial state');
+                // Similar recursive search
+                const str = JSON.stringify(state);
+                const match = str.match(new RegExp(`"${routeId}"[^}]*"uuid"[^"]*"([^"]+)"`, 'i'));
+                if (match) {
+                    d('Found UUID in state:', match[1]);
+                    return { uuid: match[1] };
+                }
+            }
+        } catch(e) { d('Error searching window state:', e); }
+
+        return null;
+    }
+
+    function fetchHammerheadGpx(routeId, cb) {
+        if (!routeId) { d('fetchHammerheadGpx no routeId'); return cb(null); }
+        d('fetchHammerheadGpx starting for routeId:', routeId);
+
+        // Get authentication token
+        const token = getHammerheadAuthToken();
+        if (!token) {
+            d('No JWT token found. Cannot authenticate.');
+            alert('Could not find authentication token for Hammerhead.\n\nPlease make sure you are logged in and try again.');
+            return cb(null);
+        }
+        d('Found auth token:', token.substring(0, 50) + '...');
+
+        // Try to get UUID from URL first (most reliable)
+        let uuid = getHammerheadRouteUUID(location.pathname);
+
+        // Fallback: Get route data from page (UUID, userId)
+        if (!uuid) {
+            const routeData = getHammerheadRouteData(routeId);
+            d('Route data from page:', routeData);
+            uuid = routeData?.uuid;
+        } else {
+            d('UUID from URL:', uuid);
+        }
+
+        // Extract userId from token
+        let userId = routeId; // fallback
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            userId = payload.sub || payload.userId || payload.context?.userId || routeId;
+            d('Extracted userId from token:', userId);
+        } catch(e) { d('Could not parse token payload:', e); }
+
+        // Build export URLs to try
+        const candidates = [];
+
+        if (uuid) {
+            // Exact format from curl - this should work!
+            candidates.push(`https://dashboard.hammerhead.io/v1/users/${userId}/routes/${routeId}.route.${uuid}/export?format=gpx`);
+        }
+
+        // Try various other patterns as fallback
+        candidates.push(
+            `https://dashboard.hammerhead.io/v1/users/${userId}/routes/${routeId}/export?format=gpx`,
+            `https://dashboard.hammerhead.io/api/v1/routes/${routeId}/export?format=gpx`,
+            `https://dashboard.hammerhead.io/v1/routes/${routeId}/export?format=gpx`
+        );
+
+        d('Will try URLs:', candidates);
+
+        let idx = 0;
+        function tryNext() {
+            if (idx >= candidates.length) {
+                d('All endpoints failed');
+                alert('Could not download GPX from Hammerhead.\n\nThe route might be private or the API structure has changed.');
+                return cb(null);
+            }
+
+            const url = candidates[idx++];
+            d('Attempting:', url);
+
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                d('Using GM_xmlhttpRequest with Authorization header');
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: url,
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Accept': '*/*',
+                        'Referer': 'https://dashboard.hammerhead.io/routes'
+                    },
+                    onload: function(res) {
+                        d('Response status:', res.status, 'len:', res.responseText?.length);
+                        d('Response headers:', res.responseHeaders);
+                        const txt = res.responseText;
+
+                        // Check if it's actually an error response
+                        if (txt && txt.includes('unauthorized')) {
+                            d('ERROR: Unauthorized response:', txt);
+                            tryNext();
+                            return;
+                        }
+
+                        if (res.status === 200 && txt && (txt.trim().startsWith('<?xml') || txt.includes('<gpx'))) {
+                            d('SUCCESS! Got GPX from:', url);
+                            return cb(txt);
+                        }
+                        d('Failed. Response preview:', txt ? txt.substring(0, 200) : 'null');
+                        tryNext();
+                    },
+                    onerror: function(err) {
+                        d('Request error:', err);
+                        tryNext();
+                    }
+                });
+            } else {
+                fetch(url, {
+                    credentials: 'include',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Accept': '*/*'
+                    }
+                })
+                .then(r => {
+                    if (r.status === 200) {
+                        return r.text().then(txt => {
+                            if (txt && (txt.trim().startsWith('<?xml') || txt.includes('<gpx'))) {
+                                d('SUCCESS! Got GPX from:', url);
+                                return cb(txt);
+                            }
+                            tryNext();
+                        });
+                    }
+                    tryNext();
+                })
+                .catch(e => {
+                    d('Fetch error:', e);
+                    tryNext();
+                });
+            }
+        }
+
+        tryNext();
+    }
+
+    function addHammerheadButton(routeId) {
+        if (!routeId) return false;
+        if (document.querySelector('.meteoride-export-btn.global.hammerhead')) return true;
+        const btn = addButton('Open Hammerhead route in MeteoRide', () => {
+            d('Hammerhead button clicked', routeId);
+            setButtonLoading(btn, true, 'Loading Hammerhead route...');
+            fetchHammerheadGpx(routeId, gpx => {
+                if (!gpx) {
+                    d('Hammerhead GPX not available');
+                    setButtonLoading(btn, false);
+                    return;
+                }
+                postToMeteoRide(gpx, 'hammerhead-' + routeId + '.gpx');
+                setButtonLoading(btn, false);
+            });
+        }, 'hammerhead');
+        return true;
+    }
+
+    function tryHammerhead() {
+        const id = getHammerheadRouteId(location.pathname);
+        if (id) return addHammerheadButton(id);
+        return false;
+    }
+
     // --- Bikemap helpers ---
     function getBikemapRouteId(url) {
         const u = url || location.pathname;
@@ -416,10 +699,11 @@
     function refreshButtons() {
         // Remove all existing buttons first to handle page changes
         document.querySelectorAll('.meteoride-export-btn.global').forEach(btn => btn.remove());
-        
+
         const hadKomoot = tryKomoot();
         const hadBikemap = tryBikemap();
-        if (!hadKomoot && !hadBikemap) {
+        const hadHammerhead = tryHammerhead();
+        if (!hadKomoot && !hadBikemap && !hadHammerhead) {
             addGenericButtonIfPossible();
         }
     }

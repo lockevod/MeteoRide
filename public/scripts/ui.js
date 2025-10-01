@@ -1368,7 +1368,9 @@
         // Direct hostname checks for reliability
         const allowHosts = [
           'komoot.com','www.komoot.com','account.komoot.com','komoot.de','www.komoot.de','account.komoot.de',
-          'bikemap.net','www.bikemap.net','web.bikemap.net','localhost','127.0.0.1'
+          'bikemap.net','www.bikemap.net','web.bikemap.net',
+          'dashboard.hammerhead.io','hammerhead.io',
+          'localhost','127.0.0.1'
         ];
         if (allowHosts.includes(host)) return true;
   // Subdomains of komoot.* allowed
