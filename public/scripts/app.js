@@ -2114,6 +2114,8 @@ function renderWeatherTable() {
   // Ahora iterar por cada key (filas reducidas)
   keys.forEach((key, idx) => {
     const row = document.createElement("tr");
+    // Mark metric rows so CSS can target them reliably across browsers
+    row.classList.add('metrics-row');
     const th = document.createElement("th");
     th.innerHTML = labelsHTML[idx]; // include icon + wrapped text
     row.appendChild(th);

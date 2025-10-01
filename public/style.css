@@ -1585,13 +1585,23 @@ input[type="file"] {
 /* Responsive */
 @media screen and (max-width: 900px) {
   #weatherTable,
-  #weatherTable thead,
-  #weatherTable tbody,
   #weatherTable tr,
-  #weatherTable th,
-  #weatherTable td {
+  #weatherTable th {
+    /* Keep compact headers/small labels at this breakpoint */
     font-size: 11px !important;
+  }
+  /* Make data cells more legible: set tds to 13px. For metric rows that are placed
+     inside THEAD (non-icon rows) we must explicitly set their td size as well, since
+     earlier rules targeted THEAD broadly. This keeps compare vs normal modes consistent. */
+  #weatherTable tbody td,
+  #weatherTable thead tr:not(.icon-row) td,
+  #weatherTable td {
+    font-size: 13px !important;
     padding: 4px 6px !important;
+  }
+  /* Robust fallback: ensure metric rows explicitly marked in JS also receive the same sizing */
+  #weatherTable thead tr.metrics-row td {
+    font-size: 13px !important;
   }
   #controls {
     flex-direction: column;
