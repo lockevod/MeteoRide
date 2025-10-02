@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MeteoRide Import from Komoot and Bikemap
+// @name         MeteoRide Import from Komoot, Bikemap and Hammerhead
 // @namespace    github.com/lockevod
-// @version      0.23
-// @description  Add a button on Komoot and Bikemap to open the current route in MeteoRide (downloads GPX and sends via postMessage)
+// @version      0.25
+// @description  Add a button on Komoot, Bikemap and Hammerheadto open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
 // @homepageURL  https://app.meteoride.cc/
@@ -17,12 +17,14 @@
 // @include      https://*.komoot.com/*
 // @include      https://*.komoot.de/*
 // @include      https://*.bikemap.net/*
+// @include      https://dashboard.hammerhead.io/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_openInTab
 // @connect      raw.githubusercontent.com
 // @connect      komoot.com
 // @connect      komoot.de
 // @connect      bikemap.net
+// @connect      dashboard.hammerhead.io
 // ==/UserScript==
 
 // Install (one-click - raw): https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js
@@ -392,6 +394,86 @@
         return false;
     }
 
+    // --- Hammerhead helpers ---
+    function getHammerheadRouteId(url) {
+        const u = url || location.href;
+        const m = u.match(/\/routes\/([^\/?#]+)/);
+        const id = m ? m[1] : null;
+        d('getHammerheadRouteId', u, '=>', id);
+        return id;
+    }
+
+    function decodeJwt(token){
+        try {
+            const parts = token.split('.'); if(parts.length<2) return null;
+            const payloadB64 = parts[1].replace(/-/g,'+').replace(/_/g,'/');
+            const json = atob(payloadB64 + '==='.slice((payloadB64.length+3)%4));
+            return JSON.parse(json);
+        } catch(e){ return null; }
+    }
+
+    function discoverJwtToken(){
+        const candidates = [];
+        try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); const v=localStorage.getItem(k); if(v && /\.[A-Za-z0-9_-]+\./.test(v) && v.length<3000) candidates.push(v); if(v && /Bearer /.test(v)) candidates.push(v.replace(/^Bearer\s+/i,'')); } } catch(_){}
+        try{ for(let i=0;i<sessionStorage.length;i++){ const k=sessionStorage.key(i); const v=sessionStorage.getItem(k); if(v && /\.[A-Za-z0-9_-]+\./.test(v) && v.length<3000) candidates.push(v); } } catch(_){}
+        // dedupe
+        const seen = new Set(); const unique = candidates.filter(t=>{ if(seen.has(t)) return false; seen.add(t); return true; });
+        return unique.length ? unique[0] : null;
+    }
+
+    async function fetchHammerheadGpx(routeId, cb){
+        if(!routeId) return cb(null);
+        // Try to obtain userId from routeId prefix (e.g. 65206.route....)
+        let userId = null;
+        const prefix = routeId.match(/^([0-9]+)\./);
+        if(prefix) userId = prefix[1];
+
+        // Try to get JWT token from storage
+        const token = discoverJwtToken();
+        if(token && !userId){
+            const claims = decodeJwt(token);
+            if(claims){ userId = claims.sub || (claims.context && claims.context.userId) || null;
+            }
+        }
+
+        // If still no userId, attempt to fetch without auth (may fail)
+        const base = 'https://dashboard.hammerhead.io';
+        const candidateUser = userId || '';
+        const endpoint = `${base}/v1/users/${encodeURIComponent(candidateUser)}/routes/${encodeURIComponent(routeId)}/export?format=gpx`;
+        d('fetchHammerheadGpx trying', endpoint, 'tokenPresent=', !!token);
+
+        try{
+            const headers = {};
+            if(token) headers['Authorization'] = 'Bearer ' + token;
+            const resp = await fetch(endpoint, { method:'GET', headers, credentials:'include', mode:'cors', cache:'no-cache' });
+            if(!resp) return cb(null);
+            const txt = await resp.text().catch(()=>null);
+            if(txt && txt.trim().startsWith('<?xml')) return cb(txt);
+            // If response is JSON with a url to gpx, try to fetch that
+            try{ const j = txt ? JSON.parse(txt) : null; if(j && j.url){ const t2 = await fetchAsText(j.url); if(t2 && t2.trim().startsWith('<?xml')) return cb(t2); } } catch(_){ }
+            // fallback: try to locate a redirect/shared URL in body
+            if(txt && /<gpx[\s>]/i.test(txt)) return cb(txt);
+            d('fetchHammerheadGpx failed: not GPX', txt && txt.slice ? txt.slice(0,200) : txt);
+            return cb(null);
+        } catch(e){ d('fetchHammerheadGpx error', e); return cb(null); }
+    }
+
+    function addHammerheadButton(routeId){
+        if(!routeId) return false;
+        if(document.querySelector('.meteoride-export-btn.global.hammerhead')) return true;
+        const btn = addButton('Open Hammerhead route in MeteoRide', () => {
+            d('Hammerhead button clicked', routeId);
+            setButtonLoading(btn, true, 'Loading Hammerhead route...');
+            fetchHammerheadGpx(routeId, (gpx) => {
+                if(!gpx){ d('Hammerhead GPX not available'); setButtonLoading(btn, false); return; }
+                postToMeteoRide(gpx, 'hammerhead-'+routeId+'.gpx');
+                setButtonLoading(btn, false);
+            });
+        }, 'hammerhead');
+        return true;
+    }
+
+
     function hasAnyDirectGpxLink() {
         return !!Array.from(document.querySelectorAll('a[href]')).find(a => a.href && (a.href.match(/\.gpx(\?|$)/i) || a.href.includes('/export/gpx')));
     }
@@ -419,6 +501,8 @@
 
         const hadKomoot = tryKomoot();
         const hadBikemap = tryBikemap();
+        const hhId = getHammerheadRouteId(location.href);
+        if(hhId){ addHammerheadButton(hhId); return; }
         if (!hadKomoot && !hadBikemap) {
             addGenericButtonIfPossible();
         }
