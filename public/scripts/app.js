@@ -2136,8 +2136,12 @@ function renderWeatherTable() {
   const uvRaw = (w?.uvindex ?? w?.uv);
   const uv = (uvRaw == null || uvRaw === '') ? null : Math.max(0, Math.round(Number(uvRaw)));
     // Data cells: show only numeric values (no icons) per UI decision
-    const cloudPart = Number.isFinite(cc) && cc >= 0 ? `<span class="cloud-part"><span class="cloud-text">${Math.round(cc)}%</span></span>` : `<span class="cloud-part">-</span>`;
-  const uvPart = uv != null ? `<span class="uv-part"><span class="uv-text">${uv}</span></span>` : `<span class="uv-part">-</span>`;
+    const cloudPart = (Number.isFinite(cc) && cc >= 0)
+      ? `<span class="cloud-part"><span class="cloud-text">${Math.round(cc)}%</span></span>`
+      : `<span class="cloud-part"><span class="cloud-text">-</span></span>`;
+  const uvPart = (uv != null)
+      ? `<span class="uv-part"><span class="uv-text">${uv}</span></span>`
+      : `<span class="uv-part"><span class="uv-text">-</span></span>`;
         const tooltipText = (lang === 'es')
           ? (uv != null ? `Nubosidad: ${Math.round(cc)}% — UV: ${uv}` : `Nubosidad: ${Math.round(cc)}%`)
           : (uv != null ? `Cloud cover: ${Math.round(cc)}% — UV: ${uv}` : `Cloud cover: ${Math.round(cc)}%`);
@@ -2300,14 +2304,19 @@ function renderWeatherTable() {
     const table = document.getElementById('weatherTable');
     if (!table) return;
     let touchTimer = null;
-    // Tooltip only active for icon labels in compact mode (<=700px). Use matchMedia so it updates on resize.
+    // Always attach listeners; decide per-element whether to show tooltip.
     const mm = window.matchMedia('(max-width: 700px)');
 
     function onMouseOver(ev) {
-      // restrict to icon elements in compact mode
-      const t = ev.target.closest('.label-ico[data-tooltip]');
+      const t = ev.target.closest('[data-tooltip]');
       if (!t) return;
-      showTooltipAt(t, t.getAttribute('data-tooltip'));
+      const isIcon = Boolean(t.closest && t.closest('.label-ico')) || (t.classList && t.classList.contains && t.classList.contains('label-ico'));
+      const isCloudUv = Boolean(t.closest && (t.closest('.cloud-uv-cell') || (t.tagName === 'TD' && t.querySelector && t.querySelector('.cloud-uv-cell'))));
+      const isLuminance = Boolean(t.closest && t.closest('.luminance-vert')) || (t.classList && t.classList.contains && t.classList.contains('luminance-vert'));
+      // Show cloud-uv and luminance tooltips in all viewports; show icon tooltips only in compact mode
+      if (isCloudUv || isLuminance || (isIcon && mm.matches)) {
+        showTooltipAt(t, t.getAttribute('data-tooltip'));
+      }
     }
     function onMouseOut(ev) {
       const related = ev.relatedTarget;
@@ -2315,37 +2324,28 @@ function renderWeatherTable() {
       hideTooltip();
     }
     function onTouchStart(ev) {
-      const t = ev.target.closest('.label-ico[data-tooltip]');
+      const t = ev.target.closest('[data-tooltip]');
       if (!t) return;
+      const isIcon = Boolean(t.closest && t.closest('.label-ico')) || (t.classList && t.classList.contains && t.classList.contains('label-ico'));
+      const isCloudUv = Boolean(t.closest && (t.closest('.cloud-uv-cell') || (t.tagName === 'TD' && t.querySelector && t.querySelector('.cloud-uv-cell'))));
+      const isLuminance = Boolean(t.closest && t.closest('.luminance-vert')) || (t.classList && t.classList.contains && t.classList.contains('luminance-vert'));
+      if (!(isCloudUv || isLuminance || (isIcon && mm.matches))) return;
       if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
       const touch = ev.touches && ev.touches[0];
       showTooltipAt(t, t.getAttribute('data-tooltip'), touch ? touch.clientX : undefined, touch ? touch.clientY : undefined);
       touchTimer = setTimeout(() => { hideTooltip(); touchTimer = null; }, 3000);
     }
 
-    function enableTooltipHandlers() {
-      table.addEventListener('mouseover', onMouseOver);
-      table.addEventListener('mouseout', onMouseOut);
-      table.addEventListener('touchstart', onTouchStart, { passive: true });
-      // hide tooltip when tapping elsewhere
-      document.addEventListener('touchstart', documentTouchHandler, { passive: true });
-    }
-    function disableTooltipHandlers() {
-      table.removeEventListener('mouseover', onMouseOver);
-      table.removeEventListener('mouseout', onMouseOut);
-      table.removeEventListener('touchstart', onTouchStart, { passive: true });
-      document.removeEventListener('touchstart', documentTouchHandler, { passive: true });
-      hideTooltip();
-    }
-    function documentTouchHandler(ev) {
-      const t = ev.target.closest('.label-ico[data-tooltip]');
+    // Attach handlers once; handlers will decide whether to show tooltips based on element and viewport
+    table.addEventListener('mouseover', onMouseOver);
+    table.addEventListener('mouseout', onMouseOut);
+    table.addEventListener('touchstart', onTouchStart, { passive: true });
+    // hide tooltip when tapping elsewhere
+    document.addEventListener('touchstart', (ev) => {
+      const t = ev.target.closest('[data-tooltip]');
+      // If tapping outside any tooltip-enabled element, hide
       if (!t) hideTooltip();
-    }
-
-    // Initialize based on current viewport
-    if (mm.matches) enableTooltipHandlers();
-    // Listen to changes
-    mm.addEventListener && mm.addEventListener('change', (e) => { if (e.matches) enableTooltipHandlers(); else disableTooltipHandlers(); });
+    }, { passive: true });
   }
 }
 function luminanceBarHTML(val) {
