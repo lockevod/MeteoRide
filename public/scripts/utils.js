@@ -333,8 +333,15 @@
     const el = document.getElementById(id);
     return el ? el.value : null;
   }
+  // DEBUG FLAG: when true, disable use of localStorage weather cache to force fresh fetches
+  // Set to false to enable cache (default for normal operation)
+  const DISABLE_WEATHER_CACHE = false;
   function getCache(key) {
     try {
+      if (DISABLE_WEATHER_CACHE) {
+        logDebug(`getCache disabled by flag key=${key}`);
+        return null;
+      }
       const item = localStorage.getItem(key);
       if (!item) {
         logDebug(`getCache miss key=${key} item=null`);
@@ -360,6 +367,10 @@
   }
   function setCache(key, data) {
     try {
+      if (DISABLE_WEATHER_CACHE) {
+        logDebug(`setCache suppressed by flag key=${key}`);
+        return;
+      }
       const item = JSON.stringify({ data, timestamp: Date.now() });
       localStorage.setItem(key, item);
       logDebug(`setCache success key=${key} data=exists`);

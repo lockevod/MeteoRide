@@ -239,8 +239,12 @@
   const cached = window.cw.getCache && window.cw.getCache(key);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, p, units.wind);
-          // Keep row label as original provider while using effProv data
-          s.provider = prov;
+          // Preserve which provider actually supplied the data (effective provider)
+          // and keep the originally requested provider as _reqProv for row labeling.
+          s._effProv = effProv;
+          s._reqProv = prov;
+          // Store actual provider in step.provider so consumers see the real data source
+          s.provider = effProv;
           compareData[prov].push(s);
           if (s && s.temp != null) hasAny[prov] = true;
           continue;
@@ -262,8 +266,45 @@
                   const stdH = std?.hourly || {};
                   const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
                   json.hourly = json.hourly || {};
-                  mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-                  if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+                  try {
+                    const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
+                    const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
+                    let stdIndexByTime = null;
+                    if (aromeTimes && stdTimes) {
+                      stdIndexByTime = Object.create(null);
+                      for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
+                    }
+                    mergeKeys.forEach(k => {
+                      const aVal = json.hourly[k];
+                      const sVal = stdH[k];
+                      if (!Array.isArray(aVal) && Array.isArray(sVal)) {
+                        json.hourly[k] = sVal.slice();
+                      } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
+                        const merged = aVal.slice();
+                        if (stdIndexByTime) {
+                          for (let i = 0; i < aromeTimes.length; i++) {
+                            if (merged[i] == null) {
+                              const t = String(aromeTimes[i]);
+                              const si = stdIndexByTime[t];
+                              if (si != null && sVal[si] != null) merged[i] = sVal[si];
+                            }
+                          }
+                        } else {
+                          for (let mi = 0; mi < sVal.length; mi++) {
+                            if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+                          }
+                        }
+                        json.hourly[k] = merged;
+                      }
+                    });
+                    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+                    if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
+                      json.minutely_15 = std.minutely_15;
+                    }
+                  } catch (mergeErr) {
+                    mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
+                    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+                  }
                 }
               } catch {}
               // If AROME payload invalid, refetch with Open‑Meteo
@@ -276,7 +317,12 @@
             }
             window.cw.setCache && window.cw.setCache(key, json);
             const s = extractStepMetrics(effProv, json, p, units.wind);
-            s.provider = prov; // keep row label
+            // Preserve effective provider and original requested provider separately.
+            s._effProv = effProv;
+            s._reqProv = prov;
+            // Store actual provider in step.provider so consumers (markers, summaries)
+            // operate on the real data source rather than the logical row label.
+            s.provider = effProv;
             compareData[prov].push(s);
             if (s && s.temp != null) hasAny[prov] = true;
           } else {
@@ -313,7 +359,8 @@
           if (!compareData[effProv] || !compareData[effProv][i]) effProv = 'openmeteo';
           const src = (compareData[effProv] && compareData[effProv][i]) ? compareData[effProv][i] : null;
           if (src && src.temp != null) {
-            const clone = { ...src, provider: chainId, _effProv: effProv };
+            // src already uses provider=effProv; clone but mark requested provider as chainId
+            const clone = { ...src, provider: src._effProv || src.provider, _reqProv: chainId, _effProv: effProv };
             arr.push(clone);
             hasAny[chainId] = true;
           } else {
@@ -1034,8 +1081,11 @@
   const pp = (step.precipProb != null && Number.isFinite(Number(step.precipProb))) ? Math.round(Number(step.precipProb)) : null;
   // Show probability only when precipitation amount is > 0
   const rainWithProb = (pp != null && Number(pr) > 0) ? `${rainTxt} (${pp}%)` : rainTxt;
+    // Title shows requested vs effective provider when they differ to aid debugging
+    const req = step._reqProv || '';
+    const title = (req && req !== eff) ? `requested=${req} effective=${eff}` : '';
     return `
-      <div style="display:flex;align-items:center;gap:4px;justify-content:center;min-width:0">
+      <div title="${title}" style="display:flex;align-items:center;gap:4px;justify-content:center;min-width:0">
         <i class="wi ${iconClass}" style="font-size:18px;line-height:1;color:#29519b;flex-shrink:0"></i>
         <div class="weather-combined" style="min-width:0;align-items:flex-start;flex-shrink:1">
           <span class="combined-top">${tempTxt}</span>

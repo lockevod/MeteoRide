@@ -748,13 +748,47 @@ async function fetchWeatherForSteps(steps, timeSteps) {
                 const stdH = std?.hourly || {};
                 const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
                 json.hourly = json.hourly || {};
-                mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
+                try {
+                  const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
+                  const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
+                  let stdIndexByTime = null;
+                  if (aromeTimes && stdTimes) {
+                    stdIndexByTime = Object.create(null);
+                    for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
+                  }
+                  mergeKeys.forEach(k => {
+                    const aVal = json.hourly[k];
+                    const sVal = stdH[k];
+                    if (!Array.isArray(aVal) && Array.isArray(sVal)) {
+                      // AROME lacks the array, copy OM's array
+                      json.hourly[k] = sVal.slice();
+                    } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
+                      const merged = aVal.slice();
+                      if (stdIndexByTime) {
+                        for (let i = 0; i < aromeTimes.length; i++) {
+                          if (merged[i] == null) {
+                            const t = String(aromeTimes[i]);
+                            const si = stdIndexByTime[t];
+                            if (si != null && sVal[si] != null) merged[i] = sVal[si];
+                          }
+                        }
+                      } else {
+                        // Fallback: fill missing positions by index when OM array longer
+                        for (let mi = 0; mi < sVal.length; mi++) {
+                          if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+                        }
+                      }
+                      json.hourly[k] = merged;
+                    }
+                  });
                   if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                  // If the standard Open-Meteo response included minutely_15, copy it so
-                  // the AROME payload can benefit from higher-resolution near-term data.
-                  if (std && std.minutely_15 && typeof std.minutely_15 === 'object') {
+                  if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
                     json.minutely_15 = std.minutely_15;
                   }
+                } catch (mergeErr) {
+                  mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
+                  if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+                }
               }
             } catch (_) {}
             if (aromeResponseLooksInvalid(json)) {
