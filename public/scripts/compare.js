@@ -276,7 +276,24 @@
                     }
                     mergeKeys.forEach(k => {
                       const aVal = json.hourly[k];
-                      const sVal = stdH[k];
+                      // Determine std value and accept common variants (uv_index vs uvindex vs uvi)
+                      let sVal = stdH[k];
+                      if (!Array.isArray(sVal)) {
+                        if (k === 'uv_index') {
+                          sVal = stdH['uv_index'] || stdH['uvindex'] || stdH['uvi'] || stdH['uv'] || null;
+                          // If still not an array but we have a scalar current.uvi, broadcast it across hourly times
+                          if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object' && (std.current.uvi != null)) {
+                            try {
+                              const v = Number(std.current.uvi);
+                              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
+                            } catch (_) { /* ignore */ }
+                          }
+                        } else if (k === 'cloud_cover') {
+                          sVal = stdH['cloud_cover'] || stdH['cloudcover'] || null;
+                        } else if (k === 'precipitation_probability') {
+                          sVal = stdH['precipitation_probability'] || stdH['pop'] || null;
+                        }
+                      }
                       if (!Array.isArray(aVal) && Array.isArray(sVal)) {
                         json.hourly[k] = sVal.slice();
                       } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
@@ -297,6 +314,32 @@
                         json.hourly[k] = merged;
                       }
                     });
+                    // Debug: log uv_index merge activity when debugging enabled
+                    try {
+                      if (window.cw && window.cw.DEBUG_MERGE) {
+                        const beforeKeys = Object.keys(stdH || {});
+                        console.debug('[merge][compare] aromeTimes=', Array.isArray(aromeTimes) ? aromeTimes.length : null, 'stdTimes=', Array.isArray(stdTimes) ? stdTimes.length : null, 'stdKeys=', beforeKeys);
+                        if (Array.isArray(json.hourly.uv_index)) console.debug('[merge][compare] json.hourly.uv_index sample=', json.hourly.uv_index.slice(0,5));
+                        else console.debug('[merge][compare] json.hourly.uv_index missing after merge');
+                      }
+                    } catch(_) {}
+                    // Special handling: ensure precipitation_probability is normalized
+                    try {
+                      if (!Array.isArray(json.hourly.precipitation_probability)) {
+                        const candNames = ['precipitation_probability','precipitationProbability','precip_prob','pop','probability_of_precipitation'];
+                        for (const n of candNames) {
+                          if (Array.isArray(stdH[n])) {
+                            // Normalize: if values are 0..1 assume fraction and convert to percent
+                            const arr = stdH[n].slice();
+                            const nums = arr.filter(v => v != null && !Number.isNaN(Number(v))).map(Number);
+                            const max = nums.length ? Math.max(...nums) : null;
+                            const normalized = (max != null && max <= 1) ? arr.map(v => v == null ? null : Number(v) * 100) : arr;
+                            json.hourly.precipitation_probability = normalized;
+                            break;
+                          }
+                        }
+                      }
+                    } catch (_) {}
                     if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
                     if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
                       json.minutely_15 = std.minutely_15;
@@ -912,7 +955,27 @@
           // Use precipitation probability when available (0..100)
           step.precipProb = safeNum(H.precipitation_probability?.[idx]);
           step.weatherCode = H.weathercode?.[idx];
-          step.uvindex = safeNum(H.uv_index?.[idx]);
+          // Debug: log uv_index array and selected index when debugging enabled
+          try {
+            if (window.cw && window.cw.DEBUG_MERGE) {
+              console.debug('[extract][compare] idx=', idx, 'has_uv_array=', Array.isArray(H.uv_index), 'uv_sample=', Array.isArray(H.uv_index) ? H.uv_index.slice(0,5) : null);
+            }
+          } catch(_) {}
+          // If uv array exists but idx is out of bounds, try to find closest index by time
+          let uvVal = null;
+          if (Array.isArray(H.uv_index)) {
+            if (H.uv_index.length > idx) uvVal = H.uv_index[idx];
+            else {
+              try {
+                const finder = (window.cw && window.cw.findClosestIndex) || window.findClosestIndex;
+                if (typeof finder === 'function' && Array.isArray(H.time)) {
+                  const alt = finder(H.time, step.time);
+                  if (alt != null && alt >= 0 && H.uv_index.length > alt) uvVal = H.uv_index[alt];
+                }
+              } catch (_) {}
+            }
+          }
+          step.uvindex = safeNum(uvVal);
           step.isDaylight = H.is_day?.[idx];
           step.cloudCover = safeNum(H.cloud_cover?.[idx]);
         }

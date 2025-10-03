@@ -757,38 +757,76 @@ async function fetchWeatherForSteps(steps, timeSteps) {
                     for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
                   }
                   mergeKeys.forEach(k => {
-                    const aVal = json.hourly[k];
-                    const sVal = stdH[k];
-                    if (!Array.isArray(aVal) && Array.isArray(sVal)) {
-                      // AROME lacks the array, copy OM's array
-                      json.hourly[k] = sVal.slice();
-                    } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
-                      const merged = aVal.slice();
-                      if (stdIndexByTime) {
-                        for (let i = 0; i < aromeTimes.length; i++) {
-                          if (merged[i] == null) {
-                            const t = String(aromeTimes[i]);
-                            const si = stdIndexByTime[t];
-                            if (si != null && sVal[si] != null) merged[i] = sVal[si];
+                      const aVal = json.hourly[k];
+                      // Accept common variants in standard payload (uv_index, uvindex, uvi)
+                      let sVal = stdH[k];
+                      if (!Array.isArray(sVal)) {
+                        if (k === 'uv_index') {
+                          sVal = stdH['uv_index'] || stdH['uvindex'] || stdH['uvi'] || stdH['uv'] || null;
+                          if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object' && (std.current.uvi != null)) {
+                            try {
+                              const v = Number(std.current.uvi);
+                              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
+                            } catch (_) { /* ignore */ }
                           }
-                        }
-                      } else {
-                        // Fallback: fill missing positions by index when OM array longer
-                        for (let mi = 0; mi < sVal.length; mi++) {
-                          if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+                        } else if (k === 'cloud_cover') {
+                          sVal = stdH['cloud_cover'] || stdH['cloudcover'] || null;
+                        } else if (k === 'precipitation_probability') {
+                          sVal = stdH['precipitation_probability'] || stdH['pop'] || null;
                         }
                       }
-                      json.hourly[k] = merged;
-                    }
-                  });
+                      if (!Array.isArray(aVal) && Array.isArray(sVal)) {
+                        // AROME lacks the array, copy OM's array
+                        json.hourly[k] = sVal.slice();
+                      } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
+                        const merged = aVal.slice();
+                        if (stdIndexByTime) {
+                          for (let i = 0; i < aromeTimes.length; i++) {
+                            if (merged[i] == null) {
+                              const t = String(aromeTimes[i]);
+                              const si = stdIndexByTime[t];
+                              if (si != null && sVal[si] != null) merged[i] = sVal[si];
+                            }
+                          }
+                        } else {
+                          // Fallback: fill missing positions by index when OM array longer
+                          for (let mi = 0; mi < sVal.length; mi++) {
+                            if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+                          }
+                        }
+                        json.hourly[k] = merged;
+                      }
+                    });
                   if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
                   if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
                     json.minutely_15 = std.minutely_15;
                   }
-                } catch (mergeErr) {
+                  } catch (mergeErr) {
                   mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
                   if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
                 }
+                // Debug: log uv_index presence after merge when enabled
+                try {
+                  if (window.cw && window.cw.DEBUG_MERGE) {
+                    console.debug('[merge][app] stdH.time=', Array.isArray(stdH.time) ? stdH.time.length : null, 'json.hourly.uv_index=', Array.isArray(json.hourly.uv_index) ? json.hourly.uv_index.slice(0,5) : json.hourly.uv_index);
+                  }
+                } catch(_) {}
+                // Special handling: normalize/copy precipitation_probability variants into json.hourly.precipitation_probability
+                try {
+                  if (!Array.isArray(json.hourly.precipitation_probability)) {
+                    const candNames = ['precipitation_probability','precipitationProbability','precip_prob','pop','probability_of_precipitation'];
+                    for (const n of candNames) {
+                      if (Array.isArray(stdH[n])) {
+                        const arr = stdH[n].slice();
+                        const nums = arr.filter(v => v != null && !Number.isNaN(Number(v))).map(Number);
+                        const max = nums.length ? Math.max(...nums) : null;
+                        const normalized = (max != null && max <= 1) ? arr.map(v => v == null ? null : Number(v) * 100) : arr;
+                        json.hourly.precipitation_probability = normalized;
+                        break;
+                      }
+                    }
+                  }
+                } catch (_) {}
               }
             } catch (_) {}
             if (aromeResponseLooksInvalid(json)) {
@@ -1250,11 +1288,41 @@ function processWeatherData() {
       const mIdx = step.__minutelyIndex || -1;
 
       const getVar = (varName) => {
-        if (useMin && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx) {
+        // Special case for uv_index: prefer hourly if not available in minutely_15
+        if (varName === 'uv_index') {
+          if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx && w.minutely_15[varName][mIdx] != null) {
+            return w.minutely_15[varName][mIdx];
+          }
+          // Fall back to hourly
+          if (w.hourly && w.hourly[varName] && Array.isArray(w.hourly[varName])) {
+            if (w.hourly[varName].length > hIdx) return w.hourly[varName][hIdx];
+            // Fallback: try to find closest hourly index by matching times array
+            try {
+              const times = Array.isArray(w.hourly.time) ? w.hourly.time : null;
+              const finder = (window.findClosestIndex || (window.cw && window.cw.findClosestIndex));
+              if (times && typeof finder === 'function') {
+                const alt = finder(times, step.time);
+                if (alt != null && alt >= 0 && w.hourly[varName].length > alt) return w.hourly[varName][alt];
+              }
+            } catch (_) {}
+          }
+          return null;
+        }
+        // For other variables, use minutely if available, else hourly
+        if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx) {
           return w.minutely_15[varName][mIdx];
         }
-        if (w.hourly[varName] && Array.isArray(w.hourly[varName]) && w.hourly[varName].length > hIdx) {
-          return w.hourly[varName][hIdx];
+        if (w.hourly && w.hourly[varName] && Array.isArray(w.hourly[varName])) {
+          if (w.hourly[varName].length > hIdx) return w.hourly[varName][hIdx];
+          // Fallback: try to find closest hourly index by matching times array
+          try {
+            const times = Array.isArray(w.hourly.time) ? w.hourly.time : null;
+            const finder = (window.findClosestIndex || (window.cw && window.cw.findClosestIndex));
+            if (times && typeof finder === 'function') {
+              const alt = finder(times, step.time);
+              if (alt != null && alt >= 0 && w.hourly[varName].length > alt) return w.hourly[varName][alt];
+            }
+          } catch (_) {}
         }
         return null;
       };
@@ -1268,6 +1336,13 @@ function processWeatherData() {
       // AROME may lack precipitation_probability; merged earlier when available
       step.precipProb = safeNum(getVar('precipitation_probability'));
       step.weatherCode = getVar('weathercode');
+      // Debug: when in AROME processing, show whether uv_index array exists and what getVar returns
+      try {
+        if (window.cw && window.cw.DEBUG_MERGE && prov === 'aromehd') {
+          const uvArr = (w && w.hourly && Array.isArray(w.hourly.uv_index)) ? (w.hourly.uv_index.slice(0,5)) : null;
+          console.debug('[proc][app] prov=aromehd idx=', idx, 'getVar(uv_index)=', getVar('uv_index'), 'hourly.uv_index_sample=', uvArr, 'useMin=', !!useMin, 'minutely_present=', !!(w && w.minutely_15));
+        }
+      } catch (_) {}
       step.uvindex = (getVar('uv_index') != null) ? safeNum(getVar('uv_index')) : null;
       step.isDaylight = getVar('is_day');
       step.cloudCover = safeNum(w.hourly.cloud_cover?.[idx]); // 0–100
