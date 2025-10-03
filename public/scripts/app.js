@@ -1288,8 +1288,8 @@ function processWeatherData() {
       const mIdx = step.__minutelyIndex || -1;
 
       const getVar = (varName) => {
-        // Special case for uv_index: prefer hourly if not available in minutely_15
-        if (varName === 'uv_index') {
+        // Special case for fields that may be null in minutely_15 but available in hourly (merged from fallback)
+        if (varName === 'uv_index' || varName === 'precipitation_probability') {
           if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx && w.minutely_15[varName][mIdx] != null) {
             return w.minutely_15[varName][mIdx];
           }
