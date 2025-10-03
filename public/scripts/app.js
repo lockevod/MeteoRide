@@ -2188,6 +2188,15 @@ function renderWeatherTable() {
     return `<i class="wi ${cls} label-ico" aria-hidden="true" data-tooltip="${safeTitle}"></i>`;
   };
 
+  // Provide tooltip titles for icons (only used in compact mode via CSS/JS)
+  const titleMap = {
+    temp: (lang === 'es') ? 'Temperatura' : 'Temperature',
+    windCombined: (lang === 'es') ? 'Viento y racha' : 'Wind and gusts',
+    rainCombined: (lang === 'es') ? 'Lluvia y probabilidad' : 'Rain and probability',
+    humidity: (lang === 'es') ? 'Humedad relativa' : 'Relative humidity',
+    cloud_uv: (lang === 'es') ? 'Nubes y UV' : 'Clouds and UV'
+  };
+
   // Construye etiquetas con unidades para los keys interesados + icono + envoltorio de texto
   const labelsHTML = labels[lang].map((txt, i) => {
     const key = keys[i];
@@ -2199,14 +2208,6 @@ function renderWeatherTable() {
     } else if (key === "rainCombined") {
       base = `${txt} (<span class="unit-lower" style="text-transform:lowercase">${precipUnitLabel || 'mm'}</span>)`;
     }
-    // Provide tooltip titles for icons (only used in compact mode via CSS/JS)
-    const titleMap = {
-      temp: (lang === 'es') ? 'Temperatura' : 'Temperature',
-      windCombined: (lang === 'es') ? 'Viento y racha' : 'Wind and gusts',
-      rainCombined: (lang === 'es') ? 'Lluvia y probabilidad' : 'Rain and probability',
-      humidity: (lang === 'es') ? 'Humedad relativa' : 'Relative humidity',
-      cloud_uv: (lang === 'es') ? 'Nubes y UV' : 'Clouds and UV'
-    };
     return `${getRowIconHTML(key, titleMap[key])} <span class="label-text">${base}</span>`;
   });
 
@@ -2222,9 +2223,9 @@ function renderWeatherTable() {
         // Desktop: show full label with UV icon near the UV text
         // Compact-only: show a small separator '/' and the UV icon immediately next to the cloud icon
         // Compact-only: show a small separator '/' and the UV icon immediately next to the cloud icon
-  labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text desktop-only">${parts[0]}<i class="wi wi-hot label-ico-inline" aria-hidden="true" style="margin:0 6px 0 4px"></i>UV${parts[1] || ''}</span>`;
+  labelsHTML[idx] = `${getRowIconHTML(key, titleMap[key])} <span class="label-text desktop-only">${parts[0]}<i class="wi wi-hot label-ico-inline" aria-hidden="true" style="margin:0 6px 0 4px"></i>UV${parts[1] || ''}</span>`;
       } else {
-        labelsHTML[idx] = `${getRowIconHTML(key)} <span class="label-text">${raw}</span>`;
+        labelsHTML[idx] = `${getRowIconHTML(key, titleMap[key])} <span class="label-text">${raw}</span>`;
       }
     }
   });
