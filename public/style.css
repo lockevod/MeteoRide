@@ -1544,6 +1544,19 @@ input[type="file"] {
   margin: 0 auto;
   line-height: 1;
 }
+
+/* Icon row in compare-dates mode (tbody) */
+.compare-dates-mode #weatherTable tbody tr.icon-row th {
+  padding: 4px;
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+  background-color: #f9f9f9;
+}
+
+.compare-dates-mode #weatherTable tbody tr.icon-row th:first-child {
+  background-color: #f7f7f7;
+  border-right: 1px solid #ddd;
+}
 #weatherTable thead th:first-child, #weatherTable tbody th {
   text-align: left;
   max-width: var(--cw-first-col);
@@ -3292,4 +3305,33 @@ tr.selected-row:hover {
   .icon-with-lum { gap: 6px; }
   .luminance-vert { min-width: 28px; }
   .luminance-vert .lum-value { font-size: 10px; }
+}
+
+/* Provider change indicators in weather table icon row */
+.provider-indicator {
+  font-weight: bold;
+  color: #1e40af;
+  font-size: 7px;
+  text-transform: uppercase;
+  text-align: left;
+  background: transparent;
+  padding: 1px 1px;
+  border-radius: 1px;
+  border: 2px solid #e0e7ff;
+  position: absolute;
+  top: -2px;
+  left: 2px;
+  z-index: 2;
+}
+
+.provider-indicator::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -10px;
+  width: 1px;
+  height: 210px; /* Extend up and down */
+  background: #3b82f6; /* Blue line */
+  opacity: 0.7;
+  pointer-events: none; /* Don't interfere with clicks */
 }

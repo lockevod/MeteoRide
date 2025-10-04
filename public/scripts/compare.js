@@ -66,12 +66,14 @@
 
           // Determine which row should be selected in compare-dates mode.
           // Requirement: clicks map to the summary row:
-          // 0 -> 1, 1 -> 1, 2 -> 3, 3 -> 3
+          // Row 0 (intervalsA) -> Row 1 (summaryA), Row 1 (summaryA) -> Row 1 (summaryA)
+          // Row 2 (intervalsB) -> Row 3 (summaryB), Row 3 (summaryB) -> Row 3 (summaryB)
           let targetIndex = rawIndex;
           if (isCompareDates) {
-            // map even interval rows to the following summary row
-            if (rawIndex % 2 === 0) targetIndex = rawIndex + 1;
-            else targetIndex = rawIndex; // odd already a summary
+            if (rawIndex === 0) targetIndex = 1; // intervalsA -> summaryA
+            else if (rawIndex === 1) targetIndex = 1; // summaryA -> summaryA
+            else if (rawIndex === 2) targetIndex = 3; // intervalsB -> summaryB
+            else if (rawIndex === 3) targetIndex = 3; // summaryB -> summaryB
           }
 
           // Resolve the actual row element to select (fallback to clicked row)
@@ -722,6 +724,7 @@
     const lonB = (dataB && dataB[0] && dataB[0].lon) != null ? dataB[0].lon : ((window.cw.getSteps && window.cw.getSteps()[0]?.lon) || 0);
     const dateLikeB = (dataB && dataB[0] && dataB[0].time) || null;
   const sunB = buildSunHeaderFull(latB, lonB, dateLikeB);
+
   // Local summary from provided arrays (do not mutate global state)
     function computeRouteSummaryFrom(arr) {
       // Delegate to shared implementation when available to ensure consistency
@@ -782,7 +785,7 @@
         : ((summaryHTML || "") + (sunHTML || ""));
     };
 
-  // Row 1: intervals fecha A (first column = day/month)
+  // Row 0: intervals fecha A (first column = day/month)
     const intervalsA = document.createElement('tr');
     intervalsA.classList.add('interval-row');
     intervalsA.dataset.row = '0'; // Row for date A intervals
@@ -821,19 +824,31 @@
     }
     tbody.appendChild(intervalsA);
 
-  // Row 2: summary fecha A (using buildCompareCell)
+  // Row 1: summary fecha A (using buildCompareCell)
   const summaryA = document.createElement('tr');
   summaryA.classList.add('summary-row');
   summaryA.dataset.row = '1'; // Row for date A summary
-    // First cell: compact summary for Date A (no date label)
-    { const th = document.createElement('th'); th.scope = 'row'; th.classList.add('provider-cell'); th.style.textAlign = 'left'; th.innerHTML = summaryHTML_A || ''; summaryA.appendChild(th); }
+    // First cell: icon + compact summary for Date A
+    {
+      const th = document.createElement('th');
+      th.scope = 'row';
+      th.classList.add('provider-cell');
+      th.style.textAlign = 'left';
+      const iconClassA = sumA?.iconClass || '';
+      th.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${iconClassA ? `<i class="wi ${iconClassA}" style="font-size: 24px; color: #29519b; flex-shrink: 0;"></i>` : ''}
+          <div style="flex: 1;">${summaryHTML_A || ''}</div>
+        </div>`;
+      summaryA.appendChild(th);
+    }
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
       const step = (dataA && dataA[i]) ? dataA[i] : null; td.innerHTML = buildCompareCell(step); summaryA.appendChild(td);
     }
     tbody.appendChild(summaryA);
 
-  // Row 3: intervals fecha B
+  // Row 2: intervals fecha B
     const intervalsB = document.createElement('tr');
     intervalsB.classList.add('interval-row');
     intervalsB.dataset.row = '2'; // Row for date B intervals
@@ -872,12 +887,24 @@
     }
     tbody.appendChild(intervalsB);
 
-  // Row 4: summary fecha B
+  // Row 3: summary fecha B
     const summaryB = document.createElement('tr');
     summaryB.classList.add('summary-row');
     summaryB.dataset.row = '3'; // Row for date B summary
-    // First cell: compact summary for Date B (no date label)
-    { const th = document.createElement('th'); th.scope = 'row'; th.classList.add('provider-cell'); th.style.textAlign = 'left'; th.innerHTML = summaryHTML_B || ''; summaryB.appendChild(th); }
+    // First cell: icon + compact summary for Date B
+    {
+      const th = document.createElement('th');
+      th.scope = 'row';
+      th.classList.add('provider-cell');
+      th.style.textAlign = 'left';
+      const iconClassB = sumB?.iconClass || '';
+      th.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${iconClassB ? `<i class="wi ${iconClassB}" style="font-size: 24px; color: #29519b; flex-shrink: 0;"></i>` : ''}
+          <div style="flex: 1;">${summaryHTML_B || ''}</div>
+        </div>`;
+      summaryB.appendChild(th);
+    }
     for (let i = 0; i < maxCols; i++) {
       const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
       const step = (dataB && dataB[i]) ? dataB[i] : null; td.innerHTML = buildCompareCell(step); summaryB.appendChild(td);

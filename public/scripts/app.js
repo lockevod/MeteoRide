@@ -2094,12 +2094,38 @@ function renderWeatherTable() {
   }
   thead.appendChild(row);
 
+  // Provider abbreviations for change indicators
+  const providerAbbreviations = {
+    'openmeteo': 'OPM',
+    'aromehd': 'ARM', 
+    'meteoblue': 'MB',
+    'openweather': 'OPW'
+  };
+
   // Fila 2: iconos por paso (usar viewData)
   row = document.createElement("tr");
   row.classList.add("icon-row");
   viewData.forEach((w, i) => {
     const th = document.createElement("th");
     const prov = w.provider || apiSource;
+    
+    // Add provider change indicator above the icon if this is the first cell with a different provider
+    let providerIndicator = '';
+    if (window.apiSource && window.apiSource !== 'compare') {
+      const cellProvider = w?.provider;
+      if (cellProvider && cellProvider !== window.apiSource) {
+        // Only show indicator on the first cell of this provider in the row
+        const isFirstDifferent = i === 0 || viewData[i-1]?.provider === window.apiSource;
+        if (isFirstDifferent) {
+          const abbr = providerAbbreviations[cellProvider] || cellProvider.toUpperCase();
+          providerIndicator = `<div class="provider-indicator">${abbr}</div>`;
+        }
+      }
+    }
+    
+    // Set relative positioning for the cell to allow absolute positioning of indicator
+    th.style.position = 'relative';
+    
     // Presentation-only weather code: if AROME reported 0 precipitation, strip the precipitation
     // component for the icon while keeping the canonical w.weatherCode unchanged.
     let presentationCode = w.weatherCode;
@@ -2138,6 +2164,10 @@ function renderWeatherTable() {
   iconWrapper.appendChild(icon);
   iconWrapper.appendChild(lumDiv);
 
+  // Add provider indicator above the icon wrapper if present
+  if (providerIndicator) {
+    th.innerHTML = providerIndicator;
+  }
   th.appendChild(iconWrapper);
   th.dataset.col = String(i);
   th.dataset.ori = String(viewOriginalIndexMap[i]);
@@ -2236,10 +2266,13 @@ function renderWeatherTable() {
     // Mark metric rows so CSS can target them reliably across browsers
     row.classList.add('metrics-row');
     const th = document.createElement("th");
-    th.innerHTML = labelsHTML[idx]; // include icon + wrapped text
+    
+    th.innerHTML = labelsHTML[idx]; // no provider change in magnitude column
     row.appendChild(th);
+    
     viewData.forEach((w, i) => {
       const td = document.createElement("td");
+      
       // Special rendering for combined cloud + UV row
       if (key === "cloud_uv") {
         const cc = Number(w?.cloudCover ?? -1);
