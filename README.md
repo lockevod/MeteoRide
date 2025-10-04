@@ -40,15 +40,14 @@ MeteoRide supports multiple weather providers, each with unique strengths:
   - **Best for**: Immediate departures, urban areas, when current weather is critical
   
 - **AROME-HD**:
-  - **Advantages**: Hyper-local precision (~1-2km resolution), superior wind forecasting, accurate short-term precipitation
+  - **Advantages**: Free, no API key required (use openmeteo with AromeHD provider). Hyper-local precision (~1-2km resolution), superior wind forecasting, accurate short-term precipitation
   - **Best for**: European routes (France + nearby), wind-sensitive activities, short-term planning
   
 - **Provider Chains**:
   - **OpenWeather → AROME-HD → Open-Meteo**: Combines real-time data from OpenWeather (first hour) with hyper-local AROME precision (next 47 hours), falling back to reliable Open-Meteo for longer forecasts
 
 ## Howto use
-You can use in your own computer, only download the code and open index.html in your computer.
-You can use directly in a web (it's the same code published in Vercel directly). You can use https://app.meteoride.cc We use vercel because it's necessary to have POST option to upload gpx files if you use share (IOS). If you don't use this option (upload a GPX all info is managed in your own brownser. If you upload a )
+You can use in your own computer, only download the code and open index.html in your computer or you can use your own server or you can use https://app.meteoride.cc. We use Cloudflare because it's necessary to have POST option to upload gpx files (it's necessary if you want to share GPX files in IOS between apps).
 
 ## Getting Started
 
