@@ -4,6 +4,15 @@
   let compareRendering = false;
   let lastCompareKey = "";
 
+  // Provider abbreviations for change indicators
+  const providerAbbreviations = {
+    'openmeteo': 'OPM',
+    'aromehd': 'ARM',
+    'meteoblue': 'MB',
+    'openweather': 'OPW',
+    'ow2_arome_openmeteo': 'CHAIN'
+  };
+
   // Guard on DOM ready
   document.addEventListener("DOMContentLoaded", () => {
     const sel = document.getElementById("apiSource");
@@ -652,7 +661,7 @@
       // Render combined table: header (times) then block A (label row + data rows), block B
       const labelA = formatDateOnly(baseA);
       const labelB = formatDateOnly(baseB);
-      renderDateCompareTable(labelA, dataA, labelB, dataB, units);
+      renderDateCompareTable(labelA, dataA, labelB, dataB, units, provider);
 
       // Store data for row selection
       window.cw.weatherDataA = dataA;
@@ -674,7 +683,7 @@
   // Expose date-compare runner so UI button can call it
   try { window.cw = window.cw || {}; window.cw.runCompareDatesMode = runCompareDatesMode; } catch(_) {}
 
-  function renderDateCompareTable(dateA, dataA, dateB, dataB, units) {
+  function renderDateCompareTable(dateA, dataA, dateB, dataB, units, expectedProvider) {
     const table = document.getElementById("weatherTable");
     if (!table) return;
     table.innerHTML = "";
@@ -843,8 +852,31 @@
       summaryA.appendChild(th);
     }
     for (let i = 0; i < maxCols; i++) {
-      const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
-      const step = (dataA && dataA[i]) ? dataA[i] : null; td.innerHTML = buildCompareCell(step); summaryA.appendChild(td);
+      const td = document.createElement('td');
+      td.style.position = 'relative'; // For absolute positioning of indicators
+      td.dataset.col = String(i);
+      td.dataset.ori = String(i);
+      
+      const step = (dataA && dataA[i]) ? dataA[i] : null;
+      
+      // Add provider change indicator when the provider changes from the previous cell
+      let providerIndicator = '';
+      const cellProvider = step?.provider;
+      const prevProvider = (i > 0 && dataA && dataA[i-1]) ? dataA[i-1].provider : null;
+      
+      // Show indicator if:
+      // 1. First cell and provider differs from expectedProvider, OR
+      // 2. Provider differs from previous cell (detects all changes in chains)
+      const showIndicator = (i === 0 && cellProvider && expectedProvider && cellProvider !== expectedProvider) ||
+                            (i > 0 && cellProvider && cellProvider !== prevProvider);
+      
+      if (showIndicator) {
+        const abbr = providerAbbreviations[cellProvider] || cellProvider.substring(0, 3).toUpperCase();
+        providerIndicator = `<div class="provider-indicator">${abbr}</div>`;
+      }
+      
+      td.innerHTML = providerIndicator + buildCompareCell(step);
+      summaryA.appendChild(td);
     }
     tbody.appendChild(summaryA);
 
@@ -906,8 +938,31 @@
       summaryB.appendChild(th);
     }
     for (let i = 0; i < maxCols; i++) {
-      const td = document.createElement('td'); td.dataset.col = String(i); td.dataset.ori = String(i);
-      const step = (dataB && dataB[i]) ? dataB[i] : null; td.innerHTML = buildCompareCell(step); summaryB.appendChild(td);
+      const td = document.createElement('td');
+      td.style.position = 'relative'; // For absolute positioning of indicators
+      td.dataset.col = String(i);
+      td.dataset.ori = String(i);
+      
+      const step = (dataB && dataB[i]) ? dataB[i] : null;
+      
+      // Add provider change indicator when the provider changes from the previous cell
+      let providerIndicator = '';
+      const cellProvider = step?.provider;
+      const prevProvider = (i > 0 && dataB && dataB[i-1]) ? dataB[i-1].provider : null;
+      
+      // Show indicator if:
+      // 1. First cell and provider differs from expectedProvider, OR
+      // 2. Provider differs from previous cell (detects all changes in chains)
+      const showIndicator = (i === 0 && cellProvider && expectedProvider && cellProvider !== expectedProvider) ||
+                            (i > 0 && cellProvider && cellProvider !== prevProvider);
+      
+      if (showIndicator) {
+        const abbr = providerAbbreviations[cellProvider] || cellProvider.substring(0, 3).toUpperCase();
+        providerIndicator = `<div class="provider-indicator">${abbr}</div>`;
+      }
+      
+      td.innerHTML = providerIndicator + buildCompareCell(step);
+      summaryB.appendChild(td);
     }
     tbody.appendChild(summaryB);
 
@@ -1419,7 +1474,25 @@
       // reuse 'arr' declared earlier for the provider's data
        for (let i = 0; i < baseline.length; i++) {
          const td = document.createElement("td");
-         td.innerHTML = buildCompareCell(arr[i]);
+         td.style.position = 'relative'; // For absolute positioning of indicators
+         
+         // Add provider change indicator when the provider changes from the previous cell
+         let providerIndicator = '';
+         const cellProvider = arr[i]?.provider;
+         const prevProvider = (i > 0) ? arr[i-1]?.provider : null;
+         
+         // Show indicator if:
+         // 1. First cell and provider differs from row provider, OR
+         // 2. Provider differs from previous cell (detects all changes in chains)
+         const showIndicator = (i === 0 && cellProvider && cellProvider !== prov) || 
+                               (i > 0 && cellProvider && cellProvider !== prevProvider);
+         
+         if (showIndicator) {
+           const abbr = providerAbbreviations[cellProvider] || cellProvider.substring(0, 3).toUpperCase();
+           providerIndicator = `<div class="provider-indicator">${abbr}</div>`;
+         }
+         
+         td.innerHTML = providerIndicator + buildCompareCell(arr[i]);
          td.dataset.col = String(i);
          td.dataset.ori = String(i);
          r.appendChild(td);

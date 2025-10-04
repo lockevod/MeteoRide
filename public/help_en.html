@@ -337,7 +337,7 @@
         <p>The table shows information hour by hour:</p>
         <ul>
             <li><strong>First row:</strong> Time and accumulated distance</li>
-            <li><strong>Second row:</strong> Weather icons</li>
+            <li><strong>Second row:</strong> Weather icons with provider change indicators when applicable</li>
             <li><strong>Temperature:</strong> In degrees Celsius or Fahrenheit</li>
             <li><strong>Wind:</strong> Speed + direction arrow (gusts in parentheses)</li>
             <li><strong>Rain:</strong> Amount in mm/h (probability in parentheses)</li>
@@ -346,6 +346,10 @@
             <li><strong>Luminosity:</strong> Shown as a vertical bar next to the weather icon in the second row (represents 0–100% of available light for that interval)</li>
             <li><strong>UV:</strong> Ultraviolet index (integer) — appears in the combined "Cloud / UV" row</li>
         </ul>
+
+        <div class="tip">
+            <strong>🔄 Provider Change Indicators:</strong> When the weather data source changes during your route (especially in provider chains), you'll see abbreviated labels (OPM, ARM, OPW) appear above the weather data. This feature works in normal mode, compare providers mode, and compare dates mode, making it easy to identify which provider is supplying data for each time segment.
+        </div>
 
         <h3>🗺️ Interactive Map</h3>
         <ul>

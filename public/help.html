@@ -340,7 +340,7 @@
         <p>La tabla muestra información hora por hora:</p>
         <ul>
             <li><strong>Primera fila:</strong> Hora y distancia acumulada</li>
-            <li><strong>Segunda fila:</strong> Iconos del tiempo</li>
+            <li><strong>Segunda fila:</strong> Iconos del tiempo con indicadores de cambio de proveedor cuando corresponda</li>
             <li><strong>Temperatura:</strong> En grados Celsius o Fahrenheit</li>
             <li><strong>Viento:</strong> Velocidad + flecha de dirección (rachas entre paréntesis)</li>
             <li><strong>Lluvia:</strong> Cantidad en mm/h (probabilidad entre paréntesis)</li>
@@ -349,6 +349,10 @@
             <li><strong>Luminosidad:</strong> Se muestra como una barra vertical junto al símbolo del tiempo en la segunda fila (representa 0–100% de luz disponible para ese intervalo)</li>
             <li><strong>UV:</strong> Índice ultravioleta (número entero) — aparece en la fila combinada "Nubes / UV"</li>
         </ul>
+        
+        <div class="tip">
+            <strong>🔄 Cambios de Proveedor:</strong> Cuando la fuente de datos meteorológicos cambia durante la ruta, verás una etiqueta abreviada (OPM para OpenMeteo, ARM para AROME HD, OPW para OpenWeather) sobre los datos meteorológicos. Esta función está disponible en el modo normal, modo comparar proveedores y modo comparar fechas, marcando exactamente qué proveedor suministra los datos en cada segmento temporal.
+        </div>
 
         <h3>🗺️ Mapa Interactivo</h3>
         <ul>

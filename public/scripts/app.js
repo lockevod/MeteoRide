@@ -2109,17 +2109,21 @@ function renderWeatherTable() {
     const th = document.createElement("th");
     const prov = w.provider || apiSource;
     
-    // Add provider change indicator above the icon if this is the first cell with a different provider
+    // Add provider change indicator when the provider changes from the previous cell
     let providerIndicator = '';
     if (window.apiSource && window.apiSource !== 'compare') {
       const cellProvider = w?.provider;
-      if (cellProvider && cellProvider !== window.apiSource) {
-        // Only show indicator on the first cell of this provider in the row
-        const isFirstDifferent = i === 0 || viewData[i-1]?.provider === window.apiSource;
-        if (isFirstDifferent) {
-          const abbr = providerAbbreviations[cellProvider] || cellProvider.toUpperCase();
-          providerIndicator = `<div class="provider-indicator">${abbr}</div>`;
-        }
+      const prevProvider = (i > 0) ? viewData[i-1]?.provider : null;
+      
+      // Show indicator if:
+      // 1. First cell and provider differs from apiSource, OR
+      // 2. Provider differs from previous cell (detects all changes in chains)
+      const showIndicator = (i === 0 && cellProvider && cellProvider !== window.apiSource) || 
+                            (i > 0 && cellProvider && cellProvider !== prevProvider);
+      
+      if (showIndicator) {
+        const abbr = providerAbbreviations[cellProvider] || cellProvider.toUpperCase();
+        providerIndicator = `<div class="provider-indicator">${abbr}</div>`;
       }
     }
     

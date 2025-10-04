@@ -8,6 +8,7 @@ You can download de code, execute directly without a server, install in a server
 
 - **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), OpenWeather (API key required, up to 4 days), or Arome-HD (high-resolution for Europe within 48 hours).
 - **Provider chains**: A new chain option is available: "OpenWeather 0–1h → Arome 1–48h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. This chain leverages real-time data from OpenWeather for the immediate hour and hyper-local AROME precision for the next 47 hours.
+- **Provider Change Indicators**: Visual indicators show when the weather data source changes during your route. In normal mode, compare providers mode, and compare dates mode, abbreviated labels (OPM, ARM, OPW) appear at the top of each column where the provider switches, making it easy to see exactly which data source is being used for each time segment. This is especially useful in provider chains where multiple sources are combined.
 - **Comparison Mode**: Evaluate differences between providers for better decision-making.
 - **Date Comparison Mode**: Compare weather forecasts between two different dates/times for the same route.
 - **Automatic Fallbacks**: Switches to Open-Meteo if your primary provider fails or exceeds its horizon, with optional notifications.
