@@ -1254,10 +1254,10 @@ function processWeatherData() {
 
       // If no precip, hide probability
       if (step.precipitation != null && Number(step.precipitation) === 0) {
-        // Allow showing probability when it's meaningful (>=20%). This avoids hiding
+        // Allow showing probability when it's meaningful (>=10%). This avoids hiding
         // isolated/light precipitation chances reported as a percent. Presentation
         // of icons and summary remains governed elsewhere (AROME policy + mapWmoToNonPrecip).
-        if (step.precipProb == null || Number(step.precipProb) < 20) {
+        if (step.precipProb == null || Number(step.precipProb) < 10) {
           step.precipProb = null;
         }
       }
@@ -1374,8 +1374,8 @@ function processWeatherData() {
         // and avoid displaying a rain icon even if the reconciled weatherCode suggests rain.
         if (Number(step.precipitation) === 0) {
           // If AROME reports 0 precipitation, prefer not to show small probabilities.
-          // Keep precipProb when it's meaningful (>=20%) so users see isolated/spotty chances.
-          if (step.precipProb == null || Number(step.precipProb) < 20) {
+          // Keep precipProb when it's meaningful (>=10%) so users see isolated/spotty chances.
+          if (step.precipProb == null || Number(step.precipProb) < 10) {
             step.precipProb = null;
           }
         }
@@ -1384,10 +1384,10 @@ function processWeatherData() {
 
     // Si no hay precipitación, no tiene sentido mostrar probabilidad
     if (step.precipitation != null && Number(step.precipitation) === 0) {
-      // Allow showing probability when it's meaningful (>=20%). This avoids hiding
+      // Allow showing probability when it's meaningful (>=10%). This avoids hiding
       // isolated/light precipitation chances reported as a percent. Presentation
       // of icons and summary remains governed elsewhere (AROME policy + mapWmoToNonPrecip).
-      if (step.precipProb == null || Number(step.precipProb) < 20) {
+      if (step.precipProb == null || Number(step.precipProb) < 10) {
         step.precipProb = null;
       }
     }
@@ -1624,7 +1624,10 @@ function formatRainCell(precip, prob) {
   const unit = getVal("precipUnits") || "mm";
   const converted = unit === "in" ? pNum * 0.0393701 : pNum; // NEW: mm to in
   const top = `<span class="combined-top">${converted.toFixed(1)}</span>`;
-  const showProb = probNum != null && Number.isFinite(probNum) && pNum > 0 && probNum > 0;
+  // Show probability if:
+  // 1. There is precipitation (pNum > 0), OR
+  // 2. No precipitation but probability >= 10%
+  const showProb = probNum != null && Number.isFinite(probNum) && probNum > 0 && (pNum > 0 || probNum >= 10);
   const bottom = showProb ? `<span class="combined-bottom">(${Math.round(probNum)}%)</span>` : "";
   return `<div class="weather-combined">${top}${bottom}</div>`;
 }
@@ -1820,16 +1823,22 @@ function buildRouteSummaryHTML(sum, tempUnitLabel, windUnitLabel, precipUnitLabe
   const hasRange = (sum.tempMin != null) && (sum.tempMax != null);
   const lo = hasRange ? Math.round(Math.min(sum.tempMin, sum.tempMax)) : null;
   const hi = hasRange ? Math.round(Math.max(sum.tempMin, sum.tempMax)) : null;
-  const tempTxt = !hasRange ? "-" : `${lo}–${hi}${tempUnitLabel}`;
+  // If min and max are the same, show single value instead of "2-2"
+  const tempTxt = !hasRange ? "-" : (lo === hi ? `${lo}${tempUnitLabel}` : `${lo}–${hi}${tempUnitLabel}`);
 
   // CHANGED: wrap units to force lowercase in header
   // Wind: show interval if min/max available, keep gust as max
   const windHasRange = (sum.windMin != null) && (sum.windMax != null);
   const windLo = windHasRange ? Math.round(Number(sum.windMin)) : null;
   const windHi = windHasRange ? Math.round(Number(sum.windMax)) : null;
+  // If min and max are the same, show single value instead of "2-2"
   const windTxt = (!windHasRange && sum.windAvg == null)
     ? "-"
-    : (windHasRange ? `${windLo}–${windHi} <span class="unit-lower">${windUnitLc}</span>` : `${Math.round(Number(sum.windAvg))} <span class="unit-lower">${windUnitLc}</span>`);
+    : (windHasRange 
+        ? (windLo === windHi 
+            ? `${windLo} <span class="unit-lower">${windUnitLc}</span>` 
+            : `${windLo}–${windHi} <span class="unit-lower">${windUnitLc}</span>`)
+        : `${Math.round(Number(sum.windAvg))} <span class="unit-lower">${windUnitLc}</span>`);
   const gustTxt = (sum.gustMax == null) ? "" : ` <span class="rs-paren">(${Math.round(Number(sum.gustMax))})</span>`;
   // Precipitation: show min–max interval when available, and probability as max in parens
   const precipHasRange = (sum.precipMin != null) && (sum.precipMax != null);
@@ -2115,10 +2124,17 @@ function renderWeatherTable() {
       const cellProvider = w?.provider;
       const prevProvider = (i > 0) ? viewData[i-1]?.provider : null;
       
+      // For chains, check if first cell matches expected first provider of the chain
+      let isExpectedFirstProvider = false;
+      if (i === 0 && window.apiSource === 'ow2_arome_openmeteo' && cellProvider === 'openweather') {
+        // First cell of OPW→ARM→OPM chain should be OPW, so don't show indicator
+        isExpectedFirstProvider = true;
+      }
+      
       // Show indicator if:
-      // 1. First cell and provider differs from apiSource, OR
+      // 1. First cell and provider differs from apiSource (but NOT if it's the expected first provider in a chain), OR
       // 2. Provider differs from previous cell (detects all changes in chains)
-      const showIndicator = (i === 0 && cellProvider && cellProvider !== window.apiSource) || 
+      const showIndicator = (i === 0 && cellProvider && cellProvider !== window.apiSource && !isExpectedFirstProvider) || 
                             (i > 0 && cellProvider && cellProvider !== prevProvider);
       
       if (showIndicator) {

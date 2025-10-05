@@ -756,11 +756,23 @@
     function buildNumericSummaryHTML(summary, tUnit, wUnit, pUnit) {
       if (!summary) return "";
       let tempPart = "";
-      if (summary.tempMin != null && summary.tempMax != null) tempPart = `${Math.round(summary.tempMin)}-${Math.round(summary.tempMax)}${tUnit}`;
-      else if (summary.tempAvg != null) tempPart = `${Math.round(summary.tempAvg)}${tUnit}`;
+      if (summary.tempMin != null && summary.tempMax != null) {
+        const tempMin = Math.round(summary.tempMin);
+        const tempMax = Math.round(summary.tempMax);
+        // If min and max are the same, show single value instead of "2-2"
+        tempPart = (tempMin === tempMax) ? `${tempMin}${tUnit}` : `${tempMin}-${tempMax}${tUnit}`;
+      } else if (summary.tempAvg != null) {
+        tempPart = `${Math.round(summary.tempAvg)}${tUnit}`;
+      }
       let windPart = "";
-      if (summary.windMin != null && summary.windMax != null) windPart = `${Math.round(summary.windMin)}-${Math.round(summary.windMax)}${wUnit}`;
-      else if (summary.windAvg != null) windPart = `${Math.round(summary.windAvg)}${wUnit}`;
+      if (summary.windMin != null && summary.windMax != null) {
+        const windMin = Math.round(summary.windMin);
+        const windMax = Math.round(summary.windMax);
+        // If min and max are the same, show single value instead of "2-2"
+        windPart = (windMin === windMax) ? `${windMin}${wUnit}` : `${windMin}-${windMax}${wUnit}`;
+      } else if (summary.windAvg != null) {
+        windPart = `${Math.round(summary.windAvg)}${wUnit}`;
+      }
       if (summary.gustMax != null) windPart += ` <span class="rs-paren">(${Math.round(summary.gustMax)})</span>`;
       let precipPart = "";
       if (summary.precipMin != null && summary.precipMax != null) {
@@ -1137,8 +1149,8 @@
       }
 
       if (step.precipitation != null && Number(step.precipitation) === 0) {
-        // Keep precipProb when it's meaningful: show it if >= 20%
-        if (step.precipProb == null || Number(step.precipProb) < 20) {
+        // Keep precipProb when it's meaningful: show it if >= 10%
+        if (step.precipProb == null || Number(step.precipProb) < 10) {
           step.precipProb = null;
         }
       }
@@ -1224,8 +1236,10 @@
   const rainVal = unit === "in" ? pr * 0.0393701 : pr;
   const rainTxt = `${rainVal.toFixed(1)}`;
   const pp = (step.precipProb != null && Number.isFinite(Number(step.precipProb))) ? Math.round(Number(step.precipProb)) : null;
-  // Show probability only when precipitation amount is > 0
-  const rainWithProb = (pp != null && Number(pr) > 0) ? `${rainTxt} (${pp}%)` : rainTxt;
+  // Show probability if:
+  // 1. There is precipitation (pr > 0), OR
+  // 2. No precipitation but probability >= 10%
+  const rainWithProb = (pp != null && (Number(pr) > 0 || pp >= 10)) ? `${rainTxt} (${pp}%)` : rainTxt;
     // Title shows requested vs effective provider when they differ to aid debugging
     const req = step._reqProv || '';
     const title = (req && req !== eff) ? `requested=${req} effective=${eff}` : '';
@@ -1425,14 +1439,20 @@
         // Build stacked values like other rows (combined-top / combined-bottom)
         let tempPart = '';
         if (summary && (summary.tempMin != null && summary.tempMax != null)) {
-          tempPart = `${Math.round(summary.tempMin)}-${Math.round(summary.tempMax)}${tempUnitLabel}`;
+          const tempMin = Math.round(summary.tempMin);
+          const tempMax = Math.round(summary.tempMax);
+          // If min and max are the same, show single value instead of "2-2"
+          tempPart = (tempMin === tempMax) ? `${tempMin}${tempUnitLabel}` : `${tempMin}-${tempMax}${tempUnitLabel}`;
         } else if (summary && summary.tempAvg != null) {
           tempPart = `${Math.round(summary.tempAvg)}${tempUnitLabel}`;
         }
         let windPart = '';
         // Prefer showing min-max interval for wind when available, otherwise average
         if (summary && (summary.windMin != null && summary.windMax != null)) {
-          windPart = `${Math.round(summary.windMin)}-${Math.round(summary.windMax)}${windUnitLabel}`;
+          const windMin = Math.round(summary.windMin);
+          const windMax = Math.round(summary.windMax);
+          // If min and max are the same, show single value instead of "2-2"
+          windPart = (windMin === windMax) ? `${windMin}${windUnitLabel}` : `${windMin}-${windMax}${windUnitLabel}`;
         } else if (summary && summary.windAvg != null) {
           windPart = `${Math.round(summary.windAvg)}${windUnitLabel}`;
         }
