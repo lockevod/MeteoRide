@@ -227,11 +227,24 @@
           continue;
         }
 
-        // Decide effective provider (fallback to OM when AROME‑HD is outside domain/horizon)
+        // Decide effective provider
         let effProv = prov;
+        
+        // For aromehd: use chain resolver to respect 36-hour limit (same as normal mode)
         if (prov === "aromehd") {
-          if (hoursAhead > (horizons.AROMEHD_MAX_HOURS || 48) || !isAromeHdCovered(p.lat, p.lon)) {
-            effProv = "openmeteo";
+          const resolverExternal = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp || null;
+          const resolver = resolverExternal || localChainResolve;
+          const chainsExternal = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
+          const chainEnabled = chainsExternal[prov] || prov === 'aromehd';
+          if (resolver && chainEnabled) {
+            // Resolve using chain logic (0-36h aromehd, 36h+ openmeteo)
+            const resolved = resolver(prov, timeAt, now, { lat: p.lat, lon: p.lon });
+            if (resolved) effProv = resolved;
+          } else {
+            // Fallback: use horizon check (48 hours) and domain check
+            if (hoursAhead > (horizons.AROMEHD_MAX_HOURS || 48) || !isAromeHdCovered(p.lat, p.lon)) {
+              effProv = "openmeteo";
+            }
           }
         }
 
@@ -391,11 +404,22 @@
 
     // NEW: local fallback resolver if app-level one missing
     function localChainResolve(chainId, ts, nowRef, loc) {
-      if (chainId !== 'ow2_arome_openmeteo') return null;
       const diffH = (new Date(ts) - nowRef) / MS_PER_HOUR;
-      if (diffH <= 2) return 'openweather';
-      if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
-      return 'openmeteo';
+      
+      // Handle aromehd chain (0-36h aromehd, 36h+ openmeteo)
+      if (chainId === 'aromehd') {
+        if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
+        return 'openmeteo';
+      }
+      
+      // Handle ow2_arome_openmeteo chain (0-1h openweather, 1-36h aromehd, 36h+ openmeteo)
+      if (chainId === 'ow2_arome_openmeteo') {
+        if (diffH <= 2) return 'openweather';
+        if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
+        return 'openmeteo';
+      }
+      
+      return null;
     }
 
     // NEW: Build chain row (ow2_arome_openmeteo) AFTER base providers fetched (always attempt if present in provs)
