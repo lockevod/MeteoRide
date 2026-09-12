@@ -3764,17 +3764,21 @@ function createAlertsContainer() {
   return container;
 }
 
-// Create individual alert element
+// Create individual alert element.
+// Every string here comes from a weather provider relaying a national met service,
+// so it is built with textContent: the alert text is data, never markup.
 function createAlertElement(alert) {
   const alertDiv = document.createElement('div');
   alertDiv.className = 'weather-alert';
-  
+
   // Determine alert severity class
   const severityClass = getSeverityClass(alert.event);
-  
+  const severityColor = getSeverityColor(severityClass);
+
   alertDiv.style.cssText = `
+    position: relative;
     background: #fff;
-    border-left: 4px solid ${getSeverityColor(severityClass)};
+    border-left: 4px solid ${severityColor};
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     margin-bottom: 10px;
     padding: 12px 16px;
@@ -3784,43 +3788,45 @@ function createAlertElement(alert) {
     max-height: 120px;
     overflow-y: auto;
   `;
-  
+
+  const line = (text, css) => {
+    const el = document.createElement('div');
+    el.style.cssText = css;
+    el.textContent = text;
+    alertDiv.appendChild(el);
+  };
+
+  const description = String(alert.description || '');
   const startDate = new Date(alert.start * 1000).toLocaleString();
   const endDate = new Date(alert.end * 1000).toLocaleString();
-  
-  alertDiv.innerHTML = `
-    <div style="font-weight: bold; color: ${getSeverityColor(severityClass)}; margin-bottom: 4px;">
-      ⚠️ ${alert.event}
-    </div>
-    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-      ${alert.senderName}
-    </div>
-    <div style="color: #333; margin-bottom: 6px;">
-      ${alert.description.substring(0, 200)}${alert.description.length > 200 ? '...' : ''}
-    </div>
-    <div style="font-size: 11px; color: #888;">
-      ${startDate} - ${endDate}
-    </div>
-    <button onclick="this.parentElement.remove()" style="
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: none;
-      border: none;
-      font-size: 16px;
-      cursor: pointer;
-      color: #999;
-      width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    ">×</button>
+
+  line(`⚠️ ${alert.event || ''}`, `font-weight: bold; color: ${severityColor}; margin-bottom: 4px;`);
+  line(String(alert.senderName || ''), 'font-size: 12px; color: #666; margin-bottom: 8px;');
+  line(description.length > 200 ? description.substring(0, 200) + '...' : description, 'color: #333; margin-bottom: 6px;');
+  line(`${startDate} - ${endDate}`, 'font-size: 11px; color: #888;');
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '×';
+  close.setAttribute('aria-label', 'Close');
+  close.style.cssText = `
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    color: #999;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   `;
-  
-  // Make position relative for close button
-  alertDiv.style.position = 'relative';
-  
+  close.addEventListener('click', () => alertDiv.remove());
+  alertDiv.appendChild(close);
+
   return alertDiv;
 }
 

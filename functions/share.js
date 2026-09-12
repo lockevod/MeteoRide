@@ -19,6 +19,14 @@ export async function onRequest(context) {
   const ttlEnv = env.SHARED_TTL_SECONDS || env.SHARED_TTL || ''; 
   const parsed = parseInt(String(ttlEnv || '' ).trim(), 10);
   const TTL_SECONDS = (Number.isFinite(parsed) && parsed > 0) ? parsed : 120; // default 120s
+    // Refuse oversized uploads before reading them into memory. The length check
+    // after parsing still applies, for chunked bodies that carry no Content-Length.
+    const MAX_BYTES = 2_500_000;
+    const declared = Number(request.headers.get('content-length') || 0);
+    if (declared > MAX_BYTES) {
+      return new Response('GPX too large', { status: 413, headers: corsHeaders() });
+    }
+
     const contentType = request.headers.get('content-type') || '';
     let raw;
     if (/multipart\/form-data/i.test(contentType)) {
@@ -43,16 +51,20 @@ export async function onRequest(context) {
       return new Response('No GPX content received', { status: 400, headers: corsHeaders() });
     }
 
-    if (raw.length > 2_500_000) {
+    if (raw.length > MAX_BYTES) {
       return new Response('GPX too large', { status: 413, headers: corsHeaders() });
     }
 
-    const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    // The id is the only thing standing between a stranger and someone's route (or its
+    // deletion), so it has to be unguessable: 122 random bits, not a timestamp plus
+    // six characters of Math.random().
+    const id = crypto.randomUUID();
     // Attempt to write and verify the KV entry to avoid races/failed writes
     try{
       await env.SHARED_GPX.put(id, raw, { expirationTtl: TTL_SECONDS });
     } catch(err){
-      return new Response('KV write failed: '+String(err), { status: 500, headers: corsHeaders() });
+      console.error('share: KV write failed', err);
+      return new Response('Storage error', { status: 500, headers: corsHeaders() });
     }
     // Verify write by reading back once
     try{
@@ -61,7 +73,8 @@ export async function onRequest(context) {
         return new Response('KV write not visible after put', { status: 500, headers: corsHeaders() });
       }
     } catch(err){
-      return new Response('KV verify failed: '+String(err), { status: 500, headers: corsHeaders() });
+      console.error('share: KV verify failed', err);
+      return new Response('Storage error', { status: 500, headers: corsHeaders() });
     }
 
     // If caller provided a filename, sanitize and include it in the shared URL
@@ -113,7 +126,8 @@ export async function onRequest(context) {
       }
     });
   } catch (err) {
-    return new Response('Function error: ' + String(err), { status: 500, headers: corsHeaders() });
+    console.error('share failed', err);
+    return new Response('Function error', { status: 500, headers: corsHeaders() });
   }
 }
 

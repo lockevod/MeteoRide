@@ -572,30 +572,6 @@
         <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
     </div>
 
-    <script>
-        // Auto-detect language and show return button if needed
-        (function(){
-            const urlParams = new URLSearchParams(window.location.search);
-            const shouldShowReturn = urlParams.get('return') === 'true';
-            if (shouldShowReturn) {
-                const backBtn = document.getElementById('backBtn');
-                if (backBtn) {
-                    backBtn.style.display = 'inline-block';
-                    backBtn.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        if (window.history.length > 1) {
-                            window.history.back();
-                        } else {
-                            window.location.href = 'index.html';
-                        }
-                    });
-                }
-            }
-            const lang = navigator.language || navigator.userLanguage;
-            if (lang && lang.startsWith('es')) {
-                document.title = 'Ayuda - MeteoRide';
-            }
-        })();
-    </script>
+    <script src="/scripts/help.js"></script>
 </body>
 </html>

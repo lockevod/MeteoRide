@@ -129,7 +129,7 @@
         if (new URL(href).origin === window.location.origin) return;
       } catch (_) { return; }
       ev.preventDefault();
-      window.open(href, '_blank');
+      window.open(href, '_blank', 'noopener,noreferrer');
     }, true);
   }
 

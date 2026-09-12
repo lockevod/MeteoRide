@@ -37,13 +37,15 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
-            <!-- Open a .gpx/.kml from a file manager, a download or an attachment. -->
+            <!-- Open a .gpx/.kml from a file manager, a download or an attachment.
+                 content:// only: no app has been able to hand out a file:// URI since
+                 Android 7, and accepting one would let any app point MeteoRide at its
+                 own private files. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/vnd.google-earth.kml+xml" />
             </intent-filter>

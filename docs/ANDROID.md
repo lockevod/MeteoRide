@@ -51,15 +51,16 @@ web layer reads them.
 
 ## Testing the share flow
 
-Push the file into the app's own external directory. Anywhere else in shared storage
-is off limits: the app asks for no storage permission, and scoped storage would refuse
-a `file://` URI pointing at `Download/`.
+The app only accepts `content://` URIs, the way every real sender hands files over.
+Push the route to `Download/` and open it through the system documents provider,
+granting read access the way a file manager would:
 
 ```bash
-adb push route.gpx /sdcard/Android/data/cc.meteoride.app/files/
+adb push route.gpx /sdcard/Download/
 adb shell am start -a android.intent.action.VIEW \
-  -d file:///sdcard/Android/data/cc.meteoride.app/files/route.gpx \
-  -t application/gpx+xml -n cc.meteoride.app/.MainActivity
+  -d "content://com.android.externalstorage.documents/document/primary%3ADownload%2Froute.gpx" \
+  -t application/gpx+xml --grant-read-uri-permission \
+  -n cc.meteoride.app/.MainActivity
 ```
 
 That exercises the file-open path. The share sheet cannot be driven meaningfully from

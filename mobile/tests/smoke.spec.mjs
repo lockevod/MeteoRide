@@ -280,3 +280,34 @@ test('a booby-trapped route cannot run script', async ({ page }) => {
     expect(html).toContain('&lt;img');
   }
 });
+
+// Official weather alerts arrive through a provider's API as free text written by
+// national met services. That text used to be dropped into innerHTML.
+test('a hostile weather alert is shown as text', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  const card = await page.evaluate(() => {
+    const el = createAlertElement({
+      event: '<img src=x onerror="window.__alertPwned = 1"> Warning',
+      senderName: '<b>AEMET</b>',
+      description: '<script>window.__alertPwned = 1</script> Viento fuerte',
+      start: 1700000000,
+      end: 1700003600,
+    });
+    document.body.appendChild(el);
+    return {
+      text: el.textContent,
+      markupElements: el.querySelectorAll('img, script, b').length,
+      closeButtons: el.querySelectorAll('button').length,
+    };
+  });
+
+  // No element was ever created from the text, so nothing could have fired.
+  expect(card.markupElements).toBe(0);
+  expect(await page.evaluate(() => window.__alertPwned)).toBeUndefined();
+  expect(card.text).toContain('Viento fuerte');
+  expect(card.text).toContain('AEMET');
+  expect(card.closeButtons).toBe(1);
+});

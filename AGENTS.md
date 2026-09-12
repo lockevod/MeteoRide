@@ -86,6 +86,60 @@ sources live in `mobile/native/ios/` and `docs/IOS.md` lists the five one-time s
 to wire them up. If you find a dependable way to script the Xcode target, committing
 `mobile/ios/` would remove that friction.
 
+## Security model
+
+Threats worth designing against here are concrete: a route file is untrusted input
+that arrives from links, share sheets and other apps; the provider API key sits in
+`localStorage`; and `/share` on the website stores anything anyone POSTs, then serves
+it back from the app's own origin for two minutes. Script running on that origin
+reads the key, and in the app reaches the Capacitor bridge.
+
+Rules that follow from that, all enforced somewhere:
+
+- **Anything from outside is text, never markup.** Route names, waypoint popups and
+  provider alert cards are built with `textContent` or escaped before a library turns
+  them into HTML. `cwSanitizeGPXText` covers the file; `createAlertElement` covers
+  OpenWeather. Adding `innerHTML` with external data anywhere reopens the door.
+- **The website ships a Content-Security-Policy** (`public/_headers`): script only
+  from our files and the three pinned CDNs, nothing inline, no eval. The bundle was
+  driven under the same policy with the hosts collapsed to `'self'` and produced no
+  script or style violation through boot, route load, settings, an alert and the help
+  page — which is why the help pages' script had to move into `scripts/help.js`.
+  `connect-src` is deliberately open to `https:` because `?gpx_url=` fetches a route
+  from wherever the user hosts it. `_headers` does not apply to Functions responses;
+  those set their own headers.
+- **`/shared/{id}` is served as an attachment, `nosniff`, with a sandboxing CSP.**
+  A browser handed XML renders it, and runs script it finds in an XHTML or SVG
+  namespace inside — so stored content must never come back as a viewable document.
+  Every legitimate consumer (the app's `fetch`, the Shortcut, Hammerhead's servers)
+  reads bytes and is unaffected. IDs are `crypto.randomUUID()`; the id is the only
+  guard on `GET` and `DELETE`, so it must not be guessable.
+- **The Android activity accepts `content://` only.** No app has been able to hand out
+  a `file://` URI since Android 7, and accepting one would let any app point MeteoRide
+  at its own private files. Both stores still sniff content and cap size.
+- **Error responses say nothing about internals.** The Functions log the exception
+  and return a fixed string.
+
+What is still open, and why it was left:
+
+- The CDN scripts carry no Subresource Integrity hashes. The CDNs are unreachable
+  from the environment this was reviewed in, so the hashes could not be computed
+  against the bytes actually served, and a wrong hash takes the site down. The better
+  fix is to serve the libraries from `public/vendor/` — the build already produces
+  exactly that set — which also allows `script-src 'self'` and removes three third
+  parties from a site whose README promises no data goes anywhere else. It is a
+  deploy-shape change and a deliberate decision, not a review fix.
+- `/share` has no rate limiting. Anyone can write 2.5 MB into KV as often as they
+  like for two minutes of storage; KV writes cost money. A Cloudflare rate-limiting
+  rule on `POST /share` is the right tool, outside this repository.
+- `android:allowBackup` is left at its default. Android backups have been end-to-end
+  encrypted since 9, so the key and routes are protected; flipping it to `false`
+  trades that residual exposure for losing settings on a new phone.
+- The `postMessage` route importer accepts an empty origin (`isAllowedOrigin` in
+  `ui.js`), meant for userscript contexts. A browser page always has an origin, so
+  this is not reachable from the web, but it is a hole to remember if that listener
+  grows.
+
 ## Gotchas found the hard way
 
 - **Capacitor does not auto-register a plugin that lives in the app target.** On iOS
@@ -104,12 +158,10 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
   Using the custom properties as well would double-pad on old devices. The build adds
   `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
 - **A route file is executable content.** leaflet-gpx builds waypoint popups by
-  concatenating `<name>` and `<desc>` straight into an HTML string, so a GPX carrying
-  markup there runs script in our origin — where the provider API key lives, and where
-  the Capacitor bridge is in reach. `cwSanitizeGPXText` escapes those text nodes before
-  the library sees them, and both loaders call it. It only re-serialises when something
-  needed escaping, so ordinary routes reach the parser untouched. Anything else that
-  renders route metadata must use `textContent`, never `innerHTML`.
+  concatenating `<name>` and `<desc>` straight into an HTML string. `cwSanitizeGPXText`
+  escapes those text nodes before the library sees them, and both loaders call it. It
+  only re-serialises when something needed escaping, so ordinary routes reach the
+  parser untouched. See the security model above for the rest of that family.
 - **Nothing in the bundle may be fetched from another site.** Not just the tags in
   `index.html`: marker icons were hardcoded in three scripts and the help pages carried
   a donation button from a CDN. `findRemoteAssets` in the build scans every first-party
@@ -212,3 +264,6 @@ code does and what makes the race reproducible.
 - Only waypoint metadata is sanitised, because that is the only place the libraries
   build HTML from file content. Any new feature that renders something out of a route
   needs the same scrutiny.
+- The two items the security model leaves open on purpose: self-hosting the libraries
+  (which unlocks `script-src 'self'` and Subresource Integrity), and a rate limit on
+  `POST /share` at the Cloudflare edge.
