@@ -53,6 +53,15 @@ enum MeteoRideShareStore {
     /// Copies a file the system handed us (share sheet or "Open in…").
     @discardableResult
     static func ingest(fileURL: URL) -> Bool {
+        // Only local files. `Data(contentsOf:)` happily accepts an https URL and
+        // performs a blocking, untimed network download, and the share sheet hands
+        // over a web URL whenever someone shares a link from Strava, Komoot or a
+        // browser. Sharing a link is not a supported way to open a route.
+        guard fileURL.isFileURL else {
+            NSLog("[MeteoRide] ignoring shared web URL: \(fileURL.scheme ?? "?")")
+            return false
+        }
+
         // Files coming from other apps may be security-scoped.
         let scoped = fileURL.startAccessingSecurityScopedResource()
         defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }

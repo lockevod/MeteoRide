@@ -194,6 +194,12 @@ What is still open, and why it was left:
 - **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
   executes long after `initGpxShare()` is called from line 76 of the same file. Any
   code running at load time must poll for it rather than assume it exists.
+- **The iOS share sheet hands over web URLs too.** The activation rule accepts any
+  `public.data` attachment, and a link shared from Strava, Komoot or a browser arrives
+  as a URL item. `Data(contentsOf:)` accepts an https URL and performs a blocking,
+  untimed download, so the store now refuses anything that is not a file URL. Android
+  has no equivalent exposure: it reads only `EXTRA_STREAM` and its manifest does not
+  accept `text/plain`, so a shared link never reaches it.
 - **An Android intent can be read twice.** A rotation or a restore recreates the
   activity with the same intent still attached, so `onCreate` would ingest the same
   route again. `MainActivity` guards on `savedInstanceState == null` and marks the
@@ -302,6 +308,14 @@ code does and what makes the race reproducible.
 - Only waypoint metadata is sanitised, because that is the only place the libraries
   build HTML from file content. Any new feature that renders something out of a route
   needs the same scrutiny.
+- Importing routes straight from Strava, Komoot, Bikemap or Hammerhead. The
+  Tampermonkey userscripts in `tools/userscripts/` do it by running inside the user's
+  logged-in session on those sites and fetching their APIs with `credentials:
+  'include'`; Hammerhead's token is scraped from an open dashboard tab. None of that
+  is portable to a native app, which holds no cookies for those origins. Only Strava
+  publishes an API meant for third-party apps, so only Strava could be done properly,
+  through OAuth. Sharing an exported GPX file to the app already works today and needs
+  no code.
 - The two items the security model leaves open on purpose: self-hosting the libraries
   (which unlocks `script-src 'self'` and Subresource Integrity), and a rate limit on
   `POST /share` at the Cloudflare edge.
