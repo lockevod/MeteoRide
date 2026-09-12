@@ -3375,3 +3375,24 @@ html.cw-native header nav button {
 html.cw-native header h1 .subtitle {
   display: none;
 }
+
+/* Shown over the map when there is no connection: without tiles the background is
+   blank, and an unexplained grey rectangle reads as a failure rather than a state. */
+html.cw-native #cwMapOffline {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;                 /* clear of the route, the zoom controls and the credits */
+  transform: translateX(-50%);
+  z-index: 600;
+  max-width: 62%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #5a5a5a;
+  font-size: 0.78em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

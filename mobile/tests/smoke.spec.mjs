@@ -696,3 +696,31 @@ test('a first run with coverage stays quiet', async ({ page }) => {
 
   await expect(page.locator('.notice')).not.toContainText(/needs coverage|necesita cobertura/);
 });
+
+test('the blank map says why, and only when it is blank', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 18, offline: false });
+
+  // With a connection the tiles load, so there is nothing to explain.
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(page.locator('#cwMapOffline')).toBeHidden();
+
+  // Out of coverage the background cannot load and a bare grey rectangle reads as
+  // a failure. It must be labelled, and without covering the route.
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+  await page.reload();
+  await mapReady(page);
+
+  const badge = page.locator('#cwMapOffline');
+  await expect(badge).toBeVisible();
+
+  const { badgeBox, mapBox } = await page.evaluate(() => ({
+    badgeBox: document.getElementById('cwMapOffline').getBoundingClientRect().toJSON(),
+    mapBox: document.getElementById('map').getBoundingClientRect().toJSON(),
+  }));
+  // Out of the middle of the map, where the track is drawn.
+  expect(badgeBox.top).toBeGreaterThan(mapBox.top + mapBox.height * 0.6);
+});

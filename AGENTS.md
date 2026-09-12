@@ -249,6 +249,20 @@ seconds: generous for an IndexedDB read, short enough that an empty install is n
 in silence. Both directions are tested, including that a first run *with* coverage
 stays quiet.
 
+The map background is the one thing that genuinely cannot be recovered, and the web
+view's HTTP cache does not save it. That was measured rather than assumed: serving
+tiles from a real server, loading the route, taking the server away and reopening with
+the route restored to the same area produced zero tiles from cache. So a blank grey
+rectangle is what offline looks like, and an unexplained one reads as a failure. A
+small badge at the bottom of the map says so, clear of the track and the controls, and
+only when the device is offline. Both directions are tested.
+
+Caching tiles as they are viewed would fix it for the area the user actually looked at,
+and is allowed: OpenStreetMap's policy forbids bulk downloading, not caching what you
+legitimately requested. It needs a TileLayer that stores into IndexedDB and serves from
+there when offline, plus quota handling. Not built, and worth weighing against what it
+buys, which is the background and nothing else.
+
 What that leaves missing is only the map tiles. Screenshot the offline state before
 deciding the map matters: the route line, the wind arrows, the rain markers, the whole
 table and the sunrise times are all drawn client-side and all present without tiles.

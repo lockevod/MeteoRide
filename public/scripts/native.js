@@ -319,6 +319,39 @@
     nav.insertBefore(btn, nav.firstChild);
   }
 
+  /* ---------- the map with no tiles ---------- */
+
+  // Out of coverage the map draws the route, the wind arrows and the markers, but the
+  // background stays blank: the tiles are not in the web view's HTTP cache, verified
+  // by serving them from a real server and taking it away. A flat grey rectangle reads
+  // as something broken, so label it instead.
+  function mapTilesNotice() {
+    const container = document.getElementById('map');
+    if (!container) return null;
+    let el = document.getElementById('cwMapOffline');
+    if (el) return el;
+
+    el = document.createElement('div');
+    el.id = 'cwMapOffline';
+    el.hidden = true;
+    el.textContent = (window.t && window.t('map_offline')) || 'Map unavailable offline';
+    container.appendChild(el);
+    return el;
+  }
+
+  function updateMapNotice() {
+    const el = mapTilesNotice();
+    if (el) el.hidden = !offline();
+  }
+
+  function watchConnectivity() {
+    updateMapNotice();
+    window.addEventListener('online', updateMapNotice);
+    window.addEventListener('offline', updateMapNotice);
+    // The map is built after boot on a cold start, so try again once it exists.
+    waitFor(() => window.map, 10000).then(updateMapNotice);
+  }
+
   /* ---------- external links ---------- */
 
   // Keep the web view on the app; send real websites to the system browser.
@@ -345,6 +378,7 @@
     addShareButton();
     addPrepareButton();
     setupLinks();
+    watchConnectivity();
     hideSplash();
 
     // A route shared from another app takes precedence over the one from last time.
