@@ -107,6 +107,10 @@ cd mobile
 npm run ios        # build www + cap sync + open Xcode, then ⌘R
 ```
 
+Run `npm test` before building if you touched the web app: it rebuilds the bundle and
+drives it headless with every external request blocked, which catches a broken vendor
+copy or a broken route handoff before Xcode does.
+
 Any change under `public/` only needs `npm run sync` (or `npm run ios`) — no Xcode
 edits. The Xcode configuration above survives, because `cap sync` only replaces
 `ios/App/App/public`.

@@ -108,25 +108,43 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
 
 ## Verifying a change
 
-There is no test suite. What exists:
-
 ```bash
-cd mobile && npm install && npm run build   # fails on any remote reference
-node --check public/scripts/<file>.js       # syntax
+cd mobile
+npm install                     # once; plus `npx playwright install chromium`
+npm test                        # builds the bundle, then runs the smoke suite
+node --check public/scripts/<file>.js
 ```
 
-For behaviour, serve `mobile/www` and drive it with a headless browser. The two things
-worth checking after touching the handoff paths are that `?gpx_url=` still loads a
-route, and that a fake `window.Capacitor` with a stubbed `MeteoRideShare` gets its
-route onto the map. Both were verified this way; there is no harness committed for it,
-which is the most obvious gap in this repository.
+`mobile/tests/smoke.spec.mjs` runs six checks against `mobile/www` with every external
+request blocked, which is both the offline guarantee and a way to keep the tests
+deterministic. It covers booting with no network, the absence of remote references,
+valid structured data, and the three ways a route gets in: the file picker,
+`?gpx_url=` and the native share plugin.
+
+Two things about it are worth knowing before you extend it:
+
+- **It tests `mobile/www`, not `public/`.** The website pulls its libraries from CDNs
+  and cannot be tested offline; the bundle is the same code plus local copies. The one
+  exception is the structured-data check, which reads `public/index.html` because the
+  build strips those blocks from the bundle.
+- **The loader swallows its own failures.** `cwLoadGPXFromString` catches, logs and
+  shows an `alert`, so a route can "load" with the track missing from the map. The
+  tests therefore watch for dialogs and loader console errors, not just for the route
+  name appearing. Drop that and the suite stops catching the boot race entirely; this
+  was confirmed by reintroducing the bug and watching the tests stay green.
+
+If you add a handoff path, add a test for it. If you add a CDN reference, the build
+fails before the tests even run.
 
 ## Open work
 
 - Android release signing config is not set up; `assembleRelease` will not sign.
-- No automated tests at all. A small Playwright smoke test over `mobile/www` would
-  catch most regressions in the handoff paths.
+- The smoke suite does not touch the forecast itself: providers, the weather table,
+  comparison modes and the unit/language settings are all untested. Stubbing a
+  provider response would make that tractable.
+- Nothing runs the tests automatically. A GitHub Actions job on pull requests would
+  cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`
-  that no longer exists; harmless, but it is dead branch.
+  that no longer exists; harmless, but it is a dead branch.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
   confirmation would be friendlier.

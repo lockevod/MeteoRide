@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-www.mjs",
+    "test": "npm run build && playwright test",
     "sync": "npm run build && cap sync",
     "ios": "npm run sync && cap open ios",
     "android": "npm run sync && cap open android",
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@capacitor/android": "8.5.2",
     "@capacitor/cli": "8.5.2",
-    "@capacitor/ios": "8.5.2"
+    "@capacitor/ios": "8.5.2",
+    "@playwright/test": "^1.63.0"
   }
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="MeteoRide smoke test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Masnou - Montgat</name>
+    <trkseg>
+      <trkpt lat="41.4790" lon="2.3160"><ele>8</ele></trkpt>
+      <trkpt lat="41.4770" lon="2.3050"><ele>9</ele></trkpt>
+      <trkpt lat="41.4740" lon="2.2930"><ele>11</ele></trkpt>
+      <trkpt lat="41.4700" lon="2.2810"><ele>12</ele></trkpt>
+      <trkpt lat="41.4680" lon="2.2700"><ele>10</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -21,7 +21,7 @@ npm run android     # build www + cap sync + open Android Studio
 ```
 
 Then press Run. Any change under `public/` only needs `npm run sync` before running
-again. Never run `cap add android`: the project already exists and the command would
+again, and `npm test` first if you touched the web app. Never run `cap add android`: the project already exists and the command would
 overwrite the share handling.
 
 ## What is already wired

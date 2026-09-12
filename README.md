@@ -153,6 +153,7 @@ cd mobile
 npm install
 npm run add:ios   # iOS only, once; the Android project is already in the repo
 npm run ios       # or: npm run android
+npm test          # smoke tests over the built bundle
 ```
 
 ### Sharing routes (iOS / Android)
