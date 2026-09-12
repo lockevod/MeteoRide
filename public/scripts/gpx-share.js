@@ -2,6 +2,9 @@
 (function(){
   // Register service worker and listen for shared GPX messages
   async function registerServiceWorker() {
+    // The native shell receives shared files through the MeteoRideShare plugin,
+    // so the service worker handoff is neither available nor needed there.
+    if (window.CW_NATIVE) return;
     if (!('serviceWorker' in navigator)) return;
     try {
       await navigator.serviceWorker.register('/scripts/service-worker.js');

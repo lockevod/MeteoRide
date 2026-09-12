@@ -3335,3 +3335,25 @@ tr.selected-row:hover {
   opacity: 0.7;
   pointer-events: none; /* Don't interfere with clicks */
 }
+/* =========================================================================
+   Native shell (iOS / Android app built with Capacitor).
+   These rules only apply when scripts/native.js detects a native platform,
+   so the website and the PWA are unaffected.
+   ========================================================================= */
+html.cw-native,
+html.cw-native body {
+  overscroll-behavior: none;          /* no rubber-band bounce over the app chrome */
+  -webkit-touch-callout: none;        /* no long-press callout on map/table */
+}
+
+html.cw-native header {
+  padding-top: calc(0.5rem + env(safe-area-inset-top));
+  padding-left: calc(1rem + env(safe-area-inset-left));
+  padding-right: calc(1rem + env(safe-area-inset-right));
+}
+
+html.cw-native main {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}

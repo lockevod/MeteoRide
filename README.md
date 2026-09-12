@@ -128,6 +128,31 @@ For local development:
 1. Clone the repo: `git clone https://github.com/lockevod/MeteoRide.git`
 2. Open `index.html` in your browser.
 
+## Native apps (iOS / Android)
+
+Besides the PWA, MeteoRide can be built as a real App Store / Play Store app with
+[Capacitor](https://capacitorjs.com). It runs the very same code from `public/`
+inside a native shell, so there is no second codebase to maintain.
+
+What the native build adds:
+
+- **Native share sheet**: share a GPX to MeteoRide from Files, Mail, Komoot, Strava
+  or any other app. No iOS Shortcut and no upload to a temporary server — the file
+  never leaves the device.
+- **`.gpx` / `.kml` file handler**: "Open in MeteoRide" from anywhere on the system.
+- **Fully offline assets**: Leaflet, SunCalc and the weather icons are bundled
+  instead of loaded from a CDN.
+
+The project lives in `mobile/`. Build instructions, the Xcode setup and the Swift
+sources for the share extension are in [docs/IOS.md](docs/IOS.md).
+
+```bash
+cd mobile
+npm install
+npm run add:ios   # once
+npm run ios       # build + open Xcode
+```
+
 ### Sharing routes (iOS / Android)
 
 MeteoRide supports several ways to share GPX routes from mobile devices. Pick the one that fits your workflow:
@@ -238,6 +263,7 @@ If you need stricter privacy guarantees, consider running MeteoRide completely o
 - **Weather Data**: Open-Meteo, OpenWeather
 - **Icons**: Weather Icons by Erik Flowers
 - **Libraries**: Leaflet.js, SunCalc, GPX parser
+- **Native shell**: Capacitor (iOS / Android)
 - **Hosting**: Cloudfare Pages (only if you use web)
 - **Sripts**: Tampermonkey
 

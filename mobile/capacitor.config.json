@@ -1,0 +1,22 @@
+{
+  "appId": "cc.meteoride.app",
+  "appName": "MeteoRide",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0B6297",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "backgroundColor": "#0B6297",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "launchAutoHide": true,
+      "backgroundColor": "#0B6297",
+      "showSpinner": false
+    }
+  }
+}

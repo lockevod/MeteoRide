@@ -1,0 +1,69 @@
+<!--
+  Reference snippet — merge these keys into ios/App/App/Info.plist.
+  They declare the meteoride:// scheme the share extension calls, register the app
+  as a handler for .gpx/.kml files, and explain the location prompt.
+-->
+
+<key>CFBundleURLTypes</key>
+<array>
+	<dict>
+		<key>CFBundleURLName</key>
+		<string>cc.meteoride.app</string>
+		<key>CFBundleTypeRole</key>
+		<string>Editor</string>
+		<key>CFBundleURLSchemes</key>
+		<array>
+			<string>meteoride</string>
+		</array>
+	</dict>
+</array>
+
+<!-- GPX has no system UTI, so declare one and hang the .gpx extension off it. -->
+<key>UTImportedTypeDeclarations</key>
+<array>
+	<dict>
+		<key>UTTypeIdentifier</key>
+		<string>cc.meteoride.gpx</string>
+		<key>UTTypeDescription</key>
+		<string>GPS Exchange Format</string>
+		<key>UTTypeConformsTo</key>
+		<array>
+			<string>public.xml</string>
+		</array>
+		<key>UTTypeTagSpecification</key>
+		<dict>
+			<key>public.filename-extension</key>
+			<array>
+				<string>gpx</string>
+			</array>
+			<key>public.mime-type</key>
+			<array>
+				<string>application/gpx+xml</string>
+			</array>
+		</dict>
+	</dict>
+</array>
+
+<key>CFBundleDocumentTypes</key>
+<array>
+	<dict>
+		<key>CFBundleTypeName</key>
+		<string>Route</string>
+		<key>CFBundleTypeRole</key>
+		<string>Viewer</string>
+		<key>LSHandlerRank</key>
+		<string>Alternate</string>
+		<key>LSItemContentTypes</key>
+		<array>
+			<string>cc.meteoride.gpx</string>
+			<string>com.google.earth.kml</string>
+		</array>
+	</dict>
+</array>
+
+<!-- Copy opened documents into the app sandbox instead of editing them in place. -->
+<key>LSSupportsOpeningDocumentsInPlace</key>
+<false/>
+
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>MeteoRide uses your location to centre the map on where you are.</string>

@@ -1,0 +1,35 @@
+{
+  "name": "meteoride-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native iOS/Android shell for the MeteoRide web app (Capacitor)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-www.mjs",
+    "sync": "npm run build && cap sync",
+    "ios": "npm run sync && cap open ios",
+    "android": "npm run sync && cap open android",
+    "add:ios": "npm run build && cap add ios",
+    "add:android": "npm run build && cap add android",
+    "doctor": "cap doctor"
+  },
+  "dependencies": {
+    "@capacitor/app": "8.1.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.3",
+    "leaflet": "1.9.4",
+    "leaflet-compass": "1.5.6",
+    "leaflet-gpx": "2.1.2",
+    "pako": "2.1.0",
+    "suncalc": "1.9.0",
+    "togeojson": "0.16.0",
+    "weathericons": "2.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/cli": "8.5.2",
+    "@capacitor/ios": "8.5.2"
+  }
+}
