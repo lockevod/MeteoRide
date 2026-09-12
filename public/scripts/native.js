@@ -140,13 +140,27 @@
   }
 
   function safeFileName(name) {
-    const base = String(name || 'route.gpx').replace(/[^A-Za-z0-9._ -]+/g, '-').trim();
+    // The name reaches us from whichever app shared the route, so bound it: some
+    // filesystems stop at 255 bytes and the share sheet shows it to the user.
+    const base = String(name || 'route.gpx').replace(/[^A-Za-z0-9._ -]+/g, '-').trim().slice(0, 120);
     return /\.(gpx|kml)$/i.test(base) ? base : `${base || 'route'}.gpx`;
   }
+
+  let sharing = false;
 
   async function shareCurrentRoute() {
     const { Share, Filesystem } = plugins;
     if (!Share || !Filesystem) return log('share plugins missing');
+    if (sharing) return;  // the sheet is already up; a second tap would be rejected
+    sharing = true;
+    try {
+      await doShareCurrentRoute(Share, Filesystem);
+    } finally {
+      sharing = false;
+    }
+  }
+
+  async function doShareCurrentRoute(Share, Filesystem) {
 
     let route;
     try {
@@ -190,8 +204,9 @@
     const btn = document.createElement('button');
     btn.id = 'cwShareRoute';
     btn.type = 'button';
-    btn.title = 'Send route to another app';
-    btn.setAttribute('aria-label', 'Send route to another app');
+    const label = (window.t && window.t('share_route')) || 'Send route to another app';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
     btn.innerHTML = '<span aria-hidden="true">\u{1F4E4}</span>';
     btn.addEventListener('click', shareCurrentRoute);
     nav.insertBefore(btn, nav.firstChild);

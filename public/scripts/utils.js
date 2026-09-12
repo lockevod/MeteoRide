@@ -28,6 +28,7 @@
       toggle_config: "Configuración ⚙️",
       toggle_debug: "🐞",
       toggle_help: "Ayuda ❓",
+      share_route: "Enviar ruta a otra app",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
@@ -122,6 +123,7 @@
       toggle_config: "Config ⚙️",
       toggle_debug: "🐞",
       toggle_help: "Help ❓",
+      share_route: "Send route to another app",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
   title: "MeteoRide — Forecast for your ride",

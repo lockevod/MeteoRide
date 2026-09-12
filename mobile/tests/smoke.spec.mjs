@@ -412,3 +412,23 @@ test('the share button exists only in the app', async ({ page }) => {
   await mapReady(page);
   await expect(page.locator('#cwShareRoute')).toHaveCount(0);
 });
+
+// The chain the native build exists for, end to end: a route arrives from another app
+// through the share plugin, and goes back out through the share sheet.
+test('a route received from another app can be passed on', async ({ page }) => {
+  const gpx = await readFile(FIXTURE, 'utf8');
+  await installNativeBridge(page, { routes: [{ name: 'Komoot tour.gpx', gpx }] });
+  await goOffline(page);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+
+  await page.locator('#cwShareRoute').click();
+  await expect.poll(() => page.evaluate(() => window.__shared)).toBeTruthy();
+
+  const written = await page.evaluate(() => window.__written);
+  // What leaves is the route that came in, under the name the sending app gave it.
+  expect(written.data).toBe(gpx);
+  expect(written.path).toBe('Komoot tour.gpx');
+});
