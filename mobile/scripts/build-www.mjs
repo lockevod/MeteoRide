@@ -86,8 +86,10 @@ const VENDOR = [
   },
 ];
 
-/** Files that only make sense on the public website. */
-const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers'];
+/** Paths that only make sense on the public website. The two localised landing pages
+ *  exist for search engines and are only reachable through the alternate link tags
+ *  that patchIndexHtml strips, so nothing in the app can navigate to them. */
+const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', 'en', 'es'];
 
 const log = (...a) => console.log('[build-www]', ...a);
 
@@ -153,7 +155,7 @@ async function main() {
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
   await cp(SRC, OUT, { recursive: true });
-  for (const f of WEB_ONLY) await rm(join(OUT, f), { force: true });
+  for (const f of WEB_ONLY) await rm(join(OUT, f), { force: true, recursive: true });
   log('copied public/ -> www/');
 
   await copyVendor();

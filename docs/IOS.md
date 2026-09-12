@@ -63,6 +63,10 @@ Drag `mobile/native/ios/MeteoRideShare/` into the **App** target in Xcode
 - `MeteoRideShareStore.swift` — the shared inbox for incoming routes.
 - `MeteoRideSharePlugin.swift` — exposes it to JavaScript as
   `Capacitor.Plugins.MeteoRideShare`.
+- `MeteoRideViewController.swift` — registers that plugin. Capacitor only
+  auto-registers plugins that come from npm packages, and it rebuilds that list on
+  every `cap sync`, so a plugin living in the app target has to register itself.
+  Skip this file and the share flow silently does nothing.
 
 ### 3. App Group
 
@@ -77,17 +81,19 @@ Merge the keys from `mobile/native/ios/Info.plist.additions.xml` into
 as a handler for `.gpx`/`.kml`, and provide the location usage string.
 
 Then apply `mobile/native/ios/SceneDelegate.additions.swift` to
-`ios/App/App/SceneDelegate.swift` — three small additions that route an opened
-file into the inbox.
+`ios/App/App/SceneDelegate.swift`. Two things happen there: the root view controller
+becomes `MeteoRideViewController` instead of `CAPBridgeViewController`, and an opened
+file is routed into the inbox.
 
 ### 5. Share extension
 
-*File → New → Target → Share Extension*, name it `ShareExtension`, language Swift,
-and **uncheck** the storyboard/interface option if offered. Then:
+*File → New → Target → Share Extension*, name it `ShareExtension`, language Swift.
+The template always generates a storyboard; this extension has no UI, so:
 
 1. Delete the generated `ShareViewController.swift`, `MainInterface.storyboard`
-   and `Info.plist`, and add the three files from
-   `mobile/native/ios/ShareExtension/` instead.
+   and `Info.plist`, and add the two files from
+   `mobile/native/ios/ShareExtension/` instead. The replacement `Info.plist` points
+   at the principal class rather than a storyboard.
 2. Add `MeteoRideShareStore.swift` to the extension target as well
    (select the file → *Target Membership* → tick both App and ShareExtension).
    Both processes talk to the same folder; this is the only shared code.
@@ -151,8 +157,11 @@ but the forecast call, and does route computation locally. Worth keeping in mind
 
 ## Troubleshooting
 
-**`Capacitor.Plugins.MeteoRideShare` is undefined.** The plugin file is not in the
-App target, or the class lost its `@objc(MeteoRideSharePlugin)` annotation.
+**`Capacitor.Plugins.MeteoRideShare` is undefined.** Almost always `SceneDelegate`
+still creating a plain `CAPBridgeViewController`, so nothing ever registered the
+plugin. Otherwise the plugin file is not in the App target, or the class lost its
+`@objc(MeteoRideSharePlugin)` annotation. Adding the class name to
+`capacitor.config.json` does not help: `cap sync` overwrites that list.
 
 **Shared routes never arrive.** Check the App Group: it must be enabled on both
 targets with the exact same identifier as `MeteoRideShareStore.appGroupId`. The

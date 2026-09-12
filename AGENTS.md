@@ -88,6 +88,21 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
 
 ## Gotchas found the hard way
 
+- **Capacitor does not auto-register a plugin that lives in the app target.** On iOS
+  it registers exactly what the CLI wrote into the generated `capacitor.config.json`
+  `packageClassList`, which is rebuilt from the installed npm packages on every
+  `cap sync` — editing it by hand is pointless. `MeteoRideViewController` overrides
+  `capacitorDidLoad` and calls `bridge?.registerPluginInstance(...)`, which is the
+  only hook that runs after the bridge exists and before the web view loads.
+  (`registerPluginType` looks right and is not: it returns early whenever
+  `autoRegisterPlugins` is on, which is the default.) On Android the equivalent is
+  `registerPlugin(...)` in `MainActivity.onCreate`, before `super.onCreate`.
+- **`env(safe-area-inset-*)` is the right thing to use on both platforms**, despite
+  Capacitor's Android side also injecting `--safe-area-inset-*` custom properties.
+  On a recent WebView with `viewport-fit=cover` it passes the real insets through, so
+  `env()` works; on an older one it pads the decor view itself and injects zeroes.
+  Using the custom properties as well would double-pad on old devices. The build adds
+  `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
 - **Route injection races the app boot.** `cwLoadGPXFromString` draws straight onto
   the Leaflet map, so `window.map` must exist. Shared routes regularly arrive before
   `initMap` has run. `cwInjectGPXFromText` in `gpx-share.js` now waits for both the
@@ -96,9 +111,11 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
 - **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
   executes long after `initGpxShare()` is called from line 76 of the same file. Any
   code running at load time must poll for it rather than assume it exists.
-- **Android share types are a mess.** Plenty of apps hand a `.gpx` over as
-  `application/octet-stream`, so the manifest accepts it and `MeteoRideShareStore`
-  filters by file name and by sniffing for `<gpx`/`<kml` in the first 2 KB.
+- **Share types are a mess.** Plenty of apps hand a `.gpx` over as
+  `application/octet-stream` with no usable name, so both stores accept an item whose
+  name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
+  implementations in step: same 25 MB cap, same UTF-8 with Latin-1 fallback, same
+  24-hour prune of anything the web layer never collected.
 - **The web view origin in the app is `capacitor://localhost`.** Weather providers
   must send permissive CORS headers. Open-Meteo and OpenWeather do.
 - **The share extension cannot call `UIApplication.open`.** It tries
@@ -142,6 +159,12 @@ fails before the tests even run.
 - The smoke suite does not touch the forecast itself: providers, the weather table,
   comparison modes and the unit/language settings are all untested. Stubbing a
   provider response would make that tractable.
+- The suite runs on Chromium only. iOS ships WKWebView, so anything Safari-specific
+  goes unnoticed; adding Playwright's `webkit` project would close most of that gap.
+- The iOS native code has never been compiled. Everything about it was checked by
+  reading the Capacitor sources in `node_modules/@capacitor/ios`, which is how the
+  plugin registration bug above was found, but reading is not building. The Android
+  code at least compiles (against stubs, no SDK here).
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`

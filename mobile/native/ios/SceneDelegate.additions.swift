@@ -11,7 +11,10 @@ func scene(_ scene: UIScene,
     guard let windowScene = scene as? UIWindowScene else { return }
 
     window = UIWindow(windowScene: windowScene)
-    window?.rootViewController = CAPBridgeViewController()
+    // >>> CHANGE THIS LINE <<<  (was CAPBridgeViewController)
+    // MeteoRideViewController registers the MeteoRideShare plugin; without it the
+    // plugin is never exposed to JavaScript and no shared route ever arrives.
+    window?.rootViewController = MeteoRideViewController()
     window?.makeKeyAndVisible()
 
     // >>> ADD THIS LINE <<<  (the app was launched by opening a file)

@@ -14,6 +14,8 @@ enum MeteoRideShareStore {
 
     private static let folderName = "IncomingRoutes"
     private static let allowedExtensions: Set<String> = ["gpx", "kml"]
+    private static let maxBytes = 25 * 1024 * 1024
+    private static let maxAge: TimeInterval = 24 * 60 * 60
 
     /// Shared folder, created on first use. Nil means the App Group is misconfigured.
     static var inboxURL: URL? {
@@ -34,7 +36,7 @@ enum MeteoRideShareStore {
     /// Stores raw route bytes. Returns the stored file, or nil if it could not be saved.
     @discardableResult
     static func store(data: Data, suggestedName: String) -> URL? {
-        guard let dir = inboxURL, !data.isEmpty else { return nil }
+        guard let dir = inboxURL, !data.isEmpty, data.count <= maxBytes else { return nil }
         let safeName = sanitize(suggestedName)
         // Timestamp prefix keeps arrival order and avoids collisions between shares.
         let fileName = "\(Int(Date().timeIntervalSince1970 * 1000))__\(safeName)"
@@ -51,23 +53,44 @@ enum MeteoRideShareStore {
     /// Copies a file the system handed us (share sheet or "Open in…").
     @discardableResult
     static func ingest(fileURL: URL) -> Bool {
-        let ext = fileURL.pathExtension.lowercased()
-        guard allowedExtensions.contains(ext) else { return false }
-
         // Files coming from other apps may be security-scoped.
         let scoped = fileURL.startAccessingSecurityScopedResource()
         defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
 
         guard let data = try? Data(contentsOf: fileURL) else { return false }
-        return store(data: data, suggestedName: fileURL.lastPathComponent) != nil
+        return accepts(name: fileURL.lastPathComponent, data: data)
+            && store(data: data, suggestedName: fileURL.lastPathComponent) != nil
+    }
+
+    /// Apps share routes with all sorts of types and names, so judge by the file name
+    /// or, failing that, by what is actually inside. Mirrors the Android side.
+    static func accepts(name: String, data: Data) -> Bool {
+        guard !data.isEmpty, data.count <= maxBytes else { return false }
+        if allowedExtensions.contains((name as NSString).pathExtension.lowercased()) { return true }
+        let head = data.prefix(2048)
+        guard let start = String(data: head, encoding: .utf8)?.lowercased()
+            ?? String(data: head, encoding: .isoLatin1)?.lowercased() else { return false }
+        return start.contains("<gpx") || start.contains("<kml")
     }
 
     // MARK: - Reading
 
     static func pendingURLs() -> [URL] {
         guard let dir = inboxURL else { return [] }
+        prune(in: dir)
         let items = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
         return items.sorted().map { dir.appendingPathComponent($0) }
+    }
+
+    /// A route shared while the web layer never got to run would sit here forever.
+    private static func prune(in dir: URL) {
+        let fm = FileManager.default
+        let items = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+        for item in items {
+            let url = dir.appendingPathComponent(item)
+            guard let modified = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date else { continue }
+            if Date().timeIntervalSince(modified) > maxAge { try? fm.removeItem(at: url) }
+        }
     }
 
     /// Returns the oldest pending route as text and removes it from the inbox.

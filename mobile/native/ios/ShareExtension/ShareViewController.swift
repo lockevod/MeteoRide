@@ -59,6 +59,7 @@ class ShareViewController: UIViewController {
                     completion(MeteoRideShareStore.ingest(fileURL: url))
                 } else if let data = item as? Data {
                     let name = provider.suggestedName ?? "route.gpx"
+                    guard MeteoRideShareStore.accepts(name: name, data: data) else { return completion(false) }
                     completion(MeteoRideShareStore.store(data: data, suggestedName: name) != nil)
                 } else {
                     completion(false)

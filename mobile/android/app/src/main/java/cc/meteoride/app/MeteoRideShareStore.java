@@ -29,6 +29,7 @@ final class MeteoRideShareStore {
     private static final String DIR = "incoming-routes";
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList("gpx", "kml");
     private static final int MAX_BYTES = 25 * 1024 * 1024;
+    private static final long MAX_AGE_MS = 24 * 60 * 60 * 1000L;
 
     private MeteoRideShareStore() {}
 
@@ -84,13 +85,23 @@ final class MeteoRideShareStore {
     // ---------------------------------------------------------------- reading
 
     static int pendingCount(Context ctx) {
-        File[] files = inbox(ctx).listFiles();
+        File[] files = prune(inbox(ctx).listFiles());
         return files == null ? 0 : files.length;
+    }
+
+    /** A route shared while the web layer never got to run would sit here forever. */
+    private static File[] prune(File[] files) {
+        if (files == null) return null;
+        long cutoff = System.currentTimeMillis() - MAX_AGE_MS;
+        for (File file : files) {
+            if (file.lastModified() < cutoff && !file.delete()) Log.w(TAG, "could not prune " + file.getName());
+        }
+        return Arrays.stream(files).filter(File::exists).toArray(File[]::new);
     }
 
     /** Returns the oldest pending route and removes it from the inbox. */
     static Pending next(Context ctx) {
-        File[] files = inbox(ctx).listFiles();
+        File[] files = prune(inbox(ctx).listFiles());
         if (files == null || files.length == 0) return null;
         Arrays.sort(files);
 
@@ -103,7 +114,7 @@ final class MeteoRideShareStore {
             }
             if (!file.delete()) Log.w(TAG, "could not delete " + file.getName());
             if (data == null || data.length == 0) continue;
-            return new Pending(displayNameOf(file), new String(data, StandardCharsets.UTF_8));
+            return new Pending(displayNameOf(file), decode(data));
         }
         return null;
     }
@@ -154,6 +165,13 @@ final class MeteoRideShareStore {
         if (name == null) return false;
         int dot = name.lastIndexOf('.');
         return dot >= 0 && ALLOWED_EXTENSIONS.contains(name.substring(dot + 1).toLowerCase());
+    }
+
+    /** GPX is XML and normally UTF-8; some exporters still emit Latin-1. */
+    private static String decode(byte[] data) {
+        String text = new String(data, StandardCharsets.UTF_8);
+        // U+FFFD means the bytes were not valid UTF-8 after all.
+        return text.indexOf('\uFFFD') >= 0 ? new String(data, StandardCharsets.ISO_8859_1) : text;
     }
 
     private static boolean looksLikeRoute(byte[] data) {
