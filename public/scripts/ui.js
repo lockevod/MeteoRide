@@ -2302,6 +2302,10 @@
   window.initUI = initUI;
   // Expose saveRecentRoute for programmatic GPX loading (e.g., from userscript)
   window.saveRecentRoute = saveRecentRoute;
+  // Exposed so the native shell can put the last route back on screen when the app
+  // is opened cold, which is the difference between a blank app and a usable one.
+  window.getRecentRoutes = getRecentRoutes;
+  window.loadRecentRoute = loadRecentRoute;
 
   // Call initUI on script load
   initUI();

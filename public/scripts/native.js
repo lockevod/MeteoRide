@@ -212,6 +212,49 @@
     nav.insertBefore(btn, nav.firstChild);
   }
 
+  /* ---------- reopening where you left off ---------- */
+
+  // Opening the app with no coverage used to show nothing at all: no route, no
+  // forecast, no explanation. Everything needed was already on the device, it just
+  // was not put on screen. Restoring the last route makes the cached forecast appear
+  // with it, and it is the better behaviour with coverage too.
+  async function restoreLastRoute() {
+    if (window.lastGPXFile) return;   // a route is already loaded
+
+    // A route arriving by URL or by share wins; do not fight it.
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.has('gpx_url') || params.has('url') || params.has('shared') || params.has('shared_id')) return;
+
+    const routes = await waitFor(() => {
+      const list = window.getRecentRoutes ? window.getRecentRoutes() : [];
+      return list && list.length ? list : null;
+    });
+    if (!routes || window.lastGPXFile) return;
+
+    try {
+      log('restoring last route', routes[0].name || '');
+      await window.loadRecentRoute(routes[0]);
+    } catch (e) {
+      log('could not restore the last route', e);
+    }
+  }
+
+  /** Polls until the check returns something truthy, or gives up. */
+  function waitFor(check, timeoutMs = 8000) {
+    return new Promise((resolve) => {
+      const first = check();
+      if (first) return resolve(first);
+      const deadline = Date.now() + timeoutMs;
+      const timer = setInterval(() => {
+        const value = check();
+        if (value || Date.now() > deadline) {
+          clearInterval(timer);
+          resolve(value || null);
+        }
+      }, 200);
+    });
+  }
+
   /* ---------- preparing for no coverage ---------- */
 
   // Running the forecast already fills the cache, and the cache now keeps serving it
@@ -279,15 +322,18 @@
 
   /* ---------- boot ---------- */
 
-  function boot() {
+  async function boot() {
     setupChrome();
     setupApp();
     setupShareEvents();
     addShareButton();
     addPrepareButton();
     setupLinks();
-    consumePendingShare();
     hideSplash();
+
+    // A route shared from another app takes precedence over the one from last time.
+    const arrived = await consumePendingShare();
+    if (!arrived) restoreLastRoute();
   }
 
   if (document.readyState === 'loading') {

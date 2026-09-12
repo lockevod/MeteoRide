@@ -237,6 +237,27 @@ so they work with any app rather than a hardcoded list.
 
 ## Riding without coverage
 
+Opening the app cold with no coverage used to show nothing at all: no route, no
+forecast, no explanation, just a grey map. Everything needed was already on the
+device. `restoreLastRoute` in `native.js` puts the most recent route back on screen,
+and the cached forecast fills in behind it. Native only, so the website's opening
+behaviour is unchanged.
+
+What that leaves missing is only the map tiles. Screenshot the offline state before
+deciding the map matters: the route line, the wind arrows, the rain markers, the whole
+table and the sunrise times are all drawn client-side and all present without tiles.
+A preloaded map would add the beige background and nothing else.
+
+A route arriving from a share takes precedence: `boot` waits for the inbox drain and
+only restores when nothing came in, and `restoreLastRoute` re-checks `lastGPXFile`
+after its wait. That precedence has **no test**. Three attempts could not build one
+that fails when the guards are removed, because the share always lands last in a
+stubbed bridge and whichever route loads last is the one on screen either way. Rather
+than keep an assertion that cannot fail, it was deleted. The guards are still the
+right thing; they are just unproven.
+
+## Riding without coverage
+
 The forecast cannot be invented, but throwing away the one already downloaded was a
 choice, not a necessity. `getCache` holds a 30 minute lifetime; past that it used to
 return null even with no network to fetch anything better, so the table came out empty

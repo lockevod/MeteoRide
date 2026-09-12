@@ -643,3 +643,29 @@ test('a rejected API key is named as such', async ({ page }) => {
 
   await expect(page.locator('.notice')).toContainText(/API key/);
 });
+
+test('the app reopens on the last route, with no network', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  // Out of coverage, cold start, nobody touches the file picker.
+  await ageTheCache(page, 90);
+  control.offline = true;
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+  await page.reload();
+  await mapReady(page);
+
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await expect(page.locator('.notice')).toContainText('1 h 30 min');
+});

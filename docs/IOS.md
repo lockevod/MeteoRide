@@ -163,6 +163,10 @@ Out of signal the app keeps showing the last forecast it downloaded, labelled wi
 old it is, rather than an empty table. It stops at twelve hours, and it never prefers
 cached data while a connection works.
 
+The app reopens on the route you had last, so opening it out of signal shows that
+route with the forecast already downloaded rather than an empty screen. A route shared
+in from another app takes precedence over it.
+
 The 📴 button saves the forecast for the route you have loaded, so the entries survive
 the clear-out that runs when storage fills up. Press it at home before leaving.
 
