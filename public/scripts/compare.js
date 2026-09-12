@@ -744,8 +744,8 @@
         return m >= 1000 ? `${(m/1000).toFixed(1)} <span class="unit-lower">km</span>` : `${m.toFixed(0)} <span class="unit-lower">m</span>`;
       }
     };
-    const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
-    const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
+    const startIconUrl = "/icons/marker-icon-green.png";
+    const endIconUrl = "/icons/marker-icon-red.png";
 
   const tbody = document.createElement('tbody');
   // Build compact summary (route summary + sun) HTML for each base date using first available step
@@ -1385,8 +1385,8 @@
           distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
         } else if (convertedM < 1000) distText = `${convertedM.toFixed(1)} ${unitM}`; else distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
       }
-      const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
-      const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
+      const startIconUrl = "/icons/marker-icon-green.png";
+      const endIconUrl = "/icons/marker-icon-red.png";
       let iconHtml = "";
       if (Number.isFinite(m)) {
         if (Math.round(m) === 0) iconHtml = `<img src="${startIconUrl}" class="start-icon" alt="" />`; else if (Math.round(m) === Math.round(maxM)) iconHtml = `<img src="${endIconUrl}" class="end-icon" alt="" />`;

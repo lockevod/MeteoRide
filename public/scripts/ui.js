@@ -665,16 +665,16 @@
         }
   // FIT files are not accepted by the file input; only .gpx and .kml are handled here.
         if (window.trackLayer) window.map.removeLayer(window.trackLayer);
-        window.trackLayer = new L.GPX(content, {
+        window.trackLayer = new L.GPX(window.cwSanitizeGPXText ? window.cwSanitizeGPXText(content) : content, {
           async: true,
           polyline_options: { color: 'blue' },
           marker_options: {
             startIconUrl:
-              "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+              "/icons/marker-icon-green.png",
             endIconUrl:
-              "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+              "/icons/marker-icon-red.png",
             shadowUrl:
-              "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+              "/icons/marker-shadow.png",
             // opcionales:
             wptIconUrl: null
           }
@@ -750,8 +750,8 @@
     if (markers.length === 0) return;
 
     const startIcon = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconUrl: '/icons/marker-icon-green.png',
+      shadowUrl: '/icons/marker-shadow.png',
       iconSize: [16, 30],      // reducido
       iconAnchor: [9, 30],
       shadowSize: [30, 30],
@@ -760,8 +760,8 @@
     });
 
     const endIcon = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconUrl: '/icons/marker-icon-red.png',
+      shadowUrl: '/icons/marker-shadow.png',
       iconSize: [16, 30],      // reducido
       iconAnchor: [9, 30],
       shadowSize: [30, 30],

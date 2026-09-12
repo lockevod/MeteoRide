@@ -67,6 +67,49 @@
     return true;
   }
 
+  // leaflet-gpx builds waypoint popups by concatenating the <name> and <desc> text
+  // straight into an HTML string, so a route carrying markup there runs it in our
+  // origin — where the provider API key lives, and in the app where the Capacitor
+  // bridge lives. Escaping those text nodes before the library sees them keeps the
+  // text visible and inert, and does not touch anything else in the file.
+  function escapeMarkup(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  const RISKY_TEXT_NODES = [
+    'wpt > name', 'wpt > desc', 'wpt > cmt',
+    'trk > name', 'trk > desc',
+    'rte > name', 'rte > desc',
+    'metadata > name', 'metadata > desc'
+  ].join(', ');
+
+  function cwSanitizeGPXText(gpxText) {
+    const original = String(gpxText || '');
+    try {
+      const doc = new DOMParser().parseFromString(original, 'application/xml');
+      // Leave broken XML alone; the loader reports it far better than we could.
+      if (doc.getElementsByTagName('parsererror').length) return original;
+
+      let changed = false;
+      doc.querySelectorAll(RISKY_TEXT_NODES).forEach((el) => {
+        const text = el.textContent || '';
+        const safe = escapeMarkup(text);
+        if (safe !== text) {
+          el.textContent = safe;
+          changed = true;
+        }
+      });
+      // Only re-serialise when something actually needed escaping, so ordinary
+      // routes reach the parser byte for byte as they arrived.
+      return changed ? new XMLSerializer().serializeToString(doc) : original;
+    } catch (e) {
+      console.warn('[cw] GPX sanitise failed, passing through', e);
+      return original;
+    }
+  }
+
+  window.cwSanitizeGPXText = cwSanitizeGPXText;
+
   // Parse GPX text and return a small summary object for easier debugging
   function parseGPXSummary(gpxText) {
     try {

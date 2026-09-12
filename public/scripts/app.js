@@ -2079,8 +2079,8 @@ function renderWeatherTable() {
       }
     }
 
-    const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
-    const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
+    const startIconUrl = "/icons/marker-icon-green.png";
+    const endIconUrl = "/icons/marker-icon-red.png";
     let iconHtml = "";
     if (Number.isFinite(m)) {
       if (Math.round(m) === 0) iconHtml = `<img src="${startIconUrl}" class="start-icon" alt="" />`;
@@ -3214,13 +3214,13 @@ window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint 
 
     let gpxLayer;
     try {
-      gpxLayer = new L.GPX(gpxText, {
+      gpxLayer = new L.GPX(window.cwSanitizeGPXText ? window.cwSanitizeGPXText(gpxText) : gpxText, {
         async: true,
         polyline_options: { color: 'blue' },
         marker_options: {
-          startIconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
-          endIconUrl:   "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-          shadowUrl:    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+          startIconUrl: "/icons/marker-icon-green.png",
+          endIconUrl:   "/icons/marker-icon-red.png",
+          shadowUrl:    "/icons/marker-shadow.png",
           wptIconUrl: null
         }
       });

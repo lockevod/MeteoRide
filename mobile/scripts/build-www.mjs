@@ -109,6 +109,21 @@ async function copyVendor() {
   log(`vendored ${VENDOR.length} libraries into www/vendor`);
 }
 
+/**
+ * Applied to every page in the bundle.
+ *
+ * An <img> pointing at another site cannot load in an offline app and leaves a broken
+ * box behind, so it becomes the text it was described by. Social preview images are
+ * fetched from the website and mean nothing inside an app.
+ */
+function patchBundledHtml(html) {
+  html = html.replace(/\s*<meta (?:property|name)="(?:og|twitter):image"[^>]*>/g, '');
+  return html.replace(/<img\b[^>]*\bsrc="https?:\/\/[^"]*"[^>]*>/gi, (tag) => {
+    const alt = tag.match(/\balt="([^"]*)"/i);
+    return alt ? alt[1] : '';
+  });
+}
+
 /** Rewrites index.html for the native shell. */
 function patchIndexHtml(html) {
   for (const { url, to } of VENDOR) {
@@ -133,12 +148,42 @@ function patchIndexHtml(html) {
   return html;
 }
 
+/**
+ * Remote files the app would have to download to look right: images, fonts, styles,
+ * scripts. Tile URLs are excluded by the `{` in their template — map tiles genuinely
+ * come from the network, unlike a marker icon that belongs in the bundle.
+ *
+ * Exported so the smoke suite can assert the same thing over the shipped bundle.
+ */
+const REMOTE_ASSET = /https?:\/\/[^"'`\s)]+\.(?:png|jpe?g|gif|svg|webp|ico|woff2?|ttf|eot|css|js)\b/gi;
+
+export async function findRemoteAssets(dir, base = dir) {
+  const hits = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // Third-party libraries carry source-map comments and the like; they are
+      // already local, and their internals are not ours to police.
+      if (entry.name === 'vendor') continue;
+      hits.push(...(await findRemoteAssets(path, base)));
+      continue;
+    }
+    if (!/\.(html|js|css)$/i.test(entry.name)) continue;
+    const text = await readFile(path, 'utf8');
+    for (const [url] of text.matchAll(REMOTE_ASSET)) {
+      if (url.includes('{')) continue;
+      hits.push(`${relative(base, path)} -> ${url}`);
+    }
+  }
+  return hits;
+}
+
 async function ensureNoRemoteRefs() {
-  const html = await readFile(join(OUT, 'index.html'), 'utf8');
-  const loaders = /<(?:script[^>]*\ssrc|link[^>]*\srel="stylesheet"[^>]*\shref|img[^>]*\ssrc)="(https?:\/\/[^"]+)"/g;
-  const leftovers = [...html.matchAll(loaders)].map((m) => m[1]);
-  if (leftovers.length) {
-    throw new Error(`index.html still loads remote resources:\n  ${leftovers.join('\n  ')}`);
+  const hits = await findRemoteAssets(OUT);
+  if (hits.length) {
+    throw new Error(
+      `the bundle would fetch these at runtime, which breaks offline use and App Store review:\n  ${hits.join('\n  ')}`
+    );
   }
 }
 
@@ -160,15 +205,23 @@ async function main() {
 
   await copyVendor();
 
-  const indexPath = join(OUT, 'index.html');
-  await writeFile(indexPath, patchIndexHtml(await readFile(indexPath, 'utf8')));
+  for (const page of await readdir(OUT)) {
+    if (!page.endsWith('.html')) continue;
+    const path = join(OUT, page);
+    let html = patchBundledHtml(await readFile(path, 'utf8'));
+    if (page === 'index.html') html = patchIndexHtml(html);
+    await writeFile(path, html);
+  }
   await ensureNoRemoteRefs();
-  log('patched index.html');
+  log('patched the bundled pages');
 
   log(`done: ${relative(REPO, OUT)} (${((await dirSize(OUT)) / 1024 / 1024).toFixed(1)} MB)`);
 }
 
-main().catch((err) => {
-  console.error('[build-www] failed:', err.message);
-  process.exit(1);
-});
+// Only build when run as a script; the smoke suite imports findRemoteAssets.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error('[build-www] failed:', err.message);
+    process.exit(1);
+  });
+}

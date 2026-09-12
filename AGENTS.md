@@ -103,6 +103,19 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
   `env()` works; on an older one it pads the decor view itself and injects zeroes.
   Using the custom properties as well would double-pad on old devices. The build adds
   `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
+- **A route file is executable content.** leaflet-gpx builds waypoint popups by
+  concatenating `<name>` and `<desc>` straight into an HTML string, so a GPX carrying
+  markup there runs script in our origin — where the provider API key lives, and where
+  the Capacitor bridge is in reach. `cwSanitizeGPXText` escapes those text nodes before
+  the library sees them, and both loaders call it. It only re-serialises when something
+  needed escaping, so ordinary routes reach the parser untouched. Anything else that
+  renders route metadata must use `textContent`, never `innerHTML`.
+- **Nothing in the bundle may be fetched from another site.** Not just the tags in
+  `index.html`: marker icons were hardcoded in three scripts and the help pages carried
+  a donation button from a CDN. `findRemoteAssets` in the build scans every first-party
+  HTML, JS and CSS file and fails the build; a URL containing `{` is skipped, which is
+  how the map tile template stays legal. Remote `<img>` tags in bundled pages are
+  replaced by their alt text.
 - **Two drains can overlap.** `consumePendingShare` in `native.js` refuses to run
   twice at once, but a route can land in the inbox while a call is already in flight,
   and the answer to that call was decided before it arrived. A request that turns up
@@ -162,6 +175,10 @@ Two things about it are worth knowing before you extend it:
 If you add a handoff path, add a test for it. If you add a CDN reference, the build
 fails before the tests even run.
 
+A Playwright glob matches the whole URL, query string included, so `**/route.gpx`
+also matches a navigation to `index.html?gpx_url=/route.gpx` and hijacks the page
+itself. Route on `url.pathname` instead; two probes here were silently broken by it.
+
 **Always check a new test against the bug it is meant to catch.** Three of the tests
 here passed against the broken code on the first attempt and had to be rewritten. The
 mid-drain test is the instructive one: the shell drains the inbox once at boot, and
@@ -188,3 +205,10 @@ code does and what makes the race reproducible.
   that no longer exists; harmless, but it is a dead branch.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
   confirmation would be friendlier.
+- The donation button on the help pages is an image on buymeacoffee's CDN. The bundle
+  degrades it to a text link because an offline app cannot fetch it; dropping the PNG
+  into `public/assets/` and pointing both pages at it would restore the button and
+  remove a third-party request from the website too.
+- Only waypoint metadata is sanitised, because that is the only place the libraries
+  build HTML from file content. Any new feature that renders something out of a route
+  needs the same scrutiny.

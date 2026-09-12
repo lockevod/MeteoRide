@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
+import { findRemoteAssets } from '../scripts/build-www.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(HERE, 'fixtures/route.gpx');
@@ -85,10 +86,10 @@ test('boots with no network at all', async ({ page }) => {
   expect(crashes, 'the page threw while booting').toEqual([]);
 });
 
-test('the bundle references nothing remote', async () => {
-  const html = await readFile(join(WWW, 'index.html'), 'utf8');
-  const loaders = /<(?:script[^>]*\ssrc|link[^>]*\srel="stylesheet"[^>]*\shref|img[^>]*\ssrc)="(https?:\/\/[^"]+)"/g;
-  expect([...html.matchAll(loaders)].map((m) => m[1])).toEqual([]);
+// Not just index.html: marker icons and a donation button were being pulled from
+// other sites by the scripts and the help pages, which an offline app cannot do.
+test('the bundle fetches no assets from anywhere else', async () => {
+  expect(await findRemoteAssets(WWW)).toEqual([]);
 });
 
 // Read from public/, not from the bundle: build-www.mjs strips these blocks, so
@@ -121,8 +122,9 @@ test('loads a route from ?gpx_url=', async ({ page }) => {
   await goOffline(page);
   // Registered after goOffline on purpose: Playwright runs the most recent handler
   // first, so this one wins over the catch-all and serves the fixture from memory.
-  await page.route('**/hosted-route.gpx', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: gpx })
+  await page.route(
+    (url) => url.pathname === '/hosted-route.gpx',
+    (route) => route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: gpx })
   );
 
   await page.goto('/index.html?gpx_url=/hosted-route.gpx&name=Hosted%20route');
@@ -232,4 +234,49 @@ test('a route arriving mid-drain is not left behind', async ({ page }) => {
     .poll(() => page.evaluate(() => window.__delivered), { timeout: 10000 })
     .toEqual(['first.gpx', 'second.gpx']);
   expect(loaderFailures).toEqual([]);
+});
+
+// leaflet-gpx concatenates waypoint <name> and <desc> into an HTML popup string, so a
+// route is executable content. It reaches the app from a link, from another app's share
+// sheet, or from a file — and it would run in the origin holding the provider API key,
+// with the Capacitor bridge in reach.
+test('a booby-trapped route cannot run script', async ({ page }) => {
+  const evil = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="evil" xmlns="http://www.topografix.com/GPX/1/1">
+  <wpt lat="41.479" lon="2.316">
+    <name>&lt;img src=x onerror="window.__pwned = 'yes'"&gt;</name>
+    <desc>&lt;script&gt;window.__pwned = 'yes'&lt;/script&gt;</desc>
+  </wpt>
+  <trk><name>Evil</name><trkseg>
+    <trkpt lat="41.4790" lon="2.3160"/><trkpt lat="41.4770" lon="2.3050"/>
+  </trkseg></trk>
+</gpx>`;
+
+  await goOffline(page);
+  await page.route(
+    (url) => url.pathname === '/evil.gpx',
+    (route) => route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: evil })
+  );
+
+  await page.goto('/index.html?gpx_url=/evil.gpx');
+  await mapReady(page);
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+
+  expect(await page.evaluate(() => window.__pwned), 'the route executed script').toBeUndefined();
+
+  // The waypoint text still reaches the user, as text.
+  const popups = await page.evaluate(() => {
+    const found = [];
+    const walk = (layer) => {
+      if (layer.getPopup && layer.getPopup()) found.push(String(layer.getPopup().getContent()));
+      if (layer.eachLayer) layer.eachLayer(walk);
+    };
+    window.map.eachLayer(walk);
+    return found;
+  });
+  expect(popups.length, 'no waypoint popup was built').toBeGreaterThan(0);
+  for (const html of popups) {
+    expect(html).not.toMatch(/<img|<script/i);
+    expect(html).toContain('&lt;img');
+  }
 });
