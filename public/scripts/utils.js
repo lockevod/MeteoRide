@@ -15,6 +15,67 @@
     catch (_) { return new Set(); }
   }
 
+  // Forecast requests are watched so the app can say why a table came out empty,
+  // instead of leaving the user staring at nothing. Wrapping fetch once here beats
+  // threading a callback through every provider call site in app.js and compare.js,
+  // and it changes no behaviour: the original result is passed straight through.
+  const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org', 'my.meteoblue.com'];
+
+  let providerOk = 0;
+  let providerFailed = 0;
+  let providerStatus = '';
+  let providerTimer = null;
+
+  function isProviderUrl(url) {
+    try { return PROVIDER_HOSTS.includes(new URL(String(url), location.href).hostname); }
+    catch (_) { return false; }
+  }
+
+  function noteProvider(ok, status) {
+    if (ok) providerOk++;
+    else { providerFailed++; if (status) providerStatus = status; }
+    if (providerTimer) return;
+    // Wait for the run to finish: a chain that falls back to another provider is a
+    // success, and only a run where nothing at all worked is worth a message.
+    providerTimer = setTimeout(reportProviderOutcome, 1500);
+  }
+
+  function reportProviderOutcome() {
+    providerTimer = null;
+    const failed = providerFailed;
+    const ok = providerOk;
+    const status = providerStatus;
+    providerOk = providerFailed = 0;
+    providerStatus = '';
+    if (!failed || ok) return;   // something came back, so the table has data
+
+    try {
+      let msg;
+      if (isOffline()) msg = t('offline_no_data');
+      else if (status === '401' || status === '403') msg = t('provider_rejected');
+      else msg = t('provider_unreachable');
+      window.setNotice && window.setNotice(msg, 'warn');
+    } catch (e) { logDebug(`reportProviderOutcome failed: ${e.message}`, true); }
+  }
+
+  function watchProviderRequests() {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    if (window.__cwFetchWatched) return;
+    window.__cwFetchWatched = true;
+
+    const original = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (!isProviderUrl(url)) return original(input, init);
+      return original(input, init).then(
+        (res) => { noteProvider(res.ok, String(res.status)); return res; },
+        (err) => { noteProvider(false, 'network'); throw err; }
+      );
+    };
+  }
+
+  watchProviderRequests();
+
   function isOffline() {
     // navigator.onLine is only trustworthy when it says false, which is the case
     // that matters here: out of coverage rather than behind a captive portal.
@@ -50,6 +111,9 @@
       toggle_help: "Ayuda ❓",
       share_route: "Enviar ruta a otra app",
       offline_stale_forecast: "Sin conexión. Previsión de hace {age}.",
+      offline_no_data: "Sin conexión y sin previsión guardada para esta ruta.",
+      provider_unreachable: "No se ha podido obtener la previsión: el proveedor no responde.",
+      provider_rejected: "El proveedor ha rechazado la petición. Revisa tu API key en ajustes.",
       prepare_offline: "Preparar ruta para ir sin cobertura",
       prepare_offline_done: "Ruta preparada. Previsión guardada ({n} puntos).",
       prepare_offline_empty: "Carga una ruta y espera a que salga la previsión antes de prepararla.",
@@ -149,6 +213,9 @@
       toggle_help: "Help ❓",
       share_route: "Send route to another app",
       offline_stale_forecast: "No connection. Forecast is {age} old.",
+      offline_no_data: "No connection, and no saved forecast for this route.",
+      provider_unreachable: "Could not get the forecast: the provider is not responding.",
+      provider_rejected: "The provider rejected the request. Check your API key in settings.",
       prepare_offline: "Save this route for riding without coverage",
       prepare_offline_done: "Route saved. Forecast stored ({n} points).",
       prepare_offline_empty: "Load a route and let the forecast appear before saving it.",

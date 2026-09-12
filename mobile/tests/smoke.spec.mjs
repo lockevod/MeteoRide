@@ -589,3 +589,57 @@ test('the app toolbar stays on one line', async ({ page }) => {
     .toBeLessThan(tallestButton * 1.5);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('an empty table says why', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // The provider is unreachable and nothing is cached, which used to render an
+  // empty table with no explanation at all.
+  control.offline = true;
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(page.locator('.notice')).toContainText(/not responding|no responde/);
+  expect(await shownTemperatures(page)).toEqual([]);
+});
+
+test('a provider that recovers through the chain says nothing', async ({ page }) => {
+  // First call fails, the rest succeed: that is a working run, not an error.
+  let calls = 0;
+  await page.route(
+    (url) => url.hostname === 'api.open-meteo.com',
+    (route) => {
+      calls += 1;
+      return calls === 1
+        ? route.abort()
+        : route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(forecastAt(21)),
+          });
+    }
+  );
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await page.waitForTimeout(2000);   // past the window the warning would fire in
+  await expect(page.locator('.notice')).not.toContainText(/not responding|no responde/);
+});
+
+test('a rejected API key is named as such', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":true}' })
+  );
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect(page.locator('.notice')).toContainText(/API key/);
+});

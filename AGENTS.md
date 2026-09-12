@@ -249,8 +249,17 @@ is never shown when there is one**. The second is the one to be careful about. S
 an old forecast as if it were current is worse than showing nothing.
 
 `navigator.onLine` is only trusted when it says false, which is the case that matters —
-out of coverage, rather than behind a captive portal. A reachable network with an
-unreachable provider still shows an empty table.
+out of coverage, rather than behind a captive portal.
+
+A run where no provider answered now says so instead of leaving an empty table. A
+single `fetch` wrapper in `utils.js` watches the three forecast hosts and, 1.5 seconds
+after the last failure, reports one of three things: offline with nothing saved, the
+provider not responding, or the provider rejecting the request, which usually means a
+bad API key. It stays quiet whenever any provider answered, because the app falls back
+through a chain and a recovered run is a working run, not an error. Wrapping fetch once
+beats threading a callback through every call site in `app.js` and `compare.js`, and it
+passes the original result straight through. All three messages, and the silence on a
+recovered run, have tests that fail without them.
 
 The header's 📴 button pins the cache entries a prepared route depends on, so the
 clear-out that runs when localStorage fills up skips them, and tells the user how many
