@@ -249,19 +249,30 @@ seconds: generous for an IndexedDB read, short enough that an empty install is n
 in silence. Both directions are tested, including that a first run *with* coverage
 stays quiet.
 
-The map background is the one thing that genuinely cannot be recovered, and the web
-view's HTTP cache does not save it. That was measured rather than assumed: serving
-tiles from a real server, loading the route, taking the server away and reopening with
-the route restored to the same area produced zero tiles from cache. So a blank grey
-rectangle is what offline looks like, and an unexplained one reads as a failure. A
-small badge at the bottom of the map says so, clear of the track and the controls, and
-only when the device is offline. Both directions are tested.
+The map background is kept too, by `scripts/tile-cache.js`. The web view's own HTTP
+cache does not do it: serving tiles from a real server, loading the route, taking the
+server away and reopening with the route restored to the same area produced zero tiles
+from cache. So tiles are stored in IndexedDB as they are viewed, capped at 1200 and
+trimmed oldest-first.
 
-Caching tiles as they are viewed would fix it for the area the user actually looked at,
-and is allowed: OpenStreetMap's policy forbids bulk downloading, not caching what you
-legitimately requested. It needs a TileLayer that stores into IndexedDB and serves from
-there when offline, plus quota handling. Not built, and worth weighing against what it
-buys, which is the background and nothing else.
+Only what the user looked at is stored, never fetched ahead. That is the line
+OpenStreetMap's tile policy draws: caching what you requested is fine, bulk downloading
+is not. Do not add prefetching.
+
+Reading a tile's bytes needs a cross-origin `fetch`, which is why `connect-src` names
+the tile host as well as `img-src`. Whether the real tile servers allow that read has
+**not been verified**, because the host is unreachable from the environment this was
+built in. So a failed fetch falls back to a plain `<img>`, exactly how the map worked
+before, and the layer remembers to stop trying — but only when the `<img>` then
+succeeds, since a request that fails both ways is a network problem and must not
+disable caching for good. For the same reason the caching layer is used **only in the
+app** (`window.CW_NATIVE`); the website keeps `L.tileLayer` untouched. Verify on a
+device, then flip it on for the web if you want it there.
+
+The offline badge follows the tiles rather than the connection, and reads their state
+from the DOM rather than counting events: the first tile load finishes before there is
+a layer to attach a listener to. With tiles from the cache there is nothing to
+apologise for, so it stays hidden.
 
 What that leaves missing is only the map tiles. Screenshot the offline state before
 deciding the map matters: the route line, the wind arrows, the rain markers, the whole

@@ -170,9 +170,10 @@ in from another app takes precedence over it.
 The 📴 button saves the forecast for the route you have loaded, so the entries survive
 the clear-out that runs when storage fills up. Press it at home before leaving.
 
-Map tiles are the part that cannot be prepared: OpenStreetMap's terms do not allow
-downloading them in bulk ahead of time. Tiles you have already looked at often survive
-in the web view's own cache, but a stretch you have never opened will be blank.
+Map tiles you have already looked at are kept on the device and come back without a
+connection, so the area you studied at home still has a background. A stretch you never
+opened will be blank, and the map says so: tiles are only stored as you view them,
+never downloaded ahead, which is what OpenStreetMap's terms allow.
 
 ## What is in the bundle
 

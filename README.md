@@ -145,8 +145,9 @@ What the native build adds:
   instead of loaded from a CDN.
 - **Useful without coverage**: the app reopens on your last route, and out of signal it
   still shows the forecast it downloaded, labelled with its age, instead of an empty
-  table. A button saves the prepared route's forecast so it is not cleared. Only the
-  map tiles need a connection; the route, the wind arrows and the table do not.
+  table. A button saves the prepared route's forecast so it is not cleared. Map tiles
+  you have already looked at are kept too, so the area you studied at home still has a
+  background on the mountain.
 
 The project lives in `mobile/`. Per-platform instructions:
 

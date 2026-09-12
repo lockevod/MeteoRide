@@ -339,17 +339,28 @@
     return el;
   }
 
+  // Tiles viewed earlier are kept, so being offline no longer means a blank map.
+  // The badge follows what happened to the tiles rather than the connection, read
+  // from the DOM rather than counted from events: the first load finishes before
+  // there is anything to attach a listener to.
+  function tilesAreMissing() {
+    const tiles = document.querySelectorAll('#map img.leaflet-tile');
+    if (!tiles.length) return true;
+    return [...tiles].some((t) => !t.classList.contains('leaflet-tile-loaded'));
+  }
+
   function updateMapNotice() {
     const el = mapTilesNotice();
-    if (el) el.hidden = !offline();
+    if (el) el.hidden = !(offline() && tilesAreMissing());
   }
 
   function watchConnectivity() {
-    updateMapNotice();
     window.addEventListener('online', updateMapNotice);
     window.addEventListener('offline', updateMapNotice);
-    // The map is built after boot on a cold start, so try again once it exists.
-    waitFor(() => window.map, 10000).then(updateMapNotice);
+    waitFor(() => window.cwTileLayer, 10000).then((layer) => {
+      if (layer) layer.on('load tileerror', updateMapNotice);
+      updateMapNotice();
+    });
   }
 
   /* ---------- external links ---------- */

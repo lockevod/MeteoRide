@@ -724,3 +724,59 @@ test('the blank map says why, and only when it is blank', async ({ page }) => {
   // Out of the middle of the map, where the track is drawn.
   expect(badgeBox.top).toBeGreaterThan(mapBox.top + mapBox.height * 0.6);
 });
+
+/** Tiles a server would send, with the cross-origin header the cache depends on. */
+async function stubTiles(page, control) {
+  await page.route(
+    (url) => url.hostname.endsWith('tile.openstreetmap.org'),
+    (route) =>
+      control.offline
+        ? route.abort()
+        : route.fulfill({
+            status: 200,
+            contentType: 'image/svg+xml',
+            headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=604800' },
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e8e0d8"/></svg>',
+          })
+  );
+}
+
+const tilesDrawn = (page) => page.locator('#map img.leaflet-tile-loaded');
+
+test('map tiles already seen survive losing coverage', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await stubTiles(page, control);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(tilesDrawn(page)).not.toHaveCount(0);
+  await expect
+    .poll(async () => (await page.evaluate(() => window.cwTileCacheStats())).tiles)
+    .toBeGreaterThan(0);
+
+  // Out of coverage, cold start: the route restores and the background comes back
+  // from what was stored, so the map is not a blank rectangle.
+  control.offline = true;
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+  await page.reload();
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect(tilesDrawn(page)).not.toHaveCount(0);
+
+  // And with a background there is nothing to apologise for.
+  await expect(page.locator('#cwMapOffline')).toBeHidden();
+});
+
+test('the website keeps the plain tile layer', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  // No Capacitor, so no caching layer: the map behaves exactly as it always did.
+  expect(await page.evaluate(() => !!(window.cwTileLayer && window.cwTileLayer.createTile
+    && window.cwTileLayer.createTile !== window.L.TileLayer.prototype.createTile))).toBe(false);
+});

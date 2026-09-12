@@ -2838,9 +2838,20 @@ function initMap() {
     attributionControl: true  // Ensure attribution control is enabled
   }).setView([41.3874, 2.1686], 14);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const tileOptions = {
     attribution: '<span class="map-provider">| © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>',
-  }).addTo(map);
+  };
+  // In the app, tiles are kept as they are viewed so the map still has a background
+  // after losing coverage. On the website nothing changes: the plain layer is used,
+  // because the caching one reads tiles with fetch and that depends on the tile
+  // server allowing cross-origin reads, which has not been verified in production.
+  const tileLayer = (window.CW_NATIVE && window.cwCreateTileLayer
+    && window.cwCreateTileLayer(tileUrl, tileOptions)) || L.tileLayer(tileUrl, tileOptions);
+  tileLayer.addTo(map);
+  // Exposed so the shell can tell a map with no background from one that simply
+  // came out of the cache.
+  window.cwTileLayer = tileLayer;
 
   // Move the built-in attribution control to the bottom-right
   if (map.attributionControl && typeof map.attributionControl.setPosition === 'function') {
