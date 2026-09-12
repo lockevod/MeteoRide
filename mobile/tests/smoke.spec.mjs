@@ -669,3 +669,30 @@ test('the app reopens on the last route, with no network', async ({ page }) => {
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   await expect(page.locator('.notice')).toContainText('1 h 30 min');
 });
+
+test('a first run without coverage says so', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+
+  // Nothing stored and nothing reachable: the screen would otherwise stay blank.
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(page.locator('.notice')).toContainText(/needs coverage|necesita cobertura/, {
+    timeout: 15000,
+  });
+});
+
+test('a first run with coverage stays quiet', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 18, offline: false });
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.waitForTimeout(7000);   // past the point the offline notice would appear
+
+  await expect(page.locator('.notice')).not.toContainText(/needs coverage|necesita cobertura/);
+});

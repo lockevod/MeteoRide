@@ -225,11 +225,22 @@
     const params = new URLSearchParams(window.location.search || '');
     if (params.has('gpx_url') || params.has('url') || params.has('shared') || params.has('shared_id')) return;
 
+    // Five seconds is generous for an IndexedDB read and short enough that a first
+    // run with nothing stored is not left in silence.
     const routes = await waitFor(() => {
       const list = window.getRecentRoutes ? window.getRecentRoutes() : [];
       return list && list.length ? list : null;
-    });
-    if (!routes || window.lastGPXFile) return;
+    }, 5000);
+
+    if (!routes) {
+      // First run out of coverage: nothing to restore and no way to fetch anything.
+      // Saying so beats an empty screen that looks broken.
+      if (!window.lastGPXFile && offline()) {
+        notify('offline_first_run', 'No connection. You can open a route, but the forecast needs coverage.');
+      }
+      return;
+    }
+    if (window.lastGPXFile) return;
 
     try {
       log('restoring last route', routes[0].name || '');
@@ -237,6 +248,11 @@
     } catch (e) {
       log('could not restore the last route', e);
     }
+  }
+
+  function offline() {
+    const utils = window.cw && window.cw.utils;
+    return utils && utils.isOffline ? utils.isOffline() : navigator.onLine === false;
   }
 
   /** Polls until the check returns something truthy, or gives up. */

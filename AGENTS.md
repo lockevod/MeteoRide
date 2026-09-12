@@ -243,6 +243,12 @@ device. `restoreLastRoute` in `native.js` puts the most recent route back on scr
 and the cached forecast fills in behind it. Native only, so the website's opening
 behaviour is unchanged.
 
+A first run out of coverage has nothing to restore and no way to fetch anything, so
+it says that rather than sitting blank. The wait for the recent-route list is five
+seconds: generous for an IndexedDB read, short enough that an empty install is not left
+in silence. Both directions are tested, including that a first run *with* coverage
+stays quiet.
+
 What that leaves missing is only the map tiles. Screenshot the offline state before
 deciding the map matters: the route line, the wind arrows, the rain markers, the whole
 table and the sunrise times are all drawn client-side and all present without tiles.
