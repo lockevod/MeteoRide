@@ -13,14 +13,19 @@ import java.util.List;
 
 public class MainActivity extends BridgeActivity {
 
+    /** Marks an intent whose route has already been taken, so it is not read twice. */
+    private static final String EXTRA_HANDLED = "cc.meteoride.app.ROUTE_HANDLED";
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // Must run before super.onCreate, which builds the bridge.
         registerPlugin(MeteoRideSharePlugin.class);
         super.onCreate(savedInstanceState);
 
-        // The app was launched by a share or by opening a file.
-        ingest(getIntent());
+        // The app was launched by a share or by opening a file. Only on a genuine
+        // launch: a rotation or a restore recreates the activity with the same intent,
+        // and reading it again would load the route a second time.
+        if (savedInstanceState == null) ingest(getIntent());
     }
 
     @Override
@@ -33,7 +38,8 @@ public class MainActivity extends BridgeActivity {
 
     /** Parks any route carried by the intent in the shared inbox. */
     private boolean ingest(Intent intent) {
-        if (intent == null) return false;
+        if (intent == null || intent.getBooleanExtra(EXTRA_HANDLED, false)) return false;
+        intent.putExtra(EXTRA_HANDLED, true);
         boolean stored = false;
         for (Uri uri : routeUris(intent)) {
             stored |= MeteoRideShareStore.ingest(this, uri);

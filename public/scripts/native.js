@@ -40,21 +40,31 @@
   // The iOS share extension (and "Open in MeteoRide") drops files in a shared
   // container; the MeteoRideShare plugin hands them over one at a time.
   let consuming = false;
+  let askedAgain = false;
 
   async function consumePendingShare() {
     const share = plugins.MeteoRideShare;
-    if (!share || consuming) return false;
+    if (!share) return false;
+    // A share can land while we are still draining the previous one. Remember it
+    // instead of returning, or the route would wait for the next app activation.
+    if (consuming) {
+      askedAgain = true;
+      return false;
+    }
     consuming = true;
     try {
       let got = false;
-      // Loop: several files can pile up while the app was closed.
-      for (let i = 0; i < 10; i++) {
-        const payload = await share.consumePending();
-        if (!payload || !payload.gpx) break;
-        log('received shared route', payload.name || '');
-        injectRoute(payload.gpx, payload.name);
-        got = true;
-      }
+      do {
+        askedAgain = false;
+        // Several files can pile up while the app was closed.
+        for (let i = 0; i < 10; i++) {
+          const payload = await share.consumePending();
+          if (!payload || !payload.gpx) break;
+          log('received shared route', payload.name || '');
+          injectRoute(payload.gpx, payload.name);
+          got = true;
+        }
+      } while (askedAgain);
       return got;
     } catch (e) {
       log('consumePending failed', e);
@@ -84,11 +94,6 @@
       app.addListener('appStateChange', (state) => {
         if (state && state.isActive) consumePendingShare();
       });
-      // Android has no appUrlOpen for a plain share intent, so the plugin says so.
-      const share = plugins.MeteoRideShare;
-      if (share && typeof share.addListener === 'function') {
-        share.addListener('sharedRouteAvailable', () => consumePendingShare());
-      }
       if (window.CW_PLATFORM === 'android') {
         app.addListener('backButton', ({ canGoBack }) => {
           if (canGoBack && window.location.pathname !== '/index.html' && window.location.pathname !== '/') {
@@ -99,6 +104,16 @@
         });
       }
     } catch (e) { log('app listeners', e); }
+  }
+
+  // Android has no appUrlOpen for a plain share intent, so the plugin says so itself.
+  // Kept out of setupApp: it must not depend on the App plugin being installed.
+  function setupShareEvents() {
+    const share = plugins.MeteoRideShare;
+    if (!share || typeof share.addListener !== 'function') return;
+    try {
+      share.addListener('sharedRouteAvailable', () => consumePendingShare());
+    } catch (e) { log('share listener', e); }
   }
 
   /* ---------- external links ---------- */
@@ -123,6 +138,7 @@
   function boot() {
     setupChrome();
     setupApp();
+    setupShareEvents();
     setupLinks();
     consumePendingShare();
     hideSplash();

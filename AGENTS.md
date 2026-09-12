@@ -103,6 +103,11 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
   `env()` works; on an older one it pads the decor view itself and injects zeroes.
   Using the custom properties as well would double-pad on old devices. The build adds
   `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
+- **Two drains can overlap.** `consumePendingShare` in `native.js` refuses to run
+  twice at once, but a route can land in the inbox while a call is already in flight,
+  and the answer to that call was decided before it arrived. A request that turns up
+  mid-drain therefore sets a flag and the drain repeats, rather than being dropped
+  until the app is next activated.
 - **Route injection races the app boot.** `cwLoadGPXFromString` draws straight onto
   the Leaflet map, so `window.map` must exist. Shared routes regularly arrive before
   `initMap` has run. `cwInjectGPXFromText` in `gpx-share.js` now waits for both the
@@ -111,6 +116,10 @@ to wire them up. If you find a dependable way to script the Xcode target, commit
 - **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
   executes long after `initGpxShare()` is called from line 76 of the same file. Any
   code running at load time must poll for it rather than assume it exists.
+- **An Android intent can be read twice.** A rotation or a restore recreates the
+  activity with the same intent still attached, so `onCreate` would ingest the same
+  route again. `MainActivity` guards on `savedInstanceState == null` and marks the
+  intent with an extra once its route has been taken.
 - **Share types are a mess.** Plenty of apps hand a `.gpx` over as
   `application/octet-stream` with no usable name, so both stores accept an item whose
   name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
@@ -152,6 +161,14 @@ Two things about it are worth knowing before you extend it:
 
 If you add a handoff path, add a test for it. If you add a CDN reference, the build
 fails before the tests even run.
+
+**Always check a new test against the bug it is meant to catch.** Three of the tests
+here passed against the broken code on the first attempt and had to be rewritten. The
+mid-drain test is the instructive one: the shell drains the inbox once at boot, and
+that drain was swallowing the request the test meant to exercise, so the scenario ran
+but proved nothing. It now waits the boot drain out, and the stubbed plugin decides
+its answer when the call arrives rather than when it resolves, which is what native
+code does and what makes the race reproducible.
 
 ## Open work
 

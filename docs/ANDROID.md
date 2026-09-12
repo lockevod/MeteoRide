@@ -51,15 +51,21 @@ web layer reads them.
 
 ## Testing the share flow
 
+Push the file into the app's own external directory. Anywhere else in shared storage
+is off limits: the app asks for no storage permission, and scoped storage would refuse
+a `file://` URI pointing at `Download/`.
+
 ```bash
-adb push route.gpx /sdcard/Download/
+adb push route.gpx /sdcard/Android/data/cc.meteoride.app/files/
 adb shell am start -a android.intent.action.VIEW \
-  -d file:///sdcard/Download/route.gpx -t application/gpx+xml \
-  -n cc.meteoride.app/.MainActivity
+  -d file:///sdcard/Android/data/cc.meteoride.app/files/route.gpx \
+  -t application/gpx+xml -n cc.meteoride.app/.MainActivity
 ```
 
-For the share sheet, open any file manager, long-press a `.gpx` and pick Share. Watch
-what happens with `adb logcat -s MeteoRide Capacitor/Console`.
+That exercises the file-open path. The share sheet cannot be driven meaningfully from
+`adb`, because the `content://` URI and its permission grant come from the sharing
+app: open a file manager, long-press a `.gpx` and pick Share. Watch either path with
+`adb logcat -s MeteoRide Capacitor/Console`.
 
 ## Release build
 

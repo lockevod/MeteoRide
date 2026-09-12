@@ -133,35 +133,56 @@ test('loads a route from ?gpx_url=', async ({ page }) => {
   expect(loaderFailures).toEqual([]);
 });
 
+/** Stand-in for the bridge Capacitor injects into the web view, implementing the same
+ *  MeteoRideShare contract as the iOS and Android plugins. `delayMs` makes a drain slow
+ *  enough to collide with a second request, which is the interesting case. */
+async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
+  await page.addInitScript(
+    ({ routes: initial, delayMs: delay }) => {
+      const pending = [...initial];
+      window.__delivered = [];
+      window.__enqueue = (route) => pending.push(route);
+      window.__swRegistered = false;
+
+      const register = navigator.serviceWorker?.register;
+      if (register) {
+        navigator.serviceWorker.register = function (...args) {
+          window.__swRegistered = true;
+          return register.apply(navigator.serviceWorker, args);
+        };
+      }
+
+      const noop = { addListener: async () => ({ remove() {} }) };
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'ios',
+        Plugins: {
+          MeteoRideShare: {
+            ...noop,
+            consumePending: async () => {
+              // Snapshot on arrival, like native code reading its inbox: a route that
+              // lands while this call is in flight is NOT in this call's answer.
+              const next = pending.shift();
+              if (delay) await new Promise((r) => setTimeout(r, delay));
+              if (next) window.__delivered.push(next.name);
+              return next || {};
+            },
+          },
+          App: noop,
+          StatusBar: { setStyle: async () => {}, setBackgroundColor: async () => {} },
+          SplashScreen: { hide: async () => {} },
+        },
+      };
+    },
+    { routes, delayMs }
+  );
+}
+
 test('the native shell hands a shared route to the app', async ({ page }) => {
   const gpx = await readFile(FIXTURE, 'utf8');
   const loaderFailures = watchTheLoader(page);
 
-  // Stand-in for the bridge Capacitor injects into the web view, with the same
-  // MeteoRideShare contract the iOS and Android plugins implement.
-  await page.addInitScript((sharedGpx) => {
-    let pending = [{ name: 'Shared route.gpx', gpx: sharedGpx }];
-    window.__swRegistered = false;
-    const register = navigator.serviceWorker?.register;
-    if (register) {
-      navigator.serviceWorker.register = function (...args) {
-        window.__swRegistered = true;
-        return register.apply(navigator.serviceWorker, args);
-      };
-    }
-    const noop = { addListener: async () => ({ remove() {} }) };
-    window.Capacitor = {
-      isNativePlatform: () => true,
-      getPlatform: () => 'ios',
-      Plugins: {
-        MeteoRideShare: { ...noop, consumePending: async () => pending.shift() || {} },
-        App: noop,
-        StatusBar: { setStyle: async () => {}, setBackgroundColor: async () => {} },
-        SplashScreen: { hide: async () => {} },
-      },
-    };
-  }, gpx);
-
+  await installNativeBridge(page, { routes: [{ name: 'Shared route.gpx', gpx }] });
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
@@ -174,4 +195,41 @@ test('the native shell hands a shared route to the app', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.className)).toContain('cw-native');
   // The plugin replaces the service-worker handoff; registering it would be wrong.
   expect(await page.evaluate(() => window.__swRegistered)).toBe(false);
+});
+
+test('a route arriving mid-drain is not left behind', async ({ page }) => {
+  const gpx = await readFile(FIXTURE, 'utf8');
+  const loaderFailures = watchTheLoader(page);
+
+  const DELAY = 400;
+  await installNativeBridge(page, { delayMs: DELAY });
+  await goOffline(page);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // The shell drains once at boot. Let that finish, or it swallows the request below
+  // and the test stops exercising anything.
+  await page.waitForTimeout(DELAY * 2);
+
+  // Drain one route. The drain then asks again, and that second call comes back empty.
+  await page.evaluate((text) => {
+    window.__enqueue({ name: 'first.gpx', gpx: text });
+    window.cwConsumePendingShare();
+  }, gpx);
+
+  // Land the second route while that empty call is still in flight: after it was
+  // dispatched and before it resolves. That window is the whole point of the test.
+  await page.waitForTimeout(DELAY * 1.5);
+  await page.evaluate((text) => {
+    window.__enqueue({ name: 'second.gpx', gpx: text });
+    window.cwConsumePendingShare();
+  }, gpx);
+
+  // Nothing else will trigger a drain. Only re-running after a request that arrived
+  // mid-drain can deliver this one.
+  await expect
+    .poll(() => page.evaluate(() => window.__delivered), { timeout: 10000 })
+    .toEqual(['first.gpx', 'second.gpx']);
+  expect(loaderFailures).toEqual([]);
 });
