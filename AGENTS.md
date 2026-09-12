@@ -249,11 +249,16 @@ seconds: generous for an IndexedDB read, short enough that an empty install is n
 in silence. Both directions are tested, including that a first run *with* coverage
 stays quiet.
 
-The map background is kept too, by `scripts/tile-cache.js`. The web view's own HTTP
-cache does not do it: serving tiles from a real server, loading the route, taking the
-server away and reopening with the route restored to the same area produced zero tiles
-from cache. So tiles are stored in IndexedDB as they are viewed, capped at 1200 and
-trimmed oldest-first.
+The map background is kept too, by `scripts/tile-cache.js`. Do not count on the web
+view's own HTTP cache for it: serving tiles from a real server, loading a route, taking
+the server away and reopening produced zero tiles from cache. It has also been seen
+doing the opposite, keeping tiles across a reload in another setup, so treat it as
+unpredictable rather than absent — asserting either way in a test makes the test flaky,
+which is exactly how one of them behaved until the assertion was removed. Tiles are
+therefore stored in IndexedDB as they are viewed, capped at 1200 and trimmed
+oldest-first, and trimmed again whenever the database is opened: a session that views
+fewer tiles than the write counter's threshold would otherwise never trim at all, and
+the store would grow without bound across sessions.
 
 Only what the user looked at is stored, never fetched ahead. That is the line
 OpenStreetMap's tile policy draws: caching what you requested is fine, bulk downloading
@@ -271,8 +276,10 @@ device, then flip it on for the web if you want it there.
 
 The offline badge follows the tiles rather than the connection, and reads their state
 from the DOM rather than counting events: the first tile load finishes before there is
-a layer to attach a listener to. With tiles from the cache there is nothing to
-apologise for, so it stays hidden.
+a layer to attach a listener to. A MutationObserver on the map container backs that up,
+since Leaflet marks a loaded tile by adding a class to it and an event fired before we
+were listening is otherwise lost. With tiles from anywhere — the cache, the web view,
+the network — there is nothing to apologise for, so it stays hidden.
 
 What that leaves missing is only the map tiles. Screenshot the offline state before
 deciding the map matters: the route line, the wind arrows, the rain markers, the whole

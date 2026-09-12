@@ -780,3 +780,91 @@ test('the website keeps the plain tile layer', async ({ page }) => {
   expect(await page.evaluate(() => !!(window.cwTileLayer && window.cwTileLayer.createTile
     && window.cwTileLayer.createTile !== window.L.TileLayer.prototype.createTile))).toBe(false);
 });
+
+test('the tile cache stays bounded across sessions', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // Seed more tiles than the cap, as many sessions of riding would. Writing them
+  // directly is the point: a session that views only a handful of tiles must still
+  // end up trimming what earlier sessions left behind.
+  await page.evaluate(async () => {
+    const db = await new Promise((res) => {
+      const r = indexedDB.open('cw_tiles', 1);
+      r.onsuccess = (e) => res(e.target.result);
+    });
+    const store = db.transaction('tiles', 'readwrite').objectStore('tiles');
+    for (let i = 0; i < 1400; i++) {
+      store.put({ url: `https://x/${i}.png`, blob: new Blob(['t']), ts: 1000 + i });
+    }
+    await new Promise((res) => { store.transaction.oncomplete = res; });
+    db.close();
+  });
+  expect((await page.evaluate(() => window.cwTileCacheStats())).tiles).toBe(1400);
+
+  await page.reload();
+  await mapReady(page);
+
+  await expect
+    .poll(async () => (await page.evaluate(() => window.cwTileCacheStats())).tiles, { timeout: 15000 })
+    .toBeLessThanOrEqual(1000);
+
+  // The oldest went first, so the tiles most recently looked at are the survivors.
+  const survivors = await page.evaluate(async () => {
+    const db = await new Promise((res) => {
+      const r = indexedDB.open('cw_tiles', 1);
+      r.onsuccess = (e) => res(e.target.result);
+    });
+    return new Promise((res) => {
+      const q = db.transaction('tiles', 'readonly').objectStore('tiles').getAll();
+      q.onsuccess = () => res(q.result.map((r) => r.ts));
+    });
+  });
+  expect(Math.min(...survivors)).toBeGreaterThan(1000);
+});
+
+// Private browsing, blocked site data, a full disk. Caching is then impossible and
+// the app must behave as it always did. Deliberately says nothing about the badge:
+// whether the background survives depends on the web view's own HTTP cache, which
+// was observed doing it sometimes and not others, and that is not ours to assert.
+test('the map still works when storage is unavailable', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await stubTiles(page, control);
+
+  // Private browsing, blocked site data, a full disk: opening the database throws.
+  // Caching is then impossible, but the map must behave exactly as it always did.
+  await page.addInitScript(() => {
+    window.indexedDB = {
+      open() { throw new Error('IndexedDB is disabled'); },
+    };
+  });
+
+  const crashes = [];
+  page.on('pageerror', (e) => crashes.push(e.message));
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect(tilesDrawn(page)).not.toHaveCount(0);
+  await expect(routeName(page)).toContainText('Masnou');
+
+  // The dangerous combination: no network either, so every tile has to go through
+  // the cache lookup that cannot work. Tiles must settle as errors rather than hang
+  // forever waiting on a promise nobody resolves.
+  control.offline = true;
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+  await page.reload();
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(crashes).toEqual([]);
+});

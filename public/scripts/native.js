@@ -354,13 +354,34 @@
     if (el) el.hidden = !(offline() && tilesAreMissing());
   }
 
+  let noticeTimer = null;
+  function scheduleMapNotice() {
+    if (noticeTimer) return;
+    noticeTimer = setTimeout(() => { noticeTimer = null; updateMapNotice(); }, 250);
+  }
+
   function watchConnectivity() {
-    window.addEventListener('online', updateMapNotice);
-    window.addEventListener('offline', updateMapNotice);
+    window.addEventListener('online', scheduleMapNotice);
+    window.addEventListener('offline', scheduleMapNotice);
+
+    // Layer events alone are not enough: the first tiles can settle before there is
+    // a layer to listen to, and a run that ends on an event we missed leaves the
+    // badge in the wrong state. Watching the tiles themselves is what is reliable —
+    // Leaflet marks a tile loaded by adding a class to it.
+    const container = document.getElementById('map');
+    if (container && typeof MutationObserver === 'function') {
+      new MutationObserver(scheduleMapNotice).observe(container, {
+        subtree: true,
+        childList: true,
+        attributeFilter: ['class'],
+      });
+    }
+
     waitFor(() => window.cwTileLayer, 10000).then((layer) => {
-      if (layer) layer.on('load tileerror', updateMapNotice);
-      updateMapNotice();
+      if (layer) layer.on('load tileerror', scheduleMapNotice);
+      scheduleMapNotice();
     });
+    scheduleMapNotice();
   }
 
   /* ---------- external links ---------- */

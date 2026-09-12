@@ -35,7 +35,14 @@
           db.createObjectStore(STORE, { keyPath: 'url' }).createIndex('ts', 'ts');
         }
       };
-      request.onsuccess = (ev) => resolve(ev.target.result);
+      request.onsuccess = (ev) => {
+        const db = ev.target.result;
+        // Trim on open, not only on the write counter: a session that views fewer
+        // tiles than the counter's threshold would never trim at all, and the store
+        // would grow without bound across sessions.
+        trim(db);
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
     }).catch((e) => {
       console.warn('[cw] tile cache unavailable', e);
@@ -61,7 +68,11 @@
     const db = await openDb();
     if (!db) return;
     try {
-      db.transaction(STORE, 'readwrite').objectStore(STORE).put({ url, blob, ts: Date.now() });
+      const tx = db.transaction(STORE, 'readwrite');
+      // Running out of storage surfaces on the transaction, not on the call, and an
+      // unhandled one is noisy. Nothing to do about it beyond not caching this tile.
+      tx.onerror = () => { console.warn('[cw] tile not cached:', tx.error && tx.error.name); };
+      tx.objectStore(STORE).put({ url, blob, ts: Date.now() });
     } catch (_) { return; }
     // Trimming walks the whole store, so do it occasionally rather than every write.
     if (++writesSinceTrim >= 100) { writesSinceTrim = 0; trim(db); }
@@ -170,6 +181,20 @@
       if (url) { URL.revokeObjectURL(url); ev.tile._cwObjectUrl = null; }
     });
     return layer;
+  };
+
+  /** Drops every stored tile. Useful from the console, and if a settings screen
+   *  ever wants a "free up space" button. */
+  window.cwClearTileCache = async function () {
+    const db = await openDb();
+    if (!db) return false;
+    return new Promise((resolve) => {
+      try {
+        const req = db.transaction(STORE, 'readwrite').objectStore(STORE).clear();
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+      } catch (_) { resolve(false); }
+    });
   };
 
   window.cwTileCacheStats = async function () {
