@@ -110,6 +110,38 @@ async function copyVendor() {
 }
 
 /**
+ * The website gets its Content-Security-Policy from `public/_headers`, which is a
+ * Cloudflare Pages file: it is stripped from the bundle and would mean nothing to a
+ * web view anyway. So the app carries its own policy in a meta tag, and it matters
+ * more here — script running in the app reaches `window.Capacitor.Plugins`.
+ *
+ * Placement is deliberate. Capacitor's Android bridge is injected as an inline
+ * <script> immediately after `<head>`, which pushes this meta below it, and a meta
+ * policy does not govern script parsed before it — so the bridge still runs while
+ * everything after, including anything injected at runtime, is covered. On iOS the
+ * bridge arrives as a WKUserScript, which bypasses CSP entirely. Verified in Chromium,
+ * the engine Android's web view uses.
+ *
+ * No CDN hosts: the bundle carries every library. `connect-src` stays open to https:
+ * because ?gpx_url= fetches a route from wherever the user hosts it, and the forecast
+ * providers are chosen at runtime. `frame-ancestors` is omitted because a meta policy
+ * ignores it.
+ */
+const NATIVE_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
+  "font-src 'self' data:",
+  "connect-src 'self' https:",
+  "worker-src 'self'",
+  "manifest-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
+/**
  * Applied to every page in the bundle.
  *
  * An <img> pointing at another site cannot load in an offline app and leaves a broken
@@ -117,6 +149,11 @@ async function copyVendor() {
  * fetched from the website and mean nothing inside an app.
  */
 function patchBundledHtml(html) {
+  if (!html.includes('<head>')) throw new Error('a bundled page has no <head>; the CSP would not be applied');
+  html = html.replace(
+    '<head>',
+    `<head>\n<meta http-equiv="Content-Security-Policy" content="${NATIVE_CSP}">`
+  );
   html = html.replace(/\s*<meta (?:property|name)="(?:og|twitter):image"[^>]*>/g, '');
   return html.replace(/<img\b[^>]*\bsrc="https?:\/\/[^"]*"[^>]*>/gi, (tag) => {
     const alt = tag.match(/\balt="([^"]*)"/i);

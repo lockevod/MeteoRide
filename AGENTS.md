@@ -100,6 +100,17 @@ Rules that follow from that, all enforced somewhere:
   provider alert cards are built with `textContent` or escaped before a library turns
   them into HTML. `cwSanitizeGPXText` covers the file; `createAlertElement` covers
   OpenWeather. Adding `innerHTML` with external data anywhere reopens the door.
+- **The app ships its own Content-Security-Policy, in a meta tag.** `public/_headers`
+  is a Cloudflare Pages file: it is stripped from the bundle and would mean nothing to
+  a web view. The app needs one more than the website does, because script running
+  there reaches `window.Capacitor.Plugins`. Placement is load-bearing: Capacitor's
+  Android bridge is injected as an inline `<script>` immediately after `<head>`, which
+  pushes the meta below it, and a meta policy does not govern script parsed before it —
+  so the bridge runs and everything after it, including runtime injections, is covered.
+  On iOS the bridge is a WKUserScript, which bypasses CSP entirely. Both the survival
+  of the bridge and the blocking of an injected handler were verified in Chromium, the
+  engine Android's web view uses. The policy names no CDN because the bundle carries
+  every library.
 - **The website ships a Content-Security-Policy** (`public/_headers`): script only
   from our files and the three pinned CDNs, nothing inline, no eval. The bundle was
   driven under the same policy with the hosts collapsed to `'self'` and produced no
@@ -196,6 +207,22 @@ What is still open, and why it was left:
   `extensionContext.open` and falls back to walking the responder chain. If Apple
   closes that off, nothing is lost: the route waits in the inbox until the app is
   opened normally.
+
+## What the app still needs from the network
+
+Self-contained means the code: every library, font, icon and marker image is in the
+bundle, and the build fails if anything else creeps in. It does not mean the app works
+without a connection. Three things are fetched at runtime and cannot be bundled:
+
+| | Host | Without it |
+|---|---|---|
+| Map tiles | `*.tile.openstreetmap.org` | grey map, route and table still drawn |
+| Forecasts | `api.open-meteo.com`, `api.openweathermap.org` | no weather data, which is the point of the app |
+| `?gpx_url=` | wherever the user hosts the route | only that entry path fails |
+
+Everything else — loading a GPX from the share sheet or the file picker, parsing it,
+drawing it, the settings, the help pages — runs offline. That is what the "boots with
+no network at all" test pins down.
 
 ## Verifying a change
 

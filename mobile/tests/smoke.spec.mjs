@@ -264,18 +264,23 @@ test('a booby-trapped route cannot run script', async ({ page }) => {
 
   expect(await page.evaluate(() => window.__pwned), 'the route executed script').toBeUndefined();
 
-  // The waypoint text still reaches the user, as text.
-  const popups = await page.evaluate(() => {
-    const found = [];
-    const walk = (layer) => {
-      if (layer.getPopup && layer.getPopup()) found.push(String(layer.getPopup().getContent()));
-      if (layer.eachLayer) layer.eachLayer(walk);
-    };
-    window.map.eachLayer(walk);
-    return found;
-  });
-  expect(popups.length, 'no waypoint popup was built').toBeGreaterThan(0);
-  for (const html of popups) {
+  // The waypoint text still reaches the user, as text. leaflet-gpx parses
+  // asynchronously and adds waypoints after the track, so poll rather than peek once.
+  const readPopups = () =>
+    page.evaluate(() => {
+      const found = [];
+      const walk = (layer) => {
+        if (layer.getPopup && layer.getPopup()) found.push(String(layer.getPopup().getContent()));
+        if (layer.eachLayer) layer.eachLayer(walk);
+      };
+      window.map.eachLayer(walk);
+      return found;
+    });
+  await expect
+    .poll(async () => (await readPopups()).length, { message: 'no waypoint popup was built', timeout: 10000 })
+    .toBeGreaterThan(0);
+
+  for (const html of await readPopups()) {
     expect(html).not.toMatch(/<img|<script/i);
     expect(html).toContain('&lt;img');
   }
@@ -310,4 +315,37 @@ test('a hostile weather alert is shown as text', async ({ page }) => {
   expect(card.text).toContain('Viento fuerte');
   expect(card.text).toContain('AEMET');
   expect(card.closeButtons).toBe(1);
+});
+
+// The website's policy comes from public/_headers, a Cloudflare file that is stripped
+// from the bundle. The app carries its own, and it matters more here: script running
+// in the app reaches window.Capacitor.Plugins.
+test('the bundle carries its own content security policy', async ({ page }) => {
+  for (const name of ['index.html', 'help.html', 'help_en.html']) {
+    const html = await readFile(join(WWW, name), 'utf8');
+    const meta = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/);
+    expect(meta, `${name} has no CSP`).not.toBeNull();
+    const policy = meta[1];
+    // 'unsafe-inline' in script-src would give back exactly what the policy is for.
+    expect(policy).toMatch(/script-src 'self'\s*;/);
+    expect(policy).toContain("object-src 'none'");
+    expect(policy).toContain("base-uri 'self'");
+  }
+
+  // It has to actually apply, not merely be present.
+  await goOffline(page);
+  await page.addInitScript(() => {
+    window.__blocked = [];
+    document.addEventListener('securitypolicyviolation', (e) => window.__blocked.push(e.violatedDirective));
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<img src=x onerror="window.__pwned = 1">');
+  });
+  await page.waitForTimeout(300);
+
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  expect(await page.evaluate(() => window.__blocked)).toContain('script-src-attr');
 });

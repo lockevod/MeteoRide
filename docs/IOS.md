@@ -142,6 +142,17 @@ iOS icons must not be transparent; `icon-1024.png` already has a solid backgroun
 The Android project is committed under `mobile/android/` and its share handling is
 already wired, so there is no equivalent setup dance. See [ANDROID.md](ANDROID.md).
 
+## What is in the bundle
+
+Every library, font and image the app draws with is inside it, and the build fails if a
+reference to another site creeps back in. The bundled pages also carry a
+Content-Security-Policy meta tag, which the website gets from `public/_headers` instead;
+that file is a Cloudflare feature and is stripped from the bundle.
+
+Three things still come off the network at runtime and cannot be bundled: map tiles
+from OpenStreetMap, the forecast APIs, and a route fetched through `?gpx_url=`.
+Everything else works with the device offline.
+
 ## App Store review
 
 Guideline 4.2 rejects apps that are only a website in a wrapper. MeteoRide is not:

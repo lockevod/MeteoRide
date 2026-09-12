@@ -68,6 +68,17 @@ That exercises the file-open path. The share sheet cannot be driven meaningfully
 app: open a file manager, long-press a `.gpx` and pick Share. Watch either path with
 `adb logcat -s MeteoRide Capacitor/Console`.
 
+## What is in the bundle
+
+Every library, font and image the app draws with is inside it, and the build fails if a
+reference to another site creeps back in. The bundled pages also carry a
+Content-Security-Policy meta tag, which the website gets from `public/_headers` instead;
+that file is a Cloudflare feature and is stripped from the bundle.
+
+Three things still come off the network at runtime and cannot be bundled: map tiles
+from OpenStreetMap, the forecast APIs, and a route fetched through `?gpx_url=`.
+Everything else works with the device offline.
+
 ## Release build
 
 Create a keystore, then add the signing config to `android/app/build.gradle` and build:
