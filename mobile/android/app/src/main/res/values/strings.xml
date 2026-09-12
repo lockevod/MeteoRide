@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MeteoRide</string>
+    <string name="title_activity_main">MeteoRide</string>
+    <string name="package_name">cc.meteoride.app</string>
+    <string name="custom_url_scheme">cc.meteoride.app</string>
+</resources>

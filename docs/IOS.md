@@ -129,17 +129,8 @@ iOS icons must not be transparent; `icon-1024.png` already has a solid backgroun
 
 ## Android
 
-```bash
-cd mobile
-npm run add:android
-npm run android
-```
-
-The web layer is identical. The share flow needs an Android equivalent of the
-extension: an `intent-filter` for `application/gpx+xml` on `MainActivity` plus a
-small plugin that writes the received stream into the same inbox contract
-(`consumePending`). That is not written yet — `native.js` already calls the plugin,
-so only the Kotlin side is missing.
+The Android project is committed under `mobile/android/` and its share handling is
+already wired, so there is no equivalent setup dance. See [ANDROID.md](ANDROID.md).
 
 ## App Store review
 

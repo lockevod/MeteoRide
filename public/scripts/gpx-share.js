@@ -26,20 +26,45 @@
     }
   }
 
-  // Facade: prefer cwLoadGPXFromString when available, otherwise postMessage fallback.
-  function cwInjectGPXFromText(gpxText, routeName){
-    try {
-      const name = routeName || 'Shared route';
-      if (typeof window.cwLoadGPXFromString === 'function') {
-        window.cwLoadGPXFromString(String(gpxText || ''), name);
-        return true;
+  // The loader draws the track straight onto the Leaflet map, so both the loader and
+  // the map must exist. Shared routes routinely arrive before the app has booted:
+  // the service worker handoff, ?gpx_url= and the native shell all fire early.
+  function appReady() {
+    return !!window.map && typeof window.cwLoadGPXFromString === 'function';
+  }
+
+  function whenAppReady(cb) {
+    if (appReady()) return cb();
+    const deadline = Date.now() + 20000;
+    const timer = setInterval(() => {
+      if (appReady()) {
+        clearInterval(timer);
+        cb();
+      } else if (Date.now() > deadline) {
+        clearInterval(timer);
+        console.warn('[cw] app not ready after 20s; loading the route anyway');
+        cb();
       }
-      window.postMessage({ type: 'cw-gpx', name, gpx: String(gpxText || '') }, '*');
-      return true;
-    } catch(e){
-      console.error('[cw] cwInjectGPXFromText error', e);
-      return false;
-    }
+    }, 250);
+  }
+
+  // Single entry point for every handoff path: service worker, ?gpx_url=, shared_id
+  // and the native share extension.
+  function cwInjectGPXFromText(gpxText, routeName){
+    const name = routeName || 'Shared route';
+    const text = String(gpxText || '');
+    whenAppReady(() => {
+      try {
+        if (typeof window.cwLoadGPXFromString === 'function') {
+          window.cwLoadGPXFromString(text, name);
+        } else {
+          window.postMessage({ type: 'cw-gpx', name, gpx: text }, '*');
+        }
+      } catch(e){
+        console.error('[cw] cwInjectGPXFromText error', e);
+      }
+    });
+    return true;
   }
 
   // Parse GPX text and return a small summary object for easier debugging
@@ -213,21 +238,10 @@
   async function loadFromParams() {
     const { gpxUrl, name } = getParams();
     if (!gpxUrl) return;
-
-    // wait for loader to be available (if possible)
-    let tries = 0;
-    await new Promise((res) => {
-      const t = setInterval(() => {
-        tries++;
-        const ok = typeof window.cwLoadGPXFromString === "function";
-        if (ok || tries >= 60) { clearInterval(t); res(ok); }
-      }, 250);
-    });
-
     try {
       const txt = await fetchText(gpxUrl);
       if (!txt || !txt.includes("<gpx")) throw new Error("Fetched content is not GPX");
-      window.cwLoadGPXFromString && window.cwLoadGPXFromString(txt, name);
+      cwInjectGPXFromText(txt, name);
     } catch (e) {
       console.warn('[ingest] loadFromParams error', e);
     }
@@ -287,6 +301,9 @@
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('shared')) loadSharedGPX();
     } catch (_) {}
+
+    // ?gpx_url= / ?url= — the documented way to open a hosted route.
+    loadFromParams();
 
     // handle shared_id server copies
     loadSharedIdIfPresent();

@@ -64,36 +64,10 @@
     }
   }
 
-  // The loader draws the track straight onto the Leaflet map, so the map has to
-  // exist first: a shared route usually arrives before the app has finished booting.
-  function appReady() {
-    return !!window.map && (
-      typeof window.cwInjectGPXFromText === 'function' ||
-      typeof window.cwLoadGPXFromString === 'function'
-    );
-  }
-
+  // cwInjectGPXFromText (gpx-share.js) already waits for the map and the loader,
+  // which matters here: shared routes arrive while the app is still booting.
   function injectRoute(text, name) {
-    const routeName = name || 'Shared route';
-    const inject = () => {
-      if (typeof window.cwInjectGPXFromText === 'function') {
-        window.cwInjectGPXFromText(text, routeName);
-      } else {
-        window.cwLoadGPXFromString(text, routeName);
-      }
-    };
-    if (appReady()) return inject();
-
-    let tries = 0;
-    const timer = setInterval(() => {
-      if (appReady()) {
-        clearInterval(timer);
-        inject();
-      } else if (++tries > 80) {   // 20s
-        clearInterval(timer);
-        log('app never became ready; dropping shared route', routeName);
-      }
-    }, 250);
+    window.cwInjectGPXFromText(text, name || 'Shared route');
   }
 
   /* ---------- app lifecycle ---------- */
@@ -110,6 +84,11 @@
       app.addListener('appStateChange', (state) => {
         if (state && state.isActive) consumePendingShare();
       });
+      // Android has no appUrlOpen for a plain share intent, so the plugin says so.
+      const share = plugins.MeteoRideShare;
+      if (share && typeof share.addListener === 'function') {
+        share.addListener('sharedRouteAvailable', () => consumePendingShare());
+      }
       if (window.CW_PLATFORM === 'android') {
         app.addListener('backButton', ({ canGoBack }) => {
           if (canGoBack && window.location.pathname !== '/index.html' && window.location.pathname !== '/') {

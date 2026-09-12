@@ -143,14 +143,16 @@ What the native build adds:
 - **Fully offline assets**: Leaflet, SunCalc and the weather icons are bundled
   instead of loaded from a CDN.
 
-The project lives in `mobile/`. Build instructions, the Xcode setup and the Swift
-sources for the share extension are in [docs/IOS.md](docs/IOS.md).
+The project lives in `mobile/`. Per-platform instructions:
+
+- [docs/IOS.md](docs/IOS.md) — build, Xcode setup and the Swift share extension.
+- [docs/ANDROID.md](docs/ANDROID.md) — build and the share intents, already wired.
 
 ```bash
 cd mobile
 npm install
-npm run add:ios   # once
-npm run ios       # build + open Xcode
+npm run add:ios   # iOS only, once; the Android project is already in the repo
+npm run ios       # or: npm run android
 ```
 
 ### Sharing routes (iOS / Android)
@@ -190,7 +192,7 @@ Adds a small MeteoRide icon button on Komoot and Bikemap pages and a quick-impor
 
 2) MeteoRide → Hammerhead (URL import)
 Adds an export button in the MeteoRide UI that uploads the generated GPX to Hammerhead Dashboard.
-- Path: `scripts/userscripts/tamper_meteoride_export_hammerhead.user.js`
+- Path: `tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
 - Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
 - Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js)  
 	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js`

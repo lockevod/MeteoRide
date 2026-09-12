@@ -34,8 +34,9 @@ tools/userscripts/hammerhead_export.user.js
 # Native shell (Capacitor). Generated output stays out of git; the native sources
 # that have to be added by hand in Xcode live in mobile/native/ and are tracked.
 mobile/www/
+# The iOS project is regenerated with `cap add ios` and needs manual Xcode setup
+# (docs/IOS.md). The Android one is tracked: it carries the share handling.
 mobile/ios/
-mobile/android/
 # The shell keeps its own manifest; the root package.json stays ignored.
 !mobile/package.json
 !mobile/package-lock.json

@@ -11,7 +11,6 @@
     "ios": "npm run sync && cap open ios",
     "android": "npm run sync && cap open android",
     "add:ios": "npm run build && cap add ios",
-    "add:android": "npm run build && cap add android",
     "doctor": "cap doctor"
   },
   "dependencies": {
