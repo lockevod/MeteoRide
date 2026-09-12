@@ -122,18 +122,27 @@ async function copyVendor() {
  * bridge arrives as a WKUserScript, which bypasses CSP entirely. Verified in Chromium,
  * the engine Android's web view uses.
  *
- * No CDN hosts: the bundle carries every library. `connect-src` stays open to https:
- * because ?gpx_url= fetches a route from wherever the user hosts it, and the forecast
- * providers are chosen at runtime. `frame-ancestors` is omitted because a meta policy
+ * No CDN hosts: the bundle carries every library. `connect-src` names the three
+ * forecast APIs and nothing else — unlike the website, the app has no way to reach
+ * ?gpx_url=, because nothing ever navigates the web view to a URL carrying a query
+ * string. That makes the list closed, so script that somehow ran here could not post
+ * the stored API key anywhere. Wiring a deep link that opens a route by URL would mean
+ * widening this again, deliberately. `frame-ancestors` is omitted because a meta policy
  * ignores it.
  */
+const FORECAST_APIS = [
+  'https://api.open-meteo.com',
+  'https://api.openweathermap.org',
+  'https://my.meteoblue.com',
+];
+
 const NATIVE_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
   "font-src 'self' data:",
-  "connect-src 'self' https:",
+  `connect-src 'self' ${FORECAST_APIS.join(' ')}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",

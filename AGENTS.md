@@ -110,7 +110,9 @@ Rules that follow from that, all enforced somewhere:
   On iOS the bridge is a WKUserScript, which bypasses CSP entirely. Both the survival
   of the bridge and the blocking of an injected handler were verified in Chromium, the
   engine Android's web view uses. The policy names no CDN because the bundle carries
-  every library.
+  every library, and its `connect-src` is a closed list of the forecast hosts because
+  the app cannot reach `?gpx_url=` — verified by stubbing a provider and watching the
+  forecast succeed while a fetch to another host was blocked.
 - **The website ships a Content-Security-Policy** (`public/_headers`): script only
   from our files and the three pinned CDNs, nothing inline, no eval. The bundle was
   driven under the same policy with the hosts collapsed to `'self'` and produced no
@@ -218,11 +220,20 @@ without a connection. Three things are fetched at runtime and cannot be bundled:
 |---|---|---|
 | Map tiles | `*.tile.openstreetmap.org` | grey map, route and table still drawn |
 | Forecasts | `api.open-meteo.com`, `api.openweathermap.org` | no weather data, which is the point of the app |
-| `?gpx_url=` | wherever the user hosts the route | only that entry path fails |
+| `?gpx_url=` | wherever the user hosts the route | website only, see below |
 
 Everything else — loading a GPX from the share sheet or the file picker, parsing it,
 drawing it, the settings, the help pages — runs offline. That is what the "boots with
 no network at all" test pins down.
+
+`?gpx_url=` is unreachable in the app. The web view opens `index.html` with no query
+string and nothing ever navigates it to one: `appUrlOpen` only drains the share inbox,
+and external links are handed to the system browser. So the app's route entry points
+are the share sheet, the file picker and "Open in MeteoRide" — all of which are better
+on a phone anyway. That is why the app's `connect-src` can name the three forecast
+hosts instead of allowing `https:` wholesale, which is what stops script that somehow
+ran there from posting the stored API key to an attacker. **Adding a deep link that
+opens a route by URL means widening that list again, on purpose.**
 
 ## Verifying a change
 

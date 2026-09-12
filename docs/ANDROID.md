@@ -75,9 +75,13 @@ reference to another site creeps back in. The bundled pages also carry a
 Content-Security-Policy meta tag, which the website gets from `public/_headers` instead;
 that file is a Cloudflare feature and is stripped from the bundle.
 
-Three things still come off the network at runtime and cannot be bundled: map tiles
-from OpenStreetMap, the forecast APIs, and a route fetched through `?gpx_url=`.
-Everything else works with the device offline.
+Two things still come off the network at runtime and cannot be bundled: map tiles from
+OpenStreetMap and the forecast APIs. Everything else works with the device offline.
+
+`?gpx_url=` is a website entry point and is unreachable here, since nothing navigates
+the web view to a URL with a query string. That is why the policy lists the forecast
+hosts instead of allowing any https origin. Wiring a deep link that opens a route by
+URL means widening it again.
 
 ## Release build
 
