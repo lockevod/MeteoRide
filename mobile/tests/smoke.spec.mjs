@@ -135,6 +135,29 @@ test('loads a route from ?gpx_url=', async ({ page }) => {
   expect(loaderFailures).toEqual([]);
 });
 
+/** Records every message that passes through the notice slot.
+ *  There is only one, and the last writer wins, so sampling it at the end of a test
+ *  misses a message that appeared and was replaced. */
+async function recordNotices(page) {
+  await page.addInitScript(() => {
+    window.__notices = [];
+    const watch = () => {
+      const el = document.getElementById('horizonNotice');
+      if (!el) return false;
+      const push = () => {
+        const text = el.textContent.trim();
+        if (text && window.__notices[window.__notices.length - 1] !== text) window.__notices.push(text);
+      };
+      new MutationObserver(push).observe(el, { childList: true, characterData: true, subtree: true });
+      push();
+      return true;
+    };
+    if (!watch()) {
+      const iv = setInterval(() => { if (watch()) clearInterval(iv); }, 50);
+    }
+  });
+}
+
 /** Stand-in for the bridge Capacitor injects into the web view, implementing the same
  *  MeteoRideShare contract as the iOS and Android plugins. `delayMs` makes a drain slow
  *  enough to collide with a second request, which is the interesting case. */
@@ -170,7 +193,12 @@ async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
               return next || {};
             },
           },
-          App: noop,
+          App: {
+            addListener: async (event, cb) => {
+              (window.__appListeners = window.__appListeners || {})[event] = cb;
+              return { remove() {} };
+            },
+          },
           StatusBar: { setStyle: async () => {}, setBackgroundColor: async () => {} },
           SplashScreen: { hide: async () => {} },
           Filesystem: {
@@ -867,4 +895,106 @@ test('the map still works when storage is unavailable', async ({ page }) => {
   await expect(routeName(page)).toContainText('Masnou');
   await expect(trackDrawn(page)).not.toHaveCount(0);
   expect(crashes).toEqual([]);
+});
+
+test('no field in the app opens the keyboard at a zooming size', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#toggleConfig').click();
+  await page.waitForTimeout(400);
+
+  // iOS zooms the page in when a field that opens a keyboard has a font under 16px,
+  // and does not zoom back out. Selects and the date picker are excluded: they open
+  // native pickers, and forcing them larger clipped the time and the provider box.
+  const tooSmall = await page.evaluate(() => {
+    const keyboardTypes = ['text', 'number', 'password', 'search', 'email', 'url', 'textarea'];
+    return [...document.querySelectorAll('input, textarea')]
+      .filter((el) => el.offsetParent !== null)
+      .filter((el) => keyboardTypes.includes(el.type || el.tagName.toLowerCase()))
+      .map((el) => ({ id: el.id || el.type, size: parseFloat(getComputedStyle(el).fontSize) }))
+      .filter((f) => f.size < 16);
+  });
+  expect(tooSmall).toEqual([]);
+
+  // And the parameter row still fits: raising the sizes is what broke it before.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('coming back later says the start time has passed', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await recordNotices(page);
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(routeName(page)).toContainText('Masnou');
+
+  // The phone was in a pocket for a couple of hours. The app is resumed, not
+  // reloaded, so the table is still the one computed for a departure already gone.
+  await page.evaluate(() => {
+    const field = document.getElementById('datetimeRoute');
+    const past = new Date(Date.now() - 2 * 3600 * 1000);
+    past.setSeconds(0, 0);
+    field.value = past.toISOString().slice(0, 16);
+    window.__appListeners.appStateChange({ isActive: true });
+  });
+
+  await expect
+    .poll(() => page.evaluate(() => window.__notices))
+    .toEqual(expect.arrayContaining([expect.stringMatching(/start time has passed|hora de salida ya ha pasado/)]));
+});
+
+test('coming back while the departure is still ahead says nothing', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await recordNotices(page);
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(routeName(page)).toContainText('Masnou');
+
+  await page.evaluate(() => window.__appListeners.appStateChange({ isActive: true }));
+  await page.waitForTimeout(1500);
+  const seen = await page.evaluate(() => window.__notices);
+  expect(seen.join(' | ')).not.toMatch(/start time has passed|hora de salida ya ha pasado/);
+});
+
+test('a booby-trapped map tile cannot run script', async ({ page }) => {
+  // Tiles are the one new path from the network into the DOM: fetched, stored, and
+  // rendered through an object URL. An <img> does not execute script in an SVG, and
+  // this pins that down for the cached path as well as the live one.
+  const evil = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
+    <rect width="256" height="256" fill="#e8e0d8"/>
+    <script type="text/javascript">window.top.__tilePwned = 1;<\/script>
+    <image href="x" onerror="window.top.__tilePwned = 2"/>
+  </svg>`;
+
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 18, offline: true });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: evil,
+    })
+  );
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect
+    .poll(async () => (await page.evaluate(() => window.cwTileCacheStats())).tiles)
+    .toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__tilePwned)).toBeUndefined();
+
+  // Again once it comes back from storage rather than the network.
+  await page.reload();
+  await mapReady(page);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__tilePwned)).toBeUndefined();
 });

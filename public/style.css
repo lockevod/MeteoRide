@@ -3396,3 +3396,21 @@ html.cw-native #cwMapOffline {
   text-overflow: ellipsis;
   pointer-events: none;
 }
+
+/* iOS zooms the page in when a text field with a font smaller than 16px gets focus,
+   and does not zoom back out. Every editable control here was between 12 and 14px, so
+   tapping the speed, the time or the API key left the app zoomed. Only in the app:
+   the website is used with a mouse and keeps its compact sizing. */
+/* Limited to the fields that open a keyboard. Raising <select> and the datetime
+   picker to 16px clipped the time and overflowed the provider box, and those open
+   native pickers rather than a keyboard, so they are the weaker case anyway.
+   !important because the existing sizes come from id selectors. */
+html.cw-native input[type="text"],
+html.cw-native input[type="number"],
+html.cw-native input[type="password"],
+html.cw-native input[type="search"],
+html.cw-native input[type="email"],
+html.cw-native input[type="url"],
+html.cw-native textarea {
+  font-size: 16px !important;
+}

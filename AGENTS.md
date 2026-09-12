@@ -153,6 +153,23 @@ What is still open, and why it was left:
   this is not reachable from the web, but it is a hole to remember if that listener
   grows.
 
+## Behaving like an app rather than a page
+
+- **iOS zooms in when a field smaller than 16px takes focus, and does not zoom back.**
+  Every editable control here was between 12 and 14px, so tapping the speed or the API
+  key left the app zoomed. Raised to 16px under `html.cw-native` only, and only for the
+  controls that open a keyboard: doing it to `<select>` and the datetime picker clipped
+  the time and overflowed the provider box, and those open native pickers anyway. The
+  `!important` is not laziness — the existing sizes come from id selectors.
+- **An app is resumed, not reloaded.** Come back hours later and the table is still the
+  one computed for a departure that has passed. `warnIfStartTimeHasPassed` says so on
+  `appStateChange`, with fifteen minutes of slack. Nothing is changed automatically: a
+  deliberately chosen future time must not be overwritten.
+- **There is one notice slot and the last writer wins.** Several messages now compete
+  for it, so a test that samples it at the end can miss one that appeared and was
+  replaced. `recordNotices` in the suite observes the element and keeps every message
+  that passed through; assert against that, not against the current text.
+
 ## Gotchas found the hard way
 
 - **Capacitor does not auto-register a plugin that lives in the app target.** On iOS
@@ -170,11 +187,19 @@ What is still open, and why it was left:
   `env()` works; on an older one it pads the decor view itself and injects zeroes.
   Using the custom properties as well would double-pad on old devices. The build adds
   `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
+- **`npx playwright test` does not rebuild the bundle; `npm test` does.** A test that
+  fails right after an edit is probably running the previous build. This cost a long
+  debugging detour into code that was already correct.
 - **A route file is executable content.** leaflet-gpx builds waypoint popups by
   concatenating `<name>` and `<desc>` straight into an HTML string. `cwSanitizeGPXText`
   escapes those text nodes before the library sees them, and both loaders call it. It
   only re-serialises when something needed escaping, so ordinary routes reach the
   parser untouched. See the security model above for the rest of that family.
+- **A map tile is network content rendered into the page.** It is fetched, stored and
+  shown through an object URL, so it was checked the same way a route was: an `<img>`
+  does not execute script inside an SVG, confirmed live and from the cache, and the
+  policy limits where tiles can come from at all. Any future change that renders tile
+  bytes through anything other than `<img>` reopens the question.
 - **Nothing in the bundle may be fetched from another site.** Not just the tags in
   `index.html`: marker icons were hardcoded in three scripts and the help pages carried
   a donation button from a CDN. `findRemoteAssets` in the build scans every first-party

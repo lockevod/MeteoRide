@@ -92,7 +92,9 @@
         consumePendingShare();
       });
       app.addListener('appStateChange', (state) => {
-        if (state && state.isActive) consumePendingShare();
+        if (!state || !state.isActive) return;
+        consumePendingShare();
+        warnIfStartTimeHasPassed();
       });
       if (window.CW_PLATFORM === 'android') {
         app.addListener('backButton', ({ canGoBack }) => {
@@ -210,6 +212,23 @@
     btn.innerHTML = '<span aria-hidden="true">\u{1F4E4}</span>';
     btn.addEventListener('click', shareCurrentRoute);
     nav.insertBefore(btn, nav.firstChild);
+  }
+
+  /* ---------- coming back to the app later ---------- */
+
+  // An app is resumed, not reloaded. Come back hours later and the table is still
+  // the one computed for a departure time that has already passed, with nothing
+  // saying so. Fifteen minutes of slack, because leaving a little late is normal.
+  const STALE_START_MS = 15 * 60 * 1000;
+
+  function warnIfStartTimeHasPassed() {
+    if (!window.lastGPXFile) return;    // nothing on screen to be wrong about
+    const field = document.getElementById('datetimeRoute');
+    if (!field || !field.value) return;
+    const start = new Date(field.value);
+    if (isNaN(start.getTime())) return;
+    if (Date.now() - start.getTime() < STALE_START_MS) return;
+    notify('start_time_passed', 'The start time has passed. Set a new one and run it again.');
   }
 
   /* ---------- reopening where you left off ---------- */
