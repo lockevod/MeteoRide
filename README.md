@@ -136,9 +136,10 @@ inside a native shell, so there is no second codebase to maintain.
 
 What the native build adds:
 
-- **Native share sheet**: share a GPX to MeteoRide from Files, Mail, Komoot, Strava
-  or any other app. No iOS Shortcut and no upload to a temporary server — the file
-  never leaves the device.
+- **Native share sheet, both ways**: share a GPX to MeteoRide from Files, Mail, Komoot,
+  Strava or any other app, and send the loaded route back out to a head unit app such
+  as Hammerhead. No iOS Shortcut and no upload to a temporary server — the file never
+  leaves the device.
 - **`.gpx` / `.kml` file handler**: "Open in MeteoRide" from anywhere on the system.
 - **Fully offline assets**: Leaflet, SunCalc and the weather icons are bundled
   instead of loaded from a CDN.

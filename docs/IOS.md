@@ -142,6 +142,21 @@ iOS icons must not be transparent; `icon-1024.png` already has a solid backgroun
 The Android project is committed under `mobile/android/` and its share handling is
 already wired, so there is no equivalent setup dance. See [ANDROID.md](ANDROID.md).
 
+## Passing a route between apps
+
+Plan in Komoot, check the weather in MeteoRide, send it to a head unit. Both directions
+go through the system share sheet, so any app that can hand over a `.gpx` works without
+MeteoRide knowing about it.
+
+- **Receiving**: share an exported route to MeteoRide, or use "Open in MeteoRide" from
+  a file manager or a mail attachment.
+- **Sending**: the 📤 button in the header hands the loaded route to the share sheet,
+  where you pick Hammerhead, Files, Mail or anything else.
+
+Sharing a *link* rather than a file does nothing, deliberately. Komoot, Strava and
+Bikemap gate their downloads behind a logged-in session, so a shared URL fetches a
+login page rather than a route.
+
 ## What is in the bundle
 
 Every library, font and image the app draws with is inside it, and the build fails if a

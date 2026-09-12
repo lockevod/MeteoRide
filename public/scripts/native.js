@@ -116,6 +116,87 @@
     } catch (e) { log('share listener', e); }
   }
 
+  /* ---------- sending a route on ---------- */
+
+  // The point of the app sitting between Komoot and a head unit: take the route that
+  // is loaded, hand it to the system share sheet, and let the user pick Hammerhead,
+  // Files, Mail or anything else. Native only — the button does not exist on the web,
+  // where the browser has no share sheet worth the name.
+  async function currentRouteGpx() {
+    let file = window.lastGPXFile;
+    if (!file && window.cw && typeof window.cw.exportRouteToGpx === 'function') {
+      // No original file (route came from a comparison or a rebuild): regenerate one.
+      window.cw.exportRouteToGpx(undefined, true);
+      file = window.lastGPXFile;
+    }
+    if (!file) return null;
+
+    // lastGPXFile is a File when the browser has one, and a plain object otherwise.
+    if (typeof file.text === 'function') {
+      return { name: file.name || 'route.gpx', text: await file.text() };
+    }
+    if (file._text) return { name: file.name || 'route.gpx', text: file._text };
+    return null;
+  }
+
+  function safeFileName(name) {
+    const base = String(name || 'route.gpx').replace(/[^A-Za-z0-9._ -]+/g, '-').trim();
+    return /\.(gpx|kml)$/i.test(base) ? base : `${base || 'route'}.gpx`;
+  }
+
+  async function shareCurrentRoute() {
+    const { Share, Filesystem } = plugins;
+    if (!Share || !Filesystem) return log('share plugins missing');
+
+    let route;
+    try {
+      route = await currentRouteGpx();
+    } catch (e) {
+      log('could not read the loaded route', e);
+    }
+    if (!route || !route.text) {
+      window.setNotice && window.setNotice(
+        window.t ? window.t('no_route_for_export') || 'No route to share' : 'No route to share',
+        'warn'
+      );
+      return;
+    }
+
+    try {
+      // The share sheet needs a real file on disk. Cache is right: the system copies
+      // what it needs and we are not accumulating routes in the app's storage.
+      const written = await Filesystem.writeFile({
+        path: safeFileName(route.name),
+        data: route.text,
+        directory: 'CACHE',
+        encoding: 'utf8',
+      });
+      await Share.share({
+        title: route.name,
+        files: [written.uri],
+        dialogTitle: 'Send route to',
+      });
+    } catch (e) {
+      // Dismissing the sheet rejects too, so this is not necessarily a failure.
+      log('share cancelled or failed', e);
+    }
+  }
+
+  function addShareButton() {
+    const nav = document.querySelector('header nav');
+    if (!nav || document.getElementById('cwShareRoute')) return;
+    if (!plugins.Share || !plugins.Filesystem) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'cwShareRoute';
+    btn.type = 'button';
+    btn.title = 'Send route to another app';
+    btn.setAttribute('aria-label', 'Send route to another app');
+    btn.innerHTML = '<span aria-hidden="true">\u{1F4E4}</span>';
+    btn.addEventListener('click', shareCurrentRoute);
+    nav.insertBefore(btn, nav.firstChild);
+  }
+
   /* ---------- external links ---------- */
 
   // Keep the web view on the app; send real websites to the system browser.
@@ -139,6 +220,7 @@
     setupChrome();
     setupApp();
     setupShareEvents();
+    addShareButton();
     setupLinks();
     consumePendingShare();
     hideSplash();
@@ -151,4 +233,5 @@
   }
 
   window.cwConsumePendingShare = consumePendingShare;
+  window.cwShareCurrentRoute = shareCurrentRoute;
 })();

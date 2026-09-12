@@ -216,6 +216,22 @@ What is still open, and why it was left:
   closes that off, nothing is lost: the route waits in the inbox until the app is
   opened normally.
 
+## Passing routes between apps
+
+This is the reason the native build exists at all: plan in Komoot, check the weather in
+MeteoRide, send it to a head unit. Both directions go through the system share sheet,
+so they work with any app rather than a hardcoded list.
+
+- **In**: the share extension on iOS, the intent filters on Android. Whatever the other
+  app exports as a `.gpx`/`.kml` file, we accept. A shared *link* is refused on purpose
+  — those services gate their downloads behind a session, so a URL would fetch a login
+  page, and on iOS it also caused a blocking download inside the extension.
+- **Out**: `shareCurrentRoute` in `native.js` writes the loaded route to the cache
+  directory and hands the file to `Share`. It shares the file that was loaded, not a
+  re-rendering of it, falling back to `cw.exportRouteToGpx` when the route was built
+  rather than opened. The button is created by `native.js`, so the website never grows
+  a control that depends on plugins it does not have.
+
 ## What the app still needs from the network
 
 Self-contained means the code: every library, font, icon and marker image is in the
@@ -308,14 +324,16 @@ code does and what makes the race reproducible.
 - Only waypoint metadata is sanitised, because that is the only place the libraries
   build HTML from file content. Any new feature that renders something out of a route
   needs the same scrutiny.
-- Importing routes straight from Strava, Komoot, Bikemap or Hammerhead. The
-  Tampermonkey userscripts in `tools/userscripts/` do it by running inside the user's
-  logged-in session on those sites and fetching their APIs with `credentials:
-  'include'`; Hammerhead's token is scraped from an open dashboard tab. None of that
-  is portable to a native app, which holds no cookies for those origins. Only Strava
-  publishes an API meant for third-party apps, so only Strava could be done properly,
-  through OAuth. Sharing an exported GPX file to the app already works today and needs
-  no code.
+- Connecting an account to Strava, Komoot, Bikemap or Hammerhead from inside the app.
+  Passing a route between apps already works through the system share sheet, in both
+  directions: another app shares an exported GPX in, and the share button hands the
+  loaded route back out. An account connection is a different thing, and the
+  Tampermonkey userscripts in `tools/userscripts/` are not a head start on it: they
+  work by running inside the user's logged-in session on those sites and fetching
+  their APIs with `credentials: 'include'`, and Hammerhead's token is scraped from an
+  open dashboard tab. An app holding no cookies for those origins cannot do that. Of
+  the four, only Strava publishes an API meant for third-party apps, so only Strava
+  could be done properly, through OAuth.
 - The two items the security model leaves open on purpose: self-hosting the libraries
   (which unlocks `script-src 'self'` and Subresource Integrity), and a rate limit on
   `POST /share` at the Cloudflare edge.

@@ -173,6 +173,18 @@ async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
           App: noop,
           StatusBar: { setStyle: async () => {}, setBackgroundColor: async () => {} },
           SplashScreen: { hide: async () => {} },
+          Filesystem: {
+            writeFile: async (opts) => {
+              window.__written = { path: opts.path, directory: opts.directory, data: opts.data };
+              return { uri: 'file:///tmp/' + opts.path };
+            },
+          },
+          Share: {
+            share: async (opts) => {
+              window.__shared = opts;
+              return { activityType: 'test' };
+            },
+          },
         },
       };
     },
@@ -360,4 +372,43 @@ test('the bundle carries its own content security policy', async ({ page }) => {
   );
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.__blocked)).toContain('connect-src');
+});
+
+// Komoot to MeteoRide to a head unit: the app has to be able to pass the route on,
+// which means handing a real file to the system share sheet.
+test('the app can send the loaded route to another app', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  const button = page.locator('#cwShareRoute');
+  await expect(button).toHaveCount(1);
+
+  // Nothing loaded yet: it must decline rather than share an empty file or throw.
+  await button.click();
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__shared)).toBeFalsy();
+
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  await button.click();
+
+  await expect.poll(() => page.evaluate(() => window.__shared)).toBeTruthy();
+  const written = await page.evaluate(() => window.__written);
+  const shared = await page.evaluate(() => window.__shared);
+
+  // The bytes handed over are the route that was loaded, not a re-rendering of it.
+  expect(written.data).toBe(await readFile(FIXTURE, 'utf8'));
+  expect(written.directory).toBe('CACHE');
+  expect(shared.files).toEqual([`file:///tmp/${written.path}`]);
+  expect(written.path).toMatch(/\.gpx$/);
+});
+
+// The website must not grow a button that depends on plugins it does not have.
+test('the share button exists only in the app', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(page.locator('#cwShareRoute')).toHaveCount(0);
 });
