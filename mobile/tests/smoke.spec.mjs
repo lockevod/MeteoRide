@@ -432,3 +432,160 @@ test('a route received from another app can be passed on', async ({ page }) => {
   expect(written.data).toBe(gpx);
   expect(written.path).toBe('Komoot tour.gpx');
 });
+
+/* ---------- riding without coverage ---------- */
+
+/** A forecast the provider would return, at a temperature we can look for. */
+function forecastAt(celsius) {
+  const hours = Array.from({ length: 72 }, (_, i) =>
+    new Date(Date.now() + i * 3600000).toISOString().slice(0, 13) + ':00'
+  );
+  const fill = (v) => hours.map(() => v);
+  return {
+    hourly: {
+      time: hours,
+      temperature_2m: fill(celsius),
+      precipitation: fill(0),
+      precipitation_probability: fill(5),
+      relative_humidity_2m: fill(60),
+      wind_speed_10m: fill(12),
+      wind_gusts_10m: fill(20),
+      winddirection_10m: fill(180),
+      weathercode: fill(1),
+      uv_index: fill(3),
+      is_day: fill(1),
+      cloud_cover: fill(20),
+    },
+  };
+}
+
+/** Serves the forecast the control object names, or fails the request. */
+async function stubProvider(page, control) {
+  await page.route(
+    (url) => url.hostname === 'api.open-meteo.com',
+    (route) =>
+      control.offline
+        ? route.abort()
+        : route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(forecastAt(control.celsius)),
+          })
+  );
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+}
+
+const shownTemperatures = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('#weatherTable td')]
+      .map((c) => c.textContent.trim())
+      .filter((t) => /^-?\d+º$/.test(t))
+  );
+
+/** Pushes every cached forecast back in time, past the normal 30 minute lifetime. */
+const ageTheCache = (page, minutes) =>
+  page.evaluate((mins) => {
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith('cw_weather_')) continue;
+      const entry = JSON.parse(localStorage.getItem(key));
+      entry.timestamp = Date.now() - mins * 60000;
+      localStorage.setItem(key, JSON.stringify(entry));
+    }
+  }, minutes);
+
+test('an expired forecast is still shown when there is no connection', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await stubProvider(page, control);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  // An hour and forty minutes later, out of coverage.
+  await ageTheCache(page, 100);
+  control.offline = true;
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+  await page.reload();
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  // The forecast is what was downloaded earlier, and the app says how old it is.
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  expect(await shownTemperatures(page)).toContain('21º');
+  await expect(page.locator('.notice')).toContainText('1 h 40 min');
+});
+
+test('a stale forecast is never used while the connection works', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await stubProvider(page, control);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  // Same age as the offline case, but the network is fine: it must refetch.
+  await ageTheCache(page, 100);
+  control.celsius = 5;
+  await page.reload();
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const shown = await shownTemperatures(page);
+  expect(shown, 'the old cached forecast was shown instead of a fresh one').not.toContain('21º');
+  expect(shown).toContain('5º');
+});
+
+test('preparing a route protects its forecast from being cleared', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // Nothing cached yet: it should say so rather than claim success.
+  await page.locator('#cwPrepareOffline').click();
+  await expect(page.locator('.notice')).toContainText(/Load a route|Carga una ruta/);
+  expect(await page.evaluate(() => localStorage.getItem('cw_offline_pinned'))).toBeNull();
+
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  await page.locator('#cwPrepareOffline').click();
+  await expect(page.locator('.notice')).toContainText(/Route saved|Ruta preparada/);
+
+  const pinned = await page.evaluate(() => JSON.parse(localStorage.getItem('cw_offline_pinned') || '[]'));
+  expect(pinned.length).toBeGreaterThan(0);
+  expect(pinned.every((k) => k.startsWith('cw_weather_'))).toBe(true);
+});
+
+// Two app-only buttons pushed the toolbar onto a second line at phone width. Any
+// future one should fail here rather than in a screenshot nobody takes.
+test('the app toolbar stays on one line', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // Buttons differ in height, so their top edges do not line up even on one row.
+  // A wrapped toolbar is taller than its tallest button; an unwrapped one is not.
+  const { navHeight, tallestButton, count } = await page.evaluate(() => {
+    const nav = document.querySelector('header nav');
+    const buttons = [...nav.querySelectorAll('button')].filter((b) => b.offsetParent !== null);
+    return {
+      navHeight: nav.getBoundingClientRect().height,
+      tallestButton: Math.max(...buttons.map((b) => b.getBoundingClientRect().height)),
+      count: buttons.length,
+    };
+  });
+
+  expect(count, 'expected the app toolbar to carry both extra buttons').toBeGreaterThan(4);
+  expect(navHeight, `toolbar is ${navHeight}px tall for a ${tallestButton}px button, so it wrapped`)
+    .toBeLessThan(tallestButton * 1.5);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});

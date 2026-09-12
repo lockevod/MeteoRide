@@ -1,6 +1,26 @@
 (function() {
   const cacheTTL = 1000 * 60 * 30; 
 
+  // With no connection there is nothing better to show than the last forecast that
+  // was downloaded, so past the normal TTL the cache keeps serving it rather than
+  // leaving an empty table. Beyond this a forecast is not worth looking at.
+  const staleMaxAge = 1000 * 60 * 60 * 12;
+
+  // Keys covered by "prepare this route" survive the eviction that runs when
+  // localStorage fills up. Nothing else about them is special.
+  const PINNED_KEYS = 'cw_offline_pinned';
+
+  function pinnedKeys() {
+    try { return new Set(JSON.parse(localStorage.getItem(PINNED_KEYS) || '[]')); }
+    catch (_) { return new Set(); }
+  }
+
+  function isOffline() {
+    // navigator.onLine is only trustworthy when it says false, which is the case
+    // that matters here: out of coverage rather than behind a captive portal.
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
+  }
+
   // Nuevo: traducciones minimalistas para UI y logs
   const i18n = {
     es: {
@@ -29,6 +49,10 @@
       toggle_debug: "🐞",
       toggle_help: "Ayuda ❓",
       share_route: "Enviar ruta a otra app",
+      offline_stale_forecast: "Sin conexión. Previsión de hace {age}.",
+      prepare_offline: "Preparar ruta para ir sin cobertura",
+      prepare_offline_done: "Ruta preparada. Previsión guardada ({n} puntos).",
+      prepare_offline_empty: "Carga una ruta y espera a que salga la previsión antes de prepararla.",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
@@ -124,6 +148,10 @@
       toggle_debug: "🐞",
       toggle_help: "Help ❓",
       share_route: "Send route to another app",
+      offline_stale_forecast: "No connection. Forecast is {age} old.",
+      prepare_offline: "Save this route for riding without coverage",
+      prepare_offline_done: "Route saved. Forecast stored ({n} points).",
+      prepare_offline_empty: "Load a route and let the forecast appear before saving it.",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
   title: "MeteoRide — Forecast for your ride",
@@ -357,6 +385,11 @@
       const now = Date.now();
       const age = now - obj.timestamp;
       if (age > cacheTTL) {
+        if (isOffline() && age <= staleMaxAge) {
+          logDebug(`getCache stale-but-offline key=${key} age=${age}ms`);
+          reportStale(age);
+          return obj.data;
+        }
         logDebug(`getCache expired key=${key} age=${age}ms > ${cacheTTL}ms`);
         return null;
       }
@@ -381,7 +414,10 @@
       if (e.name === 'QuotaExceededError' || e.message.includes('quota')) {
         // Clear old cache entries to free space
         try {
-          const keys = Object.keys(localStorage).filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'));
+          const pinned = pinnedKeys();
+          const keys = Object.keys(localStorage)
+            .filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'))
+            .filter(k => !pinned.has(k));
           if (keys.length > 0) {
             // Sort by timestamp (assuming keys have timestamps, but to be safe, remove oldest by access time if possible)
             // For simplicity, remove the first 10 oldest assuming they are weather caches
@@ -403,6 +439,56 @@
       }
     }
   }
+  // Tell the user once per run that what they are reading is not current. Collapsed
+  // to the oldest value seen, because a route serves dozens of cache entries.
+  let staleTimer = null;
+  let oldestStale = 0;
+
+  function reportStale(ageMs) {
+    oldestStale = Math.max(oldestStale, ageMs);
+    if (staleTimer) return;
+    staleTimer = setTimeout(() => {
+      staleTimer = null;
+      const age = oldestStale;
+      oldestStale = 0;
+      try {
+        const hours = Math.floor(age / 3600000);
+        const mins = Math.round((age % 3600000) / 60000);
+        const when = hours ? `${hours} h ${mins} min` : `${mins} min`;
+        // t() does the placeholder substitution and blanks out anything it is not
+        // given, so the value has to go through it rather than after it.
+        const msg = t('offline_stale_forecast', { age: when });
+        window.setNotice && window.setNotice(msg, 'warn');
+      } catch (e) { logDebug(`reportStale failed: ${e.message}`, true); }
+    }, 400);
+  }
+
+  /** Marks the cache entries a route depends on, so a quota clear-out spares them. */
+  function pinCacheKeys(keys) {
+    try {
+      localStorage.setItem(PINNED_KEYS, JSON.stringify([...new Set(keys)].slice(0, 2000)));
+      return true;
+    } catch (e) {
+      logDebug(`pinCacheKeys failed: ${e.message}`, true);
+      return false;
+    }
+  }
+
+  /** Every weather entry currently held, newest first, with its age. */
+  function cachedWeatherKeys() {
+    const out = [];
+    try {
+      for (const key of Object.keys(localStorage)) {
+        if (!key.startsWith('cw_weather_')) continue;
+        try {
+          const obj = JSON.parse(localStorage.getItem(key) || 'null');
+          if (obj && obj.timestamp) out.push({ key, timestamp: obj.timestamp });
+        } catch (_) { /* not ours, or corrupt */ }
+      }
+    } catch (e) { logDebug(`cachedWeatherKeys failed: ${e.message}`, true); }
+    return out.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
   // Canonical cache key builder for weather payloads
   function makeCacheKey(providerId, dateStr, tempUnit, windUnit, lat, lon, timeAt) {
     try {
@@ -787,6 +873,10 @@
        getVal,
        getCache,
        setCache,
+       staleMaxAge,
+       pinCacheKeys,
+       cachedWeatherKeys,
+       isOffline,
        getValidatedDateTime,
        validateDateRange,
        validateRouteLoaded,

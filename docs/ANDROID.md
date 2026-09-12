@@ -83,6 +83,19 @@ Sharing a *link* rather than a file does nothing, deliberately. Komoot, Strava a
 Bikemap gate their downloads behind a logged-in session, so a shared URL fetches a
 login page rather than a route.
 
+## Without coverage
+
+Out of signal the app keeps showing the last forecast it downloaded, labelled with how
+old it is, rather than an empty table. It stops at twelve hours, and it never prefers
+cached data while a connection works.
+
+The 📴 button saves the forecast for the route you have loaded, so the entries survive
+the clear-out that runs when storage fills up. Press it at home before leaving.
+
+Map tiles are the part that cannot be prepared: OpenStreetMap's terms do not allow
+downloading them in bulk ahead of time. Tiles you have already looked at often survive
+in the web view's own cache, but a stretch you have never opened will be blank.
+
 ## What is in the bundle
 
 Every library, font and image the app draws with is inside it, and the build fails if a

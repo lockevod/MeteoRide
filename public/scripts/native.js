@@ -212,6 +212,54 @@
     nav.insertBefore(btn, nav.firstChild);
   }
 
+  /* ---------- preparing for no coverage ---------- */
+
+  // Running the forecast already fills the cache, and the cache now keeps serving it
+  // when the device is offline. What this adds is certainty: it tells you the data is
+  // there, how much of it, and protects those entries from being cleared when
+  // localStorage runs short.
+  function prepareForOffline() {
+    const utils = window.cw && window.cw.utils;
+    if (!utils || !utils.cachedWeatherKeys) return log('cache helpers missing');
+
+    const entries = utils.cachedWeatherKeys();
+    const fresh = entries.filter((e) => Date.now() - e.timestamp <= utils.staleMaxAge);
+
+    if (!fresh.length) {
+      notify('prepare_offline_empty', 'Load a route and let the forecast appear first.');
+      return;
+    }
+
+    utils.pinCacheKeys(fresh.map((e) => e.key));
+    notify('prepare_offline_done', 'Route saved for offline ({n} points).', { n: fresh.length });
+  }
+
+  function notify(key, fallback, vars) {
+    // t() substitutes the placeholders itself and blanks out any it is not given,
+    // so pass the values in rather than patching the result afterwards.
+    let msg = window.t ? window.t(key, vars || {}) : fallback;
+    if (!window.t) {
+      for (const [k, v] of Object.entries(vars || {})) msg = msg.replace(`{${k}}`, v);
+    }
+    if (window.setNotice) window.setNotice(msg, 'warn');
+    else log(msg);
+  }
+
+  function addPrepareButton() {
+    const nav = document.querySelector('header nav');
+    if (!nav || document.getElementById('cwPrepareOffline')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'cwPrepareOffline';
+    btn.type = 'button';
+    const label = (window.t && window.t('prepare_offline')) || 'Save for riding without coverage';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.innerHTML = '<span aria-hidden="true">\u{1F4F4}</span>';
+    btn.addEventListener('click', prepareForOffline);
+    nav.insertBefore(btn, nav.firstChild);
+  }
+
   /* ---------- external links ---------- */
 
   // Keep the web view on the app; send real websites to the system browser.
@@ -236,6 +284,7 @@
     setupApp();
     setupShareEvents();
     addShareButton();
+    addPrepareButton();
     setupLinks();
     consumePendingShare();
     hideSplash();
@@ -249,4 +298,5 @@
 
   window.cwConsumePendingShare = consumePendingShare;
   window.cwShareCurrentRoute = shareCurrentRoute;
+  window.cwPrepareForOffline = prepareForOffline;
 })();

@@ -181,6 +181,9 @@ What is still open, and why it was left:
   HTML, JS and CSS file and fails the build; a URL containing `{` is skipped, which is
   how the map tile template stays legal. Remote `<img>` tags in bundled pages are
   replaced by their alt text.
+- **`t()` substitutes placeholders itself and blanks out any it is not given.** So
+  `t('offline_stale_forecast')` followed by a `.replace('{age}', …)` silently produces
+  "Forecast is  old." Pass the values to `t`, never patch its result.
 - **Two drains can overlap.** `consumePendingShare` in `native.js` refuses to run
   twice at once, but a route can land in the inbox while a call is already in flight,
   and the answer to that call was decided before it arrived. A request that turns up
@@ -231,6 +234,28 @@ so they work with any app rather than a hardcoded list.
   re-rendering of it, falling back to `cw.exportRouteToGpx` when the route was built
   rather than opened. The button is created by `native.js`, so the website never grows
   a control that depends on plugins it does not have.
+
+## Riding without coverage
+
+The forecast cannot be invented, but throwing away the one already downloaded was a
+choice, not a necessity. `getCache` holds a 30 minute lifetime; past that it used to
+return null even with no network to fetch anything better, so the table came out empty
+and said nothing about why.
+
+Now, and only when `navigator.onLine` is false, it keeps serving what it has up to 12
+hours old and `setNotice` says how old it is. Two rules matter and each has a test that
+fails without it: **stale data is shown when there is no connection**, and **stale data
+is never shown when there is one**. The second is the one to be careful about. Showing
+an old forecast as if it were current is worse than showing nothing.
+
+`navigator.onLine` is only trusted when it says false, which is the case that matters —
+out of coverage, rather than behind a captive portal. A reachable network with an
+unreachable provider still shows an empty table.
+
+The header's 📴 button pins the cache entries a prepared route depends on, so the
+clear-out that runs when localStorage fills up skips them, and tells the user how many
+points were stored. Running the forecast already fills the cache; what the button adds
+is the guarantee and the feedback.
 
 ## What the app still needs from the network
 

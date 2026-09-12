@@ -143,6 +143,9 @@ What the native build adds:
 - **`.gpx` / `.kml` file handler**: "Open in MeteoRide" from anywhere on the system.
 - **Fully offline assets**: Leaflet, SunCalc and the weather icons are bundled
   instead of loaded from a CDN.
+- **Useful without coverage**: out of signal, the last forecast downloaded is still
+  shown, labelled with its age, instead of an empty table. A button saves the prepared
+  route's forecast so it is not cleared. Map tiles still need a connection.
 
 The project lives in `mobile/`. Per-platform instructions:
 

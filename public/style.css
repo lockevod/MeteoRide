@@ -3357,3 +3357,21 @@ html.cw-native main {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+/* The app adds two buttons the website does not have, and on a phone that pushed the
+   row onto a second line. Tighten the toolbar rather than move the controls. */
+html.cw-native header nav {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: nowrap;
+}
+
+html.cw-native header nav button {
+  padding: 6px 5px;
+  gap: 3px;
+}
+
+html.cw-native header h1 .subtitle {
+  display: none;
+}
