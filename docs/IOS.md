@@ -56,6 +56,14 @@ Select the **App** target → *Signing & Capabilities* → your team. The bundle
 identifier is `cc.meteoride.app` (change it in `mobile/capacitor.config.json`
 if you use another one, and keep the App Group in step 3 in sync).
 
+Where that is, since Capacitor gives the project and the target the same name:
+click the top row of the project navigator (blue project icon, "App"), and in the
+narrow column that appears down the left of the editor pick `App` under **TARGETS**,
+not the one under **PROJECT**. The tabs across the top — General, Signing &
+Capabilities, Info, Build Phases — belong to whatever is selected there, and every
+capability in steps 3 and 6 is added with **+ Capability** on that tab. If the
+column is collapsed, it is a popup menu at the top left of the editor instead.
+
 ### 2. Add the Capacitor plugin sources
 
 Drag `mobile/native/ios/MeteoRideShare/` into the **App** target in Xcode
