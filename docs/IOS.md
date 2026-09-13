@@ -106,6 +106,41 @@ opens `meteoride://shared`; the app wakes up, `native.js` calls
 `cwLoadGPXFromString`. If iOS refuses to foreground the app, the route simply waits
 and is picked up the next time MeteoRide opens.
 
+### 6. Ride alerts (background task and notifications)
+
+The forecast watch runs in `@capacitor/background-runner`, which needs three things
+the template project does not have:
+
+1. *Signing & Capabilities* → **Background Modes** → tick *Background fetch* and
+   *Background processing*. (This writes the `UIBackgroundModes` array from the
+   additions file into `Info.plist`; merging the file does the same.)
+2. `BGTaskSchedulerPermittedIdentifiers` from `Info.plist.additions.xml`, holding
+   `cc.meteoride.app.watch`. It must equal `plugins.BackgroundRunner.label` in
+   `capacitor.config.json`; if either changes, change both.
+3. The two lines from `mobile/native/ios/AppDelegate.additions.swift` in
+   `application(_:didFinishLaunchingWithOptions:)`, plus its import. Without them the
+   task is never registered and iOS never calls it.
+
+For alerts that break through Focus modes, also add *Signing & Capabilities* →
+**Time Sensitive Notifications**. The runner posts every alert with
+`interruptionLevel: "timeSensitive"`; without the capability iOS silently delivers
+it as an ordinary banner, and without the `postinstall` patch in
+`mobile/scripts/patch-background-runner.mjs` the plugin drops the field altogether
+(`npm install` applies the patch; `git status` inside `node_modules` is not tracked,
+so nothing to commit). Critical alerts are deliberately not used: they need a
+per-app entitlement from Apple.
+
+Two things the user controls and the app cannot: **Background App Refresh**
+(Settings → General, and per app) and **Low Power Mode**. With refresh off the task
+never runs; the app reads `UIApplication.backgroundRefreshStatus` through the
+`MeteoRideShare` plugin and says so under the toggle. When it runs is up to iOS: the
+30-minute interval in the config is a request, and the simulator never runs
+background tasks at all. To exercise the runner on a device, pause in Xcode and run
+
+```
+e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"cc.meteoride.app.watch"]
+```
+
 ## Day-to-day
 
 ```bash
@@ -194,6 +229,30 @@ connection, so the area you studied at home still has a background. A stretch yo
 opened will be blank, and the map says so: tiles are only stored as you view them,
 never downloaded ahead, which is what OpenStreetMap's terms allow.
 
+## Ride alerts
+
+Once a route has its forecast, the app keeps watching it. With the app closed, a
+background task re-reads the same Open-Meteo forecast for a dozen points along the
+route every half hour or so (when iOS allows) and sends a notification when the
+forecast for the hours you will be out gets worse: dry turning to rain, rain turning
+to heavy rain, calm turning to moderate or strong wind, or gusts above 55 km/h. With
+an OpenWeather key and official alerts enabled, a new official warning overlapping the
+ride is reported too. Each change is announced once; the baseline moves on, so a later
+worsening is announced again. Improvements are not reported.
+
+The toggle is in the settings panel, *Alerts* section, on by default, app-only. A line
+under it shows which route is being watched and until when. Turning it off clears the
+watch. The watch ends an hour after the ride's last point.
+
+Thresholds are in `public/scripts/watch-rules.js`: 0.3 and 3 mm/h for rain; 20 and
+35 km/h sustained, 40 and 55 km/h gusts, for wind; each with a small margin so a
+value hovering on a boundary is not reported.
+
+Two limits worth knowing. Checks stop 24 hours before the start until the ride is
+within a day, so a route planned for next week is only watched from the day before.
+And the check only begins once the ride is that close, which is why arming shows no
+request in the logs beyond the one that seeds the baseline.
+
 ## What is in the bundle
 
 Every library, font and image the app draws with is inside it, and the build fails if a
@@ -247,6 +306,13 @@ the app's own permission, so `NSLocationWhenInUseUsageDescription` must be in
 `Info.plist` (it is in the additions file). In the simulator, set a location under
 *Features → Location*; with *None* the request simply fails and the map stays where
 the website puts it.
+
+**No alert ever arrives.** In order: Background App Refresh on for MeteoRide (the
+toggle shows a hint when it is not); the two `AppDelegate` lines from step 6 present;
+`cc.meteoride.app.watch` in `BGTaskSchedulerPermittedIdentifiers`; notifications
+allowed for the app; and the ride within 24 hours, because the task is silent
+before that. Then remember the simulator never runs background tasks — use the
+`_simulateLaunchForTaskWithIdentifier` command from step 6 on a device.
 
 **Weather requests fail in the app but work on the web.** The web view origin is
 `capacitor://localhost`; a provider that does not send permissive CORS headers will

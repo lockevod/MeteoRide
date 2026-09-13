@@ -115,6 +115,11 @@
       offline_first_run: "Sin conexión. Puedes abrir una ruta, pero la previsión necesita cobertura.",
       map_offline: "Mapa sin conexión",
       start_time_passed: "La hora de salida ya ha pasado. Cambia la hora y vuelve a calcular.",
+      ride_alerts_label: "Avisarme si cambia el tiempo de la ruta",
+      ride_alerts_watching: "Vigilando {name} hasta las {until}",
+      ride_alerts_denied: "Las notificaciones de MeteoRide están desactivadas. Actívalas en Ajustes para recibir avisos.",
+      ride_alerts_bg_ios: "La actualización en segundo plano está desactivada para MeteoRide, así que no se hará ninguna comprobación. Actívala en Ajustes → General → Actualización en segundo plano.",
+      ride_alerts_bg_android: "La optimización de batería puede impedir la comprobación: excluye MeteoRide en los ajustes de batería.",
       provider_unreachable: "No se ha podido obtener la previsión: el proveedor no responde.",
       provider_rejected: "El proveedor ha rechazado la petición. Revisa tu API key en ajustes.",
       prepare_offline: "Preparar ruta para ir sin cobertura",
@@ -220,6 +225,11 @@
       offline_first_run: "No connection. You can open a route, but the forecast needs coverage.",
       map_offline: "Map unavailable offline",
       start_time_passed: "The start time has passed. Set a new one and run it again.",
+      ride_alerts_label: "Tell me if the weather on the route changes",
+      ride_alerts_watching: "Watching {name} until {until}",
+      ride_alerts_denied: "Notifications are off for MeteoRide. Allow them in Settings to get ride alerts.",
+      ride_alerts_bg_ios: "Background App Refresh is off for MeteoRide, so no check will run. Turn it on in Settings → General → Background App Refresh.",
+      ride_alerts_bg_android: "Battery optimisation may stop the check: exclude MeteoRide in the battery settings.",
       provider_unreachable: "Could not get the forecast: the provider is not responding.",
       provider_rejected: "The provider rejected the request. Check your API key in settings.",
       prepare_offline: "Save this route for riding without coverage",
@@ -346,6 +356,7 @@
       noticeAll: !!document.getElementById("noticeAll")?.checked,
       showWeatherAlerts: !!document.getElementById("showWeatherAlerts")?.checked,
       showDebugButton: !!document.getElementById("showDebugButton")?.checked,
+      rideAlerts: !!document.getElementById("rideAlerts")?.checked,   // app only
     };
     const payload = JSON.stringify(settings);
     try { localStorage.setItem("cwSettings", payload); } catch (e) { /* ignore */ }
@@ -364,7 +375,7 @@
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
       "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
-      "noticeAll","showWeatherAlerts","showDebugButton",
+      "noticeAll","showWeatherAlerts","showDebugButton","rideAlerts",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -410,6 +421,10 @@
     // Apply showWeatherAlerts configuration
     const swa = document.getElementById("showWeatherAlerts");
     if (swa) swa.checked = (s.showWeatherAlerts !== false); // Default to true
+
+    // Ride alerts (app only): on unless switched off
+    const ra = document.getElementById("rideAlerts");
+    if (ra) ra.checked = (s.rideAlerts !== false);
 
     // Apply showDebugButton configuration and set initial visibility
     const sdb = document.getElementById("showDebugButton");

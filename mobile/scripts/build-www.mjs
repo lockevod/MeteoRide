@@ -91,6 +91,13 @@ const VENDOR = [
  *  that patchIndexHtml strips, so nothing in the app can navigate to them. */
 const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', 'en', 'es'];
 
+/** The background runner: the shared rules first, then the wiring. See the header of
+ *  mobile/runners/watch.js for why it is one file and not a module. */
+const RUNNER = {
+  parts: [join(SRC, 'scripts', 'watch-rules.js'), join(MOBILE, 'runners', 'watch.js')],
+  to: 'runners/watch.js',
+};
+
 const log = (...a) => console.log('[build-www]', ...a);
 
 async function copyVendor() {
@@ -226,6 +233,31 @@ export async function findRemoteAssets(dir, base = dir) {
   return hits;
 }
 
+/**
+ * Assembles www/runners/watch.js. capacitor.config.json names that path and the
+ * plugin loads it from the app bundle, so the file has to exist after every build
+ * and has to be self-contained: the runner has no module loader.
+ */
+async function buildRunner() {
+  const config = JSON.parse(await readFile(join(MOBILE, 'capacitor.config.json'), 'utf8'));
+  const declared = config.plugins && config.plugins.BackgroundRunner && config.plugins.BackgroundRunner.src;
+  if (declared !== RUNNER.to) {
+    throw new Error(`capacitor.config.json points the BackgroundRunner at ${declared}, the build writes ${RUNNER.to}`);
+  }
+  const chunks = [];
+  for (const part of RUNNER.parts) {
+    const text = await readFile(part, 'utf8');
+    if (/^\s*(import|export)\b/m.test(text)) {
+      throw new Error(`${relative(REPO, part)} uses modules; the background runner cannot load them`);
+    }
+    chunks.push(`// ---- ${relative(REPO, part)} ----\n${text}`);
+  }
+  const dest = join(OUT, RUNNER.to);
+  await mkdir(dirname(dest), { recursive: true });
+  await writeFile(dest, chunks.join('\n'));
+  log(`assembled ${RUNNER.to}`);
+}
+
 async function ensureNoRemoteRefs() {
   const hits = await findRemoteAssets(OUT);
   if (hits.length) {
@@ -260,6 +292,7 @@ async function main() {
     if (page === 'index.html') html = patchIndexHtml(html);
     await writeFile(path, html);
   }
+  await buildRunner();
   await ensureNoRemoteRefs();
   log('patched the bundled pages');
 

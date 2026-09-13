@@ -78,4 +78,6 @@
          forwards a page's geolocation request when the app itself may ask. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Ride alerts: Android 13 asks the user; older versions grant it silently. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

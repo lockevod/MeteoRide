@@ -341,7 +341,7 @@ stubbed bridge and whichever route loads last is the one on screen either way. R
 than keep an assertion that cannot fail, it was deleted. The guards are still the
 right thing; they are just unproven.
 
-## Riding without coverage
+## The forecast cache without coverage
 
 The forecast cannot be invented, but throwing away the one already downloaded was a
 choice, not a necessity. `getCache` holds a 30 minute lifetime; past that it used to
@@ -371,6 +371,68 @@ The header's 📴 button pins the cache entries a prepared route depends on, so 
 clear-out that runs when localStorage fills up skips them, and tells the user how many
 points were stored. Running the forecast already fills the cache; what the button adds
 is the guarantee and the feedback.
+
+## Ride alerts
+
+The forecast is a plan; this watches whether it still holds. Four pieces:
+
+- `public/scripts/watch-rules.js` — every decision, pure, in one plain script:
+  levels (`rainLevel`, `windLevel`), the Open-Meteo request (`forecastUrl`, one
+  request with every point, `timeformat=unixtime`, km/h), `readForecast` (the hour the
+  rider passes each point), `compare` (a step that moved *up* a level), `newAlerts`
+  (official warnings overlapping the ride, once), `compose` (one notification, es/en)
+  and `evaluate`, which ties them together and returns the watch as it should be
+  stored next. `mobile/tests/watch-rules.test.mjs` runs it in a bare `vm` context,
+  which is closer to the runner than Node's globals are.
+- `mobile/runners/watch.js` — the wiring for `@capacitor/background-runner`: three
+  events, `saveWatch`, `loadWatch` and `checkWatch`. The build concatenates the rules
+  in front of it into `www/runners/watch.js`, the path `capacitor.config.json` names,
+  and refuses `import`/`export` in either file because the runner has no loader.
+- `native.js`, "ride alerts": `app.js` dispatches `cw:forecast` with the rendered
+  steps; `buildWatch` samples them to twelve points with a clock label and a km mark
+  (the runner has no trustworthy locale or timezone, so labels are made here),
+  `seedBaseline` reads the baseline from the same request the runner will make, and
+  `storeWatch` hands it to the runner through `dispatchEvent`, whose KV store
+  (UserDefaults / SharedPreferences under the runner's label) is the only thing the
+  background task can read. Preferences is a different store with a different prefix;
+  do not try to share.
+- The toggle `#rideAlerts` in the settings panel, hidden unless the runner plugin
+  exists, on by default, persisted in `cwSettings.rideAlerts`. Off clears the watch.
+
+Things that were decided rather than discovered:
+
+- **The baseline is Open-Meteo, whatever the table shows.** Comparing the table
+  (MeteoBlue, OpenWeather, AROME) against a later Open-Meteo reading would report the
+  difference between providers as a change in the weather. So the web view reads the
+  baseline from the runner's own request when it arms the watch, and offline the
+  runner seeds it on its first run and stays silent that time.
+- **Levels with a margin, and the baseline moves after each notification.** A value
+  sitting on 20 km/h would otherwise wake the phone every half hour. After a report
+  the current reading becomes the baseline, so a change is said once and a further
+  worsening is said again; easing is never reported.
+- **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
+  notification describes the forecast that will actually hold.
+- **Interruption level.** The runner's iOS notifications ignore `interruptionLevel`,
+  so `mobile/scripts/patch-background-runner.mjs` inserts the handling into the
+  plugin's `Notifications.swift` on `postinstall`; idempotent, and it fails the
+  install if the plugin source no longer matches, rather than silently losing the
+  patch on an upgrade. `timeSensitive` also needs the capability in Xcode. On Android
+  loudness is the channel's: the web view creates a high-importance channel with
+  `@capacitor/local-notifications` and the runner posts to it by id, but only when the
+  app confirmed the channel exists — Android drops a notification whose channel does
+  not, so `channelId` is left out of the watch otherwise.
+- **The OS can refuse to run the task, and nothing in JavaScript can see that.**
+  Background App Refresh off on iOS, a vendor battery manager on Android.
+  `MeteoRideShare.backgroundRefreshStatus()` (app-local plugin, both platforms) reports
+  what the platform exposes, and the toggle shows a hint. It is the difference between
+  a feature that is off and one that looks on and never fires.
+- **Notification permission is asked when the first forecast is computed**, not at
+  start-up, and a refusal switches the toggle off and says so; the user has to grant
+  it in the system settings and tick it again. iOS background tasks never run in the
+  simulator; `docs/IOS.md` has the lldb command that fakes one on a device.
+
+Unverified, like the rest of the iOS code: none of it has run on a device. The Swift
+patch was written against the plugin's source, not compiled.
 
 ## What the app still needs from the network
 
@@ -406,8 +468,9 @@ npm test                        # builds the bundle, then runs the smoke suite
 node --check public/scripts/<file>.js
 ```
 
-`mobile/tests/smoke.spec.mjs` runs six checks against `mobile/www` with every external
-request blocked, which is both the offline guarantee and a way to keep the tests
+`node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
+without a browser. `mobile/tests/smoke.spec.mjs` runs its checks against `mobile/www`
+with every external request blocked, which is both the offline guarantee and a way to keep the tests
 deterministic. It covers booting with no network, the absence of remote references,
 valid structured data, and the three ways a route gets in: the file picker,
 `?gpx_url=` and the native share plugin.

@@ -120,6 +120,15 @@
         <span data-i18n="show_weather_alerts_label">Mostrar alertas meteorológicas oficiales</span>
       </label>
     </div>
+    <!-- App only: scripts/native.js reveals it when the background runner exists. -->
+    <div class="config-row" id="rideAlertsRow" hidden>
+      <label class="inline">
+        <input type="checkbox" id="rideAlerts" checked />
+        <span data-i18n="ride_alerts_label">Avisarme si cambia el tiempo de la ruta</span>
+      </label>
+      <div id="rideAlertsStatus" class="ride-alerts-status" aria-live="polite"></div>
+      <div id="rideAlertsHint" class="ride-alerts-status ride-alerts-hint" hidden></div>
+    </div>
 
     <!-- NEW: Debug button visibility option and condensed noticeAll on same line -->
     <div class="config-row compact-inline">
@@ -281,6 +290,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 <!-- native shell bridge (no-op in a browser) -->
+<script src="/scripts/watch-rules.js"></script>
 <script src="/scripts/native.js"></script>
 <script src="/scripts/utils.js"></script>
 <script src="/scripts/tile-cache.js"></script>

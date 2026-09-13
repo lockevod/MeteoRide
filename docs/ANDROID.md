@@ -49,6 +49,20 @@ The manifest accepts three things:
 Routes are stored under the app's private files directory and deleted as soon as the
 web layer reads them.
 
+The ride-alert watch (see the iOS document for what it does) runs through
+`@capacitor/background-runner` on WorkManager, which needs nothing in the project
+beyond what is committed: the `flatDir` line in `app/build.gradle` for the plugin's
+engine, `POST_NOTIFICATIONS` in the manifest (Android 13 asks the user the first time
+a forecast is computed), and the config in `capacitor.config.json`. WorkManager will
+not run more often than every 15 minutes and Doze defers it further; vendors with
+their own battery managers (see dontkillmyapp.com) can stop it altogether, which the
+app cannot detect beyond the plain battery-optimisation flag it shows a hint for.
+
+Notifications go to a high-importance channel the app creates the first time it arms
+a watch, so they show as heads-up. The channel is created from the web view with
+`@capacitor/local-notifications`; the runner cannot create channels, only post to
+one by id.
+
 ## Testing the share flow
 
 The app only accepts `content://` URIs, the way every real sender hands files over.

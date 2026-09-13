@@ -930,6 +930,7 @@
       "noticeAll",
       "showWeatherAlerts",
       "showDebugButton",
+      "rideAlerts",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {

@@ -163,10 +163,15 @@ async function recordNotices(page) {
 /** Stand-in for the bridge Capacitor injects into the web view, implementing the same
  *  MeteoRideShare contract as the iOS and Android plugins. `delayMs` makes a drain slow
  *  enough to collide with a second request, which is the interesting case. */
-async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
+async function installNativeBridge(page, { routes = [], delayMs = 0, notifications = 'granted', background = 'available' } = {}) {
   await page.addInitScript(
-    ({ routes: initial, delayMs: delay }) => {
+    ({ routes: initial, delayMs: delay, notifications: answer, background: bg }) => {
       const pending = [...initial];
+      // What the system will answer when asked for notification permission.
+      window.__notifAnswer = answer;
+      window.__bgStatus = bg;
+      window.__notifAsked = false;
+      window.__runnerEvents = [];
       window.__delivered = [];
       window.__enqueue = (route) => pending.push(route);
       window.__prefsRead = () => {
@@ -198,6 +203,7 @@ async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
               if (next) window.__delivered.push(next.name);
               return next || {};
             },
+            backgroundRefreshStatus: async () => ({ status: window.__bgStatus }),
           },
           App: {
             addListener: async (event, cb) => {
@@ -230,10 +236,29 @@ async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
               return { activityType: 'test' };
             },
           },
+          // The background runner's foreground face: the app only ever stores and
+          // reads the watch through it. Backed by sessionStorage like Preferences.
+          BackgroundRunner: {
+            checkPermissions: async () => ({ notifications: sessionStorage.getItem('__notif') || 'prompt' }),
+            requestPermissions: async () => {
+              window.__notifAsked = true;
+              if (!sessionStorage.getItem('__notif')) sessionStorage.setItem('__notif', window.__notifAnswer);
+              return { notifications: sessionStorage.getItem('__notif') };
+            },
+            dispatchEvent: async ({ label, event, details }) => {
+              window.__runnerEvents.push({ label, event, details });
+              if (event === 'saveWatch') sessionStorage.setItem('__watch', JSON.stringify(details.watch || null));
+              if (event === 'loadWatch') return JSON.parse(sessionStorage.getItem('__watch') || 'null');
+              return undefined;
+            },
+          },
+          LocalNotifications: {
+            createChannel: async (channel) => { window.__channel = channel; },
+          },
         },
       };
     },
-    { routes, delayMs }
+    { routes, delayMs, notifications, background }
   );
 }
 
@@ -504,18 +529,29 @@ function forecastAt(celsius) {
   };
 }
 
+/** What the ride watch asks for: several locations at once, unix times, km/h. */
+function watchForecast(url, { rain = 0, wind = 10, gust = 15 } = {}) {
+  const n = (url.searchParams.get('latitude') || '').split(',').length;
+  const base = Math.floor(Date.now() / 3600000) * 3600;
+  const time = Array.from({ length: 72 }, (_, i) => base + i * 3600);
+  const fill = (v) => time.map(() => v);
+  return Array.from({ length: n }, () => ({
+    hourly: { time, precipitation: fill(rain), wind_speed_10m: fill(wind), wind_gusts_10m: fill(gust) },
+  }));
+}
+
 /** Serves the forecast the control object names, or fails the request. */
 async function stubProvider(page, control) {
   await page.route(
     (url) => url.hostname === 'api.open-meteo.com',
-    (route) =>
-      control.offline
-        ? route.abort()
-        : route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(forecastAt(control.celsius)),
-          })
+    (route) => {
+      if (control.offline) return route.abort();
+      const url = new URL(route.request().url());
+      const body = url.searchParams.get('timeformat') === 'unixtime'
+        ? watchForecast(url, control.watch)
+        : forecastAt(control.celsius);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    }
   );
   await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
 }
@@ -1101,4 +1137,121 @@ test.describe('with the phone in Madrid', () => {
     expect(Math.abs(c.lat - 41.478)).toBeLessThan(0.05);
     expect(Math.abs(c.lng - 2.31)).toBeLessThan(0.05);
   });
+});
+
+
+/* ---------- ride alerts ---------- */
+
+const savedWatches = (page) =>
+  page.evaluate(() => window.__runnerEvents.filter((e) => e.event === 'saveWatch').map((e) => e.details.watch));
+
+async function loadRouteAndForecast(page) {
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+}
+
+test('computing a forecast arms the background watch with the route and a baseline', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 20, watch: { rain: 0, wind: 8, gust: 12 } });
+  await loadRouteAndForecast(page);
+
+  await expect.poll(async () => (await savedWatches(page)).length).toBeGreaterThan(0);
+  const watches = await savedWatches(page);
+  const watch = watches[watches.length - 1];
+  expect(watch).not.toBeNull();
+  expect(watch.name).toBe('route.gpx');
+  expect(watch.points.length).toBeGreaterThan(1);
+  expect(watch.points.length).toBeLessThanOrEqual(12);
+  expect(watch.end).toBeGreaterThan(Date.now());
+  expect(watch.points[0]).toEqual(expect.objectContaining({ t: expect.any(Number), label: expect.stringMatching(/^\d\d:\d\d$/) }));
+  // Seeded from the same request the runner will make, not from the table.
+  expect(watch.baseline).toHaveLength(watch.points.length);
+  expect(watch.baseline[0]).toEqual({ rain: 0, wind: 8, gust: 12 });
+  expect(watch.owKey).toBe('');
+  expect(await page.evaluate(() => window.__notifAsked)).toBe(true);
+  expect(await page.evaluate(() => window.__runnerEvents.every((e) => e.label === 'cc.meteoride.app.watch'))).toBe(true);
+  await expect(page.locator('#rideAlertsStatus')).toContainText('route.gpx');
+});
+
+test('the toggle clears the watch, stops new ones, and re-arms when switched back on', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 20 });
+  await loadRouteAndForecast(page);
+  await expect.poll(async () => (await savedWatches(page)).length).toBeGreaterThan(0);
+  const armed = (await savedWatches(page)).length;
+
+  await page.evaluate(() => {
+    const el = document.getElementById('rideAlerts');
+    el.checked = false;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect.poll(async () => (await savedWatches(page)).slice(-1)[0]).toBeNull();
+  await expect(page.locator('#rideAlertsStatus')).toHaveText('');
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('cwSettings'))).rideAlerts).toBe(false);
+
+  // Another forecast while off must not arm anything.
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('cw:forecast', { detail: { steps: window.weatherData } })));
+  await page.waitForTimeout(500);
+  const afterOff = await savedWatches(page);
+  expect(afterOff.length).toBe(armed + 1);
+
+  await page.evaluate(() => {
+    const el = document.getElementById('rideAlerts');
+    el.checked = true;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect.poll(async () => (await savedWatches(page)).slice(-1)[0]).not.toBeNull();
+});
+
+test('when notifications are refused the toggle switches itself off and says so', async ({ page }) => {
+  await installNativeBridge(page, { notifications: 'denied' });
+  await stubProvider(page, { celsius: 20 });
+  await recordNotices(page);
+  await loadRouteAndForecast(page);
+
+  await expect(page.locator('#rideAlerts')).not.toBeChecked();
+  await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toContain('Notifications are off');
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('cwSettings'))).rideAlerts).toBe(false);
+  const watches = await savedWatches(page);
+  expect(watches.filter((w) => w !== null)).toHaveLength(0);
+});
+
+test('a watch stored by an earlier session is shown at start-up; the toggle is app-only', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.addInitScript(() => {
+    sessionStorage.setItem('__watch', JSON.stringify({
+      name: 'sunday.gpx', lang: 'en', start: Date.now() + 3600000, end: Date.now() + 7200000, points: [], notified: [],
+    }));
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  // The settings panel is closed, so check the row itself rather than visibility.
+  await expect.poll(() => page.evaluate(() => document.getElementById('rideAlertsRow').hidden)).toBe(false);
+  await expect(page.locator('#rideAlertsStatus')).toContainText('sunday.gpx');
+});
+
+test('on the website the ride-alerts toggle does not exist', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => document.getElementById('rideAlertsRow').hidden)).toBe(true);
+});
+
+test('when the OS will not run background tasks, the toggle says so', async ({ page }) => {
+  await installNativeBridge(page, { background: 'denied' });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(page.locator('#rideAlertsHint')).toContainText('Background App Refresh');
+
+  // And stays quiet when it will.
+  await installNativeBridge(page, { background: 'available' });
+  await page.reload();
+  await mapReady(page);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => document.getElementById('rideAlertsHint').hidden)).toBe(true);
 });

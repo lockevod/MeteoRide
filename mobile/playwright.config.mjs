@@ -4,6 +4,8 @@ const PORT = 4173;
 
 export default defineConfig({
   testDir: './tests',
+  // tests/*.test.mjs are node:test files (npm run test:rules), not browser tests.
+  testMatch: '**/*.spec.mjs',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,

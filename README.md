@@ -145,6 +145,9 @@ What the native build adds:
   instead of loaded from a CDN.
 - **Settings that stay put**: units, language and your API key are also kept in native
   storage, so they survive the system reclaiming the web view's data.
+- **Ride alerts**: after you plan a route, a background check re-reads its forecast
+  and notifies you if rain or strong wind appears where there was none, or an
+  official warning is issued for the ride. On by default, with a toggle in settings.
 - **Useful without coverage**: the app reopens on your last route, and out of signal it
   still shows the forecast it downloaded, labelled with its age, instead of an empty
   table. A button saves the prepared route's forecast so it is not cleared. Map tiles

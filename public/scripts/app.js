@@ -1420,6 +1420,10 @@ function processWeatherData() {
   if (map) map.invalidateSize();
   [120, 300, 700].forEach((delay, idx) => setTimeout(() => fitRouteOnce(idx === 0 ? [6,6] : [9,9]), delay));
 
+  // The app shell watches the forecast in the background; tell it what was rendered.
+  try {
+    document.dispatchEvent(new CustomEvent('cw:forecast', { detail: { steps: weatherData } }));
+  } catch (e) { /* ignore */ }
 }
 
 function buildSunHeaderCell(lat, lon, dateLike) {

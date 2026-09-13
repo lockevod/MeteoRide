@@ -3416,3 +3416,12 @@ html.cw-native input[type="url"],
 html.cw-native textarea {
   font-size: 16px !important;
 }
+
+/* Under the ride-alerts toggle (app only): what is being watched. */
+.ride-alerts-status {
+  font-size: 0.8em;
+  color: #4a5a70;
+  margin: 2px 0 0 1.6em;
+}
+.ride-alerts-status:empty { display: none; }
+.ride-alerts-hint { color: #a04a00; }

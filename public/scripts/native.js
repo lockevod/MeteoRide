@@ -448,6 +448,223 @@
     scheduleMapNotice();
   }
 
+  /* ---------- ride alerts ---------- */
+
+  // A forecast is a plan made hours ahead. This watches it: once a route has its
+  // table, the shell stores the route's points and the forecast read for them, and
+  // a background task (mobile/runners/watch.js) re-reads the same forecast while the
+  // app is closed. Dry turning to rain, calm turning to wind, or an official warning
+  // overlapping the ride becomes a notification. The rules live in watch-rules.js,
+  // shared with the runner; this side only builds the record and stores it.
+  const WATCH_LABEL = 'cc.meteoride.app.watch';   // = plugins.BackgroundRunner.label
+  const WATCH_CHANNEL = 'cw_alerts';
+  // A ride days away is not checked until it is a day out: fewer requests, and the
+  // notification then describes the forecast that will actually hold.
+  const WATCH_HORIZON_MS = 24 * 60 * 60 * 1000;
+
+  let channelReady = false;
+  let armToken = 0;
+
+  function alertsWanted() {
+    const el = document.getElementById('rideAlerts');
+    return !!(el && el.checked);
+  }
+
+  function readSettings() {
+    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; }
+    catch (_) { return {}; }
+  }
+
+  async function notificationsAllowed() {
+    const runner = plugins.BackgroundRunner;
+    let status = 'denied';
+    try {
+      status = (await runner.checkPermissions()).notifications;
+      if (status !== 'granted') {
+        status = (await runner.requestPermissions({ apis: ['notifications'] })).notifications;
+      }
+    } catch (e) { log('notification permission', e); }
+    if (status !== 'granted') return false;
+
+    // Android: a notification is only as loud as its channel. The runner's default
+    // channel is medium importance (no heads-up); this one is high. Created through
+    // LocalNotifications because the runner cannot create channels, and channels are
+    // app-wide, so the runner can post to it by id.
+    if (window.CW_PLATFORM === 'android' && !channelReady && plugins.LocalNotifications) {
+      try {
+        await plugins.LocalNotifications.createChannel({
+          id: WATCH_CHANNEL,
+          name: (window.t && window.t('ride_alerts_label')) || 'Ride alerts',
+          importance: 5,
+          visibility: 1,
+        });
+        channelReady = true;
+      } catch (e) { log('notification channel', e); }
+    }
+    return true;
+  }
+
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const clockLabel = (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+
+  /** The record the runner works from, or null when there is nothing worth watching. */
+  function buildWatch(steps) {
+    const rules = window.cwWatchRules;
+    const valid = (steps || []).filter((s) =>
+      s && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon))
+        && s.time && !isNaN(new Date(s.time).getTime()));
+    if (!rules || !valid.length) return null;
+
+    const intervalMin = Number(window.getVal ? window.getVal('intervalSelect') : 0) || 0;
+    const start = new Date(valid[0].time).getTime();
+    const end = new Date(valid[valid.length - 1].time).getTime() + intervalMin * 60000;
+    if (end < Date.now()) return null;   // the ride is over; nothing can change it
+
+    const settings = readSettings();
+    const points = rules.sample(valid.map((s) => {
+      const when = new Date(s.time);
+      return {
+        lat: Number(s.lat),
+        lon: Number(s.lon),
+        t: Math.round(when.getTime() / 1000),
+        label: clockLabel(when),      // the runner has no reliable locale or timezone
+        km: Number(s.distanceM || 0) / 1000,
+      };
+    }));
+
+    return {
+      name: (window.lastGPXFile && window.lastGPXFile.name) || '',
+      lang: settings.language === 'es' ? 'es' : 'en',
+      createdAt: Date.now(),
+      start,
+      end,
+      horizonMs: WATCH_HORIZON_MS,
+      points,
+      baseline: null,
+      notified: [],
+      // Official warnings need the OpenWeather key, and only if the user shows them.
+      owKey: settings.showWeatherAlerts !== false ? String(settings.apiKeyOW || '') : '',
+      channelId: channelReady ? WATCH_CHANNEL : '',
+    };
+  }
+
+  // The baseline is read here, in the foreground, from the same request the runner
+  // will make: comparing against the table would compare two providers. Offline, the
+  // runner seeds it on its first run instead.
+  async function seedBaseline(watch) {
+    const rules = window.cwWatchRules;
+    if (offline()) return;
+    try {
+      const res = await fetch(rules.forecastUrl(watch.points, Date.now()));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      watch.baseline = rules.readForecast(await res.json(), watch.points);
+    } catch (e) {
+      log('baseline left to the first background check', e && e.message);
+    }
+  }
+
+  async function storeWatch(watch) {
+    await plugins.BackgroundRunner.dispatchEvent({
+      label: WATCH_LABEL,
+      event: 'saveWatch',
+      details: { watch: watch || null },
+    });
+    showWatchStatus(watch);
+  }
+
+  async function armWatch(steps) {
+    if (!plugins.BackgroundRunner) return;
+    const mine = ++armToken;   // a newer forecast supersedes one still being armed
+    try {
+      if (!alertsWanted()) return;
+      const watch = buildWatch(steps);
+      if (!watch) return storeWatch(null);
+
+      if (!(await notificationsAllowed())) {
+        // The toggle would lie if it stayed on. Off, saved, and said out loud: the
+        // user has to grant it in the system settings and tick it again.
+        const el = document.getElementById('rideAlerts');
+        if (el) { el.checked = false; el.dispatchEvent(new Event('change', { bubbles: true })); }
+        notify('ride_alerts_denied', 'Notifications are off for MeteoRide. Allow them in the system settings to get ride alerts.');
+        return;
+      }
+      if (mine !== armToken) return;
+      watch.channelId = channelReady ? WATCH_CHANNEL : '';
+      await seedBaseline(watch);
+      if (mine !== armToken) return;
+      await storeWatch(watch);
+      log('watching the forecast until', new Date(watch.end).toISOString());
+    } catch (e) {
+      log('could not arm the watch', e);
+    }
+  }
+
+  async function disarmWatch() {
+    if (!plugins.BackgroundRunner) return;
+    ++armToken;
+    try { await storeWatch(null); } catch (e) { log('could not clear the watch', e); }
+  }
+
+  function showWatchStatus(watch) {
+    const el = document.getElementById('rideAlertsStatus');
+    if (!el) return;
+    if (!watch) { el.textContent = ''; return; }
+    const until = clockLabel(new Date(watch.end));
+    el.textContent = window.t
+      ? window.t('ride_alerts_watching', { name: watch.name || '', until })
+      : `Watching ${watch.name} until ${until}`;
+  }
+
+  function setupRideAlerts() {
+    const runner = plugins.BackgroundRunner;
+    const row = document.getElementById('rideAlertsRow');
+    if (!runner || !row) return;
+    row.hidden = false;
+
+    // app.js announces every rendered forecast with the steps it was computed for.
+    document.addEventListener('cw:forecast', (ev) => {
+      armWatch(ev.detail && ev.detail.steps);
+    });
+
+    const toggle = document.getElementById('rideAlerts');
+    if (toggle) {
+      toggle.addEventListener('change', () => {
+        if (toggle.checked) armWatch(window.weatherData);
+        else disarmWatch();
+      });
+    }
+
+    // Reflect a watch stored by a previous session.
+    runner.dispatchEvent({ label: WATCH_LABEL, event: 'loadWatch', details: {} })
+      .then((watch) => {
+        const rules = window.cwWatchRules;
+        if (watch && rules && !rules.expired(watch, Date.now())) showWatchStatus(watch);
+      })
+      .catch((e) => log('could not read the stored watch', e));
+
+    warnIfBackgroundIsOff();
+  }
+
+  // The watch runs in a task the OS schedules, and the OS may refuse: on iOS when
+  // Background App Refresh is off for the app or the device, on Android when the
+  // vendor's battery manager is restricting the app. Neither is visible from
+  // JavaScript, so the app-local plugin reports it and the toggle says so; the
+  // alternative is a feature that looks on and never fires.
+  async function warnIfBackgroundIsOff() {
+    const share = plugins.MeteoRideShare;
+    if (!share || typeof share.backgroundRefreshStatus !== 'function') return;
+    let status = 'available';
+    try { status = (await share.backgroundRefreshStatus()).status; }
+    catch (e) { return log('background refresh status', e); }
+    if (status === 'available') return;
+    const el = document.getElementById('rideAlertsHint');
+    if (!el) return;
+    el.textContent = window.CW_PLATFORM === 'android'
+      ? ((window.t && window.t('ride_alerts_bg_android')) || 'Battery optimisation may stop the check: exclude MeteoRide in the battery settings.')
+      : ((window.t && window.t('ride_alerts_bg_ios')) || 'Background App Refresh is off for MeteoRide, so no check will run. Turn it on in Settings → General → Background App Refresh.');
+    el.hidden = false;
+  }
+
   /* ---------- where the phone is ---------- */
 
   // With no route loaded the map opens on Barcelona, the hard-coded default of the
@@ -497,6 +714,7 @@
     addPrepareButton();
     setupLinks();
     watchConnectivity();
+    setupRideAlerts();
     hideSplash();
 
     // A route shared from another app takes precedence over the one from last time.
@@ -520,4 +738,5 @@
   window.cwConsumePendingShare = consumePendingShare;
   window.cwShareCurrentRoute = shareCurrentRoute;
   window.cwPrepareForOffline = prepareForOffline;
+  window.cwArmWatch = armWatch;
 })();

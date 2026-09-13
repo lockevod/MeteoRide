@@ -1,7 +1,8 @@
 <!--
   Reference snippet — merge these keys into ios/App/App/Info.plist.
   They declare the meteoride:// scheme the share extension calls, register the app
-  as a handler for .gpx/.kml files, and explain the location prompt.
+  as a handler for .gpx/.kml files, explain the location prompt, and let the ride
+  watch run in the background.
 -->
 
 <key>CFBundleURLTypes</key>
@@ -67,3 +68,18 @@
 
 <key>NSLocationWhenInUseUsageDescription</key>
 <string>MeteoRide uses your location to centre the map on where you are.</string>
+
+<!-- Ride alerts: the background task the runner schedules. The identifier must equal
+     plugins.BackgroundRunner.label in mobile/capacitor.config.json. Xcode adds
+     UIBackgroundModes itself when "Background fetch" and "Background processing" are
+     ticked under Signing & Capabilities → Background Modes; listed here so a hand-edited
+     plist ends up the same. -->
+<key>BGTaskSchedulerPermittedIdentifiers</key>
+<array>
+	<string>cc.meteoride.app.watch</string>
+</array>
+<key>UIBackgroundModes</key>
+<array>
+	<string>fetch</string>
+	<string>processing</string>
+</array>
