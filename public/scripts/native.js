@@ -456,7 +456,15 @@
   // app is closed. Dry turning to rain, calm turning to wind, or an official warning
   // overlapping the ride becomes a notification. The rules live in watch-rules.js,
   // shared with the runner; this side only builds the record and stores it.
-  const WATCH_LABEL = 'cc.meteoride.app.watch';   // = plugins.BackgroundRunner.label
+  const WATCH_LABEL = 'cc.meteoride.app.watch';   // = the BackgroundRunner label in capacitor.config.json
+
+  // The npm package is @capacitor/background-runner and its JS export is called
+  // BackgroundRunner, but the plugin registers itself with the bridge as
+  // "CapacitorBackgroundRunner" — that is the name `Capacitor.Plugins` is keyed by,
+  // on both platforms. Getting this wrong costs nothing at build time and silently
+  // hides the whole feature, so tests/plugin-names.test.mjs checks it against the
+  // installed package.
+  const runnerPlugin = () => plugins.CapacitorBackgroundRunner;
   const WATCH_CHANNEL = 'cw_alerts';
   // A ride days away is not checked until it is a day out: fewer requests, and the
   // notification then describes the forecast that will actually hold.
@@ -476,7 +484,7 @@
   }
 
   async function notificationsAllowed() {
-    const runner = plugins.BackgroundRunner;
+    const runner = runnerPlugin();
     let status = 'denied';
     try {
       status = (await runner.checkPermissions()).notifications;
@@ -566,7 +574,7 @@
   }
 
   async function storeWatch(watch) {
-    await plugins.BackgroundRunner.dispatchEvent({
+    await runnerPlugin().dispatchEvent({
       label: WATCH_LABEL,
       event: 'saveWatch',
       details: { watch: watch || null },
@@ -575,7 +583,7 @@
   }
 
   async function armWatch(steps) {
-    if (!plugins.BackgroundRunner) return;
+    if (!runnerPlugin()) return;
     const mine = ++armToken;   // a newer forecast supersedes one still being armed
     try {
       if (!alertsWanted()) return;
@@ -602,7 +610,7 @@
   }
 
   async function disarmWatch() {
-    if (!plugins.BackgroundRunner) return;
+    if (!runnerPlugin()) return;
     ++armToken;
     try { await storeWatch(null); } catch (e) { log('could not clear the watch', e); }
   }
@@ -618,7 +626,7 @@
   }
 
   function setupRideAlerts() {
-    const runner = plugins.BackgroundRunner;
+    const runner = runnerPlugin();
     const row = document.getElementById('rideAlertsRow');
     if (!runner || !row) return;
     row.hidden = false;

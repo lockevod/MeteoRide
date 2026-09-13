@@ -184,6 +184,15 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **A plugin's bridge name is not its npm export.** `@capacitor/background-runner`
+  exports `BackgroundRunner` but registers as `CapacitorBackgroundRunner`, on both
+  platforms, and `Capacitor.Plugins` is keyed by the registered name. Reaching for
+  the wrong one costs nothing at build time — the key is simply `undefined` — and
+  the ride-alerts toggle silently never appeared on a device, while the suite stayed
+  green because the stub mirrored the same mistake. `tests/plugin-names.test.mjs`
+  now reads every installed package's `registerPlugin()` call and fails on a name
+  `native.js` uses that nothing registers. A stub is only evidence when something
+  independent pins it to the real contract.
 - **`hidden` loses to `display: flex`.** `#configMenu .config-row` is a flex row, and
   an element's own display rule beats the user-agent `[hidden] { display: none }`,
   so the app-only ride-alerts row was visible on the website with the panel open. A

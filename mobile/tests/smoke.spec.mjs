@@ -246,7 +246,9 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
           },
           // The background runner's foreground face: the app only ever stores and
           // reads the watch through it. Backed by sessionStorage like Preferences.
-          BackgroundRunner: {
+          // The key is the name the plugin registers with the bridge, which is NOT
+          // its npm export — tests/plugin-names.test.mjs keeps the two in step.
+          CapacitorBackgroundRunner: {
             checkPermissions: async () => ({ notifications: sessionStorage.getItem('__notif') || 'prompt' }),
             requestPermissions: async () => {
               window.__notifAsked = true;
