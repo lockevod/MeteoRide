@@ -347,7 +347,11 @@
       showWeatherAlerts: !!document.getElementById("showWeatherAlerts")?.checked,
       showDebugButton: !!document.getElementById("showDebugButton")?.checked,
     };
-    try { localStorage.setItem("cwSettings", JSON.stringify(settings)); } catch (e) { /* ignore */ }
+    const payload = JSON.stringify(settings);
+    try { localStorage.setItem("cwSettings", payload); } catch (e) { /* ignore */ }
+    // In the app, keep a copy outside the web view. iOS can clear WebKit storage
+    // when the device runs short of space, which would silently wipe the settings.
+    try { if (window.cwMirrorSettings) window.cwMirrorSettings(payload); } catch (e) { /* ignore */ }
     logDebug(t("config_saved"));
   }
 

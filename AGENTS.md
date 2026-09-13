@@ -165,6 +165,13 @@ What is still open, and why it was left:
   one computed for a departure that has passed. `warnIfStartTimeHasPassed` says so on
   `appStateChange`, with fifteen minutes of slack. Nothing is changed automatically: a
   deliberately chosen future time must not be overwritten.
+- **localStorage inside a web view is not durable.** iOS reclaims WebKit storage when
+  the device runs short of space, which would wipe the units, the language and the API
+  key. Settings are mirrored to Preferences (UserDefaults, SharedPreferences) on every
+  save and restored at startup when the web view comes up empty. The web view stays
+  authoritative while it still has them, so a stale native copy never overwrites what
+  is in use. Changing `server.iosScheme` would change the origin and orphan
+  localStorage the same way; the default scheme is deliberate.
 - **There is one notice slot and the last writer wins.** Several messages now compete
   for it, so a test that samples it at the end can miss one that appeared and was
   replaced. `recordNotices` in the suite observes the element and keeps every message
@@ -187,6 +194,9 @@ What is still open, and why it was left:
   `env()` works; on an older one it pads the decor view itself and injects zeroes.
   Using the custom properties as well would double-pad on old devices. The build adds
   `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
+- **Do not run two suites at once.** They share port 4173 and rebuild `www` under each
+  other, which produces a cluster of tests failing in a couple of hundred milliseconds
+  each. That looks like a product bug and is not one.
 - **`npx playwright test` does not rebuild the bundle; `npm test` does.** A test that
   fails right after an edit is probably running the previous build. This cost a long
   debugging detour into code that was already correct.

@@ -167,6 +167,10 @@ async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
       const pending = [...initial];
       window.__delivered = [];
       window.__enqueue = (route) => pending.push(route);
+      window.__prefsRead = () => {
+        try { return JSON.parse(sessionStorage.getItem('__prefs') || '{}'); }
+        catch (_) { return {}; }
+      };
       window.__swRegistered = false;
 
       const register = navigator.serviceWorker?.register;
@@ -201,6 +205,17 @@ async function installNativeBridge(page, { routes = [], delayMs = 0 } = {}) {
           },
           StatusBar: { setStyle: async () => {}, setBackgroundColor: async () => {} },
           SplashScreen: { hide: async () => {} },
+          // Native storage outlives the page, so the stub is backed by sessionStorage
+          // and written through on every set: a reload right after a save must not
+          // lose it, which is exactly what the code under test relies on.
+          Preferences: {
+            get: async ({ key }) => ({ value: (window.__prefsRead() || {})[key] ?? null }),
+            set: async ({ key, value }) => {
+              const all = window.__prefsRead() || {};
+              all[key] = value;
+              sessionStorage.setItem('__prefs', JSON.stringify(all));
+            },
+          },
           Filesystem: {
             writeFile: async (opts) => {
               window.__written = { path: opts.path, directory: opts.directory, data: opts.data };
@@ -997,4 +1012,52 @@ test('a booby-trapped map tile cannot run script', async ({ page }) => {
   await mapReady(page);
   await page.waitForTimeout(1500);
   expect(await page.evaluate(() => window.__tilePwned)).toBeUndefined();
+});
+
+test('settings survive the web view losing its storage', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // Change something the user would notice losing, and save it the way the app does.
+  await page.evaluate(() => {
+    document.getElementById('windUnits').value = 'mph';
+    document.getElementById('apiKeyOW').value = 'KEY-TO-KEEP';
+    window.saveSettings();
+  });
+  await expect
+    .poll(() => page.evaluate(() => window.__prefsRead().cwSettings))
+    .toBeTruthy();
+
+  // iOS reclaims WebKit storage: localStorage is gone, native storage is not.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => page.evaluate(() => document.getElementById('windUnits').value)).toBe('mph');
+  expect(await page.evaluate(() => document.getElementById('apiKeyOW').value)).toBe('KEY-TO-KEEP');
+});
+
+test('the web view keeps priority while it still has the settings', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.addInitScript(() => {
+    // A stale native copy from an older session must not overwrite what is in use.
+    sessionStorage.setItem('__prefs', JSON.stringify({
+      cwSettings: JSON.stringify({ windUnits: 'kmh', apiKeyOW: 'OLD-KEY' }),
+    }));
+  });
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => {
+    document.getElementById('apiKeyOW').value = 'CURRENT-KEY';
+    window.saveSettings();
+  });
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => page.evaluate(() => document.getElementById('apiKeyOW').value)).toBe('CURRENT-KEY');
 });

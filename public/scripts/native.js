@@ -214,6 +214,51 @@
     nav.insertBefore(btn, nav.firstChild);
   }
 
+  /* ---------- settings that survive ---------- */
+
+  // The settings live in localStorage, which inside a web view is not durable: iOS
+  // clears WebKit storage when the device runs short of space, and the user would
+  // find their units, language and API key gone. Preferences is UserDefaults on iOS
+  // and SharedPreferences on Android, which the system does not reclaim.
+  const SETTINGS_KEY = 'cwSettings';
+
+  async function mirrorSettings(json) {
+    const prefs = plugins.Preferences;
+    if (!prefs || !json) return;
+    try { await prefs.set({ key: SETTINGS_KEY, value: String(json) }); }
+    catch (e) { log('could not mirror the settings', e); }
+  }
+
+  async function restoreSettings() {
+    const prefs = plugins.Preferences;
+    if (!prefs) return;
+
+    let local = null;
+    try { local = localStorage.getItem(SETTINGS_KEY); } catch (_) {}
+    // The web view is authoritative while it still has them; just refresh the copy.
+    if (local) return mirrorSettings(local);
+
+    let stored = null;
+    try { stored = (await prefs.get({ key: SETTINGS_KEY })).value; }
+    catch (e) { return log('could not read the stored settings', e); }
+    if (!stored) return;
+
+    try { localStorage.setItem(SETTINGS_KEY, stored); }
+    catch (e) { return log('could not restore the settings', e); }
+
+    log('settings restored from device storage');
+    // If the app already read settings on its way up, make it read them again.
+    if (typeof window.loadSettings === 'function') {
+      try {
+        window.loadSettings();
+        if (window.applyTranslations) window.applyTranslations();
+        if (window.updateProviderOptions) window.updateProviderOptions();
+      } catch (e) { log('could not re-apply the settings', e); }
+    }
+  }
+
+  window.cwMirrorSettings = mirrorSettings;
+
   /* ---------- coming back to the app later ---------- */
 
   // An app is resumed, not reloaded. Come back hours later and the table is still
@@ -436,6 +481,10 @@
     const arrived = await consumePendingShare();
     if (!arrived) restoreLastRoute();
   }
+
+  // Started as early as possible, so the restored values are usually in place before
+  // the app reads them; if not, the restore re-applies them itself.
+  restoreSettings();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot, { once: true });
