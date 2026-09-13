@@ -112,16 +112,24 @@ template, apply the three marked pieces by hand instead of copying wholesale.
 *File → New → Target → Share Extension*, name it `ShareExtension`, language Swift.
 The template always generates a storyboard; this extension has no UI, so:
 
-1. Delete the generated `ShareViewController.swift`, `MainInterface.storyboard`
-   and `Info.plist`, and add the two files from
+1. Delete the generated `ShareViewController.swift` and `MainInterface.storyboard`
+   (*Move to Trash*), and add `ShareViewController.swift` from
    `mobile/native/ios/ShareExtension/` instead, referenced in place as in step 2.
-   The replacement `Info.plist` points at the principal class rather than a
-   storyboard.
-2. Add `MeteoRideShareStore.swift` to the extension target as well
+2. Do **not** delete the generated `Info.plist`. Open it as source and replace its
+   whole contents with `mobile/native/ios/ShareExtension/Info.plist`. Swapping the
+   file instead would leave the target's `INFOPLIST_FILE` build setting pointing at
+   a path that no longer exists, and it cannot be referenced in place either without
+   rewriting that setting to reach outside `ios/`. The replacement declares
+   `NSExtensionPrincipalClass` where the template declares a main storyboard, which
+   is what makes this a UI-less extension.
+3. Add `MeteoRideShareStore.swift` to the extension target as well
    (select the file → *Target Membership* → tick both App and ShareExtension).
    Both processes talk to the same folder; this is the only shared code.
-3. *Signing & Capabilities* → App Groups → `group.cc.meteoride.app`.
-4. Set the extension's deployment target to the same value as the App target.
+4. *Signing & Capabilities* → same Team, then App Groups → `group.cc.meteoride.app`.
+   The extension is a separate target with its own entitlements; the group on the
+   App target does not carry over, and without it the two processes write to
+   different folders and no shared route ever arrives.
+5. Set the extension's deployment target to the same value as the App target.
 
 How it works: the extension writes the received file into the App Group folder and
 opens `meteoride://shared`; the app wakes up, `native.js` calls
