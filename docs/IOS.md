@@ -224,6 +224,30 @@ On a real device, AirDrop the file or open it from Mail, Files or Komoot's expor
 
 ## Icons and launch screen
 
+Run this once after generating the project, and again whenever
+`public/icons/icon-1024.png` changes:
+
+```bash
+npm run icons
+```
+
+It reads whatever `AppIcon.appiconset/Contents.json` the template shipped and writes
+an image for every filename it names, at the size that entry declares. `ios/` is not
+in git, so an icon dropped in by hand is lost the next time the project is
+regenerated; this is repeatable.
+
+It also strips the alpha channel, which matters: the source PNG is RGBA and an iOS
+app icon must not be — Xcode warns and App Store Connect rejects the upload.
+Transparent pixels are composited onto the app's blue rather than onto black, which
+is what simply discarding the channel would leave around a soft-edged icon. The
+decoding, flattening and resizing are done with Node's own zlib and nothing else, so
+there is no ImageMagick to install; `mobile/tests/icons.test.mjs` checks the output
+is RGB, the right size and not blank.
+
+If the old icon lingers after running it, clean the build folder (⇧⌘K) and delete
+the app from the simulator — iOS caches icons hard.
+
+
 The repository already has square icons under `public/icons/`. The simplest path is
 [`@capacitor/assets`](https://github.com/ionic-team/capacitor-assets):
 
