@@ -133,23 +133,29 @@ var cwWatchRules = (function () {
     }));
   }
 
-  /** Steps that got worse: rain or wind one level or more above the baseline. */
-  function compare(baseline, current) {
+  // A step the rider has already passed is history, not a forecast. A little slack
+  // so the step being ridden right now still counts.
+  const PASSED_SLACK_MS = 15 * 60 * 1000;
+
+  /** Steps that got worse: rain or wind one level or more above the baseline.
+   *  `points` and `now` (ms) restrict it to steps still ahead. */
+  function compare(baseline, current, points, now) {
     const changes = [];
     if (!Array.isArray(baseline) || !Array.isArray(current)) return changes;
     for (let i = 0; i < current.length; i++) {
       const was = baseline[i];
-      const now = current[i];
-      if (!was || !now) continue;
+      const cur = current[i];
+      if (!was || !cur) continue;
+      if (points && now != null && points[i] && points[i].t * 1000 < now - PASSED_SLACK_MS) continue;
       const rainWas = rainLevel(was.rain, false);
-      const rainNow = rainLevel(now.rain, true);
+      const rainNow = rainLevel(cur.rain, true);
       if (rainWas != null && rainNow != null && rainNow > rainWas) {
-        changes.push({ kind: 'rain', i, from: rainWas, to: rainNow, value: now.rain });
+        changes.push({ kind: 'rain', i, from: rainWas, to: rainNow, value: cur.rain });
       }
       const windWas = windLevel(was.wind, was.gust, false);
-      const windNow = windLevel(now.wind, now.gust, true);
+      const windNow = windLevel(cur.wind, cur.gust, true);
       if (windWas != null && windNow != null && windNow > windWas) {
-        changes.push({ kind: 'wind', i, from: windWas, to: windNow, value: now.wind, gust: now.gust });
+        changes.push({ kind: 'wind', i, from: windWas, to: windNow, value: cur.wind, gust: cur.gust });
       }
     }
     return changes;
@@ -194,6 +200,14 @@ var cwWatchRules = (function () {
     return s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? String(vars[k]) : m));
   }
 
+  // iOS passes the title and body through localizedUserNotificationString, which
+  // treats them as format strings; a "%" from an official warning ("80% ...") or a
+  // file name would be read as a specifier with no arguments. Full-width percent
+  // looks the same and formats nothing.
+  function safeText(s) {
+    return String(s == null ? '' : s).replace(/%/g, '\uFF05');
+  }
+
   /** One notification for everything found in a check, worst change of each kind
    *  first, official alerts last. */
   function compose(changes, alerts, watch) {
@@ -217,9 +231,9 @@ var cwWatchRules = (function () {
       lines.push(line);
     }
     for (const a of alerts) {
-      lines.push(fill(L.alert, { event: a.event }) + (a.sender ? ' · ' + a.sender : ''));
+      lines.push(fill(L.alert, { event: safeText(a.event) }) + (a.sender ? ' · ' + safeText(a.sender) : ''));
     }
-    const title = watch.name ? watch.name + ' · ' + L.title : L.title;
+    const title = watch.name ? safeText(watch.name) + ' · ' + L.title : L.title;
     return { title, body: lines.join('\n') };
   }
 
@@ -240,8 +254,8 @@ var cwWatchRules = (function () {
       next.baseline = current;
       return { notification: null, watch: next };
     }
-    const changes = compare(watch.baseline, current);
-    const fresh = newAlerts(alerts, watch.notified, watch.start, watch.end);
+    const changes = compare(watch.baseline, current, watch.points, now);
+    const fresh = newAlerts(alerts, watch.notified, Math.max(watch.start, now), watch.end);
     if (!changes.length && !fresh.length) return { notification: null, watch: next };
 
     next.baseline = current.map((c, i) => c || watch.baseline[i] || null);

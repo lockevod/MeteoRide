@@ -174,3 +174,22 @@ test('the alert lookup asks at the start, middle and end', () => {
   same(at.map((p) => p.lat), [0, 15, 29]);
   assert.match(rules.alertsUrl(points[0], 'k e y'), /appid=k%20e%20y$/);
 });
+
+test('steps already ridden are not reported, official warnings only for what is left', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  const cur = reading({ rain: 2, wind: 10, gust: 15 });
+  const midRide = (t0 + HOUR + 20 * 60) * 1000;   // 11:20, past the 11:00 step
+  const out = rules.evaluate(watchWith(base), cur, [], midRide);
+  assert.match(out.notification.body, /^Lluvia a las 12:00 \(km 40\)/m, 'only the step ahead');
+  const over = rules.readAlerts({ alerts: [{ sender_name: 'AEMET', event: 'Pasado', start: t0 - 5 * HOUR, end: t0 - 2 * HOUR }] });
+  assert.equal(rules.evaluate(watchWith(base), base, over, midRide).notification, null, 'a warning that ended before now is history');
+});
+
+test('a percent sign in an official warning or a file name cannot become a format specifier', () => {
+  const same = reading({ rain: 0, wind: 10, gust: 15 });
+  const alerts = rules.readAlerts({ alerts: [{ sender_name: '100%', event: '80% chance of %@ hail', start: t0, end: t0 + HOUR }] });
+  const out = rules.evaluate(watchWith(same, { name: '50%.gpx' }), same, alerts, now);
+  assert.equal(out.notification.title.includes('%'), false);
+  assert.equal(out.notification.body.includes('%'), false);
+  assert.match(out.notification.body, /80\uFF05 chance/);
+});

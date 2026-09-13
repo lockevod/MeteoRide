@@ -533,7 +533,7 @@
     }));
 
     return {
-      name: (window.lastGPXFile && window.lastGPXFile.name) || '',
+      name: (window.lastGPXFile && window.lastGPXFile.name) || 'GPX',
       lang: settings.language === 'es' ? 'es' : 'en',
       createdAt: Date.now(),
       start,
@@ -555,7 +555,9 @@
     const rules = window.cwWatchRules;
     if (offline()) return;
     try {
-      const res = await fetch(rules.forecastUrl(watch.points, Date.now()));
+      // cwSilent: a failure here must not become a "provider unreachable" notice on
+      // top of a table that loaded fine.
+      const res = await fetch(rules.forecastUrl(watch.points, Date.now()), { cwSilent: true });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       watch.baseline = rules.readForecast(await res.json(), watch.points);
     } catch (e) {

@@ -1241,12 +1241,24 @@ test('a watch stored by an earlier session is shown at start-up; the toggle is a
   await expect(page.locator('#rideAlertsStatus')).toContainText('sunday.gpx');
 });
 
-test('on the website the ride-alerts toggle does not exist', async ({ page }) => {
+test('on the website the ride-alerts toggle is not shown, even with the panel open', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
+  await page.locator('#toggleConfig').click();
+  await expect(page.locator('#showWeatherAlerts')).toBeVisible();   // the panel really is open
   await page.waitForTimeout(500);
-  expect(await page.evaluate(() => document.getElementById('rideAlertsRow').hidden)).toBe(true);
+  await expect(page.locator('#rideAlertsRow')).toBeHidden();
+});
+
+test('in the app the toggle sits in the open panel', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#toggleConfig').click();
+  await expect(page.locator('#rideAlerts')).toBeVisible();
+  await expect(page.locator('#rideAlerts')).toBeChecked();
 });
 
 test('when the OS will not run background tasks, the toggle says so', async ({ page }) => {

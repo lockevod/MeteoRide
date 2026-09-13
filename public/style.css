@@ -577,6 +577,10 @@ nav button:hover {
   align-items: center;
   padding: 6px 0; /* give each row some vertical breathing room */
 }
+/* `display: flex` above beats the hidden attribute; rows that are app-only rely on it. */
+#configMenu .config-row[hidden] {
+  display: none;
+}
 
 /* Compact inline row: place multiple inline checkbox labels on one line */
 #configMenu .config-row.compact-inline {
@@ -3418,10 +3422,15 @@ html.cw-native textarea {
 }
 
 /* Under the ride-alerts toggle (app only): what is being watched. */
+#rideAlertsRow {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
 .ride-alerts-status {
   font-size: 0.8em;
   color: #4a5a70;
-  margin: 2px 0 0 1.6em;
+  margin: 0 0 0 1.6em;
 }
 .ride-alerts-status:empty { display: none; }
 .ride-alerts-hint { color: #a04a00; }

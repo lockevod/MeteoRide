@@ -66,7 +66,9 @@
     const original = window.fetch.bind(window);
     window.fetch = function (input, init) {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
-      if (!isProviderUrl(url)) return original(input, init);
+      // `cwSilent` marks a request whose failure says nothing about the table (the
+      // ride-watch baseline, read after the forecast): unknown keys are ignored by fetch.
+      if (!isProviderUrl(url) || (init && init.cwSilent)) return original(input, init);
       return original(input, init).then(
         (res) => { noteProvider(res.ok, String(res.status)); return res; },
         (err) => { noteProvider(false, 'network'); throw err; }

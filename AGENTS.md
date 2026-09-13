@@ -184,6 +184,12 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **`hidden` loses to `display: flex`.** `#configMenu .config-row` is a flex row, and
+  an element's own display rule beats the user-agent `[hidden] { display: none }`,
+  so the app-only ride-alerts row was visible on the website with the panel open. A
+  `.config-row[hidden] { display: none }` rule restores the attribute; the smoke
+  suite opens the panel and checks visibility, because checking the attribute alone
+  proved nothing.
 - **There is one notice slot and the last writer wins.** Several messages now compete
   for it, so a test that samples it at the end can miss one that appeared and was
   replaced. `recordNotices` in the suite observes the element and keeps every message
@@ -419,11 +425,20 @@ Things that were decided rather than discovered:
   worsening is said again; easing is never reported.
 - **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
   notification describes the forecast that will actually hold.
-- **Interruption level.** The runner's iOS notifications ignore `interruptionLevel`,
-  so `mobile/scripts/patch-background-runner.mjs` inserts the handling into the
-  plugin's `Notifications.swift` on `postinstall`; idempotent, and it fails the
-  install if the plugin source no longer matches, rather than silently losing the
-  patch on an upgrade. `timeSensitive` also needs the capability in Xcode. On Android
+- **Only what is still ahead.** `compare` skips steps whose time has passed (with
+  fifteen minutes of slack) and `evaluate` clips the official-warning window to
+  `max(start, now)`: a check during the ride must not announce rain at a place the
+  rider left an hour ago.
+- **Two plugin patches on install** (`mobile/scripts/patch-background-runner.mjs`):
+  the runner's iOS notifications ignore `interruptionLevel`, and its Android side
+  parses `scheduleAt` (an ISO string ending in Z) with a formatter that treats the
+  time as local, so east of Greenwich the alarm is in the past and fires at once,
+  which hides the bug, and west of it the alert is hours late. Each patch is
+  idempotent and fails the install if the plugin source no longer matches, rather
+  than silently losing itself on an upgrade. The runner also schedules five seconds
+  out rather than "now": the iOS plugin clamps a past date to now and then builds a
+  `DateInterval` whose end is before its start, a precondition failure that kills
+  the runner. `timeSensitive` also needs the capability in Xcode. On Android
   loudness is the channel's: the web view creates a high-importance channel with
   `@capacitor/local-notifications` and the runner posts to it by id, but only when the
   app confirmed the channel exists — Android drops a notification whose channel does
@@ -433,6 +448,16 @@ Things that were decided rather than discovered:
   `MeteoRideShare.backgroundRefreshStatus()` (app-local plugin, both platforms) reports
   what the platform exposes, and the toggle shows a hint. It is the difference between
   a feature that is off and one that looks on and never fires.
+- **Notification text is a format string on iOS.** The runner's `schedule` passes
+  title and body through `localizedUserNotificationString(forKey:arguments:)`, so a
+  `%` from an official warning ("80% ...") or a route file name would be read as a
+  specifier with no arguments. `compose` swaps `%` for the full-width `％` in every
+  string that comes from outside; its own texts carry none.
+- **The baseline request is marked `cwSilent`.** The provider reporter in `utils.js`
+  turns a lone failed provider request into a "provider unreachable" notice; the
+  seed is read after the table has loaded, so its failure would put that notice on
+  top of a table that is fine. `fetch(url, { cwSilent: true })` bypasses the
+  reporter; fetch ignores the unknown key.
 - **Notification permission is asked when the first forecast is computed**, not at
   start-up, and a refusal switches the toggle off and says so; the user has to grant
   it in the system settings and tick it again. iOS background tasks never run in the

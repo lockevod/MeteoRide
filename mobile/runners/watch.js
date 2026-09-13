@@ -49,7 +49,12 @@ function notify(watch, message) {
     title: message.title,
     body: message.body,
     largeBody: message.body,
-    scheduleAt: new Date(),
+    // A few seconds out on purpose. The iOS plugin clamps a past date to "now" and
+    // then builds a DateInterval whose end is before its start, which is a
+    // precondition failure, not an error. Android reads the ISO string with a
+    // formatter that ignores the Z (patched on install, see
+    // scripts/patch-background-runner.mjs), and fires a past time immediately.
+    scheduleAt: new Date(Date.now() + 5000),
     threadIdentifier: 'cw_watch',
     // Honoured by the plugin once the mobile/scripts/patch-background-runner.mjs
     // patch is in, and needs the Time Sensitive Notifications entitlement in Xcode.
