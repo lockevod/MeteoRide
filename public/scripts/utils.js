@@ -374,6 +374,26 @@
     logDebug(t("config_saved"));
   }
 
+  /**
+   * The language to start in when the user has never chosen one. Follows the
+   * device instead of defaulting to English: inside the app `navigator.languages`
+   * is the system's list, and on the website it is the browser's.
+   *
+   * Catalan and Galician map to Spanish. There is no Catalan translation, and for
+   * someone whose phone is in Catalan, Spanish is a great deal closer than English.
+   */
+  function deviceLanguage() {
+    const tags = (typeof navigator === 'undefined')
+      ? []
+      : (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
+    for (const tag of tags) {
+      const base = String(tag || '').toLowerCase().split('-')[0];
+      if (base === 'es' || base === 'ca' || base === 'gl') return 'es';
+      if (base === 'en') return 'en';
+    }
+    return 'en';
+  }
+
   function loadSettings() {
     const raw = localStorage.getItem("cwSettings");
     const s = raw ? JSON.parse(raw) : {};
@@ -400,7 +420,9 @@
     let changed = false;
     if (s.apiSource) apiSource = s.apiSource;
     else { apiSource = 'openmeteo'; s.apiSource = 'openmeteo'; changed = true; }
-    if (!s.language) { s.language = 'en'; changed = true; }
+    // Only when nothing is stored: once the selector has been touched it wins,
+    // and saveSettings writes the choice on every change.
+    if (!s.language) { s.language = deviceLanguage(); changed = true; }
     if (!s.tempUnits) { s.tempUnits = 'C'; changed = true; }
     if (!s.windUnits) { s.windUnits = 'ms'; changed = true; }
     if (!s.distanceUnits) { s.distanceUnits = 'km'; changed = true; }

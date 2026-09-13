@@ -184,6 +184,12 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **The starting language follows the device, not a hardcoded `'en'`.** Only when
+  nothing is stored: the in-app selector wins the moment it is touched. Catalan and
+  Galician map to Spanish, which is far closer than English for those readers. This
+  changes the website too — a Spanish-speaking visitor now lands in Spanish. iOS
+  cannot offer its own per-app language row for this app: that appears only when the
+  bundle declares several localizations, and the translations live in JavaScript.
 - **`t()` returns the key when it is missing**, so a forgotten entry reaches the
   user as `no_route_for_export` rather than a sentence, and the `|| 'fallback'`
   written around several calls never fires because the key is truthy. Two keys had

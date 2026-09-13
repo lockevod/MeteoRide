@@ -1277,3 +1277,52 @@ test('when the OS will not run background tasks, the toggle says so', async ({ p
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => document.getElementById('rideAlertsHint').hidden)).toBe(true);
 });
+
+/* ---------- starting language ---------- */
+
+const chosenLanguage = (page) => page.evaluate(() => document.getElementById('language').value);
+
+test.describe('on a phone set to Spanish', () => {
+  test.use({ locale: 'es-ES' });
+
+  test('a first run opens in Spanish, not English', async ({ page }) => {
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    expect(await chosenLanguage(page)).toBe('es');
+    // And the interface really is translated, not just the select.
+    await expect(page.locator('[data-i18n="show_weather_alerts_label"]')).toHaveText(/alertas/i);
+  });
+
+  test('a language the user chose survives, and the device does not override it', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('cwSettings', JSON.stringify({ language: 'en', windUnits: 'kmh' }));
+    });
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    expect(await chosenLanguage(page)).toBe('en');
+  });
+});
+
+test.describe('on a phone set to Catalan', () => {
+  test.use({ locale: 'ca-ES' });
+
+  test('falls back to Spanish rather than English', async ({ page }) => {
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    expect(await chosenLanguage(page)).toBe('es');
+  });
+});
+
+test.describe('on a phone set to German', () => {
+  test.use({ locale: 'de-DE' });
+
+  test('falls back to English, the only other language there is', async ({ page }) => {
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    expect(await chosenLanguage(page)).toBe('en');
+  });
+});
