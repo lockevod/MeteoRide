@@ -173,10 +173,35 @@ function patchBundledHtml(html) {
     `<head>\n<meta http-equiv="Content-Security-Policy" content="${NATIVE_CSP}">`
   );
   html = html.replace(/\s*<meta (?:property|name)="(?:og|twitter):image"[^>]*>/g, '');
+  html = stripDonation(html);
   return html.replace(/<img\b[^>]*\bsrc="https?:\/\/[^"]*"[^>]*>/gi, (tag) => {
     const alt = tag.match(/\balt="([^"]*)"/i);
     return alt ? alt[1] : '';
   });
+}
+
+/**
+ * The help pages end with a "support the project" section linking to buymeacoffee.
+ * Fine on the website; inside the app it is a link to a payment outside the store,
+ * which App Store guideline 3.1.1 rejects outright (donations are allowed only to
+ * approved non-profits, 3.2.1) and Google Play tolerates but does not promise to.
+ * The whole section goes: heading and the paragraphs that follow it, up to the next
+ * tag that is not a paragraph. `ensureNoDonationLink` then proves nothing survived.
+ */
+const DONATION_SECTION = /\s*<h3>[^<]*(?:Apoya el Proyecto|Support the Project)[^<]*<\/h3>(?:\s*<p>[\s\S]*?<\/p>)*/g;
+const DONATION_HOST = /buymeacoffee\.com/i;
+
+function stripDonation(html) {
+  return html.replace(DONATION_SECTION, '');
+}
+
+async function ensureNoDonationLink() {
+  for (const page of await readdir(OUT)) {
+    if (!page.endsWith('.html')) continue;
+    if (DONATION_HOST.test(await readFile(join(OUT, page), 'utf8'))) {
+      throw new Error(`${page} still links to buymeacoffee; the section moved and stripDonation no longer finds it`);
+    }
+  }
 }
 
 /** Rewrites index.html for the native shell. */
@@ -294,6 +319,7 @@ async function main() {
   }
   await buildRunner();
   await ensureNoRemoteRefs();
+  await ensureNoDonationLink();
   log('patched the bundled pages');
 
   log(`done: ${relative(REPO, OUT)} (${((await dirSize(OUT)) / 1024 / 1024).toFixed(1)} MB)`);

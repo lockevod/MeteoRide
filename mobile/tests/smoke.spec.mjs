@@ -92,6 +92,14 @@ test('boots with no network at all', async ({ page }) => {
 // other sites by the scripts and the help pages, which an offline app cannot do.
 test('the bundle fetches no assets from anywhere else', async () => {
   expect(await findRemoteAssets(WWW)).toEqual([]);
+  // A payment link outside the store fails App Store review (guideline 3.1.1); the
+  // build strips the help pages' donation section and this proves it stayed gone.
+  for (const page of ['help.html', 'help_en.html']) {
+    const html = await readFile(join(WWW, page), 'utf8');
+    expect(html).not.toMatch(/buymeacoffee/i);
+    expect(html).not.toMatch(/Apoya el Proyecto|Support the Project/);
+    expect(html).toMatch(/Consejo final|Final tip/);   // the section before it survives
+  }
 });
 
 // Read from public/, not from the bundle: build-www.mjs strips these blocks, so

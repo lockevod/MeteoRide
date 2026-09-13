@@ -130,6 +130,13 @@ the web view to a URL with a query string. That is why the policy lists the fore
 hosts instead of allowing any https origin. Wiring a deep link that opens a route by
 URL means widening it again.
 
+## Play review
+
+The bundle carries no donation link: the help pages' "Buy me a coffee" section is
+removed at build time. Google Play tolerates external donation links more than Apple
+does, but its payments policy does not promise to, and the bundle is the same for
+both platforms.
+
 ## Release build
 
 Create a keystore, then add the signing config to `android/app/build.gradle` and build:

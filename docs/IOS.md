@@ -276,6 +276,10 @@ but the forecast call, and does route computation locally. Worth keeping in mind
 
 - Do not load code from a server. `build-www.mjs` fails the build if `index.html`
   still points at a CDN, which is what keeps this true.
+- No link to a payment outside the store (guideline 3.1.1; donations, 3.2.1, only to
+  approved non-profits). The website's help pages end with a "Buy me a coffee" link;
+  the build removes that section from the bundle and fails if it comes back. A tip
+  jar in the app would have to be an in-app purchase.
 - Declare in App Store Connect that no data is collected. Weather providers receive
   coordinates and times; the OpenWeather key stays in local storage on the device.
 - The privacy section of the `README` describes the data flows and is a good source

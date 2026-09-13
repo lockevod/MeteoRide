@@ -228,6 +228,13 @@ What is still open, and why it was left:
   HTML, JS and CSS file and fails the build; a URL containing `{` is skipped, which is
   how the map tile template stays legal. Remote `<img>` tags in bundled pages are
   replaced by their alt text.
+- **No payment link inside the app.** The help pages' "support the project" section
+  links to buymeacoffee. App Store guideline 3.1.1 rejects any link to a purchase
+  outside in-app purchase, and 3.2.1 allows in-app donations only to approved
+  non-profits; Google Play tolerates external donation links without promising to.
+  `stripDonation` in the build removes the section from every bundled page and
+  `ensureNoDonationLink` fails the build if the host is still mentioned, so moving
+  the section in `help.html` cannot quietly put it back. The website keeps it.
 - **`t()` substitutes placeholders itself and blanks out any it is not given.** So
   `t('offline_stale_forecast')` followed by a `.replace('{age}', …)` silently produces
   "Forecast is  old." Pass the values to `t`, never patch its result.
@@ -520,10 +527,11 @@ code does and what makes the race reproducible.
   that no longer exists; harmless, but it is a dead branch.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
   confirmation would be friendlier.
-- The donation button on the help pages is an image on buymeacoffee's CDN. The bundle
-  degrades it to a text link because an offline app cannot fetch it; dropping the PNG
-  into `public/assets/` and pointing both pages at it would restore the button and
-  remove a third-party request from the website too.
+- The donation button on the website's help pages is an image on buymeacoffee's CDN
+  (the app strips the whole section, see the security model). Dropping the PNG into
+  `public/assets/` would remove a third-party request from the website.
+- A tip jar in the app, if ever wanted, has to be an in-app purchase (consumable) on
+  iOS; on Android Play Billing is the safe route too.
 - Only waypoint metadata is sanitised, because that is the only place the libraries
   build HTML from file content. Any new feature that renders something out of a route
   needs the same scrutiny.
