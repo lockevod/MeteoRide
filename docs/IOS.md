@@ -66,8 +66,18 @@ column is collapsed, it is a popup menu at the top left of the editor instead.
 
 ### 2. Add the Capacitor plugin sources
 
-Drag `mobile/native/ios/MeteoRideShare/` into the **App** target in Xcode
-("Copy items if needed" off, "Create groups" on):
+Add `mobile/native/ios/MeteoRideShare/` to the **App** target: *File → Add Files
+to "App"…*, pick the folder, and tick App under *Add to targets*.
+
+For how the files are added, choose **Reference files in place** (Xcode 16 offers it
+as one of three radio buttons; in older versions it is "Copy items if needed"
+**unchecked**). The sources then stay in the repository, where git tracks them and
+where a regenerated `ios/` cannot lose them. *Copy items if needed* would leave you
+editing an untracked copy under `ios/`, and **Move files to destination** would take
+them out of the repository altogether. If the dialog also offers *Create groups* vs
+*Create folder references*, take groups; folder references do not compile.
+
+The three files:
 
 - `MeteoRideShareStore.swift` — the shared inbox for incoming routes.
 - `MeteoRideSharePlugin.swift` — exposes it to JavaScript as
@@ -101,8 +111,9 @@ The template always generates a storyboard; this extension has no UI, so:
 
 1. Delete the generated `ShareViewController.swift`, `MainInterface.storyboard`
    and `Info.plist`, and add the two files from
-   `mobile/native/ios/ShareExtension/` instead. The replacement `Info.plist` points
-   at the principal class rather than a storyboard.
+   `mobile/native/ios/ShareExtension/` instead, referenced in place as in step 2.
+   The replacement `Info.plist` points at the principal class rather than a
+   storyboard.
 2. Add `MeteoRideShareStore.swift` to the extension target as well
    (select the file → *Target Membership* → tick both App and ShareExtension).
    Both processes talk to the same folder; this is the only shared code.
