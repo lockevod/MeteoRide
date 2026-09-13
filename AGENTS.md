@@ -557,6 +557,11 @@ code does and what makes the race reproducible.
   that no longer exists; harmless, but it is a dead branch.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
   confirmation would be friendlier.
+- The share extension reaches the host app by walking the responder chain to
+  `openURL:` when `NSExtensionContext.open` reports failure, which it usually does
+  for a share extension. Widely used, public API, but App Store review has been known
+  to question it. If it is ever rejected, the fallback is to drop the hop: the route
+  is already in the inbox and the app picks it up the next time it opens.
 - The donation button on the website's help pages is an image on buymeacoffee's CDN
   (the app strips the whole section, see the security model). Dropping the PNG into
   `public/assets/` would remove a third-party request from the website.

@@ -72,20 +72,41 @@ class ShareViewController: UIViewController {
     }
 
     private func finish(stored: Int) {
-        if stored > 0 {
-            openHostApp()
-        } else {
+        guard stored > 0 else {
             NSLog("[MeteoRide] share extension got nothing it could read")
+            return complete()
         }
+        openHostApp { [weak self] in self?.complete() }
+    }
+
+    private func complete() {
         extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
 
-    /// A share extension cannot call `UIApplication.open` directly, so walk the
-    /// responder chain to reach the hosting application. If that fails the route
-    /// still waits in the inbox and is picked up the next time the app opens.
-    private func openHostApp() {
-        if extensionContext?.open(hostAppURL) == true { return }
+    /// Brings MeteoRide to the front, then calls back.
+    ///
+    /// `NSExtensionContext.open` does not return whether it worked — it reports
+    /// through a completion handler, and for a share extension it frequently reports
+    /// failure, which is why the responder-chain fallback is here. The request must
+    /// not be completed until this has finished: completing tears down the context
+    /// and the view controller, and the open never happens.
+    private func openHostApp(then done: @escaping () -> Void) {
+        guard let context = extensionContext else {
+            openViaResponderChain()
+            return done()
+        }
+        context.open(hostAppURL) { [weak self] opened in
+            DispatchQueue.main.async {
+                if !opened { self?.openViaResponderChain() }
+                done()
+            }
+        }
+    }
 
+    /// A share extension has no `UIApplication` of its own, so reach the hosting app
+    /// through the responder chain. If this fails too, the route simply waits in the
+    /// inbox and is picked up the next time MeteoRide opens.
+    private func openViaResponderChain() {
         var responder: UIResponder? = self
         let selector = NSSelectorFromString("openURL:")
         while let current = responder {
