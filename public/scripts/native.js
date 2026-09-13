@@ -675,6 +675,28 @@
     el.hidden = false;
   }
 
+  /* ---------- picking a file ---------- */
+
+  // iOS turns the `accept` attribute into a list of UTIs and greys out everything
+  // else in the Files picker. GPX has no system UTI, so `.gpx` maps to nothing and
+  // the user cannot select the very files the app exists to read. Widened here only:
+  // the website keeps the tighter list, where extensions work as written. Picking
+  // the wrong file is harmless — parsing it fails and says so.
+  function relaxFilePicker() {
+    const input = document.getElementById('gpxFile');
+    if (!input) return;
+    input.setAttribute('accept', [
+      '.gpx', '.kml',
+      'application/gpx+xml',
+      'application/vnd.google-earth.kml+xml',
+      'application/xml',
+      'text/xml',
+      // public.data: the catch-all that makes everything selectable, for the apps
+      // and downloads that hand a route over with no usable type at all.
+      'application/octet-stream',
+    ].join(','));
+  }
+
   /* ---------- where the phone is ---------- */
 
   // With no route loaded the map opens on Barcelona, the hard-coded default of the
@@ -723,6 +745,7 @@
     addShareButton();
     addPrepareButton();
     setupLinks();
+    relaxFilePicker();
     watchConnectivity();
     setupRideAlerts();
     hideSplash();

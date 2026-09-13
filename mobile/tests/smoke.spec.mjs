@@ -1326,3 +1326,25 @@ test.describe('on a phone set to German', () => {
     expect(await chosenLanguage(page)).toBe('en');
   });
 });
+
+/* ---------- the file picker ---------- */
+
+const acceptAttr = (page) => page.evaluate(() => document.getElementById('gpxFile').getAttribute('accept'));
+
+test('in the app the picker accepts types iOS can actually map', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  // .gpx has no system UTI, so a picker limited to it greys out every file.
+  await expect.poll(() => acceptAttr(page)).toContain('application/octet-stream');
+  expect(await acceptAttr(page)).toContain('.gpx');
+});
+
+test('on the website the picker keeps the tight list', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.waitForTimeout(300);
+  expect(await acceptAttr(page)).toBe('.gpx,.kml');
+});

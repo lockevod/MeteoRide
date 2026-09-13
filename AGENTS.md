@@ -184,6 +184,12 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **`accept=".gpx"` greys out every file in the iOS picker.** iOS turns `accept`
+  into a list of UTIs, and GPX has no system UTI, so the one file type the app
+  exists to read becomes unselectable. `relaxFilePicker` in `native.js` widens the
+  attribute inside the app only — the website keeps the tight list, where extensions
+  work as written. Declaring `cc.meteoride.gpx` in `Info.plist` covers "Open in
+  MeteoRide" from other apps; it does not help the web view's own picker.
 - **The starting language follows the device, not a hardcoded `'en'`.** Only when
   nothing is stored: the in-app selector wins the moment it is touched. Catalan and
   Galician map to Spanish, which is far closer than English for those readers. This
