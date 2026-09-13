@@ -448,6 +448,28 @@
     scheduleMapNotice();
   }
 
+  /* ---------- where the phone is ---------- */
+
+  // With no route loaded the map opens on Barcelona, the hard-coded default of the
+  // website. On a phone the obvious place to start is where the phone is. Runs
+  // alongside the route restore rather than after it, because on a first run the
+  // restore waits several seconds for routes that do not exist; whichever finishes
+  // last must not undo the other, so a position is only applied while the map is
+  // still unclaimed, and a route always fits itself afterwards anyway.
+  async function centreOnUser() {
+    if (!navigator.geolocation) return;
+    const map = await waitFor(() => window.map, 10000);
+    if (!map || window.lastGPXFile) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (window.lastGPXFile) return;   // a route arrived while we were waiting
+        map.setView([pos.coords.latitude, pos.coords.longitude], 12);
+      },
+      (err) => log('no position', err && err.message),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+    );
+  }
+
   /* ---------- external links ---------- */
 
   // Keep the web view on the app; send real websites to the system browser.
@@ -479,7 +501,10 @@
 
     // A route shared from another app takes precedence over the one from last time.
     const arrived = await consumePendingShare();
-    if (!arrived) restoreLastRoute();
+    if (!arrived) {
+      restoreLastRoute();
+      centreOnUser();
+    }
   }
 
   // Started as early as possible, so the restored values are usually in place before

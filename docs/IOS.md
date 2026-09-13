@@ -124,6 +124,25 @@ edits. The Xcode configuration above survives, because `cap sync` only replaces
 If you regenerate the project from scratch (`rm -rf ios && npm run add:ios`) you
 have to redo steps 1-5.
 
+After a `git pull` or a branch switch, the same `npm run ios` is all it takes:
+`ios/` is not in git, so what changed is `public/`, and `cap sync` copies it in. Run
+`npm install` first if `mobile/package.json` changed.
+
+### Getting a GPX into the simulator
+
+The simulator has no AirDrop and cannot see the Mac's folders. Two ways that work:
+
+- Drag the `.gpx` from Finder onto the simulator window. Recent simulators save
+  arbitrary files into the Files app ("On My iPhone"); then tap the route button in
+  MeteoRide and pick it from there. If the drop is refused, use the next one.
+- Serve it from the Mac and download it in the simulator's Safari:
+  `python3 -m http.server 8000` in the folder with the file, open
+  `http://localhost:8000/route.gpx` in Safari (the simulator shares the Mac's
+  network), and either save it to Files or use the share sheet → *MeteoRide*, which
+  also exercises the share extension.
+
+On a real device, AirDrop the file or open it from Mail, Files or Komoot's export.
+
 ## Icons and launch screen
 
 The repository already has square icons under `public/icons/`. The simplest path is
@@ -222,6 +241,12 @@ apps share a route as a URL rather than a file — that case still goes through
 
 **Blank screen after `cap sync`.** Open Safari → Develop → your device → the app,
 and read the console. It is the same web inspector the website uses.
+
+**The map does not centre on the device.** The web view asks for location through
+the app's own permission, so `NSLocationWhenInUseUsageDescription` must be in
+`Info.plist` (it is in the additions file). In the simulator, set a location under
+*Features → Location*; with *None* the request simply fails and the map stays where
+the website puts it.
 
 **Weather requests fail in the app but work on the web.** The web view origin is
 `capacitor://localhost`; a provider that does not send permissive CORS headers will

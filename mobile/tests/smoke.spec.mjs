@@ -51,8 +51,10 @@ function watchTheLoader(page) {
 const mapReady = (page) => page.waitForFunction(() => !!window.map, null, { timeout: 15000 });
 const routeName = (page) => page.locator('#rutaName');
 
-/** A track actually drawn on the map, not just a file that parsed. */
-const trackDrawn = (page) => page.locator('#map path');
+/** A track actually drawn on the map, not just a file that parsed. Scoped to Leaflet's
+ *  overlay pane: the recentre and compass controls are SVG too, so a bare `#map path`
+ *  always found something and proved nothing. */
+const trackDrawn = (page) => page.locator('#map .leaflet-overlay-pane path');
 
 test('boots with no network at all', async ({ page }) => {
   const { crashes, missing } = watchForBreakage(page);
@@ -1060,4 +1062,43 @@ test('the web view keeps priority while it still has the settings', async ({ pag
   await mapReady(page);
 
   await expect.poll(() => page.evaluate(() => document.getElementById('apiKeyOW').value)).toBe('CURRENT-KEY');
+});
+
+/* ---------- opening where the phone is ---------- */
+
+const mapCentre = (page) =>
+  page.evaluate(() => {
+    const c = window.map.getCenter();
+    return { lat: c.lat, lng: c.lng };
+  });
+
+// Madrid: far from both the website's Barcelona default and the fixture's route.
+test.describe('with the phone in Madrid', () => {
+  test.use({ geolocation: { latitude: 40.4168, longitude: -3.7038 }, permissions: ['geolocation'] });
+
+  test('an empty map opens where the phone is, not on the website default', async ({ page }) => {
+    await installNativeBridge(page);
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+
+    await expect.poll(async () => (await mapCentre(page)).lng).toBeLessThan(-3);
+    const c = await mapCentre(page);
+    expect(Math.abs(c.lat - 40.4168)).toBeLessThan(0.05);
+  });
+
+  test('a route that arrived at start keeps the map; the position does not move it', async ({ page }) => {
+    const gpx = await readFile(FIXTURE, 'utf8');
+    await installNativeBridge(page, { routes: [{ gpx, name: 'shared.gpx' }] });
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    await expect(trackDrawn(page)).not.toHaveCount(0, { timeout: 15000 });
+
+    // Long enough for a position to have been applied if it was going to be.
+    await page.waitForTimeout(1500);
+    const c = await mapCentre(page);
+    expect(Math.abs(c.lat - 41.478)).toBeLessThan(0.05);
+    expect(Math.abs(c.lng - 2.31)).toBeLessThan(0.05);
+  });
 });

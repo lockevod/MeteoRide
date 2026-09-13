@@ -172,6 +172,18 @@ What is still open, and why it was left:
   authoritative while it still has them, so a stale native copy never overwrites what
   is in use. Changing `server.iosScheme` would change the origin and orphan
   localStorage the same way; the default scheme is deliberate.
+- **Safe-area insets are added to the page's padding, not put in its place.** The
+  first version set `main`'s side padding to `env(safe-area-inset-left)` alone, which
+  is zero in portrait, and the text sat on the edge of the screen. The website's
+  0.5rem stays and the inset goes on top.
+- **With no route the map opens where the phone is.** The website centres on
+  Barcelona, a hard-coded default. `centreOnUser` in `native.js` asks the web view's
+  own `navigator.geolocation` (no plugin: WKWebView and the Android web view both
+  forward it once the app holds the location permission, which the plist string and
+  the manifest entries provide). It runs alongside the route restore, not after it,
+  because on a first run the restore waits seconds for routes that do not exist; a
+  position is only applied while the map is still unclaimed, and a route fits itself
+  afterwards regardless.
 - **There is one notice slot and the last writer wins.** Several messages now compete
   for it, so a test that samples it at the end can miss one that appeared and was
   replaced. `recordNotices` in the suite observes the element and keeps every message
