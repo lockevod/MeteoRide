@@ -76,7 +76,7 @@ Piezas nativas que necesita y su estado:
   `scheduleAt` como hora local. Idempotente; **falla el `npm install`** si la fuente
   del plugin cambia, a propósito. Si se actualiza el plugin, revisar el script.
 - iOS: Background Modes (fetch + processing), `BGTaskSchedulerPermittedIdentifiers`,
-  dos líneas en `AppDelegate` (`mobile/native/ios/AppDelegate.additions.swift`),
+  dos líneas en `AppDelegate` (`mobile/native/ios/AppDelegate.swift`),
   capability *Time Sensitive Notifications*. Nada de esto está aplicado aún en el
   proyecto Xcode del autor (paso 6 de `docs/IOS.md`).
 - Android: `POST_NOTIFICATIONS` en manifest, `flatDir` del motor JS en
