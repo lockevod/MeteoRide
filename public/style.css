@@ -595,7 +595,9 @@ nav button:hover {
   gap: 6px;
   margin: 0;
 }
-#configMenu .config-row.compact-inline label.compact-notice { 
+/* Spacing between the two checkboxes on one line, by position rather than by a
+   class naming one of them: the order is a presentation choice and has changed. */
+#configMenu .config-row.compact-inline label.inline + label.inline {
   margin-left: 6px;
   white-space: nowrap;
 }
@@ -3422,15 +3424,12 @@ html.cw-native textarea {
 }
 
 /* Under the ride-alerts toggle (app only): what is being watched. */
-#rideAlertsRow {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
+/* Sub-lines under the ride-alerts toggle. Outside the row, indented to sit under
+   the label text rather than under the checkbox. */
 .ride-alerts-status {
   font-size: 0.8em;
   color: #4a5a70;
-  margin: 0 0 0 1.6em;
+  margin: 0 0 6px 26px;
 }
 .ride-alerts-status:empty { display: none; }
 .ride-alerts-hint { color: #a04a00; }

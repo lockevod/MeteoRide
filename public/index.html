@@ -120,25 +120,27 @@
         <span data-i18n="show_weather_alerts_label">Mostrar alertas meteorológicas oficiales</span>
       </label>
     </div>
-    <!-- App only: scripts/native.js reveals it when the background runner exists. -->
+    <!-- App only: scripts/native.js reveals it when the background runner exists.
+         The two status lines sit outside the row so the label gets exactly the same
+         treatment as every other checkbox row; both are invisible until filled. -->
     <div class="config-row" id="rideAlertsRow" hidden>
       <label class="inline">
         <input type="checkbox" id="rideAlerts" checked />
         <span data-i18n="ride_alerts_label">Avisarme si cambia el tiempo de la ruta</span>
       </label>
-      <div id="rideAlertsStatus" class="ride-alerts-status" aria-live="polite"></div>
-      <div id="rideAlertsHint" class="ride-alerts-status ride-alerts-hint" hidden></div>
     </div>
+    <div id="rideAlertsStatus" class="ride-alerts-status" aria-live="polite"></div>
+    <div id="rideAlertsHint" class="ride-alerts-status ride-alerts-hint" hidden></div>
 
-    <!-- NEW: Debug button visibility option and condensed noticeAll on same line -->
+    <!-- Notices first, debug last: debug is the developer option of the two. -->
     <div class="config-row compact-inline">
+      <label class="inline">
+        <input type="checkbox" id="noticeAll" checked />
+        <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
+      </label>
       <label class="inline">
         <input type="checkbox" id="showDebugButton" checked />
         <span data-i18n="show_debug_button_label">Mostrar botón de debug</span>
-      </label>
-      <label class="inline compact-notice">
-        <input type="checkbox" id="noticeAll" checked />
-        <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
       </label>
     </div>
 

@@ -184,6 +184,13 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **`t()` returns the key when it is missing**, so a forgotten entry reaches the
+  user as `no_route_for_export` rather than a sentence, and the `|| 'fallback'`
+  written around several calls never fires because the key is truthy. Two keys had
+  been missing on the website for a long time without anyone noticing.
+  `tests/translations.test.mjs` collects every `t('x')` in the scripts and every
+  `data-i18n` in the pages and fails on any key absent from either dictionary, and
+  separately fails when the two dictionaries drift apart.
 - **A plugin's bridge name is not its npm export.** `@capacitor/background-runner`
   exports `BackgroundRunner` but registers as `CapacitorBackgroundRunner`, on both
   platforms, and `Capacitor.Plugins` is keyed by the registered name. Reaching for
