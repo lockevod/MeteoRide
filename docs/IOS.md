@@ -47,7 +47,8 @@ npm run add:ios      # builds www/ and generates mobile/ios
 npm run ios          # rebuilds www/, syncs, opens Xcode
 ```
 
-Then, in Xcode, do the five steps below once.
+Then, in Xcode, do the six steps below once, in order: step 4 edits a file that
+refers to a class added in step 2.
 
 ### 1. Signing
 
