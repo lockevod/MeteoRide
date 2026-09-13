@@ -159,9 +159,11 @@ the template project does not have:
 2. `BGTaskSchedulerPermittedIdentifiers` from `Info.plist.additions.xml`, holding
    `cc.meteoride.app.watch`. It must equal `plugins.BackgroundRunner.label` in
    `capacitor.config.json`; if either changes, change both.
-3. The two lines from `mobile/native/ios/AppDelegate.additions.swift` in
-   `application(_:didFinishLaunchingWithOptions:)`, plus its import. Without them the
-   task is never registered and iOS never calls it.
+3. Replace `ios/App/App/AppDelegate.swift` with `mobile/native/ios/AppDelegate.swift`
+   — the Capacitor 8.5.2 template plus one import and two calls in
+   `application(_:didFinishLaunchingWithOptions:)`, marked in place. Without them the
+   task is never registered and iOS never calls it. Do not add that file to the
+   target; it would collide with the real one.
 
 For alerts that break through Focus modes, also add *Signing & Capabilities* →
 **Time Sensitive Notifications**. The runner posts every alert with
