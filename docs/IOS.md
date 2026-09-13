@@ -99,10 +99,13 @@ Merge the keys from `mobile/native/ios/Info.plist.additions.xml` into
 `ios/App/App/Info.plist`. They declare the `meteoride://` scheme, register the app
 as a handler for `.gpx`/`.kml`, and provide the location usage string.
 
-Then apply `mobile/native/ios/SceneDelegate.additions.swift` to
-`ios/App/App/SceneDelegate.swift`. Two things happen there: the root view controller
-becomes `MeteoRideViewController` instead of `CAPBridgeViewController`, and an opened
-file is routed into the inbox.
+Then replace `ios/App/App/SceneDelegate.swift` with
+`mobile/native/ios/SceneDelegate.swift`, which is the file Capacitor 8.5.2 generates
+plus three marked additions: the root view controller becomes
+`MeteoRideViewController` instead of `CAPBridgeViewController`, and an opened file is
+routed into the inbox on launch and while running. Do not add that file to the target
+— it would collide with the real one. If a later Capacitor generates a different
+template, apply the three marked pieces by hand instead of copying wholesale.
 
 ### 5. Share extension
 
