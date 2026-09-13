@@ -501,7 +501,9 @@ node --check public/scripts/<file>.js
 ```
 
 `node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
-without a browser. `mobile/tests/smoke.spec.mjs` runs its checks against `mobile/www`
+without a browser, and drives the assembled `www/runners/watch.js` through its three
+events with the host objects mocked (`tests/runner.test.mjs`, needs a build first),
+which is the closest thing to running the background task without a device. `mobile/tests/smoke.spec.mjs` runs its checks against `mobile/www`
 with every external request blocked, which is both the offline guarantee and a way to keep the tests
 deterministic. It covers booting with no network, the absence of remote references,
 valid structured data, and the three ways a route gets in: the file picker,
@@ -545,7 +547,10 @@ code does and what makes the race reproducible.
 - The iOS native code has never been compiled. Everything about it was checked by
   reading the Capacitor sources in `node_modules/@capacitor/ios`, which is how the
   plugin registration bug above was found, but reading is not building. The Android
-  code at least compiles (against stubs, no SDK here).
+  code compiles (against hand-written stubs of the dozen SDK and Capacitor classes it
+  touches; there is no Android SDK here), and `cap sync android` runs here, so the
+  generated `capacitor.settings.gradle` / `capacitor.build.gradle` are committed in
+  step with the installed plugins.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`
