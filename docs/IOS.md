@@ -136,7 +136,11 @@ The template always generates a storyboard; this extension has no UI, so:
    The extension is a separate target with its own entitlements; the group on the
    App target does not carry over, and without it the two processes write to
    different folders and no shared route ever arrives.
-5. Set the extension's deployment target to the same value as the App target.
+5. Set the extension's deployment target to the same value as the App target —
+   **iOS 15.0**, which is the floor for Capacitor 8 and for every plugin here, and
+   covers the iPhone 6s onwards. A target Xcode has just created defaults to the
+   installed SDK instead (iOS 26 and up today), which would ship an app almost
+   nobody can install, so check the App target reads 15.0 too.
 
 How it works: the extension writes the received file into the App Group folder and
 opens `meteoride://shared`; the app wakes up, `native.js` calls
