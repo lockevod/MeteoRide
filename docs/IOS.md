@@ -115,6 +115,13 @@ The template always generates a storyboard; this extension has no UI, so:
 1. Delete the generated `ShareViewController.swift` and `MainInterface.storyboard`
    (*Move to Trash*), and add `ShareViewController.swift` from
    `mobile/native/ios/ShareExtension/` instead, referenced in place as in step 2.
+
+   Xcode 16 creates new targets as *synchronized folder groups*, whose contents are
+   whatever sits in the folder, so *Reference files in place* is not offered — only
+   Copy and Move. Right-click the `ShareExtension` folder → **Convert to Group**
+   first and the option comes back. Copying works too, but then the repository and
+   `ios/` hold two copies that drift apart silently; Move would take the file out of
+   the repository altogether.
 2. Do **not** delete the generated `Info.plist`. Open it as source and replace its
    whole contents with `mobile/native/ios/ShareExtension/Info.plist`. Swapping the
    file instead would leave the target's `INFOPLIST_FILE` build setting pointing at
