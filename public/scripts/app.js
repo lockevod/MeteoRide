@@ -1105,8 +1105,9 @@ function processWeatherData() {
         step.isDaylight = pos.altitude > 0 ? 1 : 0;
       } catch { step.isDaylight = 1; }
 
-      // The request asked OpenWeather for imperial units when the table shows °F.
-      const payloadUnits = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
+      // The units the answer was requested in travel with the step; the current setting
+      // is only a guess for a step that does not carry them.
+      const payloadUnits = step.payloadUnits || ((String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric");
       const r = cwForecastRules.extractStep(w, { provider: prov, time: step.time, payloadUnits });
       if (r) {
         step.temp = safeNum(r.temp);

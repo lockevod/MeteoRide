@@ -44,9 +44,9 @@ const code = [
 const FIELDS = ['temp', 'windSpeed', 'windDir', 'windGust', 'humidity', 'precipitation',
   'precipProb', 'weatherCode', 'uvindex', 'isDaylight', 'cloudCover', '__useMinutely', 'timeLabel'];
 
-function run(provider, payload, units = { temp: 'C', wind: 'kmh' }, events = []) {
+function run(provider, payload, units = { temp: 'C', wind: 'kmh' }, events = [], payloadUnits) {
   const steps = STEP_TIMES.map((iso) => ({
-    lat: 41.4, lon: 2.2, time: new Date(iso), provider, weather: structuredClone(payload),
+    lat: 41.4, lon: 2.2, time: new Date(iso), provider, payloadUnits, weather: structuredClone(payload),
   }));
   const ctx = {
     console, structuredClone,
@@ -129,4 +129,12 @@ test('repainting the table announces nothing', () => {
   const events = [];
   run('openmeteo', openMeteo(), undefined, events);
   assert.equal(events.length, 0);
+});
+
+// A cached metric answer repainted after switching to °F used to have its wind read as
+// mph. The units the answer was requested in travel with the step now.
+test('an OpenWeather answer is read in the units it was requested in, not the ones shown now', () => {
+  const metric = run('openweather', openWeather('metric'));
+  const repainted = run('openweather', openWeather('metric'), { temp: 'F', wind: 'kmh' }, [], 'metric');
+  assert.deepEqual(repainted.map((x) => x.windSpeed), metric.map((x) => x.windSpeed));
 });
