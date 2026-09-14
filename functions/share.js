@@ -19,40 +19,44 @@ export async function onRequest(context) {
   const ttlEnv = env.SHARED_TTL_SECONDS || env.SHARED_TTL || ''; 
   const parsed = parseInt(String(ttlEnv || '' ).trim(), 10);
   const TTL_SECONDS = (Number.isFinite(parsed) && parsed > 0) ? parsed : 120; // default 120s
-    // Refuse oversized uploads before reading them into memory. The length check
-    // after parsing still applies, for chunked bodies that carry no Content-Length.
+    // The limit is on bytes and is enforced while reading, not after: Content-Length is
+    // optional (a chunked upload carries none), and a string's length counts UTF-16
+    // units, so multibyte text used to slip past a check made on the parsed result.
+    // A multipart body is allowed a small envelope on top; the file inside is then held
+    // to the limit itself.
     const MAX_BYTES = 2_500_000;
+    const ENVELOPE_BYTES = 64_000;
+    const tooLarge = () => new Response('GPX too large', { status: 413, headers: corsHeaders() });
     const declared = Number(request.headers.get('content-length') || 0);
-    if (declared > MAX_BYTES) {
-      return new Response('GPX too large', { status: 413, headers: corsHeaders() });
-    }
+    if (declared > MAX_BYTES + ENVELOPE_BYTES) return tooLarge();
+    const body = await readCapped(request, MAX_BYTES + ENVELOPE_BYTES);
+    if (!body) return tooLarge();
 
     const contentType = request.headers.get('content-type') || '';
     let raw;
     if (/multipart\/form-data/i.test(contentType)) {
       // Accept first file part (field name 'file' preferred) or any File
+      let file;
       try {
-        const form = await request.formData();
-        let file = form.get('file');
+        const form = await new Response(body, { headers: { 'content-type': contentType } }).formData();
+        file = form.get('file');
         if (!file) {
           for (const [k, v] of form.entries()) {
             if (v instanceof File) { file = v; break; }
           }
         }
-        if (file && file.text) raw = await file.text();
       } catch (e) {
         return new Response('Multipart parse error', { status: 400, headers: corsHeaders() });
       }
+      if (file && file.size > MAX_BYTES) return tooLarge();
+      if (file && file.text) raw = await file.text();
     } else {
-      raw = await request.text();
+      if (body.size > MAX_BYTES) return tooLarge();
+      raw = await body.text();
     }
 
     if (!raw || raw.indexOf('<gpx') === -1) {
       return new Response('No GPX content received', { status: 400, headers: corsHeaders() });
-    }
-
-    if (raw.length > MAX_BYTES) {
-      return new Response('GPX too large', { status: 413, headers: corsHeaders() });
     }
 
     // The id is the only thing standing between a stranger and someone's route (or its
@@ -128,6 +132,24 @@ export async function onRequest(context) {
   } catch (err) {
     console.error('share failed', err);
     return new Response('Function error', { status: 500, headers: corsHeaders() });
+  }
+}
+
+/** The request body as a Blob, or null as soon as it passes `limit` bytes. */
+async function readCapped(request, limit) {
+  if (!request.body) return new Blob([]);
+  const reader = request.body.getReader();
+  const chunks = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return new Blob(chunks);
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
   }
 }
 

@@ -127,6 +127,11 @@ Rules that follow from that, all enforced somewhere:
   Every legitimate consumer (the app's `fetch`, the Shortcut, Hammerhead's servers)
   reads bytes and is unaffected. IDs are `crypto.randomUUID()`; the id is the only
   guard on `GET` and `DELETE`, so it must not be guessable.
+- **`POST /share` counts bytes while it reads, not after.** `Content-Length` is
+  optional, so it cannot be the limit; and checking the parsed string compared UTF-16
+  units, which let 2.6 MB of `é` through after reading the whole body into memory.
+  `readCapped` stops the stream at 2.5 MB plus a 64 KB multipart envelope, and the
+  file inside a multipart body is then held to 2.5 MB itself. `tests/share.test.mjs`.
 - **The Android activity accepts `content://` only.** No app has been able to hand out
   a `file://` URI since Android 7, and accepting one would let any app point MeteoRide
   at its own private files. Both stores still sniff content and cap size.
@@ -635,11 +640,10 @@ code does and what makes the race reproducible.
 - **Nothing has run on a physical device.** iOS background tasks never execute in the
   simulator, so no ride alert has ever fired through the real path: the rules and the
   runner are covered by tests, the delivery is not.
-- The six findings in `docs/REVIEW-2026-09-14.md` are all open, and all six reproduce
-  against this branch. Two of them (H2, offline preparation reporting success for the
-  wrong cache keys; H6, the `/share` size limit counting UTF-16 units after reading the
-  whole body) are in code added for the native app. `docs/HANDOFF.md` §9 has the table
-  and the proposed order.
+- Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit) is
+  fixed; the other five are open and reproduce against this branch. H2, offline
+  preparation reporting success for the wrong cache keys, is in code added for the
+  native app. `docs/HANDOFF.md` §9 has the table and the order being followed.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`
