@@ -518,6 +518,9 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   const results = [];
   // What this computation's requests and cache reads saw; the notice is decided from it.
   const recorder = window.cw.utils.createRecorder();
+  // Official warnings found along the way. They belong to this computation and are shown
+  // only if it is published.
+  const alertsSeen = [];
 
   let apiKeyFinal = ""
   if (apiSource === "meteoblue") {
@@ -908,8 +911,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
       if (ok && json) {
         // Check for weather alerts if using OpenWeather and alerts are enabled
-        if (prov === "openweather" && json.alerts && Array.isArray(json.alerts) && getVal("showWeatherAlerts") !== false) {
-          if (run === forecastRun) processWeatherAlerts(json.alerts, p, timeAt);
+        if (prov === "openweather" && Array.isArray(json.alerts) && getVal("showWeatherAlerts") !== false) {
+          alertsSeen.push(...json.alerts);
         }
         
         // For OpenWeather: the response contains an array of hourly entries. Cache
@@ -948,7 +951,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
   // Check for weather alerts independently if we have OpenWeather API key
   if (run !== forecastRun) return;
-  await checkWeatherAlertsIndependent(steps, timeSteps);
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen);
   if (run !== forecastRun) return;
 
   const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
@@ -963,7 +966,12 @@ async function fetchWeatherForSteps(steps, timeSteps) {
     route: { name: (window.lastGPXFile && window.lastGPXFile.name) || "" },
     settings: { provider: apiSource, units: { temp: tempUnit, wind: windUnit }, noticeAll: showAllNotices },
     steps: snapshotSteps,
-    alerts: [],
+    // Providers only report warnings active when asked; keep those near the ride.
+    alerts: timeSteps.length
+      ? cwForecastRules.alertsInWindow(alertsSeen,
+          timeSteps[0].getTime() / 1000 - 4 * 3600,
+          timeSteps[timeSteps.length - 1].getTime() / 1000 + 4 * 3600)
+      : [],
     outcome: {
       requestedProvider: apiSource,
       usableSteps: cwForecastRules.usableSteps(snapshotSteps),
@@ -997,6 +1005,34 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 }
 
 /**
+ * The published computation's official warnings that still matter, from now or the
+ * start of the ride, whichever is later, to its end. Replaces whatever was shown.
+ */
+function showOfficialAlerts(snapshot) {
+  const steps = snapshot.steps || [];
+  const startSec = steps.length ? new Date(steps[0].time).getTime() / 1000 : 0;
+  const endSec = steps.length ? new Date(steps[steps.length - 1].time).getTime() / 1000 : 0;
+  const shown = cwForecastRules.alertsInWindow(snapshot.alerts, Math.max(Date.now() / 1000, startSec), endSec);
+  window.activeWeatherAlerts = shown.map((a) => ({
+    id: cwForecastRules.alertId(a),
+    senderName: a.sender_name,
+    event: a.event,
+    start: a.start,
+    end: a.end,
+    description: a.description,
+    tags: a.tags || [],
+    processed: false,
+  }));
+  const container = document.getElementById("weather-alerts-container");
+  if (container) {
+    container.style.display = "none";
+    container.querySelectorAll(".weather-alert").forEach((el) => el.remove());
+  }
+  hideAndCleanupAlertIndicator();
+  if (window.activeWeatherAlerts.length) showWeatherAlerts();
+}
+
+/**
  * Puts a finished computation on screen, and nothing else may. Every effect happens
  * here in one go, with no wait between checking that the computation is still the
  * latest and the last effect: the table, the notice, `cw:forecast` and the indicator.
@@ -1008,6 +1044,7 @@ function publish(snapshot) {
     provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
   }));
   processWeatherData();
+  showOfficialAlerts(snapshot);
   const notice = cwForecastRules.decideNotice(snapshot.outcome, { noticeAll: snapshot.settings.noticeAll });
   if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
   else clearNotice();
@@ -3349,7 +3386,9 @@ window.debugAlertPosition = function() {
 };
 
 // Check for weather alerts independently of main provider
-async function checkWeatherAlertsIndependent(steps, timeSteps) {
+// With `sink`, the warnings found are added to it for the computation to keep; without
+// it (revalidateWeatherAlerts, until it goes in phase 4) they are shown straight away.
+async function checkWeatherAlertsIndependent(steps, timeSteps, sink) {
   // Only check if alerts are enabled and we have OpenWeather API key
   if (getVal("showWeatherAlerts") === false) return;
   
@@ -3391,7 +3430,8 @@ async function checkWeatherAlertsIndependent(steps, timeSteps) {
       const cached = getCache(cacheKey);
       
       if (cached && cached.alerts) {
-        processWeatherAlerts(cached.alerts, p, timeAt);
+        if (sink) sink.push(...cached.alerts);
+        else processWeatherAlerts(cached.alerts, p, timeAt);
         continue;
       }
       
@@ -3400,7 +3440,8 @@ async function checkWeatherAlertsIndependent(steps, timeSteps) {
         if (response.ok) {
           const data = await response.json();
           if (data.alerts && Array.isArray(data.alerts)) {
-            processWeatherAlerts(data.alerts, p, timeAt);
+            if (sink) sink.push(...data.alerts);
+            else processWeatherAlerts(data.alerts, p, timeAt);
             setCache(cacheKey, { alerts: data.alerts }, 3600); // Cache for 1 hour
           }
         }

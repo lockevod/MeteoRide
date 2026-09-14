@@ -1,5 +1,5 @@
-// What a computation produced and what the page says about it: decideNotice and
-// usableSteps, as plain rules in a bare context.
+// What a computation produced and what the page says about it: decideNotice,
+// usableSteps and the official-warning window, as plain rules in a bare context.
 process.env.TZ = 'Europe/Madrid';
 
 import { test } from 'node:test';
@@ -113,4 +113,20 @@ test('usableSteps counts steps with a temperature or wind at their time, cached 
   ];
   assert.equal(rules.usableSteps(steps), 3);
   assert.equal(rules.usableSteps([]), 0);
+});
+
+test('alertsInWindow keeps the warnings that overlap the window, once each', () => {
+  const a = (event, start, end) => ({ sender_name: 'AEMET', event, start, end });
+  const alerts = [
+    a('before', 100, 199),
+    a('edge-start', 100, 200),
+    a('inside', 250, 260),
+    a('edge-end', 300, 400),
+    a('after', 301, 400),
+    a('open-ended', 150, 0),                  // OpenWeather sends 0 for no end
+    a('inside', 250, 260),                    // the same warning seen from another step
+  ];
+  assert.deepEqual(plain(rules.alertsInWindow(alerts, 200, 300).map((x) => x.event)),
+    ['edge-start', 'inside', 'edge-end', 'open-ended']);
+  assert.equal(rules.alertId(a('Wind', 1, 2)), 'AEMET_Wind_1_2');
 });

@@ -356,8 +356,32 @@ var cwForecastRules = (function () {
     return null;
   }
 
+  function alertId(a) {
+    return `${a.sender_name}_${a.event}_${a.start}_${a.end}`;
+  }
+
+  /**
+   * Official warnings that overlap [fromSec, toSec], each once. OpenWeather sends unix
+   * seconds; a missing start counts as always, a missing end as never ending.
+   */
+  function alertsInWindow(alerts, fromSec, toSec) {
+    const seen = new Set();
+    const out = [];
+    for (const a of alerts || []) {
+      if (!a) continue;
+      const start = Number(a.start) || 0;
+      const end = Number(a.end) || Infinity;
+      if (start > toSec || end < fromSec) continue;
+      const id = alertId(a);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(a);
+    }
+    return out;
+  }
+
   return {
     parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
-    usableSteps, decideNotice,
+    usableSteps, decideNotice, alertId, alertsInWindow,
   };
 })();

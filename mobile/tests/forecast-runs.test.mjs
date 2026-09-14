@@ -38,14 +38,23 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     // recorder the request carried, the way the fetch wrapper in utils.js does.
     fetch: (url, init) => new Promise((resolve) => pending.push({ url, init, resolve })),
     CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
-    renders: [], notices: [], cleared: 0, events: [], hidden: 0, alertChecks: 0, stepAlerts: 0,
+    renders: [], notices: [], cleared: 0, events: [], hidden: 0, alertChecks: 0, shownAlerts: [],
+    activeWeatherAlerts: [], elements: {},
   };
   Object.assign(s, {
-    document: { getElementById: () => ({ checked: true }), dispatchEvent: (ev) => s.events.push(ev) },
+    document: {
+      getElementById: (id) => s.elements[id] || { checked: true, style: {}, querySelectorAll: () => [] },
+      dispatchEvent: (ev) => s.events.push(ev),
+    },
     setNotice: (msg, type) => s.notices.push([msg, type]), clearNotice: () => { s.cleared++; },
     showLoading() {}, hideLoading: () => { s.hidden++; },
-    checkWeatherAlertsIndependent: async () => { s.alertChecks++; if (s.onAlertCheck) await s.onAlertCheck(); },
-    processWeatherAlerts: () => { s.stepAlerts++; },
+    checkWeatherAlertsIndependent: async (steps, timeSteps, sink) => {
+      s.alertChecks++;
+      if (s.independentAlerts) sink.push(...s.independentAlerts);
+      if (s.onAlertCheck) await s.onAlertCheck();
+    },
+    showWeatherAlerts: () => { s.shownAlerts.push(s.activeWeatherAlerts.map((a) => a.event)); },
+    hideAndCleanupAlertIndicator() {},
     processWeatherData: () => { s.renders.push(s.weatherData.map((x) => x.lat)); },
     cw: { utils: { createRecorder: () => ({ ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0 }), isOffline: () => false } },
   });
@@ -94,14 +103,52 @@ test('a replaced run does not hide the loading indicator of the run that replace
 });
 
 test('a replaced run does not raise the official warnings its response carried', async () => {
-  const body = { hourly: [{ dt: Math.floor(Date.now() / 1000) + 3600 }], alerts: [{ event: 'Wind' }] };
+  const now = Math.floor(Date.now() / 1000);
+  const body = (event) => ({ hourly: [{ dt: now + 3600, temp: 20, wind_speed: 3 }],
+    alerts: [{ sender_name: 'AEMET', event, start: now, end: now + 6 * 3600 }] });
   const { s, run, answer } = harness({ provider: 'openweather' });
   const a = run(41);
   const b = run(42);
-  answer(0, ok(body)); await a;
-  assert.equal(s.stepAlerts, 0, 'the replaced run published its warnings');
-  answer(1, ok(body)); await b;
-  assert.equal(s.stepAlerts, 1);
+  answer(0, ok(body('from A'))); await a;
+  assert.deepEqual(plain(s.shownAlerts), [], 'the replaced run published its warnings');
+  answer(1, ok(body('from B'))); await b;
+  assert.deepEqual(plain(s.shownAlerts), [['from B']]);
+});
+
+test('warnings are kept near the ride and shown only from now to its end', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const H = 3600;
+  const warn = (event, start, end) => ({ sender_name: 'AEMET', event, start, end });
+  const { s, run, answer } = harness();
+  // The single step is an hour from now, so the ride starts and ends then.
+  s.independentAlerts = [
+    warn('long gone', now - 8 * H, now - 5 * H),     // ended before start - 4 h: not kept
+    warn('just over', now - 2 * H, now - 1800),      // kept, but over before now: not shown
+    warn('during', now, now + 2 * H),                 // shown
+    warn('later', now + 3 * H, now + 4 * H),          // kept, but after the end: not shown
+    warn('during', now, now + 2 * H),                 // the same warning from another point
+  ];
+  const a = run(41);
+  answer(0, ok(openMeteo())); await a;
+  const [snapshot] = s.published();
+  assert.deepEqual(plain(snapshot.alerts.map((x) => x.event)), ['just over', 'during', 'later']);
+  assert.deepEqual(plain(s.shownAlerts), [['during']]);
+});
+
+test('a computation without warnings clears the warnings of the one before', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const { s, run, answer } = harness();
+  let hides = 0;
+  s.hideAndCleanupAlertIndicator = () => { hides++; };
+  s.independentAlerts = [{ sender_name: 'AEMET', event: 'Viento', start: now, end: now + 7200 }];
+  const a = run(41);
+  answer(0, ok(openMeteo())); await a;
+  s.independentAlerts = null;
+  const b = run(42);
+  answer(1, ok(openMeteo())); await b;
+  assert.deepEqual(plain(s.shownAlerts), [['Viento']]);
+  assert.deepEqual(plain(s.activeWeatherAlerts), []);
+  assert.equal(hides, 2);
 });
 
 test('a run replaced while it looks up official warnings publishes nothing', async () => {

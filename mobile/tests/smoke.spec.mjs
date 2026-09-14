@@ -494,6 +494,24 @@ test('a hostile weather alert is shown as text', async ({ page }) => {
   expect(card.closeButtons).toBe(1);
 });
 
+// Warnings found along the route belong to the computation and appear when it is
+// published, from the per-point lookups as well as from the forecast answers.
+test('official warnings found along the route are shown with its forecast', async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000);
+  await stubProvider(page, { celsius: 20, offline: false });
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ alerts: [{ sender_name: 'AEMET', event: 'Aviso amarillo por viento',
+      start: now, end: now + 12 * 3600, description: 'Rachas fuertes' }] }),
+  }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(page.locator('#weather-alerts-container')).toContainText('Aviso amarillo por viento');
+});
+
 // The website's policy comes from public/_headers, a Cloudflare file that is stripped
 // from the bundle. The app carries its own, and it matters more here: script running
 // in the app reaches window.Capacitor.Plugins.
