@@ -254,3 +254,27 @@ la casilla «mostrar alertas», que nunca dejaba fuera los avisos, y la unidad c
 al repintar una respuesta de OpenWeather cacheada. Mientras no llegue la fase 4, comparar no
 da avisos de proveedor y `revalidateWeatherAlerts` sigue mostrando alertas por su cuenta. Las
 fases 3 a 7 tendrán cada una su plan cuando empiecen.
+
+### Revisión adversarial de las correcciones (852f61a..1e69d16)
+
+Una segunda revisión adversarial, aparte de los seis hallazgos de
+`docs/REVIEW-2026-09-14.md`, encontró y corrigió siete cosas más en siete tareas (ver
+`.superpowers/sdd/2026-09-14-correcciones-revision-adversarial/`): una ruta KML compartida
+solo se acepta convertida cuando produce track/ruta/waypoint (antes, un GPX mal nombrado
+`.kml` se convertía en un GPX vacío) y `geojsonToGpx` ya entiende `GeometryCollection`; un
+cálculo de previsión sustituido deja de escribir caché y de pedir avisos independientes tras
+el reemplazo, y un cuerpo de respuesta ilegible cuenta como fallo; Open-Meteo y AROME piden
+`start_date`/`end_date` en vez de `start=`, que se ignoraba; OpenWeather cae a `daily` más
+allá de una hora de su última hora horaria en vez de releer una hora lejana; la base de las
+alertas de ruta pasa a ser por magnitud (lluvia y viento con sus rachas, cada una la suya) y
+una magnitud sin base cuenta como nivel 0 en vez de saltarse ese punto; y los dos buzones de
+rutas compartidas llevan secuencia en el nombre de fichero, con Android ignorando además los
+intents relanzados desde Recientes. Detalle completo en `AGENTS.md`.
+
+Queda para fases posteriores, documentado pero no corregido en esta revisión: identidad por
+petición en `fetchWeatherForSteps` (fase 3); `compare.js` y `revalidateWeatherAlerts`, que
+todavía no pasan por el registro por cálculo ni por `decideNotice` (fase 4); y, para la fase
+5, un coordinador de arranque y una importación duradera — hoy Android puede perder una ruta
+compartida si el proceso muere entre marcar el intent como gestionado y escribir el fichero
+en el buzón, e iOS lee un fichero abierto con «Abrir en» de forma síncrona en el hilo
+principal en vez de en un hilo aparte, como ya hace Android.

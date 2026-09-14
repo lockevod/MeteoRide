@@ -346,6 +346,17 @@ What is still open, and why it was left:
   `cwLoadGPXFromString` directly from a handoff path: it only reads GPX, and
   `cwInjectGPXFromText` is also where a shared KML is converted (`cwKmlToGpxText`,
   the same conversion the file picker uses).
+- **A converted KML keeps its old name unless the conversion actually produced a route.**
+  `cwKmlToGpxText` always returns a syntactically valid GPX wrapper, even for a malformed
+  KML or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never refuses to return an
+  empty `FeatureCollection`. `cwInjectGPXFromText` (`gpx-share.js:53-87`) accepts the
+  conversion only when it carries a track, route or waypoint, and only then renames the
+  route to `.gpx`: keeping the `.kml` name would send the already-converted GPX text back
+  through the KML converter on every recompute, since `reloadFull` picks the converter by
+  `window.lastGPXFile`'s extension, and lose the track. `geojsonToGpx` (`ui.js:370-417`)
+  also recurses into a `GeometryCollection`, which is what `togeojson` turns a KML
+  `<MultiGeometry>` with more than one child geometry into, rather than one of the
+  geometry types it otherwise switches on.
 - **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
   executes long after `initGpxShare()` is called from line 76 of the same file. Any
   code running at load time must poll for it rather than assume it exists.
@@ -355,10 +366,15 @@ What is still open, and why it was left:
   untimed download, so the store now refuses anything that is not a file URL. Android
   has no equivalent exposure: it reads only `EXTRA_STREAM` and its manifest does not
   accept `text/plain`, so a shared link never reaches it.
-- **An Android intent can be read twice.** A rotation or a restore recreates the
-  activity with the same intent still attached, so `onCreate` would ingest the same
-  route again. `MainActivity` guards on `savedInstanceState == null` and marks the
-  intent with an extra once its route has been taken.
+- **An Android intent can be read twice, two different ways.** A rotation or a restore
+  recreates the activity with the same intent still attached, so `onCreate` would ingest
+  the same route again; `MainActivity` guards on `savedInstanceState == null` and marks
+  the intent with an extra once its route has been taken (`MainActivity.java:29-38,52-57`).
+  Reopening the task from Recent Apps is a second path to the same bug: it also calls
+  `onCreate(null)`, with the original intent Android stored for the task, carrying
+  `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`. `ingest()` checks for that flag and returns
+  before marking or reading anything, since this is not a genuine new share
+  (`MainActivity.java:56`).
 - **Android reads a shared file off the main thread.** A cloud-backed provider can
   stall the stream, and the 25 MB cap bounds size, not time. `MainActivity` hands the
   URIs to a single-thread executor, which then fires `sharedRouteAvailable` with
@@ -369,6 +385,25 @@ What is still open, and why it was left:
 - **iOS reads a shared file in chunks and stops at the cap.** `Data(contentsOf:)`
   loaded the whole file before the 25 MB check, and the share extension has a small
   memory budget. The extension also ingests its attachments one at a time.
+- **Two shares landing in the same millisecond need a tiebreaker, and an atomic write
+  needs a name filter.** Both inboxes name a stored file
+  `<13-digit-millis>-<4-digit-sequence>__<name>` (`MeteoRideShareStore.swift:150-158`,
+  `MeteoRideShareStore.java:203-206`), so arrival order survives a plain sort by name even
+  when two routes share a millisecond. On iOS that name also has to be filtered on the way
+  back out: `Data.write(to:options:.atomic)` leaves a `<name>.sb-XXXX` sibling in the same
+  directory for the instant of the rename, and `isInboxName`
+  (`MeteoRideShareStore.swift:162-166`) only accepts the full `\d{13}-\d{4}__.+\.(gpx|kml)`
+  pattern, so `pendingURLs()` skips that temp file rather than reading and deleting it
+  half-written.
+- **A naive UTF-8 decode does not throw, so a Latin-1 exporter's bytes have to be caught
+  going in, not read back out.** `String(data:encoding:)` and `new String(bytes, UTF_8)`
+  do not fail on invalid bytes by default — they substitute U+FFFD and hand back a
+  corrupted but well-formed string, the same trap `/share`'s `readCapped` works around
+  (see the security model). Both inboxes decode strictly instead: iOS tries `.utf8`
+  first, which returns `nil` on invalid bytes, then falls back to `.isoLatin1`
+  (`MeteoRideShareStore.swift:168-171`); Android's decoder is set to `REPORT` on
+  malformed input and unmappable characters and catches the resulting exception to fall
+  back to `ISO_8859_1` (`MeteoRideShareStore.java:190-201`).
 - **Share types are a mess.** Plenty of apps hand a `.gpx` over as
   `application/octet-stream` with no usable name, so both stores accept an item whose
   name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
@@ -536,13 +571,16 @@ Things that were decided rather than discovered:
   difference between providers as a change in the weather. So the web view reads the
   baseline from the runner's own request when it arms the watch, and offline the
   runner seeds it on its first run and stays silent that time.
-- **Levels with a margin, and the baseline moves after each notification.** A value
-  sitting on 20 km/h would otherwise wake the phone every half hour. After a report
-  the current reading becomes the baseline, so a change is said once and a further
-  worsening is said again; easing is never reported. A quiet check leaves the
-  baseline alone, except that a point which had no forecast when the watch was armed
-  takes the first reading that arrives; `compare` skips points without a baseline, so
-  otherwise that stretch of the ride would never be watched.
+- **Levels with a margin, and each point's rain and wind keep their own baseline.** A
+  value sitting on 20 km/h would otherwise wake the phone every half hour. Rain, and
+  wind together with its gust, move to the current reading only when that magnitude was
+  the one reported, or when the point had no baseline for it yet — an official alert on
+  its own moves nothing (`nextBaseline`, `watch-rules.js:256-269`). A magnitude with no
+  baseline compares as level 0 rather than being skipped, so a point that is already
+  severe the first time it is read is news, not silence (`compare`,
+  `watch-rules.js:142-166`); wind only counts as missing when both the speed and the
+  gust are non-finite, since either alone still yields a level (`windLevel`,
+  `watch-rules.js:51-58`). Easing is never reported.
 - **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
   notification describes the forecast that will actually hold.
 - **Only what is still ahead.** `compare` skips steps whose time has passed (with
@@ -642,9 +680,18 @@ Four things changed on purpose when the extraction moved, each in its own commit
   track or a MultiLineString now gets a forecast along the right line, or logs
   `track_too_short`, instead of producing NaN steps.
 
-Two things that look like bugs are kept, because the table has always worked that way:
+Open-Meteo and AROME are asked with `start_date`/`end_date`, one UTC day either side of the
+step, instead of `start=`/`end=` (`buildProviderUrl`, `app.js:315-322` for AROME,
+`app.js:345-350` for standard Open-Meteo): with `timezone=auto`, `start=` is silently
+ignored and the API answered with its default window from today, which was seven days long
+and did not necessarily reach a step near the far end of a multi-day route.
+
+One thing that looks like a bug is kept, because the table has always worked that way:
 `window.findClosestFutureIndex` was never assigned, so a step reads the nearest hour, not
-the next one; and OpenWeather beyond its hourly range reads the last hour, not daily.
+the next one. OpenWeather beyond its hourly range now falls back to `daily` instead of
+re-reading a distant hourly entry: `extractOpenWeather` (`forecast-rules.js:98-154`) accepts
+an hourly entry only within an hour of the step's time and reads the nearest `daily` entry
+otherwise, since daily entries are a day apart by nature and carry no such cap.
 
 `mobile/tests/extraction.test.mjs` and `mobile/tests/aromehd-merge.test.mjs` compare against
 golden files in `mobile/tests/fixtures/`, built from synthetic answers
@@ -675,6 +722,17 @@ hours either side, and shown from now or the start, whichever is later, to the e
 (`cwForecastRules.alertsInWindow`). They used to be filtered to an hour around each step
 and shown as soon as each answer arrived. `revalidateWeatherAlerts` still shows warnings on
 its own until phase 4 removes it.
+
+A replaced run writes nothing once it no longer matters: every `setCache` after an
+`await` — including the AROME standard companion answer (`app.js:784`) — is guarded by
+the same `run === forecastRun` check as the table, and so is the independent alert
+lookup, tested before each of its fetches, after each fetch resolves, after its body is
+read and again after the delay between requests (`checkWeatherAlertsIndependent`,
+`app.js:3429-3495`). A response body that fails to parse counts as a transport failure
+rather than a success with no data: `readJson` catches it and sets
+`recorder.lastFailStatus = 'body'` before rethrowing (`app.js:543-548`), so `decideNotice`
+treats it the same as offline or rejected instead of a working computation that says
+nothing.
 
 Two corrections went in with this, each in its own commit. The "show weather alerts"
 checkbox was read with `getVal`, which returns `"on"` whatever its state, so unticking it
@@ -764,6 +822,17 @@ code does and what makes the race reproducible.
 - **Nothing has run on a physical device.** iOS background tasks never execute in the
   simulator, so no ride alert has ever fired through the real path: the rules and the
   runner are covered by tests, the delivery is not.
+- **iOS reads a route opened via "Open in MeteoRide" on the main thread.**
+  `scene(_:openURLContexts:)` (`SceneDelegate.swift:34-54`) calls
+  `MeteoRideShareStore.ingest(fileURL:)` synchronously, which streams the file through
+  `readCapped` — up to 25 MB — before the UI thread is free again. The share-extension
+  path was moved off the main thread; this one has not been. Documented, not fixed.
+- **Android can lose an "Open in"/share import if the process dies mid-ingest.**
+  `ingest(Intent)` marks the intent `EXTRA_HANDLED` (`MainActivity.java:57`) before
+  handing the actual read-and-store to the background executor (`:61-66`); a process
+  killed between those two lines never writes the file to the inbox, and the same guard
+  that stops a route being imported twice then also stops it being retried. Belongs with
+  the durable-import work planned for phase 5.
 - Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
   H2 (offline preparation) and H1 (overlapping forecasts) are fixed; H3, H4 and H5 are
   open. H5 and H4 should build on H1's run number rather than add timers.
