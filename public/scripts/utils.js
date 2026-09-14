@@ -22,7 +22,7 @@
   const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org', 'my.meteoblue.com'];
 
   function createRecorder() {
-    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0 };
+    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false };
   }
 
   function isProviderUrl(url) {
@@ -40,13 +40,20 @@
       const url = typeof input === 'string' ? input : (input && input.url) || '';
       const recorder = init && init.cwRecorder;
       if (!recorder || !isProviderUrl(url)) return original(input, init);
+      // Whether a failure happened without connection is noted as it happens: by the
+      // time the computation publishes, the connection may be back.
+      const failed = (status) => {
+        recorder.failed++;
+        recorder.lastFailStatus = status;
+        if (isOffline()) recorder.offline = true;
+      };
       return original(input, init).then(
         (res) => {
           if (res.ok) recorder.ok++;
-          else { recorder.failed++; recorder.lastFailStatus = String(res.status); }
+          else failed(String(res.status));
           return res;
         },
-        (err) => { recorder.failed++; recorder.lastFailStatus = 'network'; throw err; }
+        (err) => { failed('network'); throw err; }
       );
     };
   }
@@ -496,7 +503,10 @@
       if (age > cacheTTL) {
         if (isOffline() && age <= staleMaxAge) {
           logDebug(`getCache stale-but-offline key=${key} age=${age}ms`);
-          if (recorder) recorder.staleAgeMs = Math.max(recorder.staleAgeMs, age);
+          if (recorder) {
+            recorder.staleAgeMs = Math.max(recorder.staleAgeMs, age);
+            recorder.offline = true;
+          }
           return obj.data;
         }
         logDebug(`getCache expired key=${key} age=${age}ms > ${cacheTTL}ms`);

@@ -42,8 +42,9 @@
     }
   }
 
-  // Loading overlay
-  function showLoading() {
+  // Loading overlay. This only paints it; whether it should be on is decided by the claims
+  // in route-requests.js, so one owner letting go cannot hide another's indicator.
+  function paintLoading(visible) {
     let el = document.getElementById("loadingOverlay");
     if (!el) {
       // Create the overlay if it doesn't exist
@@ -69,17 +70,21 @@
       document.body.appendChild(el);
     }
     // Do not overwrite the content if the element already existed (keeps data-i18n translation)
-    el.style.visibility = "visible";
-    el.style.opacity = "1";
-    el.style.pointerEvents = "auto";
+    if (visible) {
+      el.style.visibility = "visible";
+      el.style.opacity = "1";
+      el.style.pointerEvents = "auto";
+    } else {
+      el.style.opacity = "0";
+      el.style.visibility = "hidden";
+      el.style.pointerEvents = "none";
+    }
   }
-  function hideLoading() {
-    const el = document.getElementById("loadingOverlay");
-    if (!el) return;
-    el.style.opacity = "0";
-    el.style.visibility = "hidden";
-    el.style.pointerEvents = "none";
-  }
+  // compare.js and createDiscreteLoadingIndicator still show and hide the overlay
+  // themselves. They share one claim, so a comparison ending cannot switch off the
+  // indicator of a computation or a route request still in flight.
+  function showLoading() { window.cw.claimLoading("legacy"); }
+  function hideLoading() { window.cw.releaseLoading("legacy"); }
 
   // Toggle functions
   function toggleConfig() {
@@ -533,7 +538,7 @@
     }
 
     try {
-      window.showLoading && window.showLoading();
+      window.cw.claimLoading('share-upload');
       window.setKeyStatus && window.setKeyStatus('Subiendo GPX...', 'testing');
       // Preferred: send raw GPX body with application/gpx+xml
       let res = null;
@@ -609,7 +614,7 @@
       console.error('uploadGPXToShareServer error', err);
       return null;
     } finally {
-      window.hideLoading && window.hideLoading();
+      window.cw.releaseLoading('share-upload');
     }
   }
 
@@ -698,7 +703,8 @@
 
         window.trackLayer.on("loaded", async (evt) => {
           window.map.fitBounds(evt.target.getBounds());
-          await window.segmentRouteByTime(evt.target.toGeoJSON());
+          window.cwBridgeConfirmRoute(evt.target.toGeoJSON(), window.lastGPXFile && window.lastGPXFile.name);
+          window.cw.startForecast();
           let routeName = evt.target.get_name ? evt.target.get_name() : null;
           if (!routeName && evt.target.get_metadata) {
             let meta = evt.target.get_metadata();
@@ -1332,6 +1338,7 @@
     clearNotice,
     showLoading,
     hideLoading,
+    paintLoading,
     createDiscreteLoadingIndicator,
     toggleConfig,
     toggleDebug,

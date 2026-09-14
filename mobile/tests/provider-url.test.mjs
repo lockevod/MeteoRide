@@ -39,3 +39,19 @@ for (const prov of ['openmeteo', 'aromehd']) {
     assert.ok(url.includes('end_date=2026-09-25'), url);
   });
 }
+
+// The checkbox used to be read with getVal, which answers "on" whether it is ticked or
+// not; the computation now passes the value it read.
+test('openweather: unticked alerts are left out of the request', () => {
+  const s = harness();
+  const url = s.buildProviderUrl('openweather', p, new Date('2026-09-24T08:00:00Z'), 'key', 'kmh', 'C', false);
+  assert.ok(url.includes('exclude=minutely,alerts'), url);
+});
+
+test('openweather: ticked alerts are asked for, and so are they when a caller says nothing', () => {
+  for (const alerts of [true, undefined]) {
+    const s = harness();
+    const url = s.buildProviderUrl('openweather', p, new Date('2026-09-24T08:00:00Z'), 'key', 'kmh', 'C', alerts);
+    assert.ok(/exclude=minutely(&|$)/.test(url), `${alerts}: ${url}`);
+  }
+});

@@ -973,6 +973,33 @@ test('picking a route file computes its forecast once', async ({ page }) => {
   expect(new Set(times).size, 'the same step was computed more than once').toBe(times.length);
 });
 
+const overlayVisibility = (page) =>
+  page.evaluate(() => getComputedStyle(document.getElementById('loadingOverlay')).visibility);
+
+// The indicator is on while anyone holds a claim on it. compare.js still shows and hides
+// it directly, and its hide used to switch off the indicator of a computation in flight.
+test('compare hiding the indicator does not switch off a computation still fetching', async ({ page }) => {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    await held;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(21)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => overlayVisibility(page)).toBe('visible');
+
+  // What a comparison does around its own run, through the same helpers compare.js uses.
+  await page.evaluate(() => { window.cw.ui.showLoading(); window.cw.ui.hideLoading(); });
+  expect(await overlayVisibility(page)).toBe('visible');
+
+  release();
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {
@@ -1073,7 +1100,31 @@ test('a provider request carrying a recorder notes its outcome there', async ({ 
     await fetch(base + 'key');   // no recorder: noted nowhere
     return rec;
   });
-  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0 });
+  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0, offline: false });
+});
+
+// Whether a failure happened without connection is noted when it happens: by the time
+// the computation publishes, the connection may be back and navigator.onLine says so.
+test('a provider request that fails without connection notes it in the recorder', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__offline = false;
+    Object.defineProperty(navigator, 'onLine', { get: () => !window.__offline, configurable: true });
+  });
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => route.abort());
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  const seen = await page.evaluate(async () => {
+    const url = 'https://api.open-meteo.com/v1/forecast?case=down';
+    const online = window.cw.utils.createRecorder();
+    await fetch(url, { cwRecorder: online }).catch(() => {});
+    window.__offline = true;
+    const offline = window.cw.utils.createRecorder();
+    await fetch(url, { cwRecorder: offline }).catch(() => {});
+    window.__offline = false;
+    return { online: online.offline, offline: offline.offline };
+  });
+  expect(seen).toEqual({ online: false, offline: true });
 });
 
 test('a stale cache read without connection notes its age in the recorder', async ({ page }) => {
@@ -1084,9 +1135,10 @@ test('a stale cache read without connection notes its age in the recorder', asyn
   const read = await page.evaluate(() => {
     localStorage.setItem('cw_weather_probe', JSON.stringify({ data: { probe: 1 }, timestamp: Date.now() - 100 * 60000 }));
     const rec = window.cw.utils.createRecorder();
-    return { data: window.cw.utils.getCache('cw_weather_probe', rec), age: rec.staleAgeMs };
+    return { data: window.cw.utils.getCache('cw_weather_probe', rec), age: rec.staleAgeMs, offline: rec.offline };
   });
   expect(read.data).toEqual({ probe: 1 });
+  expect(read.offline).toBe(true);
   expect(read.age).toBeGreaterThanOrEqual(100 * 60000);
   expect(read.age).toBeLessThan(101 * 60000);
 });

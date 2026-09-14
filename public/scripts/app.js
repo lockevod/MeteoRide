@@ -299,7 +299,7 @@ function classifyProviderError(prov, status, bodyText = "") {
 }
 
 // Build URL per provider (add OpenWeather One Call 3.0)
-function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
+function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
   if (prov === "aromehd") {
     // Open‑Meteo with AROME‑HD model; same hourly variables as standard OM
     // Note: models=meteofrance_arome_hd is the AROME high‑resolution variant.
@@ -327,8 +327,9 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   if (prov === "openweather") {
     // Units: metric (°C, m/s), imperial (°F, mph). We normalize later.
     const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
-    // Check if weather alerts are enabled
-    const showAlerts = getVal("showWeatherAlerts") !== false; // Default to true if not set
+    // The computation passes the checkbox it read. A caller that says nothing (compare.js)
+    // asks for alerts, as it always has.
+    const showAlerts = alerts !== false;
     const excludeParts = showAlerts ? "minutely" : "minutely,alerts";
     // Hourly is limited (~48h). We include daily to allow fallback.
     return `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKey}&units=${units}&exclude=${excludeParts}`;
@@ -382,16 +383,18 @@ function reconcileAromeVsOmCode(omCode, precip, prob, cloud) {
 }
 
 
+// The steps of a route at the speed, interval and start in the form now, or null when it
+// cannot be segmented (logged, and a start out of range also says so).
 function segmentRouteByTime(geojson) {
   if (!geojson || !Array.isArray(geojson.features) || !geojson.features.length) {
     logDebug(t("geojson_invalid"), true);
-    return;
+    return null;
   }
   // The same line the route's validation will use: never a marker, never a stray point.
   const coords = cwForecastRules.routeLine(geojson);
   if (!coords) {
     logDebug(t("track_too_short"), true);
-    return;
+    return null;
   }
 
   const speed = Number(getVal("cyclingSpeed")) || 12;
@@ -399,14 +402,14 @@ function segmentRouteByTime(geojson) {
   const datetimeValue = getVal("datetimeRoute");
   if (!datetimeValue) {
     logDebug(t("route_date_empty"), true);
-    return;
+    return null;
   }
 
   let startDateTime = getValidatedDateTime();
 
   if (isNaN(startDateTime.getTime())) {
     logDebug(t("route_date_invalid", { val: datetimeValue }), true);
-    return;
+    return null;
   }
 
   // Validate date range (today to today + 14 days)
@@ -414,7 +417,7 @@ function segmentRouteByTime(geojson) {
   if (!dateValidation.valid) {
     logDebug(dateValidation.error, true);
     if (window.setNotice) window.setNotice(dateValidation.error, 'error');
-    return;
+    return null;
   }
 
   let totalDistance = 0;
@@ -511,13 +514,59 @@ function segmentRouteByTime(geojson) {
   //console.log("steps ejemplo:", steps[0]);
   // console.log("weatherData ejemplo:", weatherData[0]);
 
-  fetchWeatherForSteps(steps, timeSteps);
+  return { steps, timeSteps };
 }
 
-// Each run takes a number, and only the latest may publish. A speed, provider or route
-// change starts a new run while the old one is still fetching; the old one used to write
-// into weatherData alongside it and render whatever had accumulated when it finished.
-let forecastRun = 0;
+// Identities (spec §4.2). The confirmed route is the one the last request to confirm put
+// on screen, with that request's number; every computation takes the next number when it
+// is launched. Only a snapshot carrying both, and matching both, may publish, so neither a
+// computation replaced by another nor one of a route no longer on screen reaches the
+// screen. Nothing here is stored.
+let confirmedRoute = null;        // { requestId, name, fingerprint, geojson, text }
+let lastComputationId = 0;
+let runningComputationId = null;
+let publishedSnapshot = null;
+
+function publishState() {
+  return { confirmedRequestId: confirmedRoute ? confirmedRoute.requestId : null, lastComputationId };
+}
+
+// Launches a computation of the confirmed route. The number is taken, and the previous
+// computation's claim on the indicator dropped, before anything is read: the computation
+// it replaces cannot publish over it, even when this one stops at once on its start date.
+window.cwLaunchComputation = function () {
+  if (!confirmedRoute) return null;
+  const cid = ++lastComputationId;
+  window.cw.releaseLoadingPrefix("forecast:");
+  window.cw.claimLoading("forecast:" + cid);
+  runningComputationId = cid;
+  const segmented = segmentRouteByTime(confirmedRoute.geojson);
+  if (!segmented) {
+    window.cw.releaseLoading("forecast:" + cid);
+    runningComputationId = null;
+    return cid;
+  }
+  fetchWeatherForSteps(segmented.steps, segmented.timeSteps, readForecastSettings(),
+    { requestId: confirmedRoute.requestId, computationId: cid });
+  return cid;
+};
+
+window.cwHasConfirmedRoute = () => !!confirmedRoute;
+
+// The confirmed route has a forecast of its latest computation on screen, or that
+// computation is still running. A request ending recomputes a route without either.
+window.cwHasCurrentForecast = () => !!confirmedRoute && (
+  (!!publishedSnapshot && publishedSnapshot.computationId === lastComputationId
+    && publishedSnapshot.requestId === confirmedRoute.requestId)
+  || runningComputationId === lastComputationId);
+
+// The loaders in ui.js and cwLoadGPXFromString confirm the route they drew through here,
+// each time with a number of their own, until they go through cw.requestRoute.
+let bridgedRequestId = 0;
+window.cwBridgeConfirmRoute = function (geojson, name) {
+  confirmedRoute = { requestId: ++bridgedRequestId, name: name || "", fingerprint: "", geojson, text: "" };
+  publishedSnapshot = null;
+};
 
 // Everything a computation depends on, read once when it starts. A setting changed while
 // it is still fetching belongs to the next computation, never to the rest of this one.
@@ -531,8 +580,13 @@ function readForecastSettings() {
   };
 }
 
-async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSettings()) {
-  const run = ++forecastRun;
+async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
+  // Still the latest computation launched, of the route last confirmed. Checked after
+  // every wait: a computation that is not stops without writing or asking for anything.
+  const isCurrent = () => cwForecastRules.shouldPublish(ids, publishState());
+  const route = confirmedRoute
+    ? { name: confirmedRoute.name, fingerprint: confirmedRoute.fingerprint }
+    : { name: "", fingerprint: "" };
   const results = [];
   // What this computation's requests and cache reads saw; the notice is decided from it.
   const recorder = window.cw.utils.createRecorder();
@@ -557,7 +611,6 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
   const windUnit = settings.units.wind;
   const now = new Date();
 
-  showLoading();
   const showAllNotices = settings.noticeAll;
   // Notice flags
   let warnedFallback = false;
@@ -600,7 +653,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
   const hasKey = (apiKeyFinal || "").trim().length >= 5;
   try {
     for (let i = 0; i < steps.length; i++) {
-      if (run !== forecastRun) return;
+      if (!isCurrent()) return;
       const p = steps[i];
       const timeAt = timeSteps[i];
 
@@ -719,7 +772,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
       let res, json, ok = false;
 
       try {
-        const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit);
+        const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
         res = await fetch(urlPrim, { cwRecorder: recorder });
         // Diagnostic logging for OpenWeather: record status and masked URL (hide appid)
         if (prov === "openweather") {
@@ -730,7 +783,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
         }
         if (res.ok) {
           json = await readJson(res);
-          if (run !== forecastRun) return;
+          if (!isCurrent()) return;
           // Sanity-check / normalize payload shape for OpenWeather
           if (prov === "openweather") {
             try {
@@ -769,13 +822,13 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
           }
           if (prov === "aromehd") {
             try {
-              const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
-              if (run !== forecastRun) return;
+              const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
+              if (!isCurrent()) return;
               const resStd = await fetch(urlStd, { cwRecorder: recorder });
-              if (run !== forecastRun) return;
+              if (!isCurrent()) return;
               if (resStd.ok) {
                 const std = await readJson(resStd);
-                if (run !== forecastRun) return;
+                if (!isCurrent()) return;
                 try {
                   // Cache the standard Open‑Meteo response so future Open‑Meteo-only requests
                   // for the same step/time/coords can reuse it instead of re-fetching.
@@ -792,11 +845,11 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               const key2 = mk2(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
               const cached2 = getCache(key2, recorder);
               if (cached2) { results.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
-              const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
-              if (run !== forecastRun) return;
+              const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit, settings.alerts);
+              if (!isCurrent()) return;
               const res2 = await fetch(url2, { cwRecorder: recorder });
               if (res2.ok) { const json2 = await readJson(res2);
-                if (run !== forecastRun) return;
+                if (!isCurrent()) return;
                 results.push({ ...p, provider: prov2, weather: json2 });
                 setCache(key2, json2);
                 continue;
@@ -852,12 +905,12 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            if (run !== forecastRun) return;
+            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit, settings.alerts);
+            if (!isCurrent()) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await readJson(res2);
-              if (run !== forecastRun) return;
+              if (!isCurrent()) return;
               results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
@@ -897,12 +950,12 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            if (run !== forecastRun) return;
+            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit, settings.alerts);
+            if (!isCurrent()) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await readJson(res2);
-              if (run !== forecastRun) return;
+              if (!isCurrent()) return;
               results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
@@ -920,12 +973,12 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            if (run !== forecastRun) return;
+            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit, settings.alerts);
+            if (!isCurrent()) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await readJson(res2);
-              if (run !== forecastRun) return;
+              if (!isCurrent()) return;
               results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
@@ -946,7 +999,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
         logDebug(t("error_api_step", { step: i + 1, msg: err.message }), true);
       }
 
-      if (run !== forecastRun) return;
+      if (!isCurrent()) return;
       if (ok && json) {
         // Check for weather alerts if using OpenWeather and alerts are enabled
         if (prov === "openweather" && Array.isArray(json.alerts) && settings.alerts) {
@@ -988,9 +1041,9 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
     }
 
   // Check for weather alerts independently if we have OpenWeather API key
-  if (run !== forecastRun) return;
-  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, () => run === forecastRun);
-  if (run !== forecastRun) return;
+  if (!isCurrent()) return;
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, isCurrent);
+  if (!isCurrent()) return;
 
   const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
   const snapshotSteps = results.map((r) => ({
@@ -1000,8 +1053,9 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
   }));
   publish({
     version: 1,
-    computationId: run,
-    route: { name: (window.lastGPXFile && window.lastGPXFile.name) || "" },
+    requestId: ids.requestId,
+    computationId: ids.computationId,
+    route,
     settings: { provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts },
     steps: snapshotSteps,
     // Providers only report warnings active when asked; keep those near the ride.
@@ -1015,7 +1069,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
       usableSteps: cwForecastRules.usableSteps(snapshotSteps),
       transportFailures: recorder.failed,
       lastFailStatus: recorder.lastFailStatus,
-      offline: window.cw.utils.isOffline(),
+      offline: recorder.offline,
       staleAgeMs: recorder.staleAgeMs,
       beyondHorizon,
       openMeteoMaxDays: OPENMETEO_MAX_DAYS,
@@ -1035,10 +1089,12 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
   });
   } catch (err) {
     logDebug(t("error_api", { msg: err.message }), true);
-    if (run === forecastRun) {
+    if (isCurrent()) {
       setNotice(t("error_api", { msg: err.message }), "error");
-      hideLoading();
+      window.cw.releaseLoading("forecast:" + ids.computationId);
     }
+  } finally {
+    if (runningComputationId === ids.computationId) runningComputationId = null;
   }
 }
 
@@ -1076,7 +1132,8 @@ function showOfficialAlerts(snapshot) {
  * latest and the last effect: the table, the notice, `cw:forecast` and the indicator.
  */
 function publish(snapshot) {
-  if (!snapshot || snapshot.computationId !== forecastRun) return false;
+  if (!cwForecastRules.shouldPublish(snapshot, publishState())) return false;
+  publishedSnapshot = snapshot;
   weatherData = snapshot.steps.map((s) => ({
     lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
     provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
@@ -1089,7 +1146,7 @@ function publish(snapshot) {
   try {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
-  hideLoading();
+  window.cw.releaseLoading("forecast:" + snapshot.computationId);
   return true;
 }
 
@@ -3008,7 +3065,6 @@ function init() {
   window.addEventListener("resize", scheduleMapResizeRecenter, { passive: true });
   window.addEventListener("orientationchange", scheduleMapResizeRecenter, { passive: true });
 
-  hideLoading();
   logDebug(t("app_started"));
 }
 
@@ -3108,7 +3164,8 @@ window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint 
       try {
         console.debug("[cw] GPX loaded event; bounds:", evt.target.getBounds());
         map.fitBounds(evt.target.getBounds());
-        await segmentRouteByTime(evt.target.toGeoJSON());
+        window.cwBridgeConfirmRoute(evt.target.toGeoJSON(), nameHint);
+        window.cw.startForecast();
 
         const baseName = (nameHint || "route").replace(/\.[^/.]+$/,"");
         const metaName = (evt.target.get_name && evt.target.get_name()) || baseName;
@@ -3257,7 +3314,6 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("resize", scheduleMapResizeRecenter, { passive: true });
   window.addEventListener("orientationchange", scheduleMapResizeRecenter, { passive: true });
 
-  hideLoading();
   logDebug(t("app_started"));
 });
 
