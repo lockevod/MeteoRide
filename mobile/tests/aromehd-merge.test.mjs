@@ -1,6 +1,5 @@
-// How AROME HD answers are completed from the standard Open-Meteo answer, pinned before
-// the merge moves out of fetchWeatherForSteps. While the block is still inline in app.js
-// the test runs that block; once it is gone it runs cwForecastRules.mergeAromeWithStandard.
+// How AROME HD answers are completed from the standard Open-Meteo answer, pinned when
+// the merge moved out of fetchWeatherForSteps into cwForecastRules.mergeAromeWithStandard.
 // Regenerate the golden only on purpose: UPDATE_GOLDEN=1 node --test tests/aromehd-merge.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,19 +12,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS = join(HERE, '../../public/scripts');
 const GOLDEN = join(HERE, 'fixtures/aromehd-merge-golden.json');
 
-const app = await readFile(join(SCRIPTS, 'app.js'), 'utf8');
-const INLINE_FROM = '                const stdH = std?.hourly || {};';
-const INLINE_TO = '              }\n            } catch (_) {}\n            if (aromeResponseLooksInvalid(json)) {';
-let merge;
-const from = app.indexOf(INLINE_FROM);
-if (from !== -1) {
-  const to = app.indexOf(INLINE_TO, from);
-  assert.ok(to > from, 'the inline AROME merge no longer ends where this test expects');
-  merge = vm.runInNewContext(`(function (json, std) {\n${app.slice(from, to)}\nreturn json;\n})`, { window: {}, console });
-} else {
-  const rules = await readFile(join(SCRIPTS, 'forecast-rules.js'), 'utf8');
-  merge = vm.runInNewContext(`${rules}; cwForecastRules.mergeAromeWithStandard`, {});
-}
+const rules = await readFile(join(SCRIPTS, 'forecast-rules.js'), 'utf8');
+const merge = vm.runInNewContext(`${rules}; cwForecastRules.mergeAromeWithStandard`, {});
 
 const hours = (from, n) => Array.from({ length: n }, (_, i) => `2026-09-20T${String(from + i).padStart(2, '0')}:00`);
 

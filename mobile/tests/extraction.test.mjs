@@ -6,7 +6,7 @@ process.env.TZ = 'Europe/Madrid';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -18,11 +18,7 @@ const GOLDEN = join(HERE, 'fixtures/extraction-golden.json');
 
 const app = await readFile(join(SCRIPTS, 'app.js'), 'utf8');
 const utils = await readFile(join(SCRIPTS, 'utils.js'), 'utf8');
-let rules = '';
-try {
-  await access(join(SCRIPTS, 'forecast-rules.js'));
-  rules = await readFile(join(SCRIPTS, 'forecast-rules.js'), 'utf8');
-} catch { /* before Task 2 the file does not exist yet */ }
+const rules = await readFile(join(SCRIPTS, 'forecast-rules.js'), 'utf8');
 
 function between(src, from, to) {
   const a = src.indexOf(from);
@@ -114,6 +110,11 @@ test('the golden is about the hours the fixtures were built for', () => {
   assert.equal(golden['openmeteo-no-minutely'][2].temp, 19); // 08:40 → nearest hour 09:00
   assert.equal(golden['openweather-metric'][4].temp, 26);    // 16:10 local → 16:00
   assert.equal(golden['openweather-metric'][5].temp, 57);    // beyond range: last hour, not daily
+  // Wind read in m/s, outside minutely_15: pins the unit conversion, not just kmh's.
+  assert.equal(golden['openmeteo-wind-ms'][4].windSpeed, 5.833333333333333);
+  // weathercode and is_day dropped: weatherCode falls back to the synthesized value (63 with
+  // the fields present, 80 without), pinning the AROME fallback path.
+  assert.equal(golden['aromehd-missing-code-and-day'][4].weatherCode, 80);
 });
 
 for (const name of Object.keys(CASES)) {

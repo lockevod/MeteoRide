@@ -218,78 +218,69 @@ var cwForecastRules = (function () {
       });
     };
 
-    try {
-      mergeKeys.forEach((k) => {
-        const aVal = json.hourly[k];
-        // Accept common variants in the standard payload
-        let sVal = stdH[k];
-        if (!Array.isArray(sVal)) {
-          if (k === 'uv_index') {
-            sVal = stdH.uv_index || stdH.uvindex || stdH.uvi || stdH.uv || null;
-            if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object'
-                && std.current.uvi != null) {
-              const v = Number(std.current.uvi);
-              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
-            }
-          } else if (k === 'cloud_cover') {
-            sVal = stdH.cloud_cover || stdH.cloudcover || null;
-          } else if (k === 'precipitation_probability') {
-            sVal = stdH.precipitation_probability || stdH.pop || null;
+    mergeKeys.forEach((k) => {
+      const aVal = json.hourly[k];
+      // Accept common variants in the standard payload
+      let sVal = stdH[k];
+      if (!Array.isArray(sVal)) {
+        if (k === 'uv_index') {
+          sVal = stdH.uv_index || stdH.uvindex || stdH.uvi || stdH.uv || null;
+          if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object'
+              && std.current.uvi != null) {
+            const v = Number(std.current.uvi);
+            if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
           }
+        } else if (k === 'cloud_cover') {
+          sVal = stdH.cloud_cover || stdH.cloudcover || null;
+        } else if (k === 'precipitation_probability') {
+          sVal = stdH.precipitation_probability || stdH.pop || null;
         }
-        if (!Array.isArray(aVal) && Array.isArray(sVal)) {
-          // AROME lacks the array: take the standard one on AROME's hours
-          const aligned = onAromeHours(sVal);
-          if (aligned) json.hourly[k] = aligned;
-        } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
-          const merged = aVal.slice();
-          if (stdIndexByTime) {
-            for (let i = 0; i < aromeTimes.length; i++) {
-              if (merged[i] == null) {
-                const si = stdIndexByTime[String(aromeTimes[i])];
-                if (si != null && sVal[si] != null) merged[i] = sVal[si];
-              }
-            }
-          } else if (!aromeTimes) {
-            // AROME has no hours of its own and takes the standard ones below
-            for (let mi = 0; mi < sVal.length; mi++) {
-              if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+      }
+      if (!Array.isArray(aVal) && Array.isArray(sVal)) {
+        // AROME lacks the array: take the standard one on AROME's hours
+        const aligned = onAromeHours(sVal);
+        if (aligned) json.hourly[k] = aligned;
+      } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
+        const merged = aVal.slice();
+        if (stdIndexByTime) {
+          for (let i = 0; i < aromeTimes.length; i++) {
+            if (merged[i] == null) {
+              const si = stdIndexByTime[String(aromeTimes[i])];
+              if (si != null && sVal[si] != null) merged[i] = sVal[si];
             }
           }
-          json.hourly[k] = merged;
+        } else if (!aromeTimes) {
+          // AROME has no hours of its own and takes the standard ones below
+          for (let mi = 0; mi < sVal.length; mi++) {
+            if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+          }
         }
-      });
-      if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-      // minutely_15 carries its own time axis, so it is taken whole
-      if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0)
-          && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
-        json.minutely_15 = std.minutely_15;
+        json.hourly[k] = merged;
       }
-    } catch (mergeErr) {
-      if (!aromeTimes) {
-        mergeKeys.forEach((k) => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-        if (Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-      }
+    });
+    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+    // minutely_15 carries its own time axis, so it is taken whole
+    if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0)
+        && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
+      json.minutely_15 = std.minutely_15;
     }
     // Probability of precipitation under other names, as a fraction or a percentage
-    try {
-      if (!Array.isArray(json.hourly.precipitation_probability)) {
-        const candNames = ['precipitation_probability', 'precipitationProbability', 'precip_prob', 'pop', 'probability_of_precipitation'];
-        for (const n of candNames) {
-          if (Array.isArray(stdH[n])) {
-            const arr = stdH[n].slice();
-            const nums = arr.filter((v) => v != null && !Number.isNaN(Number(v))).map(Number);
-            const max = nums.length ? Math.max(...nums) : null;
-            const normalized = (max != null && max <= 1)
-              ? arr.map((v) => (v == null ? null : Number(v) * 100))
-              : arr;
-            const aligned = onAromeHours(normalized);
-            if (aligned) json.hourly.precipitation_probability = aligned;
-            break;
-          }
+    if (!Array.isArray(json.hourly.precipitation_probability)) {
+      const candNames = ['precipitation_probability', 'precipitationProbability', 'precip_prob', 'pop', 'probability_of_precipitation'];
+      for (const n of candNames) {
+        if (Array.isArray(stdH[n])) {
+          const arr = stdH[n].slice();
+          const nums = arr.filter((v) => v != null && !Number.isNaN(Number(v))).map(Number);
+          const max = nums.length ? Math.max(...nums) : null;
+          const normalized = (max != null && max <= 1)
+            ? arr.map((v) => (v == null ? null : Number(v) * 100))
+            : arr;
+          const aligned = onAromeHours(normalized);
+          if (aligned) json.hourly.precipitation_probability = aligned;
+          break;
         }
       }
-    } catch (_) { /* ignore */ }
+    }
     return json;
   }
 
