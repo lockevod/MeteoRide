@@ -109,9 +109,21 @@ var cwForecastRules = (function () {
       }
       return bestDiff <= maxDiff ? best : -1;
     };
+    // Daily entries sit at local noon, a day apart. Picking the one nearest in raw UTC
+    // `dt` ties (or misses) right at a local-midnight step, because that distance
+    // ignores the location's own offset. Match on local calendar date instead; fall
+    // back to nearest `dt` only when the offset itself is missing.
+    const localDateOf = (ms, offsetSeconds) => new Date(ms + offsetSeconds * 1000).toISOString().slice(0, 10);
+    const closestByLocalDate = (arr, offsetSeconds) => {
+      if (!Array.isArray(arr) || !arr.length) return -1;
+      const stepDate = localDateOf(timeMs, offsetSeconds);
+      return arr.findIndex((e) => e && localDateOf(Number(e.dt) * 1000, offsetSeconds) === stepDate);
+    };
     const useHourly = Array.isArray(w.hourly) && w.hourly.length > 0;
     const hi = useHourly ? closestByDt(w.hourly, 3600000) : -1;
-    const di = (!useHourly || hi === -1) ? closestByDt(w.daily) : -1;
+    const di = (!useHourly || hi === -1)
+      ? (typeof w.timezone_offset === 'number' ? closestByLocalDate(w.daily, w.timezone_offset) : closestByDt(w.daily))
+      : -1;
     const hourly = (useHourly && hi !== -1) ? w.hourly[hi] : null;
     const daily = (!hourly && Array.isArray(w.daily) && di !== -1) ? w.daily[di] : null;
 
@@ -138,7 +150,7 @@ var cwForecastRules = (function () {
     if (daily) {
       return {
         source: 'daily',
-        temp: (daily.temp && (daily.temp.day ?? daily.temp.max ?? daily.temp.min)) || null,
+        temp: daily.temp ? (daily.temp.day ?? daily.temp.max ?? daily.temp.min ?? null) : null,
         wind: toKmh(daily.wind_speed),
         gust: daily.wind_gust != null ? toKmh(daily.wind_gust) : null,
         windDir: Number(daily.wind_deg || 0),

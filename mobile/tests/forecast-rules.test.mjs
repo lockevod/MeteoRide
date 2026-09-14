@@ -70,6 +70,33 @@ test('OpenWeather uses daily when the nearest hourly entry is more than an hour 
   assert.equal(near.source, 'hourly');
 });
 
+test('OpenWeather daily: picks the entry whose local date matches the step, not the nearest dt', () => {
+  // 2026-09-22T22:00:00Z is 23 Sept 00:00 local (offset +7200): equidistant in raw UTC
+  // terms from the 22 Sept and 23 Sept daily entries, so a tie-break on nearest `dt`
+  // keeps the earlier (22 Sept, temp 22) one. The step's local calendar day is 23 Sept.
+  const midnight = rules.extractStep(openWeather('metric'),
+    { provider: 'openweather', time: at('2026-09-22T22:00:00Z'), payloadUnits: 'metric' });
+  assert.equal(midnight.source, 'daily');
+  assert.equal(midnight.temp, 23);
+
+  // Same idea in a different timezone_offset: local midnight of 23 Sept at UTC-5.
+  const otherOffset = { ...openWeather('metric'), timezone_offset: -18000 };
+  const r = rules.extractStep(otherOffset,
+    { provider: 'openweather', time: at('2026-09-23T05:00:00Z'), payloadUnits: 'metric' });
+  assert.equal(r.source, 'daily');
+  assert.equal(r.temp, 23);
+});
+
+test('OpenWeather daily: a temperature of 0°C is not treated as missing', () => {
+  const w = openWeather('metric');
+  w.hourly = [];
+  w.daily[0] = { ...w.daily[0], temp: { day: 0 } };
+  const r = rules.extractStep(w,
+    { provider: 'openweather', time: at('2026-09-20T06:00:00Z'), payloadUnits: 'metric' });
+  assert.equal(r.source, 'daily');
+  assert.equal(r.temp, 0);
+});
+
 test('no answer, no hourly block or an unhandled provider gives null', () => {
   assert.equal(rules.extractStep(null, { provider: 'openmeteo', time: new Date() }), null);
   assert.equal(rules.extractStep({}, { provider: 'openmeteo', time: new Date() }), null);
