@@ -146,6 +146,31 @@ test('a request replaced in the same tick never reads', async () => {
   assert.deepEqual(calls.commit, [['b.gpx', 2]]);
 });
 
+test('a failed request says so after the route on screen is computed again, so a notice from that computation does not cover it', async () => {
+  const reads = {
+    unusable: [async () => ({ text: 'junk', name: 'x.gpx' }), 'notify'],
+    unreadable: [async () => { throw new Error('unreadable'); }, 'readFailed'],
+  };
+  for (const [what, [read, notice]] of Object.entries(reads)) {
+    // The route on screen has no forecast: its last computation stopped on its start date.
+    const { c, calls, state } = harness({ confirmed: true, current: false });
+    state.parseResult = () => null;
+    let noticesAtLaunch = null;
+    state.onLaunch = () => { noticesAtLaunch = calls[notice]; };
+    assert.equal(await c.requestRoute({ source: 'file', read }), 'failed', what);
+    assert.equal(calls.launch, 1, what);
+    assert.deepEqual([noticesAtLaunch, calls[notice]], [0, 1], `${what}: said before the computation it relaunched`);
+  }
+});
+
+test('whether any route has been asked for is known the moment the first request is made', async () => {
+  const { c } = harness();
+  assert.equal(c.hasRouteRequests(), false);
+  const r = c.requestRoute({ source: 'file', read: async () => null });
+  assert.equal(c.hasRouteRequests(), true);
+  await r;
+});
+
 test('a read with nothing to open fails quietly', async () => {
   const { c, calls } = harness();
   assert.equal(await c.requestRoute({ source: 'recent', read: async () => null }), 'failed');
@@ -334,6 +359,25 @@ test('arrivedAt grows strictly on the same clock reading, and each write carries
   } });
   await Promise.all(['x', 'y', 'z'].map((n) => c.importRoute({ text: 'abc', name: `${n}.gpx` })));
   assert.deepEqual(seen, [['x.gpx', 1000, '3:1a47e90b'], ['y.gpx', 1001, '3:1a47e90b'], ['z.gpx', 1002, '3:1a47e90b']]);
+});
+
+test('any job on recent routes waits its turn in the import queue, and one that throws holds nothing up', async () => {
+  const log = [];
+  const first = gate();
+  const { c } = harness({ writeRecent: async (input) => {
+    log.push(`import ${input.name}`);
+    if (input.name === 'a.gpx') await first.promise;
+    return { ok: true, name: input.name };
+  } });
+  const a = c.importRoute({ text: 'A', name: 'a.gpx' });
+  const job = c.enqueueRecents(async () => { log.push('job'); throw new Error('load failed'); });
+  const b = c.importRoute({ text: 'B', name: 'b.gpx' });
+  await flush();
+  assert.deepEqual(log, ['import a.gpx'], 'the job ran before the import in front of it finished');
+  first.open();
+  assert.equal(await job, undefined);
+  await Promise.all([a, b]);
+  assert.deepEqual(log, ['import a.gpx', 'job', 'import b.gpx']);
 });
 
 test('a failed import says so and does not hold up the ones after it', async () => {

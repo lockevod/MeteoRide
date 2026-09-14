@@ -803,7 +803,17 @@ runtime, because `app.js` and `ui.js` load after it.
   and leaves the confirmed route and its computation alone, with one of two notices:
   `route_load_failed` when the text holds no usable route, `route_read_failed` when `read()`
   rejected or missed its deadline. A `read` that resolves `null` (nothing to open) fails
-  quietly.
+  quietly. The notice is shown only after the request has reconciled, because a computation
+  relaunched there can show a notice of its own (a start date out of range) that would cover
+  it. It goes through `cwNotifyRouteFailure`, which records the latest computation at that
+  moment. When that computation publishes with nothing to say, it leaves the failure up
+  instead of clearing it; a notice of its own still replaces it.
+- **Asked for, not yet on screen.** `lastGPXFile` is set only when a route is confirmed, so it
+  cannot tell whether a route is on its way. `cw.hasRouteRequests()` can: the restore at
+  start-up returns on it, so a file picked and still being read is not replaced by the last
+  recent route. A tap in the recent-routes menu closes the menu and makes its request at
+  once with the listed metadata; `cwReadRecentRoute` finds the text by id, then by name, then
+  in the old localStorage list.
 - **A request never rejects.** Whatever `commit`, `launch`, `paintLoading` or a notice
   throws is logged and swallowed, so `requestRoute` always resolves to `'committed'`,
   `'superseded'` or `'failed'` and lets go of its claim. A commit that throws still counts
@@ -843,12 +853,22 @@ runtime, because `app.js` and `ui.js` load after it.
   750 KB is reported with `route_not_saved`. **Nothing falls back to localStorage on write
   any more**; reading and migrating old localStorage entries stay. A record from before
   this has no fingerprint and counts as the same route when name and size in bytes match.
-  The file picker imports only a route that was confirmed, under the file's name; a route
-  from outside is imported as it arrives, whether or not it ends up on screen. Opening a
-  recent route moves it to the top as a job in the same queue (`cw.touchRecent`), in one
-  `readwrite` transaction that rewrites the whole record with a newer timestamp and writes
-  nothing if an import trimmed it first. It used to read and then put the record outside
-  the queue, which dropped its fingerprint and could write a trimmed route back. The name on
+  The file picker imports only a route that was confirmed, under the file's name. A route
+  from outside is imported as it arrives, whether or not it ends up on screen, but only if
+  its text carries `<trk`, `<trkpt`, `<rte`, `<rtept`, `<wpt` or `<kml`. Without that check a
+  truncated share or a web page became the newest recent route, and the next cold start
+  tried to restore it and restored nothing. The import stores the later of `arrivedAt` and
+  one millisecond past the newest stored timestamp. Stored times can be ahead of the clock
+  after the phone's clock changes, and the trim would otherwise delete the new route in its
+  own transaction while still reporting `{ ok: true }`. Loading the list at start-up
+  (migration, read, duplicate cleanup) is a job in the same queue (`cw.enqueueRecents`), so
+  it can neither overwrite a boot-time import with the older list it read nor race it. A
+  job in the queue must never wait on the queue. Opening a recent route moves it to the top
+  as a job in the same queue (`cw.touchRecent`). That job is one `readwrite` transaction: it
+  rewrites the whole record with a newer timestamp, and writes nothing if an import trimmed
+  the route first. Only when that move succeeds is the menu's list read back from the store.
+  The move used to read and then put the record outside the queue, which dropped its
+  fingerprint and could write a trimmed route back. The name on
   screen no longer decides the stored name: while a new route is read it is the old one's.
 
 Left for later phases on purpose: compare runs still write `weatherData` and paint with no

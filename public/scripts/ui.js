@@ -1754,26 +1754,11 @@
         it.style.fontFamily = 'Arial, sans-serif';
         it.textContent = (route.name || '').replace(/\.[^/.]+$/, "");
         it.addEventListener('click', async function () {
-          try {
-            // behave like selecting the option
-            const route = filtered[idx];
-            let full = null;
-            if (route.id != null) full = await idbGetRouteById(route.id);
-            if (!full) {
-              try {
-                const stored = localStorage.getItem(RECENT_ROUTES_KEY);
-                const arr = stored ? JSON.parse(stored) : [];
-                const found = arr.find(r => r.name === route.name && (route.timestamp == null || r.timestamp === route.timestamp));
-                if (found) full = { name: found.name, size: found.size, lastModified: found.lastModified, timestamp: found.timestamp, blob: new Blob([found.content], { type: 'application/gpx+xml' }) };
-              } catch (_) { /* ignore */ }
-            }
-            if (!full) {
-              console.warn('[MeteoRide] recentRoutesMenu: Could not retrieve route content for', route.name);
-              return;
-            }
-            await loadRecentRoute(full);
-          } catch (e) { console.error(e); }
+          // The request is made on the tap, before anything is read, so a route asked for
+          // while this one is still read replaces it. readRecentRoute finds the text by id,
+          // then by name, then in the old localStorage list.
           hideMenu();
+          try { await loadRecentRoute(filtered[idx]); } catch (e) { console.error(e); }
         });
         menu.appendChild(it);
       });
@@ -1887,8 +1872,11 @@
         const records = all.result || [];
         const pick = cwForecastRules.uniqueRouteName(records, { name: recentRouteName(name), fingerprint, bytes });
         chosen = pick.name;
+        // Stored times can be ahead of this clock (the phone's clock was changed). The route
+        // arriving now is still the newest, or the trim below would delete it.
+        const at = records.reduce((top, r) => Math.max(top, (Number(r.timestamp) || 0) + 1), arrivedAt);
         const record = {
-          name: pick.name, size: bytes, lastModified: arrivedAt, timestamp: arrivedAt, fingerprint,
+          name: pick.name, size: bytes, lastModified: at, timestamp: at, fingerprint,
           blob: new Blob([text], { type: 'application/gpx+xml' }),
         };
         let write;
@@ -1899,7 +1887,7 @@
           write = store.add(record);
         }
         write.onsuccess = () => {
-          const kept = records.filter((r) => r.id !== pick.replaceId).concat([{ id: write.result, timestamp: arrivedAt }]);
+          const kept = records.filter((r) => r.id !== pick.replaceId).concat([{ id: write.result, timestamp: at }]);
           kept.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
           kept.slice(MAX_RECENT_ROUTES).forEach((r) => store.delete(r.id));
         };
@@ -1972,19 +1960,15 @@
   }
 
   // Opens a recent route through the coordinator. Only a route that reached the screen
-  // moves to the top of the list.
+  // moves to the top of the list, and the list is read back from the store once it has.
   async function loadRecentRoute(routeData) {
     const status = await window.cw.requestRoute({ source: 'recent', read: () => readRecentRoute(routeData) });
-    if (status !== 'committed') return status;
+    if (status !== 'committed' || !routeData || routeData.id == null) return status;
     try {
-      const idx = recentRoutesCache.findIndex(r => r.name === routeData.name && r.size === routeData.size);
-      if (idx > 0) {
-        const [r] = recentRoutesCache.splice(idx, 1);
-        recentRoutesCache.unshift(r);
-        r.timestamp = Date.now();
-        // The cache holds metadata only. Writing it back to the store would drop every
-        // stored GPX, so only the opened route's record is moved, in the import queue.
-        await window.cw.touchRecent(r.id);
+      // The cache holds metadata only. Writing it back to the store would drop every
+      // stored GPX, so only the opened route's record is moved, in the import queue.
+      if (await window.cw.touchRecent(routeData.id)) {
+        recentRoutesCache = await idbGetAllRoutes();
         updateRecentRoutesUI();
       }
     } catch (e) {
@@ -2001,8 +1985,10 @@
     if (uiInitialised) return;
     uiInitialised = true;
     console.log('[MeteoRide] initUI: Starting initialization');
-    // Migrate any legacy localStorage entries into IndexedDB and populate cache
-    (async function() {
+    // Migrate any legacy localStorage entries into IndexedDB and populate cache. It is a job
+    // in the import queue: an import made meanwhile at start-up is neither overwritten by the
+    // older list read here nor raced by the migration and the duplicate cleanup.
+    window.cw.enqueueRecents(async function() {
       try {
         await migrateFromLocalStorage();
         recentRoutesCache = await idbGetAllRoutes();
@@ -2018,7 +2004,7 @@
         } catch (_) { recentRoutesCache = []; }
       }
       updateRecentRoutesUI();
-    })();
+    });
 
 
 

@@ -1097,6 +1097,30 @@ test('a file that is not a route leaves the route computing on screen, and its f
   await expect(trackDrawn(page)).not.toHaveCount(0);
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('route.gpx');
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+  // The forecast that published after the failure had nothing to say, and did not clear it.
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+});
+
+test('a file that is not a route says so even when the route on screen is computed again and stops on its date', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  // Its computation stops on a start date out of range, so a request ending computes it again.
+  await page.evaluate(() => {
+    const d = new Date(Date.now() + 20 * 86400000);
+    const pad = (n) => String(n).padStart(2, '0');
+    document.getElementById('datetimeRoute').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T10:00`;
+    window.cw.settingsChanged();
+  });
+  await expect(page.locator('#horizonNotice')).toHaveText(/later than 14 days|posterior a 14 días/);
+
+  await pickText(page, 'broken.gpx', 'this is not a route');
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+  await page.waitForTimeout(300);
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
 });
 
 test('a file with no line to follow leaves the route on screen', async ({ page }) => {
@@ -1339,6 +1363,73 @@ test('a picked file that is not a route stays out of recent routes; a route goes
   await expect.poll(() => storedNames(page)).toEqual(['route.gpx']);
 });
 
+test('text from outside that holds no route stays out of recent routes; a route still goes in', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate((text) => {
+    window.cwLoadGPXFromString('this is not a route', 'x.gpx');
+    window.cwLoadGPXFromString(text, 'ok.gpx');
+  }, routeAt('Buena', 41.48));
+  // Imports run in arrival order, so once this one is stored the two before it are decided.
+  expect((await importRecent(page, routeAt('Otra', 40.42), 'after.gpx')).ok).toBe(true);
+  expect(await storedNames(page)).toEqual(['after.gpx', 'ok.gpx']);
+});
+
+test('an import comes out newest even when the stored routes carry times later than the clock', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const ahead = Date.now() + 365 * 86400000;
+  for (const i of [1, 2, 3]) {
+    const result = await page.evaluate(([text, name, at]) => window.cw.importRoute({ text, name, arrivedAt: at }),
+      [routeAt(`Ruta ${i}`, 41 + i / 10), `r${i}.gpx`, ahead + i]);
+    expect(result.ok).toBe(true);
+  }
+  // A later session, whose clock is behind what the store holds (the phone's clock was changed).
+  await page.reload();
+  await mapReady(page);
+  expect(await importRecent(page, routeAt('Ruta 4', 41.45), 'r4.gpx')).toEqual({ ok: true, name: 'r4.gpx' });
+  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx']);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name)))
+    .toEqual(['r4.gpx', 'r3.gpx', 'r2.gpx']);
+});
+
+// Loading the list at start-up is a job in the import queue: an import that finished while
+// it was still reading used to be overwritten by the older list it read.
+test('an import made while recent routes are still loading at start-up is in the list afterwards', async ({ page }) => {
+  await goOffline(page);
+  await page.addInitScript(() => {
+    let open;
+    window.__recentsLoad = new Promise((r) => { open = r; });
+    window.__openRecentsLoad = open;
+    window.__recentsLoading = false;
+    // The first read of the list sees the store as it is, but hears the answer only when
+    // the test says so.
+    const real = IDBIndex.prototype.openCursor;
+    IDBIndex.prototype.openCursor = function (...args) {
+      const req = real.apply(this, args);
+      if (this.objectStore.name !== 'routes') return req;
+      IDBIndex.prototype.openCursor = real;
+      window.__recentsLoading = true;
+      let handler = null;
+      Object.defineProperty(req, 'onsuccess', { configurable: true, get: () => handler, set: (fn) => { handler = fn; } });
+      req.addEventListener('success', (ev) => { window.__recentsLoad.then(() => handler && handler.call(req, ev)); });
+      return req;
+    };
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.__recentsLoading)).toBe(true);
+
+  await page.evaluate((text) => { window.__imported = window.cw.importRoute({ text, name: 'r1.gpx' }); }, routeAt('Uno', 41.48));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__openRecentsLoad());
+  expect((await page.evaluate(() => window.__imported)).ok).toBe(true);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.getRecentRoutes().map((r) => r.name))).toEqual(['r1.gpx']);
+});
+
 test('moving an opened recent route to the top never writes back a route an import trimmed', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
@@ -1384,6 +1475,80 @@ test('moving an opened recent route to the top never writes back a route an impo
   expect(imported.ok).toBe(true);
   expect(moved).toBe(false);
   expect(await storedNames(page)).toEqual(['r1.gpx', 'r4.gpx', 'r5.gpx']);
+});
+
+test('an opened recent route moves up the list only once it moved in the store', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  for (const i of [1, 2, 3]) {
+    expect((await importRecent(page, routeAt(`Ruta ${i}`, 41 + i / 10), `r${i}.gpx`)).ok).toBe(true);
+  }
+  const listed = () => page.evaluate(() => window.getRecentRoutes().map((r) => r.name));
+  await expect.poll(listed).toEqual(['r3.gpx', 'r2.gpx', 'r1.gpx']);
+
+  // A move that does not happen leaves the list as the store has it.
+  const status = await page.evaluate(async () => {
+    const real = window.cwIdbTouchRoute;
+    window.cwIdbTouchRoute = async () => false;
+    const s = await window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === 'r1.gpx'));
+    window.cwIdbTouchRoute = real;
+    return s;
+  });
+  expect(status).toBe('committed');
+  expect(await listed()).toEqual(['r3.gpx', 'r2.gpx', 'r1.gpx']);
+
+  // One that happens puts it first, with the time the store gave it.
+  await page.evaluate(() => window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === 'r1.gpx')));
+  expect(await listed()).toEqual(['r1.gpx', 'r3.gpx', 'r2.gpx']);
+  const [first] = await page.evaluate(() => window.getRecentRoutes());
+  const stored = await page.evaluate((id) => new Promise((resolve) => {
+    const open = indexedDB.open('meteoride_recent_routes_db');
+    open.onsuccess = () => {
+      const get = open.result.transaction('routes').objectStore('routes').get(id);
+      get.onsuccess = () => resolve(get.result.timestamp);
+    };
+  }), first.id);
+  expect(first.timestamp).toBe(stored);
+});
+
+test('a route requested while a tapped recent route is still being read wins, and the menu closes at once', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect((await importRecent(page, routeAt('Reciente', 41.48), 'reciente.gpx')).ok).toBe(true);
+  await expect(page.locator('.recent-routes-menu-item')).toHaveCount(0);
+  await page.locator('#recentRoutesButton').click();
+  await expect(page.locator('.recent-routes-menu-item')).toHaveCount(1);
+
+  // Every IndexedDB open from here on is answered only when the test says so.
+  await page.evaluate(() => {
+    let open;
+    window.__idbHeld = new Promise((r) => { open = r; });
+    window.__releaseIdb = open;
+    window.__idbOpens = 0;
+    const real = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (...args) {
+      window.__idbOpens++;
+      const req = real.apply(this, args);
+      let handler = null;
+      Object.defineProperty(req, 'onsuccess', { configurable: true, get: () => handler, set: (fn) => { handler = fn; } });
+      req.addEventListener('success', (ev) => { window.__idbHeld.then(() => handler && handler.call(req, ev)); });
+      return req;
+    };
+  });
+  await page.locator('.recent-routes-menu-item').first().click();
+  await expect.poll(() => page.evaluate(() => window.__idbOpens), 'the tapped route is being read').toBeGreaterThan(0);
+  const menuOpenWhileRead = await page.locator('#recentRoutesMenu').isVisible();
+
+  await requestHeld(page, 'B');
+  await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await page.evaluate(() => window.__releaseIdb());
+  await page.waitForTimeout(800);
+  await expect(routeName(page)).toHaveText('Ruta B');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('b.gpx');
+  expect(menuOpenWhileRead, 'the menu stayed open while the route was read').toBe(false);
 });
 
 /* ---------- settings that only change how it looks ---------- */
@@ -1479,22 +1644,27 @@ test('a route shared while the last recent route is still being read at start-up
     let open;
     window.__recentRead = new Promise((r) => { open = r; });
     window.__openRecentRead = open;
+    window.__recentReads = 0;
     let real;
     Object.defineProperty(window, 'cwReadRecentRoute', {
       configurable: true,
       set(v) { real = v; },
-      get() { return async (route) => { await window.__recentRead; return real(route); }; },
+      get() { return async (route) => { window.__recentReads++; await window.__recentRead; return real(route); }; },
     });
   });
   await page.reload();
   await mapReady(page);
+  // The restore is already reading the recent route, or this would prove nothing.
+  await expect.poll(() => page.evaluate(() => window.__recentReads)).toBe(1);
 
-  await page.evaluate((text) => window.cwLoadGPXFromString(text, 'shared.gpx'), routeAt('Compartida', 40.42));
+  const shared = page.evaluate((text) => window.cwLoadGPXFromString(text, 'shared.gpx'), routeAt('Compartida', 40.42));
   await expect(routeName(page)).toHaveText('Compartida');
+  expect(await shared).toBe('committed');
   await page.evaluate(() => window.__openRecentRead());
   await page.waitForTimeout(800);
   await expect(routeName(page)).toHaveText('Compartida');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+  expect(await page.evaluate(() => window.__recentReads)).toBe(1);
 });
 
 // The restore used to ask for its route only once the recent routes had loaded, so a route
@@ -1523,6 +1693,33 @@ test('a route still arriving when the recent routes turn up is not replaced by t
   await page.waitForTimeout(500);
   await expect(routeName(page)).toHaveText('Compartida');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+});
+
+// Nothing is on screen until a request confirms, so the restore asks the coordinator whether
+// anyone has asked for a route yet, rather than looking at lastGPXFile.
+test('a file picked and still being read when the app restores the last route is not replaced', async ({ page }) => {
+  await seedRecentRoute(page);
+  // The drain at boot takes a second, and the restore runs straight after it.
+  await installNativeBridge(page, { delayMs: 1000 });
+  await page.addInitScript(() => {
+    window.__drained = false;
+    const share = window.Capacitor.Plugins.MeteoRideShare;
+    const consume = share.consumePending;
+    share.consumePending = async () => { const r = await consume(); window.__drained = true; return r; };
+  });
+  await page.reload();
+  await mapReady(page);
+
+  expect(await page.evaluate(() => window.__drained), 'picked before the restore').toBe(false);
+  await requestHeld(page, 'pick');
+  await expect.poll(() => page.evaluate(() => window.__drained)).toBe(true);
+  // Time for a restore to find the recent route and read it.
+  await page.waitForTimeout(800);
+  await openRead(page, 'pick', routeAt('Elegida', 40.42), 'picked.gpx');
+  await expect.poll(() => requestStatus(page, 'pick')).toBe('committed');
+  await page.waitForTimeout(300);
+  await expect(routeName(page)).toHaveText('Elegida');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('picked.gpx');
 });
 
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any

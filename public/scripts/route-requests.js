@@ -88,14 +88,14 @@ var cwCreateRouteCoordinator = function (deps) {
     });
   }
 
+  // 'committed', 'superseded', 'failed' (nothing to open), or a failure the request ending
+  // says: 'unreadable' or 'unusable'.
   async function acquireParseCommit(id, source, read) {
     let got;
     try {
       got = await withDeadline(id, read);
     } catch (_) {
-      if (id !== lastRequestId) return 'superseded';
-      guard('notice', () => deps.notifyReadFailed());
-      return 'failed';
+      return id !== lastRequestId ? 'superseded' : 'unreadable';
     }
     if (id !== lastRequestId) return 'superseded';
     if (got == null) return 'failed';   // nothing to open, e.g. a first run with no recents
@@ -105,10 +105,7 @@ var cwCreateRouteCoordinator = function (deps) {
       parsed = await deps.parse({ text: got.text, name: got.name, source, requestId: id });
     } catch (_) { parsed = null; }
     if (id !== lastRequestId) return 'superseded';
-    if (!parsed) {
-      guard('notice', () => deps.notifyFailed());
-      return 'failed';
-    }
+    if (!parsed) return 'unusable';
 
     // No wait between confirming and launching its computation. A commit that throws may
     // have left the route half on screen, so it still counts as confirmed and computed.
@@ -124,7 +121,7 @@ var cwCreateRouteCoordinator = function (deps) {
     claimLoading(owner);
     releaseLoadingPrefix('request:', owner);
     // Every dependency acquireParseCommit calls is guarded, so this never throws.
-    const status = await acquireParseCommit(id, source, read);
+    const outcome = await acquireParseCommit(id, source, read);
     releaseLoading(owner);
     if (id === lastRequestId) {
       lastFinished = true;
@@ -132,14 +129,21 @@ var cwCreateRouteCoordinator = function (deps) {
         // A confirmation has just launched; reconciling it again could only relaunch a
         // computation that stopped on the spot. Only settings changed since, even from
         // inside that launch, need another one.
-        const again = status === 'committed'
+        const again = outcome === 'committed'
           ? pendingSettings
           : deps.hasConfirmedRoute() && (pendingSettings || !deps.hasCurrentForecast());
         if (again) startForecast();
       });
+      // Said after reconciling: a computation relaunched there may show a notice of its own
+      // (a start date out of range), and the failure is what the user has just done.
+      if (outcome === 'unreadable') guard('notice', () => deps.notifyReadFailed());
+      if (outcome === 'unusable') guard('notice', () => deps.notifyFailed());
     }
-    return status;
+    return outcome === 'unreadable' || outcome === 'unusable' ? 'failed' : outcome;
   }
+
+  // Whether any route has been asked for, even one still being read.
+  const hasRouteRequests = () => lastRequestId > 0;
 
   /* ---------- importing into recent routes ---------- */
 
@@ -173,6 +177,12 @@ var cwCreateRouteCoordinator = function (deps) {
     });
   }
 
+  // Any other job on recent routes (loading the list at start-up) waits its turn the same
+  // way. Resolves with what the job returns, or undefined if it throws.
+  function enqueueRecents(job) {
+    return enqueue(async () => { try { return await job(); } catch (_) { return undefined; } });
+  }
+
   function importRoute({ text, name, arrivedAt }) {
     const at = arrival(arrivedAt);
     return enqueue(async () => {
@@ -189,7 +199,7 @@ var cwCreateRouteCoordinator = function (deps) {
   }
 
   return {
-    requestRoute, settingsChanged, startForecast, importRoute, touchRecent,
+    requestRoute, hasRouteRequests, settingsChanged, startForecast, importRoute, touchRecent, enqueueRecents,
     claimLoading, releaseLoading, releaseLoadingPrefix: (prefix) => releaseLoadingPrefix(prefix),
   };
 };
@@ -206,8 +216,8 @@ var cwCreateRouteCoordinator = function (deps) {
     hasConfirmedRoute: () => !!(window.cwHasConfirmedRoute && window.cwHasConfirmedRoute()),
     hasCurrentForecast: () => !!(window.cwHasCurrentForecast && window.cwHasCurrentForecast()),
     paintLoading: (visible) => { if (window.cw.ui && window.cw.ui.paintLoading) window.cw.ui.paintLoading(visible); },
-    notifyFailed: () => { if (window.setNotice) window.setNotice(t('route_load_failed'), 'error'); },
-    notifyReadFailed: () => { if (window.setNotice) window.setNotice(t('route_read_failed'), 'error'); },
+    notifyFailed: () => window.cwNotifyRouteFailure(t('route_load_failed')),
+    notifyReadFailed: () => window.cwNotifyRouteFailure(t('route_read_failed')),
     writeRecent: (input) => window.cwIdbImportRoute(input),
     touchRecent: (id, at) => window.cwIdbTouchRoute(id, at),
     notifyNotSaved: () => { if (window.setNotice) window.setNotice(t('route_not_saved'), 'warn'); },
@@ -215,6 +225,8 @@ var cwCreateRouteCoordinator = function (deps) {
   window.cw = window.cw || {};
   Object.assign(window.cw, {
     requestRoute: coordinator.requestRoute,
+    hasRouteRequests: coordinator.hasRouteRequests,
+    enqueueRecents: coordinator.enqueueRecents,
     settingsChanged: coordinator.settingsChanged,
     startForecast: coordinator.startForecast,
     claimLoading: coordinator.claimLoading,

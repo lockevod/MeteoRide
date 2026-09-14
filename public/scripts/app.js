@@ -528,6 +528,14 @@ let confirmedRoute = null;        // { requestId, name, fingerprint, geojson, te
 let lastComputationId = 0;
 let runningComputationId = null;
 let publishedSnapshot = null;
+// The latest computation when a route last failed to open and said so. That computation
+// publishing with nothing to say leaves the failure up instead of clearing it.
+let routeFailureComputationId = null;
+
+window.cwNotifyRouteFailure = function (message) {
+  routeFailureComputationId = lastComputationId;
+  setNotice(message, "error");
+};
 
 function publishState() {
   return { confirmedRequestId: confirmedRoute ? confirmedRoute.requestId : null, lastComputationId };
@@ -1143,7 +1151,7 @@ function publish(snapshot) {
   weatherData = mirrorSteps(snapshot);
   processWeatherData();
   showOfficialAlerts(snapshot);
-  showNotice(snapshot.outcome, snapshot.settings.noticeAll);
+  showNotice(snapshot.outcome, snapshot.settings.noticeAll, routeFailureComputationId === snapshot.computationId);
   try {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
@@ -1159,10 +1167,12 @@ function mirrorSteps(snapshot) {
   }));
 }
 
-function showNotice(outcome, noticeAll) {
+// keepFailure: a route failed to open while this computation ran and said so. With nothing
+// of its own to say, the computation leaves that notice up; a notice of its own replaces it.
+function showNotice(outcome, noticeAll, keepFailure = false) {
   const notice = cwForecastRules.decideNotice(outcome, { noticeAll });
   if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
-  else clearNotice();
+  else if (!keepFailure) clearNotice();
 }
 
 // Paints the published snapshot again for a setting that only changes how it looks
@@ -3202,7 +3212,12 @@ window.cwLoadGPXFromString = function loadGPXFromString(gpxText, nameHint = "rou
     return Promise.resolve("failed");
   }
   logDebug(`cwLoadGPXFromString: len=${gpxText.length}, name=${nameHint}`);
-  window.cw.importRoute({ text: gpxText, name: nameHint });
+  // Text with no sign of a track, a route, waypoints or a KML (converted when parsed) is not
+  // kept: a truncated share or a web page would become the newest recent route, and the one
+  // the next start-up tries, and fails, to restore.
+  if (/<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b|<kml[\s>]/i.test(gpxText)) {
+    window.cw.importRoute({ text: gpxText, name: nameHint });
+  }
   return window.cw.requestRoute({ source, read: async () => ({ text: gpxText, name: nameHint }) });
 };
 // --- end routes ---

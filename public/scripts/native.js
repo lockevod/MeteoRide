@@ -283,7 +283,9 @@
   // was not put on screen. Restoring the last route makes the cached forecast appear
   // with it, and it is the better behaviour with coverage too.
   async function restoreLastRoute() {
-    if (window.lastGPXFile) return;   // a route is already loaded
+    // A route is on screen, or one was asked for and is still being read or parsed: the
+    // restore would be a later request and replace it. lastGPXFile is set only on confirming.
+    if (window.lastGPXFile || window.cw.hasRouteRequests()) return;
 
     // A route arriving by URL or by share wins; do not fight it.
     const params = new URLSearchParams(window.location.search || '');
