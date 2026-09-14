@@ -214,6 +214,13 @@ What is still open, and why it was left:
   which is the background blue at about 45% over black. `install-icons.mjs` follows
   the same recipe but composites before averaging, so it reproduces the framing
   without the fringe.
+- **Android gets that icon three ways, and `npm run icons` writes all of them.** A
+  square and a round PNG for launchers before Android 8, and an adaptive icon for the
+  rest: `#1E5F8F` behind a transparent 108dp foreground with the whole drawing in its
+  middle 72dp. That is the part every launcher mask shows; spreading the drawing over
+  the full canvas lets a circular mask cut the wheel off. `android/` is in git, so the
+  generated PNGs are committed. The template's vector drawables are gone: nothing
+  referenced them once the adaptive icon pointed at the mipmap and the colour.
 - **`accept=".gpx"` greys out every file in the iOS picker.** iOS turns `accept`
   into a list of UTIs, and GPX has no system UTI, so the one file type the app
   exists to read becomes unselectable. `relaxFilePicker` in `native.js` widens the
@@ -699,10 +706,6 @@ code does and what makes the race reproducible.
 ## Open work
 
 - Android release signing config is not set up; `assembleRelease` will not sign.
-- The Android launcher icons are still the Capacitor template. `npm run icons` only
-  writes the iOS asset catalogue; Android needs the mipmap set (and an adaptive icon,
-  which is a foreground/background pair rather than one square), so the installer has
-  to grow a second output before `android/` looks like the app.
 - The remote branch `claude/cool-allen-w8evld` is stale — it predates this work and
   nothing on it is wanted. It has to be deleted from the GitHub side by the author;
   an agent session here gets a 403 trying.

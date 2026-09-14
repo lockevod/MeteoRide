@@ -104,8 +104,7 @@ Los pasos 1–9 de `docs/IOS.md` ya están hechos en el Mac del autor y el proye
   no copiado, para que editar el fichero del repo actualice el target.
 
 Queda del lado del autor: probar en iPhone real (las tareas en segundo plano **nunca**
-se ejecutan en el simulador), iconos de Android (siguen siendo la plantilla de
-Capacitor) y firma de release de Android.
+se ejecutan en el simulador) y firma de release de Android.
 
 ## 6. Verificado / no verificado
 
@@ -139,9 +138,6 @@ presente para la app nativa:
 
 - Probar en iPhone y Android **físicos**: las tareas en segundo plano no se ejecutan
   en el simulador, así que ninguna alerta ha llegado aún por la vía real.
-- Iconos de Android: siguen siendo la plantilla de Capacitor. `npm run icons` solo
-  escribe el catálogo de iOS; Android necesita los mipmaps y un icono adaptativo
-  (primer plano y fondo separados), así que el instalador tiene que crecer.
 - Firma de release de Android sin configurar: `assembleRelease` no firma.
 - Borrar la rama remota obsoleta `claude/cool-allen-w8evld` (desde GitHub, por el
   autor: una sesión de agente recibe 403).

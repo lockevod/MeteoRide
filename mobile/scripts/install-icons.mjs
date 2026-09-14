@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Puts the MeteoRide icon into the generated iOS project.
+ * Puts the MeteoRide icon into the iOS and Android projects.
  *
  * `ios/` is not in git, so dropping the icon in by hand would be lost the next time
  * the project is regenerated. This reads whatever `AppIcon.appiconset/Contents.json`
@@ -17,10 +17,15 @@
  *    and needs no dependencies — the point being that this runs with plain Node on
  *    any machine, including one with no ImageMagick.
  *
+ * Android gets the same drawing three ways: a square and a round icon for launchers
+ * older than Android 8, and an adaptive icon (a transparent foreground over a colour)
+ * for everything newer. `android/` is in git, so what this writes there is committed.
+ *
  * Usage: `npm run icons` (after `npm run add:ios`, or any time the source changes).
+ * It installs into whichever of the two projects exists.
  */
 import { existsSync } from 'node:fs';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { deflateSync, inflateSync } from 'node:zlib';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 const MOBILE = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = join(MOBILE, '../public/icons/icon-1024.png');
 const APPICON = join(MOBILE, 'ios/App/App/Assets.xcassets/AppIcon.appiconset');
+const ANDROID_RES = join(MOBILE, 'android/app/src/main/res');
 
 /**
  * The blue behind the icon. This is the one `tools/scripts/fix_icon_ios.py` used to
@@ -124,8 +130,8 @@ export function decodePng(buf) {
   return { width, height, rgba };
 }
 
-/** Encodes RGB (no alpha, as iOS requires) at the given size. */
-export function encodePng(width, height, rgb) {
+/** Encodes RGB (no alpha, as iOS requires) or, with `channels` 4, RGBA. */
+export function encodePng(width, height, rgb, channels = 3) {
   const chunk = (type, data) => {
     const out = Buffer.alloc(12 + data.length);
     out.writeUInt32BE(data.length, 0);
@@ -138,8 +144,8 @@ export function encodePng(width, height, rgb) {
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8;      // bit depth
-  ihdr[9] = 2;      // colour type: RGB, no alpha
-  const stride = width * 3;
+  ihdr[9] = channels === 4 ? 6 : 2;   // colour type: RGBA, or RGB with no alpha
+  const stride = width * channels;
   const raw = Buffer.alloc((stride + 1) * height);
   for (let y = 0; y < height; y++) {
     raw[y * (stride + 1)] = 0;   // filter: none. Icons compress well enough.
@@ -224,15 +230,87 @@ export function render(source, size) {
   return out;
 }
 
+/**
+ * The foreground layer of an Android adaptive icon, RGBA. The canvas is 108dp and
+ * launchers mask it to a circle, squircle or square that always shows the middle
+ * 72dp, so the whole drawing goes there and the rest stays transparent over the
+ * background colour. Filling the full 108dp would let a circular mask cut the wheel.
+ */
+export function adaptiveForeground(source, size) {
+  const inner = Math.round((size * 72) / 108);
+  const offset = Math.round((size - inner) / 2);
+  const art = render(source, inner);
+  const out = Buffer.alloc(size * size * 4);   // all transparent
+  for (let y = 0; y < inner; y++) {
+    for (let x = 0; x < inner; x++) {
+      const from = (y * inner + x) * 3;
+      const to = ((y + offset) * size + (x + offset)) * 4;
+      out[to] = art[from];
+      out[to + 1] = art[from + 1];
+      out[to + 2] = art[from + 2];
+      out[to + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/** The round legacy icon, RGBA: the square icon cut to a disc with a one-pixel soft edge. */
+export function roundIcon(source, size) {
+  const art = render(source, size);
+  const out = Buffer.alloc(size * size * 4);
+  const r = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const coverage = Math.min(1, Math.max(0, r - Math.hypot(x + 0.5 - r, y + 0.5 - r) + 0.5));
+      const from = (y * size + x) * 3;
+      const to = (y * size + x) * 4;
+      out[to] = art[from];
+      out[to + 1] = art[from + 1];
+      out[to + 2] = art[from + 2];
+      out[to + 3] = Math.round(coverage * 255);
+    }
+  }
+  return out;
+}
+
 /* ---------- installing ---------- */
 
+const ANDROID_DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+
+/** Writes the launcher icons into an Android `res` directory. */
+export async function installAndroid(source, res) {
+  for (const [density, scale] of Object.entries(ANDROID_DENSITIES)) {
+    const dir = join(res, `mipmap-${density}`);
+    await mkdir(dir, { recursive: true });
+    const legacy = Math.round(48 * scale);
+    const canvas = Math.round(108 * scale);
+    await writeFile(join(dir, 'ic_launcher.png'), encodePng(legacy, legacy, render(source, legacy)));
+    await writeFile(join(dir, 'ic_launcher_round.png'), encodePng(legacy, legacy, roundIcon(source, legacy), 4));
+    await writeFile(join(dir, 'ic_launcher_foreground.png'), encodePng(canvas, canvas, adaptiveForeground(source, canvas), 4));
+    log(`wrote mipmap-${density} (${legacy}px, foreground ${canvas}px)`);
+  }
+  const hex = '#' + BACKGROUND.map((c) => c.toString(16).padStart(2, '0')).join('').toUpperCase();
+  await mkdir(join(res, 'values'), { recursive: true });
+  await writeFile(
+    join(res, 'values/ic_launcher_background.xml'),
+    `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${hex}</color>\n</resources>\n`,
+  );
+}
+
 async function main() {
-  if (!existsSync(APPICON)) {
-    throw new Error(`${APPICON.replace(MOBILE + '/', '')} is missing — run \`npm run add:ios\` first`);
+  const hasIos = existsSync(APPICON);
+  const hasAndroid = existsSync(ANDROID_RES);
+  if (!hasIos && !hasAndroid) {
+    throw new Error('neither project is there — run `npm run add:ios` or `npx cap add android` first');
   }
   const source = decodePng(await readFile(SOURCE));
   log(`source ${source.width}x${source.height}`);
+  if (hasIos) await installIos(source);
+  else log('no iOS project, skipping it');
+  if (hasAndroid) await installAndroid(source, ANDROID_RES);
+}
 
+async function installIos(source) {
   const contents = JSON.parse(await readFile(join(APPICON, 'Contents.json'), 'utf8'));
   const wanted = new Map();   // filename -> pixel size
   for (const image of contents.images || []) {
@@ -252,7 +330,7 @@ async function main() {
   const stale = (await readdir(APPICON)).filter((f) => f.endsWith('.png') && !wanted.has(f));
   if (stale.length) log(`note: ${stale.join(', ')} ${stale.length === 1 ? 'is' : 'are'} not referenced by Contents.json and was left alone`);
 
-  log('done — clean the build folder in Xcode (⇧⌘K) if the old icon lingers');
+  log('iOS done — clean the build folder in Xcode (⇧⌘K) if the old icon lingers');
 }
 
 // Only install when run as a script; the tests import the pure functions above.

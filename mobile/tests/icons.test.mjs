@@ -4,10 +4,14 @@
 // than onto black.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decodePng, encodePng, render, contentBox, BACKGROUND } from '../scripts/install-icons.mjs';
+import {
+  decodePng, encodePng, render, contentBox, BACKGROUND,
+  adaptiveForeground, roundIcon, installAndroid,
+} from '../scripts/install-icons.mjs';
 
 const SOURCE = join(dirname(fileURLToPath(import.meta.url)), '../../public/icons/icon-1024.png');
 const source = decodePng(await readFile(SOURCE));
@@ -77,4 +81,45 @@ test('the scaled icon is not blank: it still carries the source colours', () => 
   const distinct = new Set();
   for (let i = 0; i < rgb.length; i += 3) distinct.add(`${rgb[i]},${rgb[i + 1]},${rgb[i + 2]}`);
   assert.ok(distinct.size > 50, `only ${distinct.size} distinct colours; the resize probably collapsed`);
+});
+
+// Android launchers mask the adaptive foreground to a circle, a squircle or a square,
+// and every one of them shows at least the middle 72dp of the 108dp canvas.
+test('the Android adaptive foreground keeps the artwork inside the part every mask shows', () => {
+  const size = 108;
+  const rgba = adaptiveForeground(source, size);
+  assert.equal(rgba.length, size * size * 4);
+  const alpha = (x, y) => rgba[(y * size + x) * 4 + 3];
+  assert.equal(alpha(0, 0), 0);
+  assert.equal(alpha(17, 54), 0, 'left of the visible 72px must be see-through');
+  assert.equal(alpha(90, 54), 0, 'right of the visible 72px must be see-through');
+  assert.equal(alpha(18, 54), 255);
+  assert.equal(alpha(89, 54), 255);
+  assert.equal(alpha(54, 54), 255);
+});
+
+test('the round legacy icon is a disc: clear corners, solid middle', () => {
+  const size = 96;
+  const rgba = roundIcon(source, size);
+  const alpha = (x, y) => rgba[(y * size + x) * 4 + 3];
+  assert.equal(alpha(0, 0), 0);
+  assert.equal(alpha(size - 1, size - 1), 0);
+  assert.equal(alpha(48, 48), 255);
+  assert.equal(alpha(48, 1), 255, 'the disc reaches the edge');
+});
+
+test('installing for Android writes every density, both shapes, and the background colour', async () => {
+  const res = await mkdtemp(join(tmpdir(), 'meteoride-icons-'));
+  await installAndroid(source, res);
+  const densities = [['mdpi', 1], ['hdpi', 1.5], ['xhdpi', 2], ['xxhdpi', 3], ['xxxhdpi', 4]];
+  const icons = [['ic_launcher', 48, 2], ['ic_launcher_round', 48, 6], ['ic_launcher_foreground', 108, 6]];
+  for (const [density, scale] of densities) {
+    for (const [name, dp, colour] of icons) {
+      const png = await readFile(join(res, `mipmap-${density}`, `${name}.png`));
+      const px = Math.round(dp * scale);
+      assert.deepEqual(header(png), { width: px, height: px, depth: 8, colour }, `${density}/${name}`);
+    }
+  }
+  const xml = await readFile(join(res, 'values/ic_launcher_background.xml'), 'utf8');
+  assert.match(xml, /<color name="ic_launcher_background">#1E5F8F<\/color>/);
 });
