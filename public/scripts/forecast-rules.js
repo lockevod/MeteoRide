@@ -9,17 +9,31 @@
 var cwForecastRules = (function () {
   'use strict';
 
-  /** A provider time as epoch ms. */
-  function parseProviderTime(value) {
+  // "2026-09-20T08:00" or "2026-09-20T08:00:30": a wall-clock time with no zone.
+  const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
+
+  /**
+   * A provider time as epoch ms. Open-Meteo (timezone=auto) sends wall-clock times with
+   * no zone and says which offset they are in; with that offset the device's zone plays
+   * no part. Anything else, or no offset, is parsed as before.
+   */
+  function parseProviderTime(value, offsetSeconds) {
+    if (typeof value === 'string' && Number.isFinite(offsetSeconds)) {
+      const m = LOCAL_TIME.exec(value);
+      if (m) {
+        return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) - offsetSeconds * 1000;
+      }
+    }
     return (value instanceof Date ? value : new Date(value)).getTime();
   }
 
-  /** Index of the entry closest to `targetMs`; ties keep the earlier one; -1 if none. */
-  function nearestIndex(times, targetMs) {
+  /** Index of the entry closest to `targetMs`; ties keep the earlier one; -1 if none.
+   *  `offsetSeconds` is passed on to parseProviderTime. */
+  function nearestIndex(times, targetMs, offsetSeconds) {
     let best = -1;
     let bestDiff = Infinity;
     for (let i = 0; i < times.length; i++) {
-      const diff = Math.abs(parseProviderTime(times[i]) - targetMs);
+      const diff = Math.abs(parseProviderTime(times[i], offsetSeconds) - targetMs);
       if (diff < bestDiff) { bestDiff = diff; best = i; }
     }
     return best;
@@ -31,15 +45,16 @@ var cwForecastRules = (function () {
 
   function extractOpenMeteo(w, timeMs) {
     const hourly = w.hourly;
-    const idx = nearestIndex(hourly.time, timeMs);
+    const offset = w.utc_offset_seconds;
+    const idx = nearestIndex(hourly.time, timeMs, offset);
 
     let useMinutely = false;
     let minutelyIndex;
     const m = w.minutely_15;
     if (m && Array.isArray(m.time)) {
-      const mi = nearestIndex(m.time, timeMs);
-      const first = parseProviderTime(m.time[0]);
-      const last = parseProviderTime(m.time[m.time.length - 1]);
+      const mi = nearestIndex(m.time, timeMs, offset);
+      const first = parseProviderTime(m.time[0], offset);
+      const last = parseProviderTime(m.time[m.time.length - 1], offset);
       if (timeMs >= first && timeMs <= last && mi !== -1) {
         useMinutely = true;
         minutelyIndex = mi;
