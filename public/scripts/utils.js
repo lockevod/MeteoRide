@@ -130,6 +130,8 @@
       prepare_offline: "Preparar ruta para ir sin cobertura",
       prepare_offline_done: "Ruta preparada. Previsión guardada ({n} puntos).",
       prepare_offline_empty: "Carga una ruta y espera a que salga la previsión antes de prepararla.",
+      prepare_offline_partial: "Ruta preparada solo en parte: hay previsión guardada para {n} de {total} puntos. Vuelve a calcularla con cobertura.",
+      prepare_offline_failed: "No se ha podido proteger la previsión: el almacenamiento está lleno.",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
@@ -243,6 +245,8 @@
       prepare_offline: "Save this route for riding without coverage",
       prepare_offline_done: "Route saved. Forecast stored ({n} points).",
       prepare_offline_empty: "Load a route and let the forecast appear before saving it.",
+      prepare_offline_partial: "Route only partly saved: forecast stored for {n} of {total} points. Run it again while you have coverage.",
+      prepare_offline_failed: "Could not protect the stored forecast: storage is full.",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
   title: "MeteoRide — Forecast for your ride",

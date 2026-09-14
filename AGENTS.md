@@ -458,7 +458,15 @@ recovered run, have tests that fail without them.
 The header's 📴 button pins the cache entries a prepared route depends on, so the
 clear-out that runs when localStorage fills up skips them, and tells the user how many
 points were stored. Running the forecast already fills the cache; what the button adds
-is the guarantee and the feedback.
+is the guarantee and the feedback — so the feedback has to be true. It used to pin every
+fresh entry in the cache, whichever route it came from, count entries as points and say
+"saved" even when the pin was never written. `prepareForOffline` now rebuilds the keys
+from the rendered steps with `makeCacheKey`, the same call `app.js` looks them up with,
+and says one of four things: nothing to save, saved, saved in part ("n of total"), or
+could not protect it. A point is a distinct key, not a step: steps at the same place in
+the same quarter hour share an entry. The tests count cache keys rather than
+`weatherData.length`, because a single route load currently leaves each step in that
+array three times over (H1 in the review).
 
 ## Ride alerts
 
@@ -640,10 +648,12 @@ code does and what makes the race reproducible.
 - **Nothing has run on a physical device.** iOS background tasks never execute in the
   simulator, so no ride alert has ever fired through the real path: the rules and the
   runner are covered by tests, the delivery is not.
-- Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit) is
-  fixed; the other five are open and reproduce against this branch. H2, offline
-  preparation reporting success for the wrong cache keys, is in code added for the
-  native app. `docs/HANDOFF.md` §9 has the table and the order being followed.
+- Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit) and
+  H2 (offline preparation) are fixed; H1, H3, H4 and H5 are open and reproduce against
+  this branch. H1 is not only a fast-clicking race: in the smoke suite one ordinary
+  route load leaves every step in `weatherData` three times, interleaved, so three runs
+  are overlapping on the global. Cause not yet traced. `docs/HANDOFF.md` §9 has the
+  table and the order being followed.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`

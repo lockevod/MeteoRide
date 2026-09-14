@@ -655,6 +655,89 @@ test('preparing a route protects its forecast from being cleared', async ({ page
   expect(pinned.every((k) => k.startsWith('cw_weather_'))).toBe(true);
 });
 
+// Preparing used to pin every fresh forecast in the cache, whichever route it came from,
+// count cache entries as points, and report success even when the pin was not written.
+// It has to speak for the route on screen, and only for what it actually secured.
+const FOREIGN_KEY = 'cw_weather_openmeteo_2026-01-01_celsius_kmh_10.000_10.000_2026-01-01T10:00:00.000Z';
+const plantForeignForecast = (page) =>
+  page.evaluate((key) => {
+    localStorage.setItem(key, JSON.stringify({ data: { hourly: {} }, timestamp: Date.now() }));
+  }, FOREIGN_KEY);
+const cachedKeys = (page) =>
+  page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('cw_weather_')));
+
+test('preparing with no route on screen ignores a forecast left from another route', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await plantForeignForecast(page);
+
+  await page.locator('#cwPrepareOffline').click();
+  await expect(page.locator('.notice')).toContainText(/Load a route|Carga una ruta/);
+  expect(await page.evaluate(() => localStorage.getItem('cw_offline_pinned'))).toBeNull();
+});
+
+test('preparing pins the route on screen, and counts its points', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  // Only this route has run, so every entry held now is one of its points. Steps that
+  // fall in the same quarter hour at the same place share an entry and count once.
+  const routeKeys = await cachedKeys(page);
+  await plantForeignForecast(page);
+
+  await page.locator('#cwPrepareOffline').click();
+  await expect(page.locator('.notice')).toContainText(new RegExp(`\\(${routeKeys.length} (points|puntos)\\)`));
+  const pinned = await page.evaluate(() => JSON.parse(localStorage.getItem('cw_offline_pinned') || '[]'));
+  expect(pinned.sort()).toEqual(routeKeys.sort());
+});
+
+test('preparing says so when only part of the route has a forecast stored', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  // One point's entry is gone, as a quota clear-out would leave it.
+  const keys = await cachedKeys(page);
+  expect(keys.length).toBeGreaterThan(1);
+  await page.evaluate((key) => localStorage.removeItem(key), keys[0]);
+
+  await page.locator('#cwPrepareOffline').click();
+  await expect(page.locator('.notice')).toContainText(new RegExp(`${keys.length - 1} (of|de) ${keys.length}`));
+  await expect(page.locator('.notice')).not.toContainText(/Route saved|Ruta preparada\./);
+});
+
+test('preparing says so when the protection could not be written', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'cw_offline_pinned') throw new DOMException('full', 'QuotaExceededError');
+      return setItem.call(this, key, value);
+    };
+  });
+
+  await page.locator('#cwPrepareOffline').click();
+  await expect(page.locator('.notice')).toContainText(/Could not|No se ha podido/);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {

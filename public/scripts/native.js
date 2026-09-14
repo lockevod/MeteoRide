@@ -337,24 +337,44 @@
 
   /* ---------- preparing for no coverage ---------- */
 
-  // Running the forecast already fills the cache, and the cache now keeps serving it
-  // when the device is offline. What this adds is certainty: it tells you the data is
-  // there, how much of it, and protects those entries from being cleared when
-  // localStorage runs short.
+  // Running the forecast already fills the cache, and the cache keeps serving it when
+  // the device is offline. What this adds is certainty about the route on screen: how
+  // many of its points have a forecast stored, and protection for exactly those
+  // entries when localStorage runs short. It used to pin every fresh entry, whichever
+  // route it came from, and report success whether or not the pin was written.
   function prepareForOffline() {
     const utils = window.cw && window.cw.utils;
-    if (!utils || !utils.cachedWeatherKeys) return log('cache helpers missing');
+    if (!utils || !utils.cachedWeatherKeys || !utils.makeCacheKey) return log('cache helpers missing');
 
-    const entries = utils.cachedWeatherKeys();
-    const fresh = entries.filter((e) => Date.now() - e.timestamp <= utils.staleMaxAge);
+    // The keys app.js looks each step up under. Steps at the same place in the same
+    // quarter hour share an entry, so a point is a distinct key, not a step.
+    const steps = Array.isArray(window.weatherData) ? window.weatherData : [];
+    const unit = (id) => (document.getElementById(id) || {}).value || '';
+    const wanted = new Set(steps
+      .filter((s) => Number.isFinite(new Date(s.time).getTime()))
+      .map((s) => {
+        const at = new Date(s.time);
+        return utils.makeCacheKey(s.provider, at.toISOString().substring(0, 10),
+          unit('tempUnits'), unit('windUnits'), s.lat, s.lon, at);
+      }));
+    const held = utils.cachedWeatherKeys()
+      .filter((e) => wanted.has(e.key) && Date.now() - e.timestamp <= utils.staleMaxAge)
+      .map((e) => e.key);
 
-    if (!fresh.length) {
+    if (!held.length) {
       notify('prepare_offline_empty', 'Load a route and let the forecast appear first.');
       return;
     }
-
-    utils.pinCacheKeys(fresh.map((e) => e.key));
-    notify('prepare_offline_done', 'Route saved for offline ({n} points).', { n: fresh.length });
+    if (!utils.pinCacheKeys(held)) {
+      notify('prepare_offline_failed', 'Could not protect the stored forecast: storage is full.');
+      return;
+    }
+    if (held.length < wanted.size) {
+      notify('prepare_offline_partial', 'Route only partly saved: forecast stored for {n} of {total} points.',
+        { n: held.length, total: wanted.size });
+      return;
+    }
+    notify('prepare_offline_done', 'Route saved for offline ({n} points).', { n: held.length });
   }
 
   function notify(key, fallback, vars) {
