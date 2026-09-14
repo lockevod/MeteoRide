@@ -64,3 +64,29 @@ test('no answer, no hourly block or an unhandled provider gives null', () => {
   assert.equal(rules.extractStep({}, { provider: 'openmeteo', time: new Date() }), null);
   assert.equal(rules.extractStep(openMeteo(), { provider: 'meteoblue', time: new Date() }), null);
 });
+
+// Arrays built inside the vm context have their own prototypes; compare through JSON.
+const same = (a, b) => assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
+
+test('routeLine follows the first line with two points, whatever comes before it', () => {
+  const geojson = { type: 'FeatureCollection', features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: [2.1, 41.3] } },
+    { type: 'Feature', geometry: { type: 'LineString', coordinates: [[2.2, 41.4]] } },
+    { type: 'Feature', geometry: { type: 'LineString', coordinates: [[2.3, 41.5, 120], [2.4, 41.6, 130]] } },
+    { type: 'Feature', geometry: { type: 'LineString', coordinates: [[9, 9], [9, 10]] } },
+  ] };
+  same(rules.routeLine(geojson), [{ lat: 41.5, lon: 2.3 }, { lat: 41.6, lon: 2.4 }]);
+});
+
+test('routeLine joins the segments of a multi-segment track, in order', () => {
+  const geojson = { features: [
+    { geometry: { type: 'MultiLineString', coordinates: [[[1, 2], [3, 4]], [[5, 6]]] } },
+  ] };
+  same(rules.routeLine(geojson), [{ lat: 2, lon: 1 }, { lat: 4, lon: 3 }, { lat: 6, lon: 5 }]);
+});
+
+test('routeLine gives null when there is no line to follow', () => {
+  assert.equal(rules.routeLine({ features: [{ geometry: { type: 'Point', coordinates: [2, 41] } }] }), null);
+  assert.equal(rules.routeLine({ features: [] }), null);
+  assert.equal(rules.routeLine(null), null);
+});

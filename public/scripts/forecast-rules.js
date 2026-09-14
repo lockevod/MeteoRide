@@ -152,5 +152,26 @@ var cwForecastRules = (function () {
     return null;
   }
 
-  return { parseProviderTime, nearestIndex, extractStep };
+  /**
+   * The line a route's forecast follows: the first LineString with at least two valid
+   * points, or the first MultiLineString flattened in order. Null when there is none.
+   * GeoJSON pairs are [lon, lat(, ele)]; the result is [{ lat, lon }].
+   */
+  function routeLine(geojson) {
+    const features = geojson && Array.isArray(geojson.features) ? geojson.features : [];
+    const valid = (c) => Array.isArray(c) && Number.isFinite(Number(c[0])) && Number.isFinite(Number(c[1]));
+    for (const feature of features) {
+      const g = feature && feature.geometry;
+      if (!g || !Array.isArray(g.coordinates)) continue;
+      let pairs = null;
+      if (g.type === 'LineString') pairs = g.coordinates;
+      else if (g.type === 'MultiLineString') pairs = [].concat(...g.coordinates);
+      if (!pairs) continue;
+      const points = pairs.filter(valid).map((c) => ({ lat: Number(c[1]), lon: Number(c[0]) }));
+      if (points.length >= 2) return points;
+    }
+    return null;
+  }
+
+  return { parseProviderTime, nearestIndex, extractStep, routeLine };
 })();

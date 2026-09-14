@@ -377,16 +377,13 @@ function reconcileAromeVsOmCode(omCode, precip, prob, cloud) {
 
 
 function segmentRouteByTime(geojson) {
-  if (!geojson || !geojson.features.length) {
+  if (!geojson || !Array.isArray(geojson.features) || !geojson.features.length) {
     logDebug(t("geojson_invalid"), true);
     return;
   }
-  const coords = geojson.features[0].geometry.coordinates.map((c) => ({
-    lat: c[1],
-    lon: c[0],
-  }));
-
-  if (coords.length < 2) {
+  // The same line the route's validation will use: never a marker, never a stray point.
+  const coords = cwForecastRules.routeLine(geojson);
+  if (!coords) {
     logDebug(t("track_too_short"), true);
     return;
   }
