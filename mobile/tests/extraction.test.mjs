@@ -109,7 +109,7 @@ test('the golden is about the hours the fixtures were built for', () => {
   assert.equal(om[4].temp, 26);             // nearest hour 16:00 → slot 16
   assert.equal(golden['openmeteo-no-minutely'][2].temp, 19); // 08:40 → nearest hour 09:00
   assert.equal(golden['openweather-metric'][4].temp, 26);    // 16:10 local → 16:00
-  assert.equal(golden['openweather-metric'][5].temp, 57);    // beyond range: last hour, not daily
+  assert.equal(golden['openweather-metric'][5].temp, 22);    // beyond range: the daily entry
   // Wind read in m/s, outside minutely_15: pins the unit conversion, not just kmh's.
   assert.equal(golden['openmeteo-wind-ms'][4].windSpeed, 5.833333333333333);
   // weathercode and is_day dropped: weatherCode falls back to the synthesized value (63 with
@@ -137,4 +137,14 @@ test('an OpenWeather answer is read in the units it was requested in, not the on
   const metric = run('openweather', openWeather('metric'));
   const repainted = run('openweather', openWeather('metric'), { temp: 'F', wind: 'kmh' }, [], 'metric');
   assert.deepEqual(repainted.map((x) => x.windSpeed), metric.map((x) => x.windSpeed));
+});
+
+// windToUnits(null) is 0, not empty: a missing Open-Meteo/AROME gust used to render as "0"
+// instead of staying blank like OpenWeather's already does.
+test('a missing Open-Meteo gust stays empty in m/s and mph', () => {
+  const dropped = openMeteo({ drop: ['wind_gusts_10m'], minutely: false });
+  const ms = run('openmeteo', dropped, { temp: 'C', wind: 'ms' });
+  assert.ok(ms.every((s) => s.windGust === null), JSON.stringify(ms.map((s) => s.windGust)));
+  const mph = run('openmeteo', dropped, { temp: 'C', wind: 'mph' });
+  assert.ok(mph.every((s) => s.windGust === null), JSON.stringify(mph.map((s) => s.windGust)));
 });

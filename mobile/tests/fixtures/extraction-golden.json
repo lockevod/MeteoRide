@@ -536,17 +536,17 @@
       "timeLabel": "14:10"
     },
     {
-      "temp": 57,
-      "windSpeed": 52,
-      "windDir": 345,
-      "windGust": 62,
-      "humidity": 87,
-      "precipitation": 4.7,
-      "precipProb": 28.999999999999996,
-      "weatherCode": 804,
+      "temp": 22,
+      "windSpeed": 10,
+      "windDir": 80,
+      "windGust": 22.000000000000004,
+      "humidity": 62,
+      "precipitation": 2,
+      "precipProb": 20,
+      "weatherCode": 502,
       "uvindex": 2,
       "isDaylight": 0,
-      "cloudCover": 17,
+      "cloudCover": 20,
       "__useMinutely": "(undefined)",
       "timeLabel": "03:00"
     }
@@ -628,17 +628,17 @@
       "timeLabel": "14:10"
     },
     {
-      "temp": 57,
-      "windSpeed": 51.99999999999999,
-      "windDir": 345,
-      "windGust": 62,
-      "humidity": 87,
-      "precipitation": 4.7,
-      "precipProb": 28.999999999999996,
-      "weatherCode": 804,
+      "temp": 22,
+      "windSpeed": 10,
+      "windDir": 80,
+      "windGust": 22,
+      "humidity": 62,
+      "precipitation": 2,
+      "precipProb": 20,
+      "weatherCode": 502,
       "uvindex": 2,
       "isDaylight": 0,
-      "cloudCover": 17,
+      "cloudCover": 20,
       "__useMinutely": "(undefined)",
       "timeLabel": "03:00"
     }

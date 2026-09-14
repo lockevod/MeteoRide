@@ -312,11 +312,14 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   const wantMinutely = (typeof hoursFromNow === 'number' && hoursFromNow >= - (1/60) && hoursFromNow <= 5);
     const hourlyVars = 'temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover';
     const minutelyVars = hourlyVars; // request same variables in minutely_15 as in hourly
+    // Open-Meteo ignores `start=`; ask for the day range around the step instead
+    // (one day each side, to cover any timezone offset at the location).
+    const day = (n) => new Date(tMs + n * 86400000).toISOString().slice(0, 10);
     return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
       // CHANGED: ask for a full hourly variable set (model may not fill everything)
       `&hourly=${hourlyVars}` +
       `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
-      `&start=${timeAt.toISOString()}&timezone=auto&models=arome_france_hd`;
+      `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto&models=arome_france_hd`;
   }
   if (prov === "meteoblue") {
     return `https://my.meteoblue.com/packages/basic-1h,clouds-1h?lat=${p.lat}&lon=${p.lon}&apikey=${apiKey}&time=${timeAt.toISOString()}&tz=auto`;
@@ -339,9 +342,12 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   const wantMinutely = (typeof hoursFromNow === 'number' && hoursFromNow >= - (1/60) && hoursFromNow <= 5);
   const hourlyVars = 'temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover';
   const minutelyVars = hourlyVars;
+  // Open-Meteo ignores `start=`; ask for the day range around the step instead
+  // (one day each side, to cover any timezone offset at the location).
+  const day = (n) => new Date(tMs + n * 86400000).toISOString().slice(0, 10);
   return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=${hourlyVars}` +
     `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
-    `&start=${timeAt.toISOString()}&timezone=auto`;
+    `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto`;
 }
 
 
@@ -1190,7 +1196,7 @@ function processWeatherData() {
       step.temp = safeNum(r.temp);
       step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
       step.windDir = r.windDir || 0;
-      step.windGust = safeNum(windToUnits(r.gust, windUnit));
+      step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
       step.humidity = safeNum(r.humidity);
       step.precipitation = safeNum(r.precipitation);
       // AROME may lack precipitation_probability; merged earlier when available

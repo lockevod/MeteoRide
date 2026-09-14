@@ -59,6 +59,17 @@ test('OpenWeather falls back to daily only when there are no hourly entries', ()
   assert.equal(r.temp, 22);                // 22 Sept → daily entry 2
 });
 
+test('OpenWeather uses daily when the nearest hourly entry is more than an hour away', () => {
+  // 6h past the last of the 48 hourly slots: too far for hourly, so it should read daily.
+  const beyond = rules.extractStep(openWeather('metric'), { provider: 'openweather', time: at('2026-09-22T03:00:00Z'), payloadUnits: 'metric' });
+  assert.equal(beyond.source, 'daily');
+  assert.equal(beyond.temp, 22);           // daily entry 2
+
+  // 30 min from an hourly slot stays close enough to read hourly.
+  const near = rules.extractStep(openWeather('metric'), { provider: 'openweather', time: at('2026-09-20T14:30:00Z'), payloadUnits: 'metric' });
+  assert.equal(near.source, 'hourly');
+});
+
 test('no answer, no hourly block or an unhandled provider gives null', () => {
   assert.equal(rules.extractStep(null, { provider: 'openmeteo', time: new Date() }), null);
   assert.equal(rules.extractStep({}, { provider: 'openmeteo', time: new Date() }), null);

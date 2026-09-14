@@ -96,7 +96,10 @@ var cwForecastRules = (function () {
   }
 
   function extractOpenWeather(w, timeMs, payloadUnits) {
-    const closestByDt = (arr) => {
+    // `maxDiff` matters for hourly only: beyond an hour from the closest slot the data
+    // is stale enough to prefer daily (or nothing) over reading a distant hour as if it
+    // were now. Daily entries are a day apart by nature, so they keep no such cap.
+    const closestByDt = (arr, maxDiff = Infinity) => {
       if (!Array.isArray(arr) || !arr.length) return -1;
       let best = -1;
       let bestDiff = Infinity;
@@ -104,10 +107,10 @@ var cwForecastRules = (function () {
         const diff = Math.abs(Number(arr[i] && arr[i].dt) * 1000 - timeMs);
         if (diff < bestDiff) { bestDiff = diff; best = i; }
       }
-      return best;
+      return bestDiff <= maxDiff ? best : -1;
     };
     const useHourly = Array.isArray(w.hourly) && w.hourly.length > 0;
-    const hi = useHourly ? closestByDt(w.hourly) : -1;
+    const hi = useHourly ? closestByDt(w.hourly, 3600000) : -1;
     const di = (!useHourly || hi === -1) ? closestByDt(w.daily) : -1;
     const hourly = (useHourly && hi !== -1) ? w.hourly[hi] : null;
     const daily = (!hourly && Array.isArray(w.daily) && di !== -1) ? w.daily[di] : null;
