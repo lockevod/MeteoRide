@@ -42,7 +42,7 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     buildProviderUrl: (prov) => prov, classifyProviderError: () => 'http',
     // The request is held until the test answers it. Answering notes the outcome in the
     // recorder the request carried, the way the fetch wrapper in utils.js does.
-    fetch: (url, init) => new Promise((resolve) => pending.push({ url, init, resolve })),
+    fetch: (url, init) => new Promise((resolve, reject) => pending.push({ url, init, resolve, reject })),
     CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
     renders: [], notices: [], cleared: 0, events: [], hidden: 0, alertChecks: 0, shownAlerts: [],
     activeWeatherAlerts: [], elements: {},
@@ -345,6 +345,26 @@ test('a replaced run writes nothing to the cache when its AROME standard compani
   const b = run(42);
   answer(2, ok(openMeteo())); await b;
   answer(1, failed(500)); // A's companion answers only now, while A is replaced
+  await a;
+  assert.deepEqual(writes, ['openmeteo:42']);
+});
+
+test('a replaced run writes nothing to the cache when its AROME standard companion rejects after replacement', async () => {
+  const writes = [];
+  const { s, run, answer, pending } = harness({ provider: 'aromehd', stubs: {
+    isAromeHdCovered: () => true,
+    aromeResponseLooksInvalid: () => false,
+    makeCacheKey: (prov, d, t, w, lat) => `${prov}:${lat}`,
+    setCache: (key) => writes.push(key),
+  } });
+  const aromeBody = { hourly: { time: ['2026-01-01T00:00'], temperature_2m: [10] } };
+  const a = run(41);
+  answer(0, ok(aromeBody)); // A's own AROME answer, valid
+  await waitFor(() => pending.length === 2); // A's standard Open-Meteo companion is now in flight
+  s.apiSource = 'openmeteo';
+  const b = run(42);
+  answer(2, ok(openMeteo())); await b;
+  pending[1].reject(new TypeError('Load failed')); // A's companion rejects only now, while A is replaced
   await a;
   assert.deepEqual(writes, ['openmeteo:42']);
 });

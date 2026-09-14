@@ -72,6 +72,12 @@
             // recompute; keeping the .kml name would run this already-converted GPX
             // text back through the KML converter and lose the track.
             name = /\.kml$/i.test(name) ? name.replace(/\.kml$/i, '.gpx') : `${name}.gpx`;
+          } else if (/\.kml$/i.test(name)) {
+            // The conversion carried no track: this text was never real KML, most
+            // likely a GPX file shared under a .kml name. Keep the original text but
+            // rename it too, or reloadFull() would keep treating it as KML on every
+            // recompute and run this GPX text back through the KML converter.
+            name = name.replace(/\.kml$/i, '.gpx');
           }
         }
         if (typeof window.cwLoadGPXFromString === 'function') {

@@ -946,6 +946,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
         logDebug(t("error_api_step", { step: i + 1, msg: err.message }), true);
       }
 
+      if (run !== forecastRun) return;
       if (ok && json) {
         // Check for weather alerts if using OpenWeather and alerts are enabled
         if (prov === "openweather" && Array.isArray(json.alerts) && settings.alerts) {

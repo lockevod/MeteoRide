@@ -464,6 +464,19 @@ test('a real GPX shared under a .kml name is drawn, not emptied', async ({ page 
 
   await expect(trackDrawn(page)).not.toHaveCount(0);
   expect(loaderFailures).toEqual([]);
+
+  // The KML conversion is rejected (this text isn't KML), but reloadFull() still
+  // re-reads window.lastGPXFile by its extension on every recompute. A stale .kml
+  // name would run this GPX text back through the KML converter and lose the track.
+  await page.evaluate(() => {
+    const el = document.getElementById('distanceUnits');
+    el.value = el.value === 'km' ? 'mi' : 'km';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(loaderFailures).toEqual([]);
+  expect(await page.evaluate(() => window.lastGPXFile && window.lastGPXFile.name)).toMatch(/\.gpx$/i);
 });
 
 test('a route arriving mid-drain is not left behind', async ({ page }) => {

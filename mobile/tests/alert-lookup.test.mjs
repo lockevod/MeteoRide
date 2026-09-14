@@ -79,3 +79,25 @@ test('a lookup replaced while its request was in flight writes nothing and fills
   assert.deepEqual(sink, []);
   assert.deepEqual(writes, []);
 });
+
+test('a lookup replaced while reading the response body writes nothing and fills nothing', async () => {
+  const s = harness();
+  let current = true;
+  s.fetch = async () => {
+    s.fetchCalls++;
+    return {
+      ok: true,
+      json: async () => {
+        current = false; // the computation was replaced while the body was being read
+        return { alerts: [{ event: 'Viento' }] };
+      },
+    };
+  };
+  const writes = [];
+  s.setCache = (key) => writes.push(key);
+  const sink = [];
+  await s.checkWeatherAlertsIndependent(step(), times(), sink, settings(true), () => current);
+  assert.equal(s.fetchCalls, 1);
+  assert.deepEqual(sink, []);
+  assert.deepEqual(writes, []);
+});
