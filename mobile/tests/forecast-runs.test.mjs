@@ -20,7 +20,7 @@ const end = src.indexOf('\nfunction processWeatherData(');
 assert.ok(fnStart !== -1 && end > fnStart, 'app.js no longer looks the way this test expects');
 
 /** The real fetchWeatherForSteps, with the network and the page replaced. */
-function harness({ provider = 'openmeteo', body = { hourly: { time: [] } } } = {}) {
+function harness({ provider = 'openmeteo', body = { hourly: { time: [] } }, stubs = {} } = {}) {
   const pending = [];
   const s = {
     console, Date, Promise, setTimeout, clearTimeout,
@@ -28,7 +28,7 @@ function harness({ provider = 'openmeteo', body = { hourly: { time: [] } } } = {
     MS_PER_DAY: 86400000, MS_PER_HOUR: 3600000, OPENMETEO_MAX_DAYS: 14, METEOBLUE_MAX_DAYS: 7,
     OPENWEATHER_MAX_DAYS: 4, OPENWEATHER_MAX_HOURS: 1, AROMEHD_MAX_HOURS: 48, isAromeHdCovered: () => false,
     getVal: (id) => ({ datetimeRoute: new Date().toISOString(), tempUnits: 'C', windUnits: 'kmh',
-      apiKeyOW: 'a-valid-looking-key' }[id] || ''),
+      apiKey: 'a-valid-looking-key', apiKeyOW: 'a-valid-looking-key' }[id] || ''),
     document: { getElementById: () => ({ checked: true }) },
     logDebug() {}, t: (x) => x,
     getCache: () => null, setCache() {}, makeCacheKey: () => 'key',
@@ -44,6 +44,7 @@ function harness({ provider = 'openmeteo', body = { hourly: { time: [] } } } = {
     processWeatherData: () => s.renders.push(s.weatherData.map((x) => x.id)),
   });
   s.window = s;
+  Object.assign(s, stubs);
   vm.runInNewContext(src.slice(start, end), s);
   // Arrays built inside the context have that context's Array.prototype, which strict
   // deep equality holds against them; compare their JSON instead.
@@ -109,3 +110,24 @@ test('a run on its own still publishes', async () => {
   assert.equal(s.hidden, 1);
   assert.equal(s.alertChecks, 1);
 });
+
+// When the chosen provider answers with an error, each branch falls back to Open-Meteo
+// and, when that is cached, used to label the step with `cached2.provider` — a field
+// the raw Open-Meteo JSON does not have. The step then carried no provider at all, so
+// the table parsed Open-Meteo JSON as the primary provider's format.
+for (const provider of ['meteoblue', 'openweather', 'aromehd']) {
+  test(`a ${provider} error served from the cached Open-Meteo forecast is labelled openmeteo`, async () => {
+    const cached = { hourly: { time: [] } };
+    const { s, run } = harness({ provider, stubs: {
+      isAromeHdCovered: () => true,
+      makeCacheKey: (prov) => prov,
+      getCache: (key) => (key === 'openmeteo' ? cached : null),
+      classifyProviderError: () => 'http',
+      fetch: async () => ({ ok: false, status: 500, text: async () => '' }),
+    } });
+    await run('A');
+    assert.deepEqual(s.rendered(), [['A']]);
+    assert.deepEqual(JSON.parse(JSON.stringify(s.weatherData.map((x) => x.provider ?? null))), ['openmeteo']);
+    assert.equal(s.weatherData[0].weather, cached);
+  });
+}

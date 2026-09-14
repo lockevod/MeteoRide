@@ -896,7 +896,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             usedFallbackError = true;
 
             if (cached2) {
-              results.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
@@ -939,7 +939,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             usedFallbackError = true;
 
             if (cached2) {
-              results.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
@@ -960,7 +960,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const key2 = mk5(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             if (cached2) {
-              results.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);

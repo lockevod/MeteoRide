@@ -223,3 +223,8 @@ exactamente aquí):
 - **H6**: `/share` decodifica con `TextDecoder` estricto y responde 400 a lo que no es
   UTF-8 (2,5 MB de `0xFF` se guardaban como 7,5 MB), y un `cancel` que falla ya no
   convierte el 413 en 500. Tests nuevos para el margen multipart y el `Content-Length`.
+- **H2**: los fallbacks a Open-Meteo servidos desde caché (MeteoBlue, OpenWeather y
+  AROME con error) etiquetaban el paso con `cached2.provider`, que no existe; el paso
+  quedaba sin proveedor, la tabla leía el JSON con el formato equivocado y la
+  preparación sin cobertura construía claves inexistentes. Ahora llevan `prov2`;
+  `mobile/tests/forecast-runs.test.mjs`.
