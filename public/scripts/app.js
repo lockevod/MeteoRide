@@ -534,6 +534,13 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
   // only if it is published.
   const alertsSeen = [];
 
+  // A body that cannot be read is a failed answer, not a success with no data.
+  const readJson = (response) => response.json().catch((err) => {
+    recorder.failed++;
+    recorder.lastFailStatus = 'body';
+    throw err;
+  });
+
   let apiKeyFinal = "";
   if (settings.provider === "meteoblue") {
     apiKeyFinal = settings.keys.meteoblue;
@@ -716,7 +723,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
           } catch (e) { /* ignore logging errors */ }
         }
         if (res.ok) {
-          json = await res.json();
+          json = await readJson(res);
+          if (run !== forecastRun) return;
           // Sanity-check / normalize payload shape for OpenWeather
           if (prov === "openweather") {
             try {
@@ -759,7 +767,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               if (run !== forecastRun) return;
               const resStd = await fetch(urlStd, { cwRecorder: recorder });
               if (resStd.ok) {
-                const std = await resStd.json();
+                const std = await readJson(resStd);
+                if (run !== forecastRun) return;
                 try {
                   // Cache the standard Open‑Meteo response so future Open‑Meteo-only requests
                   // for the same step/time/coords can reuse it instead of re-fetching.
@@ -779,7 +788,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
               if (run !== forecastRun) return;
               const res2 = await fetch(url2, { cwRecorder: recorder });
-              if (res2.ok) { const json2 = await res2.json();
+              if (res2.ok) { const json2 = await readJson(res2);
+                if (run !== forecastRun) return;
                 results.push({ ...p, provider: prov2, weather: json2 });
                 setCache(key2, json2);
                 continue;
@@ -839,7 +849,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
             if (run !== forecastRun) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
-              const json2 = await res2.json();
+              const json2 = await readJson(res2);
+              if (run !== forecastRun) return;
               results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
@@ -883,7 +894,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
             if (run !== forecastRun) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
-              const json2 = await res2.json();
+              const json2 = await readJson(res2);
+              if (run !== forecastRun) return;
               results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
@@ -905,7 +917,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
             if (run !== forecastRun) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
-              const json2 = await res2.json();
+              const json2 = await readJson(res2);
+              if (run !== forecastRun) return;
               results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
@@ -968,7 +981,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
 
   // Check for weather alerts independently if we have OpenWeather API key
   if (run !== forecastRun) return;
-  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings);
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, () => run === forecastRun);
   if (run !== forecastRun) return;
 
   const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
@@ -3406,7 +3419,7 @@ window.debugAlertPosition = function() {
 // Check for weather alerts independently of main provider
 // With `sink`, the warnings found are added to it for the computation to keep; without
 // it (revalidateWeatherAlerts, until it goes in phase 4) they are shown straight away.
-async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings) {
+async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent) {
   // Only check if alerts are enabled and we have OpenWeather API key
   if (settings ? !settings.alerts : !document.getElementById("showWeatherAlerts")?.checked) return;
   
@@ -3435,6 +3448,7 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings) {
     console.log(`Weather alerts sampling: ${sampleCount}/${totalSteps} points (~67%, indices: ${sampleIndices.join(', ')})`)
     
     for (const i of sampleIndices) {
+      if (isCurrent && !isCurrent()) return;
       const p = steps[i];
       const timeAt = timeSteps[i];
       

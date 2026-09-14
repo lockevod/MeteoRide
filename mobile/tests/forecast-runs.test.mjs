@@ -305,3 +305,26 @@ for (const provider of ['meteoblue', 'openweather', 'aromehd']) {
     assert.equal(s.weatherData[0].weather, cached);
   });
 }
+
+test('a replaced run writes nothing to the cache after it was replaced', async () => {
+  const writes = [];
+  const { s, run, answer } = harness({ stubs: {
+    makeCacheKey: (prov, d, t, w, lat) => `${prov}:${lat}`,
+    setCache: (key) => writes.push(key),
+  } });
+  const a = run(41);
+  const b = run(42);
+  answer(1, ok(openMeteo())); await b;
+  answer(0, ok(openMeteo())); await a;
+  assert.deepEqual(writes, ['openmeteo:42']);
+});
+
+test('an answer whose body cannot be read says the provider is not responding', async () => {
+  const { s, run, answer } = harness();
+  const a = run(41);
+  answer(0, { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } });
+  await a;
+  assert.deepEqual(s.notices, [['provider_unreachable', 'warn']]);
+  const [snapshot] = s.published();
+  assert.equal(snapshot.outcome.transportFailures, 1);
+});

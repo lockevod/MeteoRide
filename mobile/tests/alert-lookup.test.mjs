@@ -47,3 +47,17 @@ test('settings.alerts === true lets the lookup run and fill the sink', async () 
   assert.equal(s.fetchCalls, 1);
   assert.deepEqual(sink, [{ event: 'Viento' }]);
 });
+
+test('a lookup whose computation was replaced stops before the next point', async () => {
+  const s = harness();
+  const writes = [];
+  s.setCache = (key) => writes.push(key);
+  let calls = 0;
+  const isCurrent = () => (calls++ === 0);
+  const threeSteps = () => [{ lat: 41, lon: 2 }, { lat: 41.1, lon: 2 }, { lat: 41.2, lon: 2 }];
+  const threeTimes = () => [new Date(), new Date(), new Date()];
+  const sink = [];
+  await s.checkWeatherAlertsIndependent(threeSteps(), threeTimes(), sink, settings(true), isCurrent);
+  assert.equal(s.fetchCalls, 1);
+  assert.equal(writes.length, 1);
+});
