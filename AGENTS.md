@@ -184,6 +184,16 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **The icon set holds two different drawings.** Every PNG in `public/icons/` shares
+  one artwork with a 9% transparent margin — except `icon-ios.png`, which is the one
+  `<link rel="apple-touch-icon">` points at, so it is what iOS actually shows for the
+  installed web app. It was made by `tools/scripts/fix_icon_ios.py` (crop, scale to
+  fill, centre on `#1E5F8F`), and it carries a dark fringe the others do not: PIL
+  resamples RGBA without premultiplying, so the black behind the transparent pixels
+  bleeds into the edges. Measured, not guessed — the fringe pixels average `0,38,65`,
+  which is the background blue at about 45% over black. `install-icons.mjs` follows
+  the same recipe but composites before averaging, so it reproduces the framing
+  without the fringe.
 - **`accept=".gpx"` greys out every file in the iOS picker.** iOS turns `accept`
   into a list of UTIs, and GPX has no system UTI, so the one file type the app
   exists to read becomes unselectable. `relaxFilePicker` in `native.js` widens the

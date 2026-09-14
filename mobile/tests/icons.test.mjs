@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { decodePng, encodePng, render, BACKGROUND } from '../scripts/install-icons.mjs';
+import { decodePng, encodePng, render, contentBox, BACKGROUND } from '../scripts/install-icons.mjs';
 
 const SOURCE = join(dirname(fileURLToPath(import.meta.url)), '../../public/icons/icon-1024.png');
 const source = decodePng(await readFile(SOURCE));
@@ -36,6 +36,29 @@ test('every size comes out as RGB with no alpha channel', () => {
   }
 });
 
+test('the artwork is cropped and scaled to fill, not left adrift with a margin', () => {
+  // The source carries a 9% transparent margin. Flattening without cropping would
+  // put a small logo on a large blue square, which is not what iOS shows for the
+  // installed web app.
+  const box = contentBox(source);
+  assert.ok(box.width < source.width * 0.9, 'this test assumes a source with a transparent margin');
+
+  const size = 180;
+  const rgb = render(source, size);
+  const isBackground = (x, y) => {
+    const i = (y * size + x) * 3;
+    return rgb[i] === BACKGROUND[0] && rgb[i + 1] === BACKGROUND[1] && rgb[i + 2] === BACKGROUND[2];
+  };
+  // The longer side fills the canvas, so the middle row reaches both edges.
+  const middle = size >> 1;
+  assert.ok(!isBackground(0, middle) || !isBackground(size - 1, middle),
+    'the artwork should reach the edge on its longer side');
+  // And the margin that remains on the shorter side is small.
+  let top = 0;
+  while (top < size && isBackground(middle, top)) top++;
+  assert.ok(top < size * 0.1, `a ${top}px band of background at the top is too much for a 180px icon`);
+});
+
 test('transparent corners become the app blue, not black', () => {
   // The source is a rounded/soft-edged icon, so its very corner is transparent.
   const corner = source.rgba.subarray(0, 4);
@@ -43,9 +66,7 @@ test('transparent corners become the app blue, not black', () => {
 
   const size = 64;
   const rgb = render(source, size);
-  const [r, g, b] = [rgb[0], rgb[1], rgb[2]];
-  // The top-left output pixel averages a 16x16 block that is transparent throughout.
-  assert.deepEqual([r, g, b], BACKGROUND, 'a naive flatten would leave 0,0,0 here');
+  assert.deepEqual([rgb[0], rgb[1], rgb[2]], BACKGROUND, 'a naive flatten would leave 0,0,0 here');
 });
 
 test('the scaled icon is not blank: it still carries the source colours', () => {

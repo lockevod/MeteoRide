@@ -29,8 +29,13 @@ const MOBILE = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = join(MOBILE, '../public/icons/icon-1024.png');
 const APPICON = join(MOBILE, 'ios/App/App/Assets.xcassets/AppIcon.appiconset');
 
-/** The app's blue, the same one the splash screen and status bar use. */
-export const BACKGROUND = [0x0b, 0x62, 0x97];
+/**
+ * The blue behind the icon. This is the one `tools/scripts/fix_icon_ios.py` used to
+ * make `public/icons/icon-ios.png`, the icon iOS already shows for the installed web
+ * app — so the native app ends up looking like the thing people recognise, rather
+ * than like a second, slightly different icon.
+ */
+export const BACKGROUND = [30, 95, 143];
 
 const log = (...a) => console.log('[install-icons]', ...a);
 
@@ -148,29 +153,69 @@ export function encodePng(width, height, rgb) {
   ]);
 }
 
-/** Box-filter downscale, compositing alpha onto the background as it goes. */
-export function render({ width, height, rgba }, size) {
+/** The smallest rectangle holding every pixel that is not fully transparent. */
+export function contentBox({ width, height, rgba }) {
+  let x0 = width, y0 = height, x1 = -1, y1 = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (rgba[(y * width + x) * 4 + 3] === 0) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return { x: 0, y: 0, width, height };   // nothing but transparency
+  return { x: x0, y: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 };
+}
+
+/**
+ * Renders the icon at `size`, the same way `fix_icon_ios.py` made the web app's
+ * icon: crop away the transparent margin, scale the artwork so its longer side
+ * fills the canvas, centre it, and composite onto the background.
+ *
+ * The cropping is the part that matters. The source has a 93px transparent margin,
+ * so merely flattening it leaves a small logo adrift on a large blue square — which
+ * is not what iOS shows for the installed web app, and looks wrong beside it.
+ */
+export function render(source, size) {
+  const { width, height, rgba } = source;
+  const box = contentBox(source);
+  const scale = size / Math.max(box.width, box.height);
+  const drawW = Math.max(1, Math.round(box.width * scale));
+  const drawH = Math.max(1, Math.round(box.height * scale));
+  const offsetX = Math.round((size - drawW) / 2);
+  const offsetY = Math.round((size - drawH) / 2);
+
   const out = Buffer.alloc(size * size * 3);
-  for (let y = 0; y < size; y++) {
-    const y0 = Math.floor((y * height) / size);
-    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * height) / size));
-    for (let x = 0; x < size; x++) {
-      const x0 = Math.floor((x * width) / size);
-      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * width) / size));
+  for (let i = 0; i < size * size; i++) {
+    out[i * 3] = BACKGROUND[0];
+    out[i * 3 + 1] = BACKGROUND[1];
+    out[i * 3 + 2] = BACKGROUND[2];
+  }
+
+  for (let y = 0; y < drawH; y++) {
+    // Box filter: average the source pixels this output pixel covers. When scaling
+    // up, the range is a single pixel and this is a nearest-neighbour read.
+    const sy0 = box.y + Math.floor((y * box.height) / drawH);
+    const sy1 = Math.min(box.y + box.height, Math.max(sy0 + 1, box.y + Math.floor(((y + 1) * box.height) / drawH)));
+    for (let x = 0; x < drawW; x++) {
+      const sx0 = box.x + Math.floor((x * box.width) / drawW);
+      const sx1 = Math.min(box.x + box.width, Math.max(sx0 + 1, box.x + Math.floor(((x + 1) * box.width) / drawW)));
       let r = 0, g = 0, b = 0, n = 0;
-      for (let sy = y0; sy < y1; sy++) {
-        for (let sx = x0; sx < x1; sx++) {
+      for (let sy = sy0; sy < sy1; sy++) {
+        for (let sx = sx0; sx < sx1; sx++) {
           const i = (sy * width + sx) * 4;
           const a = rgba[i + 3] / 255;
-          // Over the app's blue rather than over black, which is what dropping the
-          // channel outright would leave around a rounded or soft-edged icon.
+          // Over the background rather than over black, which is what discarding
+          // the channel would leave around the soft edges.
           r += rgba[i] * a + BACKGROUND[0] * (1 - a);
           g += rgba[i + 1] * a + BACKGROUND[1] * (1 - a);
           b += rgba[i + 2] * a + BACKGROUND[2] * (1 - a);
           n++;
         }
       }
-      const to = (y * size + x) * 3;
+      const to = ((y + offsetY) * size + (x + offsetX)) * 3;
       out[to] = Math.round(r / n);
       out[to + 1] = Math.round(g / n);
       out[to + 2] = Math.round(b / n);

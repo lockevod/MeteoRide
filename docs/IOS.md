@@ -236,13 +236,18 @@ an image for every filename it names, at the size that entry declares. `ios/` is
 in git, so an icon dropped in by hand is lost the next time the project is
 regenerated; this is repeatable.
 
-It also strips the alpha channel, which matters: the source PNG is RGBA and an iOS
-app icon must not be — Xcode warns and App Store Connect rejects the upload.
-Transparent pixels are composited onto the app's blue rather than onto black, which
-is what simply discarding the channel would leave around a soft-edged icon. The
-decoding, flattening and resizing are done with Node's own zlib and nothing else, so
-there is no ImageMagick to install; `mobile/tests/icons.test.mjs` checks the output
-is RGB, the right size and not blank.
+It follows the same recipe `tools/scripts/fix_icon_ios.py` used to make
+`public/icons/icon-ios.png`, the icon iOS shows for the installed web app: crop away
+the transparent margin, scale the artwork so its longer side fills the canvas, centre
+it, and composite onto `#1E5F8F`. The cropping is the part that matters — the source
+carries a 9% transparent margin, so merely flattening it leaves a small logo adrift
+on a large blue square.
+
+Stripping the alpha channel matters too: an iOS app icon must not have one, or Xcode
+warns and App Store Connect rejects the upload. Decoding, flattening and resizing use
+Node's own zlib and nothing else, so there is no ImageMagick to install;
+`mobile/tests/icons.test.mjs` checks the output is RGB, opaque, the right size, not
+blank, and actually fills the canvas.
 
 If the old icon lingers after running it, clean the build folder (⇧⌘K) and delete
 the app from the simulator — iOS caches icons hard.
