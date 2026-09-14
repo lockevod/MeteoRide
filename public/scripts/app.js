@@ -559,15 +559,6 @@ window.cwHasCurrentForecast = () => !!confirmedRoute && (
   (!!publishedSnapshot && publishedSnapshot.computationId === lastComputationId
     && publishedSnapshot.requestId === confirmedRoute.requestId)
   || runningComputationId === lastComputationId);
-
-// The loaders in ui.js and cwLoadGPXFromString confirm the route they drew through here,
-// each time with a number of their own, until they go through cw.requestRoute.
-let bridgedRequestId = 0;
-window.cwBridgeConfirmRoute = function (geojson, name) {
-  confirmedRoute = { requestId: ++bridgedRequestId, name: name || "", fingerprint: "", geojson, text: "" };
-  publishedSnapshot = null;
-};
-
 // Everything a computation depends on, read once when it starts. A setting changed while
 // it is still fetching belongs to the next computation, never to the rest of this one.
 function readForecastSettings() {
@@ -3068,151 +3059,118 @@ function init() {
   logDebug(t("app_started"));
 }
 
-// --- GPX public loader: logging + error handling ---
-// Helper: comprobar si hay algo parseable (track/route/waypoint)
-function hasParsableGpxText(txt) {
-  if (typeof txt !== "string") return false;
-  const s = txt.slice(0, 200000); // evita regex sobre ficheros enormes (no usamos el resto)
-  return /<trkpt\b/i.test(s) || /<rtept\b/i.test(s) || /<wpt\b/i.test(s) || /<trk\b/i.test(s) || /<rte\b/i.test(s);
-}
+// --- Routes: read off the map, confirm, and the loader for routes from outside ---
 
-// Nota: si ya existía, se sobrescribe con más logging y validación.
-window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint = "route.gpx") {
-  try {
-    const head = (typeof gpxText === "string") ? gpxText.slice(0,  120) : String(gpxText);
-    logDebug(`cwLoadGPXFromString: called, len=${(gpxText && gpxText.length) || 0}, name=${nameHint}`);
-    console.debug("[cw] loader input head:", head);
+// Reads a route without touching the screen: a KML is converted, the file sanitised and
+// leaflet-gpx asked for a layer that is not drawn (it keeps its tracks, routes and markers
+// in its own group). Resolves null when the file holds no line to follow.
+window.cwParseRoute = async function ({ text, name }) {
+  if (typeof text !== "string") return null;
+  let gpxText = text;
+  let fileName = name || "route.gpx";
+  if (/\.kml$/i.test(fileName) || /<kml[\s>]/i.test(text.slice(0, 4096))) {
+    const converted = window.cwKmlToGpxText ? window.cwKmlToGpxText(text) : null;
+    // A KML with no Placemark still converts into a valid, empty GPX wrapper.
+    if (converted && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(converted)) gpxText = converted;
+    fileName = fileName.replace(/\.kml$/i, ".gpx");
+  }
+  const source = (window.cwSanitizeGPXText ? window.cwSanitizeGPXText(gpxText) : gpxText).replace(/^[﻿\s]+/, "");
+  // leaflet-gpx takes anything that does not start with "<" for a URL, and fetches it.
+  if (!source.startsWith("<")) return null;
 
-    if (!gpxText || typeof gpxText !== "string") {
-      logDebug("cwLoadGPXFromString: invalid gpxText", true);
-      return;
-    }
-    // Validación rápida: si no hay trk/rte/wpt, avisar y abortar
-    if (!hasParsableGpxText(gpxText)) {
-      const bytes = gpxText.length;
-      const hint = "El GPX recibido no contiene tracks/rutas/puntos o está truncado.";
-      console.warn("[cw] GPX pre-parse failed (no trk/rte/wpt). size:", bytes);
-      logDebug(`${hint} Tamaño=${bytes}B. Prueba con gpx_url o revisa el Atajo (debe codificar el archivo completo a Base64).`, true);
-      alert(`${hint}\n\nTamaño=${bytes}B.\n\nSugerencias:\n• Usa la variante gpx_url (enlace directo al .gpx).\n• En el Atajo, asegúrate de que “Codificar (Base64)” se aplique al archivo completo (no al nombre) y que el resultado se usa en la URL.`);
-      return;
-    }
-    if (typeof L === "undefined" || !L.GPX) {
-      console.error("[cw] Leaflet/leaflet-gpx not ready");
-      logDebug("Leaflet/leaflet-gpx no está listo", true);
-      return;
-    }
-    if (!map) {
-      console.warn("[cw] map not initialized yet");
-    }
-
-    // Ensure reloadFull() (which reads window.lastGPXFile) works when GPX is injected
-    // programmatically (POST/service-worker flow). Create a File-like object so
-    // the existing file-based reload path can reparse the same GPX on parameter
-    // changes triggered by the UI.
+  const layer = await new Promise((resolve) => {
+    let gpx;
     try {
-      // File constructor is available in browsers; fallback to a simple object if not.
-      window.lastGPXFile = typeof File === 'function'
-        ? new File([gpxText], nameHint || 'route.gpx', { type: 'application/gpx+xml' })
-        : { name: nameHint || 'route.gpx', _text: gpxText };
-    } catch (e) {
-      // Do not block loading if File creation fails; just log.
-      console.warn('[cw] could not create File for lastGPXFile fallback', e);
-      window.lastGPXFile = { name: nameHint || 'route.gpx', _text: gpxText };
-    }
-
-    // Save programmatically loaded routes to recent routes for consistency
-    if (typeof window.saveRecentRoute === 'function' && window.lastGPXFile) {
-      try {
-        window.saveRecentRoute(window.lastGPXFile);
-      } catch (e) {
-        console.warn('[cw] failed to save recent route', e);
-      }
-    }
-
-    if (trackLayer) {
-      try {
-        map.removeLayer(trackLayer);
-        logDebug("cwLoadGPXFromString: removed previous track layer");
-      } catch (_) {}
-    }
-
-    let loadedFired = false;
-    let errorFired = false;
-
-    let gpxLayer;
-    try {
-      gpxLayer = new L.GPX(window.cwSanitizeGPXText ? window.cwSanitizeGPXText(gpxText) : gpxText, {
+      gpx = new L.GPX(source, {
         async: true,
-        polyline_options: { color: 'blue' },
+        polyline_options: { color: "blue" },
         marker_options: {
           startIconUrl: "/icons/marker-icon-green.png",
-          endIconUrl:   "/icons/marker-icon-red.png",
-          shadowUrl:    "/icons/marker-shadow.png",
-          wptIconUrl: null
-        }
+          endIconUrl: "/icons/marker-icon-red.png",
+          shadowUrl: "/icons/marker-shadow.png",
+          wptIconUrl: null,
+        },
       });
     } catch (e) {
-      console.error("[cw] L.GPX constructor error:", e);
       logDebug("Error creando L.GPX: " + e.message, true);
-      return;
+      return resolve(null);
     }
-
-    trackLayer = gpxLayer;
-
-    gpxLayer.on("loaded", async (evt) => {
-      loadedFired = true;
-      try {
-        console.debug("[cw] GPX loaded event; bounds:", evt.target.getBounds());
-        map.fitBounds(evt.target.getBounds());
-        window.cwBridgeConfirmRoute(evt.target.toGeoJSON(), nameHint);
-        window.cw.startForecast();
-
-        const baseName = (nameHint || "route").replace(/\.[^/.]+$/,"");
-        const metaName = (evt.target.get_name && evt.target.get_name()) || baseName;
-        const rutaEl = document.getElementById("rutaName");
-        if (rutaEl) rutaEl.textContent =  (metaName || baseName);
-
-        map.fitBounds(evt.target.getBounds(), { padding: [20, 20], maxZoom: 15 });
-        logDebug("GPX cargado desde ingest ✓");
-      } catch (e) {
-        console.error("[cw] on loaded processing error:", e);
-        logDebug("Error procesando GPX: " + e.message, true);
-      }
+    gpx.on("loaded", () => resolve(gpx));
+    gpx.on("error", (e) => {
+      logDebug("Evento error al cargar GPX: " + ((e && e.err) || "unknown"), true);
+      resolve(null);
     });
+    // leaflet-gpx parses in a zero-delay timer it has just scheduled, so this one runs
+    // after it: by then it has fired loaded or error, or it threw and never will.
+    setTimeout(() => resolve(null), 0);
+  });
+  if (!layer) return null;
 
-    gpxLayer.on("error", (e) => {
-      errorFired = true;
-      const detail = (e && (e.err || e.error || e.message)) || "unknown";
-      console.error("[cw] GPX error event:", detail, e);
-      logDebug("Evento error al cargar GPX: " + detail, true);
-      console.debug("[cw] GPX head snippet:", head);
-      // Mensaje más claro para el caso típico de “No parseable layers…”
-      if (String(detail).includes("No parseable layers")) {
-        alert("El GPX no contiene ningún track/ruta/punto parseable.\n\nRevisa que el archivo no esté vacío o truncado.\nSugerencia: usa gpx_url en el atajo o verifica que la codificación Base64 incluya todo el archivo.");
-      }
-    });
-
-    gpxLayer.on("add", () => {
-      console.debug("[cw] GPX layer added to map");
-    });
-
-    gpxLayer.addTo(map);
-    console.debug("[cw] GPX layer addTo(map) called");
-
-    // Watchdog: si no dispara loaded ni error en 5s, informar
-    setTimeout(() => {
-      if (!loadedFired && !errorFired) {
-        console.warn("[cw] GPX neither loaded nor error after 5s");
-        logDebug("GPX no terminó de cargar en 5s (ni loaded ni error). Revisa el GPX o la consola.", true);
-      }
-    }, 5000);
-  } catch (err) {
-    console.error("[cw] loader outer error:", err);
-    logDebug("Error cargando GPX: " + err.message, true);
-    alert(t("error_reading_gpx", { msg: err.message }));
-  }
+  const geojson = layer.toGeoJSON();
+  if (!cwForecastRules.routeLine(geojson)) return null;
+  return {
+    layer, geojson, text, gpxText, name: fileName,
+    displayName: (layer.get_name && layer.get_name()) || fileName.replace(/\.[^/.]+$/, ""),
+    fingerprint: cwForecastRules.fingerprint(text),
+  };
 };
-// --- end GPX public loader ---
+
+// Puts a parsed route on screen with no wait anywhere: what belonged to the route before
+// goes, the whole layer is drawn and framed, and it becomes the confirmed route. The
+// coordinator launches its computation straight after.
+window.cwCommitRoute = function (parsed, requestId) {
+  weatherData = [];
+  publishedSnapshot = null;
+  window.activeWeatherAlerts = [];
+  const alertContainer = document.getElementById("weather-alerts-container");
+  if (alertContainer) {
+    alertContainer.style.display = "none";
+    alertContainer.querySelectorAll(".weather-alert").forEach((el) => el.remove());
+  }
+  hideAndCleanupAlertIndicator();
+  windMarkers.forEach((m) => map.removeLayer(m));
+  windMarkers = [];
+  rainMarkers.forEach((m) => map.removeLayer(m));
+  rainMarkers = [];
+  selectedOriginalIdx = null;
+  viewOriginalIndexMap = [];
+  colIndexByOriginal = {};
+  lastAppliedSpeed = null;
+
+  if (trackLayer) map.removeLayer(trackLayer);
+  trackLayer = parsed.layer;
+  trackLayer.addTo(map);
+  window.replaceGPXMarkers(trackLayer);
+  map.fitBounds(trackLayer.getBounds(), { padding: [20, 20], maxZoom: 15 });
+  renderWeatherTable();
+
+  const rutaEl = document.getElementById("rutaName");
+  if (rutaEl) {
+    rutaEl.textContent = parsed.displayName;
+    rutaEl.style.color = "";
+    rutaEl.style.fontStyle = "";
+  }
+  window.lastGPXFile = new File([parsed.gpxText], parsed.name, { type: "application/gpx+xml" });
+  confirmedRoute = {
+    requestId, name: parsed.name, fingerprint: parsed.fingerprint, geojson: parsed.geojson, text: parsed.text,
+  };
+};
+
+// Routes from outside the page (the share inboxes, ?gpx_url=, shared_id, postMessage) still
+// arrive here. They are imported into recent routes as they arrive, as before, and shown
+// through the coordinator like any other route.
+window.cwLoadGPXFromString = function loadGPXFromString(gpxText, nameHint = "route.gpx", source = "message") {
+  if (!gpxText || typeof gpxText !== "string") {
+    logDebug("cwLoadGPXFromString: invalid gpxText", true);
+    return Promise.resolve("failed");
+  }
+  logDebug(`cwLoadGPXFromString: len=${gpxText.length}, name=${nameHint}`);
+  if (typeof window.saveRecentRoute === "function") {
+    window.saveRecentRoute(new File([gpxText], nameHint, { type: "application/gpx+xml" }));
+  }
+  return window.cw.requestRoute({ source, read: async () => ({ text: gpxText, name: nameHint }) });
+};
+// --- end routes ---
 
 // NEW: expose minimal hooks for compare.js (no behavior changes)
 try {

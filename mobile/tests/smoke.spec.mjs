@@ -150,7 +150,7 @@ test('opening an older recent route keeps every stored route', async ({ page }) 
   await goOffline(page);
   const tracks = ['Ruta Uno', 'Ruta Dos', 'Ruta Tres'];
   for (const [i, track] of tracks.entries()) {
-    // A fresh page each time: the recent-route name is taken from what is on screen.
+    // A fresh page each time, as a rider opening one route per session would.
     await page.goto('/index.html');
     await mapReady(page);
     const gpx = (await readFile(FIXTURE, 'utf8')).replace('Masnou - Montgat', track);
@@ -376,9 +376,9 @@ test('a KML shared from another app is converted, not refused', async ({ page })
   expect(loaderFailures).toEqual([]);
 });
 
-// reloadFull() re-reads window.lastGPXFile by its extension. A shared KML converted to
-// GPX but still filed under its original .kml name looks like KML again on the next
-// settings-driven recompute, gets run back through the KML converter and loses its track.
+// Recomputing used to re-read window.lastGPXFile by its extension. A shared KML converted
+// to GPX but still filed under its original .kml name looked like KML again on the next
+// settings-driven recompute, went back through the KML converter and lost its track.
 test('a shared KML keeps its track after the forecast is recomputed', async ({ page }) => {
   const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
@@ -394,9 +394,7 @@ test('a shared KML keeps its track after the forecast is recomputed', async ({ p
   await expect(trackDrawn(page)).not.toHaveCount(0);
 
   // Trigger a recompute the same way any settings control does: a reactive control's
-  // change handler ends by calling window.reloadFull(). distanceUnits carries no extra
-  // gating (unlike windUnits/tempUnits, which require an existing forecast), so this
-  // exercises reloadFull() the way the UI does without depending on a computed forecast.
+  // change handler ends by calling cw.settingsChanged().
   await page.evaluate(() => {
     const el = document.getElementById('distanceUnits');
     el.value = el.value === 'km' ? 'mi' : 'km';
@@ -465,9 +463,8 @@ test('a real GPX shared under a .kml name is drawn, not emptied', async ({ page 
   await expect(trackDrawn(page)).not.toHaveCount(0);
   expect(loaderFailures).toEqual([]);
 
-  // The KML conversion is rejected (this text isn't KML), but reloadFull() still
-  // re-reads window.lastGPXFile by its extension on every recompute. A stale .kml
-  // name would run this GPX text back through the KML converter and lose the track.
+  // The KML conversion is rejected (this text isn't KML), but the name still ends in
+  // .gpx, and a recompute keeps the track.
   await page.evaluate(() => {
     const el = document.getElementById('distanceUnits');
     el.value = el.value === 'km' ? 'mi' : 'km';
@@ -952,22 +949,15 @@ test('picking a route file computes its forecast once', async ({ page }) => {
   await stubProvider(page, control);
   await page.goto('/index.html');
   await mapReady(page);
-  // Only the latest run publishes now, so the table and weatherData look right however
-  // many runs a pick starts. Count the launches themselves. segmentRouteByTime calls
-  // fetchWeatherForSteps as a global, which resolves through this window property.
-  await page.evaluate(() => {
-    window.__launches = { reloadFull: 0, fetchWeatherForSteps: 0 };
-    for (const name of Object.keys(window.__launches)) {
-      const real = window[name];
-      window[name] = function (...args) { window.__launches[name]++; return real.apply(this, args); };
-    }
-  });
+  // Only the latest computation publishes, so the table and weatherData look right however
+  // many a pick starts. Count what a pick creates instead: route requests and computations.
+  await countLaunches(page);
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   // The extra runs started within milliseconds of the first; half a second is ample
   // for any of them to have been launched.
   await page.waitForTimeout(500);
-  expect(await page.evaluate(() => window.__launches)).toEqual({ reloadFull: 1, fetchWeatherForSteps: 1 });
+  expect(await page.evaluate(() => window.__launches)).toEqual({ requestRoute: 1, launch: 1 });
   const times = await page.evaluate(() => window.weatherData.map((s) => +new Date(s.time)));
   expect(times.length).toBeGreaterThan(0);
   expect(new Set(times).size, 'the same step was computed more than once').toBe(times.length);
@@ -998,6 +988,238 @@ test('compare hiding the indicator does not switch off a computation still fetch
   release();
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+});
+
+/* ---------- route requests ---------- */
+
+/** A route of its own: `name` in the file, five points from `lat` heading south-west. */
+function routeAt(name, lat) {
+  const pts = [0, 1, 2, 3, 4]
+    .map((i) => `<trkpt lat="${(lat - i * 0.003).toFixed(4)}" lon="${(2.316 - i * 0.011).toFixed(4)}"/>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${name}</name><trkseg>${pts}</trkseg></trk></gpx>`;
+}
+
+/** Starts a route request whose read the test answers later with openRead. */
+const requestHeld = (page, key, source = 'file') =>
+  page.evaluate(([k, src]) => {
+    window.__reads = window.__reads || {};
+    window.__status = window.__status || {};
+    let open;
+    const promise = new Promise((resolve) => { open = resolve; });
+    window.__reads[k] = open;
+    window.cw.requestRoute({ source: src, read: () => promise }).then((s) => { window.__status[k] = s; });
+  }, [key, source]);
+const openRead = (page, key, text, name) =>
+  page.evaluate(([k, t, n]) => window.__reads[k]({ text: t, name: n }), [key, text, name]);
+const requestStatus = (page, key) => page.evaluate((k) => (window.__status || {})[k], key);
+
+/** Counts route requests and launched computations from now on. */
+const countLaunches = (page) =>
+  page.evaluate(() => {
+    window.__launches = { requestRoute: 0, launch: 0 };
+    const request = window.cw.requestRoute;
+    window.cw.requestRoute = function (...args) { window.__launches.requestRoute++; return request.apply(this, args); };
+    const launch = window.cwLaunchComputation;
+    window.cwLaunchComputation = function (...args) { window.__launches.launch++; return launch.apply(this, args); };
+  });
+
+/** Open-Meteo answers only once the test calls the function this returns. */
+async function holdProvider(page, celsius = 21) {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    await held;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(celsius)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  return release;
+}
+
+const setSpeed = (page, kmh) =>
+  page.evaluate((v) => {
+    const el = document.getElementById('cyclingSpeed');
+    el.value = String(v);
+    el.dispatchEvent(new Event('blur'));
+  }, kmh);
+
+const pickText = (page, name, text) =>
+  page.locator('#gpxFile').setInputFiles({ name, mimeType: 'application/gpx+xml', buffer: Buffer.from(text) });
+
+const loadFailedNotice = /Could not open the route|No se ha podido abrir la ruta/;
+
+test('a route requested first and read last does not replace the one requested after it', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await requestHeld(page, 'A');
+  await requestHeld(page, 'B');
+  await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  await openRead(page, 'A', routeAt('Ruta A', 41.48), 'a.gpx');
+  await expect.poll(() => requestStatus(page, 'A')).toBe('superseded');
+  await page.waitForTimeout(300);
+
+  expect(await requestStatus(page, 'B')).toBe('committed');
+  await expect(routeName(page)).toHaveText('Ruta B');
+  const shown = await page.evaluate(() => ({
+    file: window.lastGPXFile.name,
+    trackNorth: window.trackLayer.getBounds().getNorth(),
+    steps: window.weatherData.map((s) => s.lat),
+  }));
+  expect(shown.file).toBe('b.gpx');
+  expect(Math.abs(shown.trackNorth - 40.42)).toBeLessThan(0.001);
+  expect(shown.steps.length).toBeGreaterThan(0);
+  expect(shown.steps.every((lat) => lat <= 40.42 && lat > 40.3)).toBe(true);
+});
+
+test('a file that is not a route leaves the route computing on screen, and its forecast', async ({ page }) => {
+  await recordNotices(page);
+  const release = await holdProvider(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(() => overlayVisibility(page)).toBe('visible');
+
+  await pickText(page, 'broken.gpx', 'this is not a route');
+  await expect.poll(() => page.evaluate(() => window.__notices))
+    .toEqual(expect.arrayContaining([expect.stringMatching(loadFailedNotice)]));
+
+  release();
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('route.gpx');
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+});
+
+test('a file with no line to follow leaves the route on screen', async ({ page }) => {
+  await recordNotices(page);
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const before = await shownTemperatures(page);
+
+  await pickText(page, 'waypoints.gpx', `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <wpt lat="41.4790" lon="2.3160"><name>Solo un punto</name></wpt>
+  <wpt lat="41.4700" lon="2.2810"><name>Y otro</name></wpt>
+</gpx>`);
+  await expect.poll(() => page.evaluate(() => window.__notices))
+    .toEqual(expect.arrayContaining([expect.stringMatching(loadFailedNotice)]));
+
+  await expect(routeName(page)).toContainText('Masnou');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('route.gpx');
+  expect(await shownTemperatures(page)).toEqual(before);
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+});
+
+test('a speed changed while a route is read is used by its one computation', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await countLaunches(page);
+
+  await requestHeld(page, 'A');
+  await setSpeed(page, 60);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__launches.launch), 'launched while the route was still being read').toBe(0);
+
+  await openRead(page, 'A', await readFile(FIXTURE, 'utf8'), 'route.gpx');
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__launches.launch)).toBe(1);
+
+  // The same route at 12 km/h takes more steps, so the one computation used 60.
+  const fast = await page.evaluate(() => window.weatherData.length);
+  await setSpeed(page, 12);
+  await expect.poll(() => page.evaluate(() => window.weatherData.length)).toBeGreaterThan(fast);
+});
+
+test('a speed changed while another route is read that then fails recomputes the route on screen once', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const slow = await page.evaluate(() => window.weatherData.length);
+  await countLaunches(page);
+
+  await requestHeld(page, 'B');
+  await setSpeed(page, 60);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__launches.launch), 'launched while the other route was still being read').toBe(0);
+
+  await openRead(page, 'B', 'this is not a route', 'b.gpx');
+  await expect.poll(() => requestStatus(page, 'B')).toBe('failed');
+  await expect.poll(() => page.evaluate(() => window.weatherData.length)).toBeLessThan(slow);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__launches.launch)).toBe(1);
+  await expect(routeName(page)).toContainText('Masnou');
+});
+
+test('units changed while a computation fetches: only the new one publishes', async ({ page }) => {
+  const release = await holdProvider(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => {
+    window.__publishedUnits = [];
+    document.addEventListener('cw:forecast', (e) => window.__publishedUnits.push(e.detail.snapshot.settings.units.temp));
+  });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => overlayVisibility(page)).toBe('visible');
+
+  const other = await page.evaluate(() => {
+    const el = document.getElementById('tempUnits');
+    const next = [...el.options].map((o) => o.value).find((v) => v !== el.value);
+    el.value = next;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return next;
+  });
+  await page.waitForTimeout(200);
+  release();
+
+  await expect.poll(() => page.evaluate(() => window.__publishedUnits.length)).toBeGreaterThan(0);
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__publishedUnits)).toEqual([other]);
+});
+
+test('a file with a route and a track of two segments draws them all and follows the route', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await pickText(page, 'mixed.gpx', `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <rte><name>Ruta mixta</name>
+    <rtept lat="41.4000" lon="2.1000"/><rtept lat="41.3950" lon="2.0900"/><rtept lat="41.3900" lon="2.0800"/>
+  </rte>
+  <trk><name>Otra</name>
+    <trkseg><trkpt lat="41.4790" lon="2.3160"/><trkpt lat="41.4770" lon="2.3050"/></trkseg>
+    <trkseg><trkpt lat="41.4740" lon="2.2930"/><trkpt lat="41.4700" lon="2.2810"/></trkseg>
+  </trk>
+</gpx>`);
+  await expect(routeName(page)).toHaveText('Ruta mixta');
+  // leaflet-gpx joins the segments of a track by default: the route and the whole track.
+  await expect(trackDrawn(page)).toHaveCount(2);
+  const drawn = await page.evaluate(() => {
+    const counts = [];
+    const walk = (layer) => {
+      if (layer instanceof L.Polyline) counts.push(layer.getLatLngs().length);
+      else if (layer.eachLayer) layer.eachLayer(walk);
+    };
+    walk(window.trackLayer);
+    return counts.sort();
+  });
+  expect(drawn).toEqual([3, 4]);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const lats = await page.evaluate(() => window.weatherData.map((s) => s.lat));
+  expect(lats.every((lat) => lat <= 41.4 && lat >= 41.39)).toBe(true);
 });
 
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
