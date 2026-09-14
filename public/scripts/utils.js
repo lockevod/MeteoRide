@@ -416,7 +416,10 @@
       // Nothing stored: leave whatever the markup already holds. Blanking it here
       // threw away the defaults written in index.html — speed 12 and interval 15
       // came up empty on a fresh install, and an empty <select> shows nothing at all.
-      else if (s[id] != null) el.value = s[id];
+      // An empty string counts as nothing: the earlier bug persisted one into
+      // cwSettings, and on the next load it would go on winning for ever. No field
+      // that carries a default in the markup can legitimately be blank anyway.
+      else if (s[id] != null && s[id] !== "") el.value = s[id];
     });
 
     // Apply sensible defaults when missing and persist them so subsequent loads are consistent

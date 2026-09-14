@@ -156,11 +156,12 @@ What is still open, and why it was left:
 ## Behaving like an app rather than a page
 
 - **iOS zooms in when a field smaller than 16px takes focus, and does not zoom back.**
-  Every editable control here was between 12 and 14px, so tapping the speed or the API
-  key left the app zoomed. Raised to 16px under `html.cw-native` only, and only for the
-  controls that open a keyboard: doing it to `<select>` and the datetime picker clipped
-  the time and overflowed the provider box, and those open native pickers anyway. The
-  `!important` is not laziness — the existing sizes come from id selectors.
+  The first answer was to raise those fields to 16px in the app, but only the ones
+  that open a keyboard — raising `<select>` and the datetime picker clipped the time
+  and overflowed the provider box. That left the speed box visibly larger than the
+  interval select beside it. The app's viewport carries `user-scalable=no` instead
+  (added in `build-www.mjs`, so the website keeps pinch-zoom), which removes the cause
+  rather than working around it, and every control keeps the size the website gives it.
 - **An app is resumed, not reloaded.** Come back hours later and the table is still the
   one computed for a departure that has passed. `warnIfStartTimeHasPassed` says so on
   `appStateChange`, with fifteen minutes of slack. Nothing is changed automatically: a
@@ -232,7 +233,11 @@ What is still open, and why it was left:
 - **`loadSettings` used to blank every field with nothing stored**, throwing away the
   defaults written in `index.html`: the speed came up empty and the interval select,
   handed an invalid value, showed nothing at all. The markup holds the default now
-  and the loader only overwrites what it actually has.
+  and the loader only overwrites what it actually has — **including empty strings**,
+  which is the part that took two goes. `saveSettings` had already persisted the
+  blanks to real devices, so a loader that ignored only `null` read `""` back and put
+  it straight in again, for ever. No field carrying a default in the markup can
+  legitimately be blank, so `""` counts as nothing stored.
 - **Two CSS rules that cover for each other cannot be mutation-tested one at a time.**
   Removing the body flex left `height: auto` on main, which alone prevented the
   overflow, and removing only the height left flex-shrink to do the same — the layout

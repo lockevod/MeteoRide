@@ -3352,18 +3352,25 @@ html.cw-native body {
   -webkit-touch-callout: none;        /* no long-press callout on map/table */
 }
 
+/* Tight to the top: on a phone every pixel above the map is a pixel of map. The
+   inset is not padding we chose, it is the notch, so only the 0.5rem the website
+   adds is worth trimming. */
 html.cw-native header {
-  padding-top: calc(0.5rem + env(safe-area-inset-top));
-  padding-left: calc(1rem + env(safe-area-inset-left));
-  padding-right: calc(1rem + env(safe-area-inset-right));
+  padding-top: calc(0.15rem + env(safe-area-inset-top));
+  padding-bottom: 0.15rem;
+  padding-left: calc(0.6rem + env(safe-area-inset-left));
+  padding-right: calc(0.6rem + env(safe-area-inset-right));
 }
 
 /* Added to the page's own padding, not in place of it: an earlier version set the
-   sides to the inset alone, which is zero in portrait, and the text sat on the edge. */
+   sides to the inset alone, which is zero in portrait, and the text sat on the edge.
+   The bottom keeps the home-indicator inset and nothing else. */
 html.cw-native main {
-  padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
+  padding-top: 0;
+  padding-bottom: env(safe-area-inset-bottom);
   padding-left: calc(0.5rem + env(safe-area-inset-left));
   padding-right: calc(0.5rem + env(safe-area-inset-right));
+  gap: 0.35rem;
 }
 
 /* The website sizes `main` as `calc(100vh - 3rem)`, taking the header to be exactly
@@ -3394,8 +3401,8 @@ html.cw-native main {
    the table off the bottom. Let the map give up the space instead — it is the one
    element here that reads fine at any height. */
 html.cw-native #map {
-  min-height: 150px;
-  max-height: 45vh;
+  min-height: 150px;   /* low enough to give way when a notice appears */
+  max-height: 62vh;    /* and the ceiling the website already used, not lower */
 }
 
 /* Last resort: if the controls still do not fit, they scroll rather than vanish. */
@@ -3452,23 +3459,11 @@ html.cw-native #cwMapOffline {
   pointer-events: none;
 }
 
-/* iOS zooms the page in when a text field with a font smaller than 16px gets focus,
-   and does not zoom back out. Every editable control here was between 12 and 14px, so
-   tapping the speed, the time or the API key left the app zoomed. Only in the app:
-   the website is used with a mouse and keeps its compact sizing. */
-/* Limited to the fields that open a keyboard. Raising <select> and the datetime
-   picker to 16px clipped the time and overflowed the provider box, and those open
-   native pickers rather than a keyboard, so they are the weaker case anyway.
-   !important because the existing sizes come from id selectors. */
-html.cw-native input[type="text"],
-html.cw-native input[type="number"],
-html.cw-native input[type="password"],
-html.cw-native input[type="search"],
-html.cw-native input[type="email"],
-html.cw-native input[type="url"],
-html.cw-native textarea {
-  font-size: 16px !important;
-}
+/* The 16px override that used to live here is gone. It existed to stop iOS zooming
+   in when a small field took focus, but it only applied to the inputs that open a
+   keyboard, so the speed box ended up visibly larger than the interval select next
+   to it. The app's viewport now carries `user-scalable=no` (see build-www.mjs), which
+   removes the cause, and every control keeps the size the website gives it. */
 
 /* Under the ride-alerts toggle (app only): what is being watched. */
 /* Sub-lines under the ride-alerts toggle. Outside the row, indented to sit under

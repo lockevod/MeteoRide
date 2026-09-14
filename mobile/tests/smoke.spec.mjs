@@ -960,7 +960,7 @@ test('the map still works when storage is unavailable', async ({ page }) => {
   expect(crashes).toEqual([]);
 });
 
-test('no field in the app opens the keyboard at a zooming size', async ({ page }) => {
+test('the settings panel still fits across the screen', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
   await page.goto('/index.html');
@@ -968,21 +968,12 @@ test('no field in the app opens the keyboard at a zooming size', async ({ page }
   await page.locator('#toggleConfig').click();
   await page.waitForTimeout(400);
 
-  // iOS zooms the page in when a field that opens a keyboard has a font under 16px,
-  // and does not zoom back out. Selects and the date picker are excluded: they open
-  // native pickers, and forcing them larger clipped the time and the provider box.
-  const tooSmall = await page.evaluate(() => {
-    const keyboardTypes = ['text', 'number', 'password', 'search', 'email', 'url', 'textarea'];
-    return [...document.querySelectorAll('input, textarea')]
-      .filter((el) => el.offsetParent !== null)
-      .filter((el) => keyboardTypes.includes(el.type || el.tagName.toLowerCase()))
-      .map((el) => ({ id: el.id || el.type, size: parseFloat(getComputedStyle(el).fontSize) }))
-      .filter((f) => f.size < 16);
-  });
-  expect(tooSmall).toEqual([]);
-
-  // And the parameter row still fits: raising the sizes is what broke it before.
+  // This used to check every keyboard field was at least 16px, the trick for stopping
+  // iOS zooming in on focus. The viewport does that now (see the page-zoom test), and
+  // the sizes went back to the website's. What is still worth pinning is the thing
+  // raising them broke: the panel overflowing sideways.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page.locator('#apiKeyOW')).toBeVisible();
 });
 
 test('coming back later says the start time has passed', async ({ page }) => {
@@ -1369,6 +1360,41 @@ test('a fresh install shows the speed and interval the markup declares', async (
   await page.reload();
   await mapReady(page);
   expect(await page.evaluate(() => document.getElementById('cyclingSpeed').value)).toBe('24');
+});
+
+test('an empty value left behind by the old bug does not keep winning', async ({ page }) => {
+  // What the earlier version wrote to real devices: it blanked the fields, then
+  // saveSettings persisted the blanks, so every later load read an empty string and
+  // put it back. Ignoring only null was not enough to recover from that.
+  await page.addInitScript(() => {
+    localStorage.setItem('cwSettings', JSON.stringify({
+      cyclingSpeed: '', intervalSelect: '', windUnits: 'kmh',
+    }));
+  });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(await page.evaluate(() => document.getElementById('intervalSelect').value)).toBe('15');
+  expect(await page.evaluate(() => document.getElementById('cyclingSpeed').value)).toBe('12');
+  // The rest of the stored settings are untouched.
+  expect(await page.evaluate(() => document.getElementById('windUnits').value)).toBe('kmh');
+});
+
+test('the app turns off page zoom instead of forcing 16px on some fields', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const viewport = await page.evaluate(() => document.querySelector('meta[name="viewport"]').content);
+  expect(viewport).toContain('user-scalable=no');
+  expect(viewport).toContain('viewport-fit=cover');
+
+  // The speed box and the interval select sit side by side; they must match.
+  const sizes = await page.evaluate(() => [
+    getComputedStyle(document.getElementById('cyclingSpeed')).fontSize,
+    getComputedStyle(document.getElementById('intervalSelect')).fontSize,
+  ]);
+  expect(sizes[0]).toBe(sizes[1]);
 });
 
 /** How far the bottom of an element falls past the bottom of the screen, in pixels.
