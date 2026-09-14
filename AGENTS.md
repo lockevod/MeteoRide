@@ -342,10 +342,14 @@ What is still open, and why it was left:
 - **Route injection races the app boot.** A route is parsed off the map, but confirming
   it (`cwCommitRoute`) draws onto the Leaflet map, so `window.map` must exist by then.
   Shared routes regularly arrive before `initMap` has run. `cwInjectGPXFromText` in
-  `gpx-share.js` waits for both the loader and the map, and every handoff path goes
-  through it. Do not call `cwLoadGPXFromString` directly from a handoff path until
-  phase 5 gives each path its own request: `cwInjectGPXFromText` is where the wait for
-  the map lives, and where a shared KML is converted before it reaches the loader.
+  `gpx-share.js` waits for both the loader and the map, and the share inboxes, the
+  service worker, `?gpx_url=` and `shared_id` go through it. The one exception is the
+  `postMessage` listener in `ui.js` (trusted origins only), which calls
+  `cwLoadGPXFromString` directly: a message that lands before the map exists is confirmed
+  but not drawn, because the commit throws and the coordinator swallows it. Do not add
+  another direct caller until phase 5 gives each path its own request:
+  `cwInjectGPXFromText` is where the wait for the map lives, and where a shared KML is
+  converted before it reaches the loader.
 - **A `.kml`-named share is renamed to `.gpx` whether or not the conversion actually
   produced a route.** `cwKmlToGpxText` always returns a syntactically valid GPX wrapper,
   even for a malformed KML or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never
@@ -903,8 +907,9 @@ Two things about it are worth knowing before you extend it:
   exception is the structured-data check, which reads `public/index.html` because the
   build strips those blocks from the bundle.
 - **A route that cannot be used says so and changes nothing.** Every route goes through
-  `cw.requestRoute`; one that fails ends as `'failed'` with the `route_load_failed`
-  notice and the route on screen untouched. The old loader showed an `alert` and could
+  `cw.requestRoute`; one that fails ends as `'failed'` and leaves the route on screen
+  untouched, with the `route_load_failed` notice when the text holds no usable route and
+  `route_read_failed` when it could not be read or the read missed its deadline. The old loader showed an `alert` and could
   leave a route name with no track, which is why the tests still watch for dialogs and
   loader console errors and look for the track on the map, not just for the name.
 
