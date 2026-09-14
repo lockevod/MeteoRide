@@ -346,17 +346,22 @@ What is still open, and why it was left:
   `cwLoadGPXFromString` directly from a handoff path: it only reads GPX, and
   `cwInjectGPXFromText` is also where a shared KML is converted (`cwKmlToGpxText`,
   the same conversion the file picker uses).
-- **A converted KML keeps its old name unless the conversion actually produced a route.**
-  `cwKmlToGpxText` always returns a syntactically valid GPX wrapper, even for a malformed
-  KML or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never refuses to return an
-  empty `FeatureCollection`. `cwInjectGPXFromText` (`gpx-share.js:53-87`) accepts the
-  conversion only when it carries a track, route or waypoint, and only then renames the
-  route to `.gpx`: keeping the `.kml` name would send the already-converted GPX text back
-  through the KML converter on every recompute, since `reloadFull` picks the converter by
-  `window.lastGPXFile`'s extension, and lose the track. `geojsonToGpx` (`ui.js:370-417`)
-  also recurses into a `GeometryCollection`, which is what `togeojson` turns a KML
-  `<MultiGeometry>` with more than one child geometry into, rather than one of the
-  geometry types it otherwise switches on.
+- **A `.kml`-named share is renamed to `.gpx` whether or not the conversion actually
+  produced a route.** `cwKmlToGpxText` always returns a syntactically valid GPX wrapper,
+  even for a malformed KML or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never
+  refuses to return an empty `FeatureCollection`. `cwInjectGPXFromText`
+  (`gpx-share.js:53-93`) only swaps in the converted text when it actually carries a
+  track, route or waypoint; when it does not — a real GPX misnamed `.kml` converts into
+  that empty wrapper too — it keeps the original text but still renames a `.kml` name to
+  `.gpx`. Either way, keeping the `.kml` name would send the GPX text (converted or not)
+  back through the KML converter on every recompute, since `reloadFull` picks the
+  converter by `window.lastGPXFile`'s extension, and lose the track. `geojsonToGpx`
+  (`ui.js:370-417`) also recurses into a `GeometryCollection`, which is what `togeojson`
+  turns a KML `<MultiGeometry>` with more than one child geometry into, rather than one of
+  the geometry types it otherwise switches on: every line in it is drawn on the map, but
+  `cwForecastRules.routeLine` — the line the forecast follows — only reads the first
+  `LineString`/`MultiLineString` feature with at least two valid points, so the forecast
+  only follows that first line, the same as a GPX carrying several `<trk>` tracks.
 - **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
   executes long after `initGpxShare()` is called from line 76 of the same file. Any
   code running at load time must poll for it rather than assume it exists.
@@ -392,7 +397,7 @@ What is still open, and why it was left:
   when two routes share a millisecond. On iOS that name also has to be filtered on the way
   back out: `Data.write(to:options:.atomic)` leaves a `<name>.sb-XXXX` sibling in the same
   directory for the instant of the rename, and `isInboxName`
-  (`MeteoRideShareStore.swift:159-173`) skips it rather than having `pendingURLs()` read and
+  (`MeteoRideShareStore.swift`) skips it rather than having `pendingURLs()` read and
   delete it half-written. The filter accepts either that current pattern or the legacy
   pre-update one (`<millis>__<name>`, no padding, no sequence) case-insensitively — `sanitize`
   only checks the extension case-insensitively and keeps whatever case the sender used, so a
@@ -404,7 +409,7 @@ What is still open, and why it was left:
   corrupted but well-formed string, the same trap `/share`'s `readCapped` works around
   (see the security model). Both inboxes decode strictly instead: iOS tries `.utf8`
   first, which returns `nil` on invalid bytes, then falls back to `.isoLatin1`
-  (`MeteoRideShareStore.swift:168-171`); Android's decoder is set to `REPORT` on
+  (`MeteoRideShareStore.swift`'s `decode`); Android's decoder is set to `REPORT` on
   malformed input and unmappable characters and catches the resulting exception to fall
   back to `ISO_8859_1` (`MeteoRideShareStore.java:190-201`).
 - **Share types are a mess.** Plenty of apps hand a `.gpx` over as
@@ -731,7 +736,12 @@ A replaced run writes nothing once it no longer matters: every `setCache` after 
 the same `run === forecastRun` check as the table, and so is the independent alert
 lookup, tested before each of its fetches, after each fetch resolves, after its body is
 read and again after the delay between requests (`checkWeatherAlertsIndependent`,
-`app.js:3429-3495`). A response body that fails to parse counts as a transport failure
+`app.js:3429-3495`). The companion request can also reject instead of resolving — offline,
+CORS, an abort — and the empty `catch` around it used to let that path fall straight
+through to the primary write with no fresh check; a guard placed right before that write
+(`app.js:949`) now covers it too, whichever way the companion request ends.
+
+A response body that fails to parse counts as a transport failure
 rather than a success with no data: `readJson` catches it and sets
 `recorder.lastFailStatus = 'body'` before rethrowing (`app.js:543-548`), so `decideNotice`
 treats it the same as offline or rejected instead of a working computation that says

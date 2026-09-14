@@ -255,7 +255,7 @@ al repintar una respuesta de OpenWeather cacheada. Mientras no llegue la fase 4,
 da avisos de proveedor y `revalidateWeatherAlerts` sigue mostrando alertas por su cuenta. Las
 fases 3 a 7 tendrán cada una su plan cuando empiecen.
 
-### Revisión adversarial de las correcciones (852f61a..1e69d16)
+### Revisión adversarial de las correcciones (852f61a..8b6e3fb)
 
 Una segunda revisión adversarial, aparte de los seis hallazgos de
 `docs/REVIEW-2026-09-14.md`, encontró y corrigió siete cosas más en siete tareas (ver
