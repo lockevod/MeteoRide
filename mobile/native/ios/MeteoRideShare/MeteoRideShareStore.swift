@@ -165,7 +165,7 @@ enum MeteoRideShareStore {
     /// a name can legitimately end in `.GPX` or `.KML`.
     private static let inboxNameRegex = try? NSRegularExpression(
         pattern: "^(?:\\d{13}-\\d{4}__.+\\.(?:gpx|kml)|\\d+__.+\\.(?:gpx|kml))$",
-        options: [.caseInsensitive]
+        options: [.caseInsensitive, .dotMatchesLineSeparators]
     )
 
     static func isInboxName(_ name: String) -> Bool {
@@ -190,6 +190,10 @@ enum MeteoRideShareStore {
         var base = name.isEmpty ? "route.gpx" : name
         base = base.replacingOccurrences(of: "/", with: "-")
         base = base.replacingOccurrences(of: ":", with: "-")
+        // A newline or other control character in a shared name would otherwise sit
+        // unescaped in the stored file name; `isInboxName`'s `.+` now spans line
+        // separators too, but new writes should never produce one in the first place.
+        base = String(String.UnicodeScalarView(base.unicodeScalars.map { $0.value < 0x20 ? "-" : $0 }))
         if !allowedExtensions.contains((base as NSString).pathExtension.lowercased()) {
             base += ".gpx"
         }
