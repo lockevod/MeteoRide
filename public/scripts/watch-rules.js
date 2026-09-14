@@ -145,15 +145,19 @@ var cwWatchRules = (function () {
     for (let i = 0; i < current.length; i++) {
       const was = baseline[i];
       const cur = current[i];
-      if (!was || !cur) continue;
+      if (!cur) continue;
       if (points && now != null && points[i] && points[i].t * 1000 < now - PASSED_SLACK_MS) continue;
-      const rainWas = rainLevel(was.rain, false);
+      // A magnitude with no baseline counts as calm: a point that is already severe
+      // the first time it is read is news, not a starting point.
       const rainNow = rainLevel(cur.rain, true);
+      let rainWas = rainLevel(was && was.rain, false);
+      if (rainWas == null && rainNow != null) rainWas = 0;
       if (rainWas != null && rainNow != null && rainNow > rainWas) {
         changes.push({ kind: 'rain', i, from: rainWas, to: rainNow, value: cur.rain });
       }
-      const windWas = windLevel(was.wind, was.gust, false);
       const windNow = windLevel(cur.wind, cur.gust, true);
+      let windWas = windLevel(was && was.wind, was && was.gust, false);
+      if (windWas == null && windNow != null) windWas = 0;
       if (windWas != null && windNow != null && windNow > windWas) {
         changes.push({ kind: 'wind', i, from: windWas, to: windNow, value: cur.wind, gust: cur.gust });
       }
@@ -242,11 +246,33 @@ var cwWatchRules = (function () {
   }
 
   /**
+   * The baseline after a check, point by point and magnitude by magnitude. Rain, and
+   * wind with its gusts, move to the current reading only when that very change was
+   * reported, or when there was no baseline for it and the reading brings one. Any
+   * other move would eat the margin (a creeping rise never announced) or forget a
+   * level that merely eased (and announce it again as new). JSON storage turns NaN
+   * into null; the level functions treat both as "no value".
+   */
+  function nextBaseline(baseline, current, changes) {
+    const moved = new Set(changes.map((c) => c.i + ':' + c.kind));
+    return current.map((cur, i) => {
+      const was = baseline[i] || null;
+      if (!cur) return was;
+      const takeRain = moved.has(i + ':rain') || rainLevel(was && was.rain, false) == null;
+      const takeWind = moved.has(i + ':wind') || windLevel(was && was.wind, was && was.gust, false) == null;
+      return {
+        rain: takeRain ? cur.rain : was.rain,
+        wind: takeWind ? cur.wind : was.wind,
+        gust: takeWind ? cur.gust : was.gust,
+      };
+    });
+  }
+
+  /**
    * One check. Pure: returns the notification to send (or null) and the watch as it
-   * should be stored afterwards. The baseline moves to the current reading whenever
-   * something is reported, so the same change is not announced again on the next
-   * run; a later worsening still is. Without a baseline (the app was offline when
-   * it armed the watch) the first check only seeds one.
+   * should be stored afterwards (see nextBaseline for how the baseline moves). An
+   * official warning is remembered by id and moves no baseline. Without a baseline
+   * (the app was offline when it armed the watch) the first check only seeds one.
    */
   function evaluate(watch, current, alerts, now) {
     const next = Object.assign({}, watch, { checkedAt: now });
@@ -256,14 +282,9 @@ var cwWatchRules = (function () {
     }
     const changes = compare(watch.baseline, current, watch.points, now);
     const fresh = newAlerts(alerts, watch.notified, Math.max(watch.start, now), watch.end);
-    if (!changes.length && !fresh.length) {
-      // A point with no forecast when the watch was armed is seeded as soon as one
-      // arrives; otherwise compare would skip it for the rest of the ride.
-      next.baseline = current.map((c, i) => watch.baseline[i] || c || null);
-      return { notification: null, watch: next };
-    }
+    next.baseline = nextBaseline(watch.baseline, current, changes);
+    if (!changes.length && !fresh.length) return { notification: null, watch: next };
 
-    next.baseline = current.map((c, i) => c || watch.baseline[i] || null);
     next.notified = (watch.notified || []).concat(fresh.map((a) => a.id));
     return { notification: compose(changes, fresh, watch), watch: next };
   }

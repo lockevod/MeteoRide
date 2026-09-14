@@ -184,6 +184,77 @@ test('a quiet check never moves an established baseline', () => {
   same(out.watch.baseline, base, 'creeping up must not hide a later worsening');
 });
 
+test('an official warning alone does not move the baseline', () => {
+  const base = reading({ rain: 0, wind: 19, gust: 25 });
+  const alerts = rules.readAlerts({ alerts: [{ sender_name: 'AEMET', event: 'Tormentas', start: t0, end: t0 + HOUR }] });
+  const nudge = reading({ rain: 0.35, wind: 22, gust: 30 });
+  const first = rules.evaluate(watchWith(base), nudge, alerts, now);
+  assert.equal(first.notification.body, 'Aviso oficial: Tormentas · AEMET');
+  same(first.watch.baseline, base, 'the warning says nothing about the forecast at each point');
+
+  const worse = reading({ rain: 2.9, wind: 37, gust: 45 });
+  const out = rules.evaluate(first.watch, worse, alerts, now + 1);
+  assert.ok(out.notification, 'the rise from the original baseline is announced');
+  assert.match(out.notification.body, /^Lluvia a las 10:00/m);
+  assert.match(out.notification.body, /^Viento moderado/m);
+});
+
+test('easing at one point and rain at another does not re-announce the first point later', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  base[0] = { rain: 1.0, wind: 10, gust: 15 };
+  const cur = reading({ rain: 0, wind: 10, gust: 15 });
+  cur[0] = { rain: 0.1, wind: 10, gust: 15 };
+  cur[1] = { rain: 1.0, wind: 10, gust: 15 };
+  const first = rules.evaluate(watchWith(base), cur, [], now);
+  assert.match(first.notification.body, /^Lluvia a las 11:00/m);
+  assert.doesNotMatch(first.notification.body, /10:00/);
+  assert.equal(first.watch.baseline[0].rain, 1.0, 'easing keeps the old baseline');
+
+  const back = reading({ rain: 0, wind: 10, gust: 15 });
+  back[0] = { rain: 1.0, wind: 10, gust: 15 };
+  back[1] = { rain: 1.0, wind: 10, gust: 15 };
+  assert.equal(rules.evaluate(first.watch, back, [], now + 1).notification, null, 'rain at 10:00 was forecast before');
+});
+
+test('a point with no forecast when armed that arrives severe is announced', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  base[0] = null;
+  const cur = reading({ rain: 0, wind: 10, gust: 15 });
+  cur[0] = { rain: 5, wind: 40, gust: 60 };
+  const out = rules.evaluate(watchWith(base), cur, [], now);
+  assert.ok(out.notification);
+  assert.match(out.notification.body, /^Lluvia fuerte a las 10:00/m);
+  assert.match(out.notification.body, /^Viento fuerte \(40 km\/h\) a las 10:00/m);
+});
+
+test('a missing rain value inside a point is filled when a reading brings it', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  base[0] = { rain: NaN, wind: 10, gust: 15 };
+  const dry = reading({ rain: 0, wind: 10, gust: 15 });
+  const quiet = rules.evaluate(watchWith(base), dry, [], now);
+  assert.equal(quiet.notification, null);
+  assert.equal(quiet.watch.baseline[0].rain, 0);
+
+  const wet = reading({ rain: 0, wind: 10, gust: 15 });
+  wet[0] = { rain: 5, wind: 10, gust: 15 };
+  const out = rules.evaluate(quiet.watch, wet, [], now + 1);
+  assert.match(out.notification.body, /^Lluvia fuerte a las 10:00/m);
+});
+
+test('gusts keep their baseline while the mean wind is missing', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  base[0] = { rain: 0, wind: NaN, gust: 30 };
+  const nudge = reading({ rain: 0, wind: 10, gust: 15 });
+  nudge[0] = { rain: 0, wind: NaN, gust: 41 };
+  const quiet = rules.evaluate(watchWith(base), nudge, [], now);
+  assert.equal(quiet.notification, null);
+  assert.equal(quiet.watch.baseline[0].gust, 30, 'the gusts are a baseline even without the mean');
+
+  const gusty = reading({ rain: 0, wind: 10, gust: 15 });
+  gusty[0] = { rain: 0, wind: NaN, gust: 43.5 };
+  assert.match(rules.evaluate(quiet.watch, gusty, [], now + 1).notification.body, /^Viento moderado/m);
+});
+
 test('a watch is over an hour after the ride ends', () => {
   const w = watchWith(null);
   assert.equal(rules.expired(w, w.end), false);
