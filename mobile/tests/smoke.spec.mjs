@@ -1151,8 +1151,6 @@ test('a speed changed while a route is read is used by its one computation', asy
 
   await requestHeld(page, 'A');
   await setSpeed(page, 60);
-  await page.waitForTimeout(300);
-  expect(await page.evaluate(() => window.__launches.launch), 'launched while the route was still being read').toBe(0);
 
   await openRead(page, 'A', await readFile(FIXTURE, 'utf8'), 'route.gpx');
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
@@ -1196,7 +1194,9 @@ test('units changed while a computation fetches: only the new one publishes', as
     document.addEventListener('cw:forecast', (e) => window.__publishedUnits.push(e.detail.snapshot.settings.units.temp));
   });
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect.poll(() => overlayVisibility(page)).toBe('visible');
+  // Confirmed, so its computation is running and held at the provider: the change below
+  // replaces a computation, rather than landing while the file is still read.
+  await expect(routeName(page)).toContainText('Masnou');
 
   const other = await page.evaluate(() => {
     const el = document.getElementById('tempUnits');

@@ -759,9 +759,16 @@ request ends.
 
 A response body that fails to parse counts as a transport failure
 rather than a success with no data: `readJson` catches it and sets
-`recorder.lastFailStatus = 'body'` before rethrowing, so `decideNotice`
+`recorder.lastFailStatus = 'body'` (and `recorder.offline` when it happened without
+connection, as the fetch wrapper does) before rethrowing, so `decideNotice`
 treats it the same as offline or rejected instead of a working computation that says
 nothing.
+
+A computation that stops or throws before it fetches lets go at once: `cwLaunchComputation`
+catches what segmenting throws, and the `try` of `fetchWeatherForSteps` starts on its first
+line. Before, a throw there kept `forecast:<id>` claimed and `runningComputationId` set, so
+`cwHasCurrentForecast()` stayed true and no request ending ever recomputed the route. An
+empty or invalid start date now says so with a notice, like one out of range.
 
 Two corrections went in with this, each in its own commit. The "show weather alerts"
 checkbox was read with `getVal`, which returns `"on"` whatever its state, so unticking it
@@ -787,12 +794,21 @@ runtime, because `app.js` and `ui.js` load after it.
   launching another computation does. Nothing of this is stored.
 - **Phases.** `read()` with a 30 s deadline → `cwParseRoute` (KML converted, sanitised,
   leaflet-gpx builds a layer that is never added to the map, `routeLine` must find a line,
-  fingerprint of the text as read) → `cwCommitRoute` (clears the previous route's table,
-  markers and warnings, draws the whole layer, sets the name and `lastGPXFile`, confirms)
-  → `startForecast()`, with nothing in between those two. After each wait a request that
-  a later one replaced stops as `'superseded'` and touches nothing. A failure ends as
-  `'failed'` with the `route_load_failed` notice and leaves the confirmed route and its
-  computation alone; a `read` that resolves `null` (nothing to open) fails quietly.
+  fingerprint of the text as read) → `cwCommitRoute` (confirms first, then clears the
+  previous route's table, markers and warnings, draws the whole layer, sets the name and
+  `lastGPXFile`) → `startForecast()`, with nothing in between those two. Confirming first
+  means a step that throws midway never leaves the old route confirmed under the new layer.
+  After each wait a request that a later one replaced stops as `'superseded'` and touches
+  nothing; one replaced in the same tick never calls `read()`. A failure ends as `'failed'`
+  and leaves the confirmed route and its computation alone, with one of two notices:
+  `route_load_failed` when the text holds no usable route, `route_read_failed` when `read()`
+  rejected or missed its deadline. A `read` that resolves `null` (nothing to open) fails
+  quietly.
+- **A request never rejects.** Whatever `commit`, `launch`, `paintLoading` or a notice
+  throws is logged and swallowed, so `requestRoute` always resolves to `'committed'`,
+  `'superseded'` or `'failed'` and lets go of its claim. A commit that throws still counts
+  as `'committed'` and its computation is launched once: the route may already be half on
+  screen.
 - **leaflet-gpx off the map**, verified in Chromium: with `async: true` it fires `loaded`
   without ever being added to a map, and draws nothing. Text that does not start with `<`
   it takes for a URL and fetches, so `cwParseRoute` refuses that first. It parses in a
@@ -805,9 +821,10 @@ runtime, because `app.js` and `ui.js` load after it.
   mark, so a request that confirms uses the settings changed while it was read, in its one
   computation. When the latest request ends any other way it reconciles: a confirmed route
   with pending settings, or with neither a published snapshot of its latest computation
-  nor that computation running, is computed again. A request that confirms does not
-  reconcile — it has just launched — which is also what keeps a start date out of range
-  from being tried twice. The confirm-and-launch path is guarded twice (the mark cleared,
+  nor that computation running, is computed again. A request that confirms reconciles only
+  settings marked since its launch (a change made from inside that launch, say), never a
+  missing forecast — it has just launched — which is also what keeps a start date out of
+  range from being tried twice. The confirm-and-launch path is guarded twice (the mark cleared,
   no reconcile after confirming), so the browser test only fails with both removed; the
   Node tests catch each one. Language and detailed notices only repaint the published
   snapshot (`cwRepaintPublished`: no request, no `cw:forecast`); the debug button and ride
@@ -827,7 +844,11 @@ runtime, because `app.js` and `ui.js` load after it.
   any more**; reading and migrating old localStorage entries stay. A record from before
   this has no fingerprint and counts as the same route when name and size in bytes match.
   The file picker imports only a route that was confirmed, under the file's name; a route
-  from outside is imported as it arrives, whether or not it ends up on screen. The name on
+  from outside is imported as it arrives, whether or not it ends up on screen. Opening a
+  recent route moves it to the top as a job in the same queue (`cw.touchRecent`), in one
+  `readwrite` transaction that rewrites the whole record with a newer timestamp and writes
+  nothing if an import trimmed it first. It used to read and then put the record outside
+  the queue, which dropped its fingerprint and could write a trimmed route back. The name on
   screen no longer decides the stored name: while a new route is read it is the old one's.
 
 Left for later phases on purpose: compare runs still write `weatherData` and paint with no
