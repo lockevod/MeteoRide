@@ -738,6 +738,24 @@ test('preparing says so when the protection could not be written', async ({ page
   await expect(page.locator('.notice')).toContainText(/Could not|No se ha podido/);
 });
 
+// Picking a file used to start the forecast three times: bindUIEvents and initUI both
+// listened to the input, and initUI ran twice, on script load and on DOMContentLoaded.
+// The three runs wrote into the one weatherData, so every step landed in it three times.
+test('picking a route file computes its forecast once', async ({ page }) => {
+  const control = { celsius: 21, offline: false };
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  // The extra runs started within milliseconds of the first; half a second is ample
+  // for any of them to have appended its steps.
+  await page.waitForTimeout(500);
+  const times = await page.evaluate(() => window.weatherData.map((s) => +new Date(s.time)));
+  expect(times.length).toBeGreaterThan(0);
+  expect(new Set(times).size, 'the same step was computed more than once').toBe(times.length);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {

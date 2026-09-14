@@ -836,22 +836,8 @@
       menu.style.display = "none";
     }, { capture: true });
 
-    // File input
-    const gpxFileEl = document.getElementById("gpxFile");
-    if (gpxFileEl) {
-      gpxFileEl.addEventListener("change", function () {
-        if (!this.files.length) {
-          window.lastGPXFile = null;
-          return;
-        }
-        window.lastGPXFile = this.files[0];
-        const val = (this.files[0].name) || (this.value.split("\\").pop() || this.value.split("/").pop() || "");
-        const rutaBase = val.replace(/\.[^/.]+$/, "");
-        const rutaEl = document.getElementById("rutaName");
-        if (rutaEl) rutaEl.textContent = rutaBase ? rutaBase : "";
-        window.reloadFull();
-      });
-    }
+    // File input: handled in initUI, which also records the route as recent. A second
+    // listener here started every forecast twice over.
 
     const dtEl = document.getElementById("datetimeRoute");
     if (dtEl) {
@@ -2228,7 +2214,12 @@
   }
 
   // Initialize UI event listeners and recent routes
+  let uiInitialised = false;
   function initUI() {
+    // Called on script load and again from app.js on DOMContentLoaded; running twice
+    // registered the file listener twice and computed every route more than once.
+    if (uiInitialised) return;
+    uiInitialised = true;
     console.log('[MeteoRide] initUI: Starting initialization');
     // Migrate any legacy localStorage entries into IndexedDB and populate cache
     (async function() {
