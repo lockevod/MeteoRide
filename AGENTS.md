@@ -402,16 +402,21 @@ What is still open, and why it was left:
   pre-update one (`<millis>__<name>`, no padding, no sequence) case-insensitively — `sanitize`
   only checks the extension case-insensitively and keeps whatever case the sender used, so a
   stored name can legitimately end in `.GPX`/`.KML`, and a route shared moments before an app
-  update must not sit unread until the 24-hour prune sweeps it.
+  update must not sit unread until the 24-hour prune sweeps it. `sanitize` also replaces any
+  control character (a stray `\n`, `\r`, `\t`…) in the shared name with `-` before writing,
+  and `isInboxName`'s regex spans line separators (`.dotMatchesLineSeparators`) so a name
+  stored by an older build, before that replacement existed, is still delivered rather than
+  silently pruned after 24 hours.
 - **A naive UTF-8 decode does not throw, so a Latin-1 exporter's bytes have to be caught
-  going in, not read back out.** `String(data:encoding:)` and `new String(bytes, UTF_8)`
-  do not fail on invalid bytes by default — they substitute U+FFFD and hand back a
-  corrupted but well-formed string, the same trap `/share`'s `readCapped` works around
-  (see the security model). Both inboxes decode strictly instead: iOS tries `.utf8`
-  first, which returns `nil` on invalid bytes, then falls back to `.isoLatin1`
-  (`MeteoRideShareStore.swift`'s `decode`); Android's decoder is set to `REPORT` on
-  malformed input and unmappable characters and catches the resulting exception to fall
-  back to `ISO_8859_1` (`MeteoRideShareStore.java:190-201`).
+  going in, not read back out.** Swift's `String(data:encoding: .utf8)` already returns
+  `nil` on invalid bytes, so it needs no extra care; the actual trap is `new String(bytes,
+  UTF_8)` in Java (and JavaScript's own lenient decoding) — both substitute U+FFFD and
+  hand back a corrupted but well-formed string instead of failing, the same trap
+  `/share`'s `readCapped` works around (see the security model), which is why Android's
+  decoder needs `REPORT` on malformed input and unmappable characters, catching the
+  resulting exception to fall back to `ISO_8859_1` (`MeteoRideShareStore.java:190-201`).
+  iOS just tries `.utf8` first, then falls back to `.isoLatin1`
+  (`MeteoRideShareStore.swift`'s `decode`).
 - **Share types are a mess.** Plenty of apps hand a `.gpx` over as
   `application/octet-stream` with no usable name, so both stores accept an item whose
   name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
@@ -698,8 +703,10 @@ One thing that looks like a bug is kept, because the table has always worked tha
 `window.findClosestFutureIndex` was never assigned, so a step reads the nearest hour, not
 the next one. OpenWeather beyond its hourly range now falls back to `daily` instead of
 re-reading a distant hourly entry: `extractOpenWeather` (`forecast-rules.js:98-154`) accepts
-an hourly entry only within an hour of the step's time and reads the nearest `daily` entry
-otherwise, since daily entries are a day apart by nature and carry no such cap.
+an hourly entry only within an hour of the step's time and otherwise picks the `daily`
+entry whose own local date (`dt` plus `timezone_offset`) matches the step's — not the one
+nearest in raw `dt` seconds, which can tie or lose right at local midnight — since daily
+entries are a day apart by nature and carry no such cap.
 
 `mobile/tests/extraction.test.mjs` and `mobile/tests/aromehd-merge.test.mjs` compare against
 golden files in `mobile/tests/fixtures/`, built from synthetic answers
@@ -844,8 +851,13 @@ code does and what makes the race reproducible.
   `ingest(Intent)` marks the intent `EXTRA_HANDLED` (`MainActivity.java:57`) before
   handing the actual read-and-store to the background executor (`:61-66`); a process
   killed between those two lines never writes the file to the inbox, and the same guard
-  that stops a route being imported twice then also stops it being retried. Belongs with
-  the durable-import work planned for phase 5.
+  that stops a route being imported twice then also stops it being retried. Reopening
+  the task from Recent Apps used to be an incidental way to retry exactly this case —
+  Android hands `onCreate` the same original intent again — but the Recents guard above
+  (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) now refuses that intent too, on purpose: a
+  route already delivered must not be re-ingested from Recents. That accidental
+  recovery is gone along with the duplicates it used to cost. Belongs with the
+  durable-import work planned for phase 5.
 - Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
   H2 (offline preparation) and H1 (overlapping forecasts) are fixed; H3, H4 and H5 are
   open. H5 and H4 should build on H1's run number rather than add timers.
