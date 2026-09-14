@@ -185,6 +185,11 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **The root `.gitignore` ignores every nested `.gitignore`** (line 6). So the one
+  `cap add android` generates never reaches a clone, and on a fresh checkout the
+  files `cap sync android` writes — `app/src/main/assets/`, `res/xml/config.xml`,
+  `capacitor-cordova-android-plugins/` — turn up as untracked with nothing to catch
+  them. Rules for generated Android paths go in the root file, which is tracked.
 - **The help pages carry an app-only section**, hidden behind `.app-only` and shown
   when `html.cw-native` is set. `help.js` sets that class itself: the help page does
   not load `native.js` (that one wires up the toolbar and route handling, none of
