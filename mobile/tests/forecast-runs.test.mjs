@@ -169,6 +169,20 @@ test('a run replaced while it looks up official warnings publishes nothing', asy
   assert.deepEqual(s.rendered(), [[42]]);
 });
 
+test('a run replaced mid-step stops fetching its remaining steps', async () => {
+  const { s, run, answer, pending } = harness();
+  const a = s.fetchWeatherForSteps(...twoSteps());
+  const b = run(42);
+  assert.equal(pending.length, 2, 'A and B each made their first request');
+  answer(0, ok(openMeteo()));
+  // A's second step would follow ~70 ms after its first answer; give it time to
+  // (wrongly) show up before checking it never does.
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(pending.length, 2, 'A kept fetching after B replaced it');
+  answer(1, ok(openMeteo()));
+  await b;
+});
+
 test('publish refuses a snapshot from a computation that is no longer the latest', async () => {
   const { s, run, answer } = harness();
   const a = run(41);

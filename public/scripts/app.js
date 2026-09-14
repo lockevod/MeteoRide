@@ -587,6 +587,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
   const hasKey = (apiKeyFinal || "").trim().length >= 5;
   try {
     for (let i = 0; i < steps.length; i++) {
+      if (run !== forecastRun) return;
       const p = steps[i];
       const timeAt = timeSteps[i];
 
@@ -755,6 +756,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
           if (prov === "aromehd") {
             try {
               const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
+              if (run !== forecastRun) return;
               const resStd = await fetch(urlStd, { cwRecorder: recorder });
               if (resStd.ok) {
                 const std = await resStd.json();
@@ -775,6 +777,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               const cached2 = getCache(key2, recorder);
               if (cached2) { results.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
+              if (run !== forecastRun) return;
               const res2 = await fetch(url2, { cwRecorder: recorder });
               if (res2.ok) { const json2 = await res2.json();
                 results.push({ ...p, provider: prov2, weather: json2 });
@@ -833,6 +836,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
+            if (run !== forecastRun) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await res2.json();
@@ -876,6 +880,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
+            if (run !== forecastRun) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await res2.json();
@@ -897,6 +902,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
+            if (run !== forecastRun) return;
             const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await res2.json();
