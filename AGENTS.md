@@ -296,6 +296,11 @@ What is still open, and why it was left:
 - **`npx playwright test` does not rebuild the bundle; `npm test` does.** A test that
   fails right after an edit is probably running the previous build. This cost a long
   debugging detour into code that was already correct.
+- **The in-memory recent-routes cache holds metadata only; never write it back to
+  IndexedDB.** The GPX lives only in each stored record's `blob`. Opening an older
+  recent route used to clear the store and re-add the cache, which wiped every stored
+  route and renumbered them, so the menu and the native cold-start restore found
+  nothing. Reordering now rewrites just the opened record with a new `timestamp`.
 - **A route file is executable content.** leaflet-gpx builds waypoint popups by
   concatenating `<name>` and `<desc>` straight into an HTML string. `cwSanitizeGPXText`
   escapes those text nodes before the library sees them, and both loaders call it. It

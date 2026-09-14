@@ -1634,40 +1634,6 @@
     }
   }
 
-  async function idbSaveAll(routes) {
-    // Keep for compatibility but delegate to adding individual routes with blob support.
-    try {
-      // Clear and re-add: convert routes to objects that may include blob
-      const db = await openIDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        const store = tx.objectStore(IDB_STORE);
-        const clearReq = store.clear();
-        clearReq.onsuccess = async function () {
-          try {
-            for (let i = 0; i < routes.length; i++) {
-              // route may contain 'blob' or 'content' (fallback)
-              const r = routes[i];
-              const obj = { name: r.name, size: r.size, lastModified: r.lastModified, timestamp: r.timestamp };
-              if (r.blob) obj.blob = r.blob; else if (r.content) obj.blob = new Blob([r.content], { type: 'application/gpx+xml' });
-              // eslint-disable-next-line no-await-in-loop
-              await new Promise((res, rej) => {
-                const areq = store.add(obj);
-                areq.onsuccess = () => res(true);
-                areq.onerror = () => rej(areq.error || new Error('add failed'));
-              });
-            }
-            resolve(true);
-          } catch (e) { reject(e); }
-        };
-        clearReq.onerror = () => reject(clearReq.error || new Error('clear failed'));
-      });
-    } catch (e) {
-      console.warn('[MeteoRide] idbSaveAll failed', e);
-      throw e;
-    }
-  }
-
   async function migrateFromLocalStorage() {
     try {
       const stored = localStorage.getItem(RECENT_ROUTES_KEY);
@@ -2209,7 +2175,11 @@
         if (idx > 0) {
           const [r] = recentRoutesCache.splice(idx, 1);
           recentRoutesCache.unshift(r);
-          await idbSaveAll(recentRoutesCache);
+          // The cache holds metadata only. Writing it back to the store would drop every
+          // stored GPX, so only the opened route's full record is touched.
+          const rec = await idbGetRouteById(r.id);
+          rec.timestamp = r.timestamp = Date.now();
+          await idbPutRoute(rec);
           updateRecentRoutesUI();
           console.log('[MeteoRide] loadRecentRoute: Moved route to top');
         }

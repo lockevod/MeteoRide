@@ -231,3 +231,7 @@ exactamente aquí):
   quedaba sin proveedor, la tabla leía el JSON con el formato equivocado y la
   preparación sin cobertura construía claves inexistentes. Ahora llevan `prov2`;
   `mobile/tests/forecast-runs.test.mjs`.
+- **Fuera de la revisión**: abrir una ruta reciente que no era la primera borraba el GPX
+  de todas las rutas recientes (`idbSaveAll` vaciaba el almacén y reescribía la caché, que
+  solo tiene metadatos) y el arranque sin cobertura ya no tenía qué restaurar. Ahora solo
+  se reescribe el registro abierto con otro `timestamp`; test en `smoke.spec.mjs`.

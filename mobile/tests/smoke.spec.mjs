@@ -126,6 +126,73 @@ test('loads a route from the file picker', async ({ page }) => {
   expect(loaderFailures).toEqual([]);
 });
 
+/** Every stored recent route as {id, name, bytes}, read straight from IndexedDB. */
+const storedRoutes = (page) =>
+  page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const open = indexedDB.open('meteoride_recent_routes_db');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction('routes').objectStore('routes').getAll();
+          all.onerror = () => reject(all.error);
+          all.onsuccess = () =>
+            resolve(
+              all.result
+                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : 0 }))
+                .sort((a, b) => a.id - b.id)
+            );
+        };
+      })
+  );
+
+test('opening an older recent route keeps every stored route', async ({ page }) => {
+  await goOffline(page);
+  const tracks = ['Ruta Uno', 'Ruta Dos', 'Ruta Tres'];
+  for (const [i, track] of tracks.entries()) {
+    // A fresh page each time: the recent-route name is taken from what is on screen.
+    await page.goto('/index.html');
+    await mapReady(page);
+    const gpx = (await readFile(FIXTURE, 'utf8')).replace('Masnou - Montgat', track);
+    await page.locator('#gpxFile').setInputFiles({
+      name: `ruta-${i}.gpx`,
+      mimeType: 'application/gpx+xml',
+      buffer: Buffer.from(gpx),
+    });
+    await expect.poll(async () => (await storedRoutes(page)).length).toBe(i + 1);
+  }
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(3);
+  const before = await storedRoutes(page);
+  expect(before.every((r) => r.bytes > 0)).toBe(true);
+
+  // The oldest one, last in the list.
+  const oldest = await page.evaluate(async () => {
+    const meta = window.getRecentRoutes().at(-1);
+    await window.loadRecentRoute(meta);
+    return meta.name;
+  });
+  expect(oldest).toBe('ruta-0.gpx');
+  await expect.poll(() => storedRoutes(page)).toEqual(before);
+
+  // Next cold start: the route just opened comes first, and every route still opens.
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(3);
+  expect(await page.evaluate(() => window.getRecentRoutes()[0].name)).toBe(oldest);
+  for (const i of [1, 2, 0]) {
+    const text = await page.evaluate(async (name) => {
+      window.lastGPXFile = null;
+      await window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === name));
+      return window.lastGPXFile ? window.lastGPXFile.text() : null;
+    }, `ruta-${i}.gpx`);
+    expect(text).toContain(tracks[i]);
+  }
+  await expect.poll(() => storedRoutes(page)).toEqual(before);
+});
+
 test('loads a route from ?gpx_url=', async ({ page }) => {
   const gpx = await readFile(FIXTURE, 'utf8');
   const loaderFailures = watchTheLoader(page);
