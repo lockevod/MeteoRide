@@ -289,28 +289,31 @@
     const params = new URLSearchParams(window.location.search || '');
     if (params.has('gpx_url') || params.has('url') || params.has('shared') || params.has('shared_id')) return;
 
-    // Five seconds is generous for an IndexedDB read and short enough that a first
-    // run with nothing stored is not left in silence.
-    const routes = await waitFor(() => {
-      const list = window.getRecentRoutes ? window.getRecentRoutes() : [];
-      return list && list.length ? list : null;
-    }, 5000);
+    // The request is made before any wait, so a route that arrives while the recent
+    // routes are still loading is a later request and replaces this one. Five seconds is
+    // generous for an IndexedDB read and short enough that a first run with nothing
+    // stored is not left in silence.
+    let nothingStored = false;
+    await window.cw.requestRoute({
+      source: 'recent',
+      read: async () => {
+        const routes = await waitFor(() => {
+          const list = window.getRecentRoutes ? window.getRecentRoutes() : [];
+          return list && list.length ? list : null;
+        }, 5000);
+        if (!routes) {
+          nothingStored = true;
+          return null;
+        }
+        log('restoring last route', routes[0].name || '');
+        return window.cwReadRecentRoute(routes[0]);
+      },
+    });
 
-    if (!routes) {
-      // First run out of coverage: nothing to restore and no way to fetch anything.
-      // Saying so beats an empty screen that looks broken.
-      if (!window.lastGPXFile && offline()) {
-        notify('offline_first_run', 'No connection. You can open a route, but the forecast needs coverage.');
-      }
-      return;
-    }
-    if (window.lastGPXFile) return;
-
-    try {
-      log('restoring last route', routes[0].name || '');
-      await window.loadRecentRoute(routes[0]);
-    } catch (e) {
-      log('could not restore the last route', e);
+    // First run out of coverage: nothing to restore and no way to fetch anything.
+    // Saying so beats an empty screen that looks broken.
+    if (nothingStored && !window.lastGPXFile && offline()) {
+      notify('offline_first_run', 'No connection. You can open a route, but the forecast needs coverage.');
     }
   }
 

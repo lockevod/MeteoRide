@@ -1389,6 +1389,72 @@ test('detailed notices switch the notice of the forecast on screen on and off', 
   expect(calls).toBe(asked);
 });
 
+/* ---------- restoring the last route at start-up ---------- */
+
+/** Opens the app once with the fixture picked, so it is among the recent routes. */
+async function seedRecentRoute(page) {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await storedRoutes(page)).length).toBe(1);
+}
+
+// Spec §6: the recent route is read after the shared one has already published, and the
+// shared one still wins.
+test('a route shared while the last recent route is still being read at start-up wins', async ({ page }) => {
+  await seedRecentRoute(page);
+  await page.addInitScript(() => {
+    let open;
+    window.__recentRead = new Promise((r) => { open = r; });
+    window.__openRecentRead = open;
+    let real;
+    Object.defineProperty(window, 'cwReadRecentRoute', {
+      configurable: true,
+      set(v) { real = v; },
+      get() { return async (route) => { await window.__recentRead; return real(route); }; },
+    });
+  });
+  await page.reload();
+  await mapReady(page);
+
+  await page.evaluate((text) => window.cwLoadGPXFromString(text, 'shared.gpx'), routeAt('Compartida', 40.42));
+  await expect(routeName(page)).toHaveText('Compartida');
+  await page.evaluate(() => window.__openRecentRead());
+  await page.waitForTimeout(800);
+  await expect(routeName(page)).toHaveText('Compartida');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+});
+
+// The restore used to ask for its route only once the recent routes had loaded, so a route
+// still on its way in at that moment (a download, a slow read) lost to the older one.
+test('a route still arriving when the recent routes turn up is not replaced by the last recent one', async ({ page }) => {
+  await seedRecentRoute(page);
+  await page.addInitScript(() => {
+    window.__recentsOpen = false;
+    let real;
+    Object.defineProperty(window, 'getRecentRoutes', {
+      configurable: true,
+      set(v) { real = v; },
+      get() { return () => (window.__recentsOpen && real ? real() : []); },
+    });
+  });
+  await page.reload();
+  await mapReady(page);
+
+  await requestHeld(page, 'shared', 'message');
+  await page.evaluate(() => { window.__recentsOpen = true; });
+  // The restore polls for recent routes every 200 ms; give it time to find and read one.
+  await page.waitForTimeout(800);
+  await openRead(page, 'shared', routeAt('Compartida', 40.42), 'shared.gpx');
+
+  await expect(routeName(page)).toHaveText('Compartida');
+  await page.waitForTimeout(500);
+  await expect(routeName(page)).toHaveText('Compartida');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {
