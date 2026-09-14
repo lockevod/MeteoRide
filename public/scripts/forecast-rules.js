@@ -395,8 +395,56 @@ var cwForecastRules = (function () {
     return out;
   }
 
+  /* ---------- routes: identity and names ---------- */
+
+  /**
+   * What makes two route texts the same route: the length and a 32-bit FNV-1a over the
+   * UTF-16 code units of the exact text, as `${length}:${hex8}`.
+   */
+  function fingerprint(text) {
+    const s = String(text);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return `${s.length}:${h.toString(16).padStart(8, '0')}`;
+  }
+
+  /**
+   * A snapshot may reach the screen only while it belongs to the confirmed route and to
+   * the latest computation launched. Without both identities it never does.
+   */
+  function shouldPublish(snapshot, state) {
+    if (!snapshot || !state) return false;
+    const { requestId, computationId } = snapshot;
+    return Number.isInteger(requestId) && Number.isInteger(computationId)
+      && requestId === state.confirmedRequestId && computationId === state.lastComputationId;
+  }
+
+  /**
+   * The name an imported route is stored under. Walks `name`, `base (2)ext`,
+   * `base (3)ext`… and takes the first that is free, or the first held by the same
+   * content, which is then replaced. A suffix already in `name` is not interpreted.
+   * Old records carry no fingerprint and match by size in bytes instead.
+   */
+  function uniqueRouteName(records, { name, fingerprint: fp, bytes }) {
+    const m = /\.(gpx|kml)$/i.exec(name);
+    const ext = m ? m[0] : '';
+    const base = m ? name.slice(0, -ext.length) : name;
+    const same = (r) => (r.fingerprint ? r.fingerprint === fp : r.size === bytes);
+    for (let n = 1; ; n++) {
+      const candidate = n === 1 ? name : `${base} (${n})${ext}`;
+      const taken = (records || []).filter((r) => r && r.name === candidate);
+      if (!taken.length) return { name: candidate, replaceId: null };
+      const match = taken.find(same);
+      if (match) return { name: candidate, replaceId: match.id };
+    }
+  }
+
   return {
     parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
     usableSteps, decideNotice, alertId, alertsInWindow,
+    fingerprint, shouldPublish, uniqueRouteName,
   };
 })();
