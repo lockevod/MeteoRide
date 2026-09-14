@@ -376,6 +376,79 @@ test('a KML shared from another app is converted, not refused', async ({ page })
   expect(loaderFailures).toEqual([]);
 });
 
+// reloadFull() re-reads window.lastGPXFile by its extension. A shared KML converted to
+// GPX but still filed under its original .kml name looks like KML again on the next
+// settings-driven recompute, gets run back through the KML converter and loses its track.
+test('a shared KML keeps its track after the forecast is recomputed', async ({ page }) => {
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</Placemark></Document></kml>`;
+  const loaderFailures = watchTheLoader(page);
+
+  await installNativeBridge(page, { routes: [{ name: 'Costa.kml', gpx: kml }] });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+
+  // Trigger a recompute the same way any settings control does: a reactive control's
+  // change handler ends by calling window.reloadFull(). distanceUnits carries no extra
+  // gating (unlike windUnits/tempUnits, which require an existing forecast), so this
+  // exercises reloadFull() the way the UI does without depending on a computed forecast.
+  await page.evaluate(() => {
+    const el = document.getElementById('distanceUnits');
+    el.value = el.value === 'km' ? 'mi' : 'km';
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(loaderFailures).toEqual([]);
+  expect(await page.evaluate(() => window.lastGPXFile && window.lastGPXFile.name)).toMatch(/\.gpx$/i);
+});
+
+// togeojson turns a KML <MultiGeometry> into a GeoJSON GeometryCollection, a type
+// geojsonToGpx did not handle: the track silently disappeared.
+test('a shared KML with a MultiGeometry is drawn', async ({ page }) => {
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<MultiGeometry>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0</coordinates></LineString>
+<LineString><coordinates>2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</MultiGeometry>
+</Placemark></Document></kml>`;
+  const loaderFailures = watchTheLoader(page);
+
+  await installNativeBridge(page, { routes: [{ name: 'Costa.kml', gpx: kml }] });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(loaderFailures).toEqual([]);
+});
+
+// The KML sniff only looks at the first 4096 characters; a long comment ahead of the
+// <kml> element pushes it past that window. The file name still says .kml.
+test('a shared file named .kml is converted even when <kml comes late', async ({ page }) => {
+  const padding = `<!-- ${'x'.repeat(5000)} -->`;
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+${padding}
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</Placemark></Document></kml>`;
+  const loaderFailures = watchTheLoader(page);
+
+  await installNativeBridge(page, { routes: [{ name: 'Costa.kml', gpx: kml }] });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(loaderFailures).toEqual([]);
+});
+
 test('a route arriving mid-drain is not left behind', async ({ page }) => {
   const gpx = await readFile(FIXTURE, 'utf8');
   const loaderFailures = watchTheLoader(page);

@@ -51,14 +51,23 @@
   // Single entry point for every handoff path: service worker, ?gpx_url=, shared_id
   // and the native share extension.
   function cwInjectGPXFromText(gpxText, routeName){
-    const name = routeName || 'Shared route';
+    let name = routeName || 'Shared route';
     let text = String(gpxText || '');
     whenAppReady(() => {
       try {
-        // The native inboxes accept .kml too; the loader only reads GPX.
-        if (/<kml[\s>]/i.test(text.slice(0, 4096)) && typeof window.cwKmlToGpxText === 'function') {
+        // The native inboxes accept .kml too; the loader only reads GPX. Detect it by
+        // content (the usual case) or by the file name, since a long comment ahead of
+        // <kml> can push it past the content-sniff window.
+        const looksLikeKml = /<kml[\s>]/i.test(text.slice(0, 4096)) || /\.kml$/i.test(name);
+        if (looksLikeKml && typeof window.cwKmlToGpxText === 'function') {
           const converted = window.cwKmlToGpxText(text);
-          if (converted) text = converted;
+          if (converted) {
+            text = converted;
+            // reloadFull() re-reads window.lastGPXFile by its extension on every
+            // recompute; keeping the .kml name would run this already-converted GPX
+            // text back through the KML converter and lose the track.
+            name = /\.kml$/i.test(name) ? name.replace(/\.kml$/i, '.gpx') : `${name}.gpx`;
+          }
         }
         if (typeof window.cwLoadGPXFromString === 'function') {
           window.cwLoadGPXFromString(text, name);

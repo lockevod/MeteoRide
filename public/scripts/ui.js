@@ -371,11 +371,11 @@
     try {
       const fc = (geojson.type === 'FeatureCollection') ? geojson : { type: 'FeatureCollection', features: geojson.type === 'Feature' ? [geojson] : [] };
       let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="meteoride">\n`;
-      for (const feat of (fc.features || [])) {
-        const props = feat.properties || {};
-        const name = props.name || props.title || '';
-        const geom = feat.geometry;
-        if (!geom) continue;
+
+      // togeojson turns a KML <MultiGeometry> with more than one child geometry into a
+      // GeometryCollection; recurse so each child is emitted under the same feature name.
+      function appendGeometry(geom, name) {
+        if (!geom) return;
         const type = geom.type;
         if (type === 'Point') {
           const [lon, lat] = geom.coordinates;
@@ -403,7 +403,15 @@
             for (const c of outer) { gpx += `<trkpt lat="${c[1]}" lon="${c[0]}"></trkpt>`; }
             gpx += `</trkseg></trk>\n`;
           }
+        } else if (type === 'GeometryCollection') {
+          for (const g of (geom.geometries || [])) appendGeometry(g, name);
         }
+      }
+
+      for (const feat of (fc.features || [])) {
+        const props = feat.properties || {};
+        const name = props.name || props.title || '';
+        appendGeometry(feat.geometry, name);
       }
       gpx += '</gpx>';
       return gpx;
