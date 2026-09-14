@@ -33,6 +33,13 @@ export async function onRequest(context) {
     if (!body) return tooLarge();
 
     const contentType = request.headers.get('content-type') || '';
+    // Blob.text() turns each invalid byte into U+FFFD, three bytes, so what is stored
+    // could be three times what was counted. Refuse anything that is not UTF-8.
+    const notUtf8 = () => new Response('Invalid UTF-8', { status: 400, headers: corsHeaders() });
+    const decode = async (blob) => {
+      try { return new TextDecoder('utf-8', { fatal: true }).decode(await blob.arrayBuffer()); }
+      catch (e) { if (e instanceof TypeError) return null; throw e; }
+    };
     let raw;
     if (/multipart\/form-data/i.test(contentType)) {
       // Accept first file part (field name 'file' preferred) or any File
@@ -49,10 +56,14 @@ export async function onRequest(context) {
         return new Response('Multipart parse error', { status: 400, headers: corsHeaders() });
       }
       if (file && file.size > MAX_BYTES) return tooLarge();
-      if (file && file.text) raw = await file.text();
+      if (file && file.arrayBuffer) {
+        raw = await decode(file);
+        if (raw === null) return notUtf8();
+      }
     } else {
       if (body.size > MAX_BYTES) return tooLarge();
-      raw = await body.text();
+      raw = await decode(body);
+      if (raw === null) return notUtf8();
     }
 
     if (!raw || raw.indexOf('<gpx') === -1) {
@@ -146,7 +157,8 @@ async function readCapped(request, limit) {
     if (done) return new Blob(chunks);
     size += value.byteLength;
     if (size > limit) {
-      await reader.cancel();
+      // Not awaited: a source that fails to cancel must not turn a 413 into a 500.
+      reader.cancel().catch(() => {});
       return null;
     }
     chunks.push(value);

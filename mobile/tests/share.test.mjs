@@ -95,3 +95,58 @@ test('a file exactly at the limit is accepted, one byte over is not', async () =
   assert.equal((await onRequest({ request: post(form), env: multi })).status, 413);
   assert.equal(multi.SHARED_GPX.store.size, 0);
 });
+
+// Decoding replaces every invalid byte with U+FFFD, three bytes each: 2.5 MB of 0xFF
+// read under the limit used to be stored as 7.5 MB.
+function notUtf8() {
+  const bytes = new Uint8Array(MAX_BYTES);
+  bytes.set(new TextEncoder().encode('<gpx>'));
+  return bytes.fill(0xff, 5);
+}
+
+test('a text body that is not UTF-8 is refused without writing', async () => {
+  const env = { SHARED_GPX: kv() };
+  const res = await onRequest({ request: post(notUtf8()), env });
+  assert.equal(res.status, 400);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  assert.equal(env.SHARED_GPX.store.size, 0);
+});
+
+test('a multipart file that is not UTF-8 is refused without writing', async () => {
+  const form = new FormData();
+  form.append('file', new File([notUtf8()], 'r.gpx'));
+  const env = { SHARED_GPX: kv() };
+  const res = await onRequest({ request: post(form), env });
+  assert.equal(res.status, 400);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+  assert.equal(env.SHARED_GPX.store.size, 0);
+});
+
+test('a multipart file of exactly the limit fits inside the envelope allowance', async () => {
+  const gpx = '<gpx>' + 'x'.repeat(MAX_BYTES - 11) + '</gpx>';
+  const form = new FormData();
+  form.append('file', new File([gpx], 'r.gpx'));
+  const env = { SHARED_GPX: kv() };
+  assert.equal((await onRequest({ request: post(form), env })).status, 201);
+  assert.equal([...env.SHARED_GPX.store.values()][0].length, MAX_BYTES);
+});
+
+test('a declared Content-Length over the allowance is refused before reading', async () => {
+  const env = { SHARED_GPX: kv() };
+  const request = post('<gpx></gpx>', { 'content-length': String(MAX_BYTES + 64_000 + 1) });
+  assert.equal(request.headers.get('content-length'), '2564001');
+  const res = await onRequest({ request, env });
+  assert.equal(res.status, 413);
+  assert.equal(env.SHARED_GPX.store.size, 0);
+});
+
+test('an oversized body whose cancel fails is still refused as too large', async () => {
+  const chunk = new TextEncoder().encode('<gpx>' + 'x'.repeat(999_995));
+  const body = new ReadableStream({
+    pull(controller) { controller.enqueue(chunk); },
+    cancel() { throw new Error('cancel failed'); }
+  });
+  const env = { SHARED_GPX: kv() };
+  assert.equal((await onRequest({ request: post(body), env })).status, 413);
+  assert.equal(env.SHARED_GPX.store.size, 0);
+});

@@ -131,7 +131,10 @@ Rules that follow from that, all enforced somewhere:
   optional, so it cannot be the limit; and checking the parsed string compared UTF-16
   units, which let 2.6 MB of `é` through after reading the whole body into memory.
   `readCapped` stops the stream at 2.5 MB plus a 64 KB multipart envelope, and the
-  file inside a multipart body is then held to 2.5 MB itself. `tests/share.test.mjs`.
+  file inside a multipart body is then held to 2.5 MB itself. The counted bytes are
+  decoded strictly: `Blob.text()` swaps each invalid byte for a three-byte U+FFFD, so
+  2.5 MB of `0xFF` used to be stored as 7.5 MB. Anything not UTF-8 gets a 400.
+  `tests/share.test.mjs`.
 - **The Android activity accepts `content://` only.** No app has been able to hand out
   a `file://` URI since Android 7, and accepting one would let any app point MeteoRide
   at its own private files. Both stores still sniff content and cap size.
