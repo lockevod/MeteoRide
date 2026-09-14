@@ -518,11 +518,11 @@ The forecast is a plan; this watches whether it still holds. Four pieces:
   events, `saveWatch`, `loadWatch` and `checkWatch`. The build concatenates the rules
   in front of it into `www/runners/watch.js`, the path `capacitor.config.json` names,
   and refuses `import`/`export` in either file because the runner has no loader.
-- `native.js`, "ride alerts": `publish()` in `app.js` dispatches `cw:forecast` with
-  the snapshot and its rendered steps; `buildWatch` samples them to twelve points with a clock label and a km mark
-  (the runner has no trustworthy locale or timezone, so labels are made here),
-  `seedBaseline` reads the baseline from the same request the runner will make, and
-  `storeWatch` hands it to the runner through `dispatchEvent`, whose KV store
+- `native.js`, "ride alerts": `publish()` in `app.js` dispatches `cw:forecast` with the
+  snapshot and its rendered steps; `buildWatch` samples them to twelve points with a clock
+  label and a km mark (the runner has no trustworthy locale or timezone, so labels are
+  made here), `seedBaseline` reads the baseline from the same request the runner will
+  make, and `storeWatch` hands it to the runner through `dispatchEvent`, whose KV store
   (UserDefaults / SharedPreferences under the runner's label) is the only thing the
   background task can read. Preferences is a different store with a different prefix;
   do not try to share.
@@ -664,7 +664,10 @@ checks that the computation is still the latest (`forecastRun`, until phase 3 re
 and then, with no wait in between, mirrors the steps into `window.weatherData`, repaints,
 shows the warnings, decides the notice, dispatches `cw:forecast` with `{ snapshot, steps }`
 and hides the loading indicator. `processWeatherData` only paints: a repaint for a language
-or unit change is not a new forecast and no longer arms the ride watch again.
+or unit change is not a new forecast and no longer arms the ride watch again. A notice now
+stays on screen while the next computation fetches, until that computation publishes: the
+old `clearNotice()` at the start of a computation is gone, so a notice always describes the
+forecast currently on screen.
 
 Official warnings are collected during the computation, from the OpenWeather forecast
 answers and from `checkWeatherAlertsIndependent`, kept when they overlap the ride with four
