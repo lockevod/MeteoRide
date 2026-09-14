@@ -11,6 +11,10 @@ class ShareViewController: UIViewController {
     /// Custom URL scheme declared by the main app.
     private let hostAppURL = URL(string: "meteoride://shared")!
 
+    /// One file in memory at a time: item providers call back concurrently, and each
+    /// file may be up to the store's size cap.
+    private let ingestQueue = DispatchQueue(label: "cc.meteoride.share.ingest")
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
@@ -46,17 +50,17 @@ class ShareViewController: UIViewController {
         let dataType = UTType.data.identifier
 
         if provider.hasItemConformingToTypeIdentifier(fileURLType) {
-            provider.loadItem(forTypeIdentifier: fileURLType, options: nil) { item, _ in
+            provider.loadItem(forTypeIdentifier: fileURLType, options: nil) { [ingestQueue] item, _ in
                 guard let url = item as? URL else { return completion(false) }
-                completion(MeteoRideShareStore.ingest(fileURL: url))
+                ingestQueue.sync { completion(MeteoRideShareStore.ingest(fileURL: url)) }
             }
             return
         }
 
         if provider.hasItemConformingToTypeIdentifier(dataType) {
-            provider.loadItem(forTypeIdentifier: dataType, options: nil) { item, _ in
+            provider.loadItem(forTypeIdentifier: dataType, options: nil) { [ingestQueue] item, _ in
                 if let url = item as? URL {
-                    completion(MeteoRideShareStore.ingest(fileURL: url))
+                    ingestQueue.sync { completion(MeteoRideShareStore.ingest(fileURL: url)) }
                 } else if let data = item as? Data {
                     let name = provider.suggestedName ?? "route.gpx"
                     guard MeteoRideShareStore.accepts(name: name, data: data) else { return completion(false) }

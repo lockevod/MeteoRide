@@ -66,9 +66,30 @@ enum MeteoRideShareStore {
         let scoped = fileURL.startAccessingSecurityScopedResource()
         defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
 
-        guard let data = try? Data(contentsOf: fileURL) else { return false }
+        guard let data = readCapped(fileURL) else { return false }
         return accepts(name: fileURL.lastPathComponent, data: data)
             && store(data: data, suggestedName: fileURL.lastPathComponent) != nil
+    }
+
+    /// Reads at most `maxBytes`, giving up as soon as the file turns out to be bigger.
+    /// `Data(contentsOf:)` would load all of it first, and the share extension has a
+    /// small memory budget.
+    static func readCapped(_ fileURL: URL) -> Data? {
+        guard let stream = InputStream(url: fileURL) else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read < 0 { return nil }
+            if read == 0 { return data }
+            data.append(buffer, count: read)
+            if data.count > maxBytes {
+                NSLog("[MeteoRide] ignoring shared file larger than \(maxBytes) bytes")
+                return nil
+            }
+        }
     }
 
     /// Apps share routes with all sorts of types and names, so judge by the file name
