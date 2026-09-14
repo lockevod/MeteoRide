@@ -72,14 +72,25 @@ final class MeteoRideShareStore {
     static File store(Context ctx, byte[] data, String suggestedName) {
         if (data == null || data.length == 0) return null;
         // Timestamp prefix keeps arrival order and avoids collisions between shares.
-        File dest = new File(inbox(ctx), System.currentTimeMillis() + "__" + sanitize(suggestedName));
-        try (FileOutputStream out = new FileOutputStream(dest)) {
+        String fileName = System.currentTimeMillis() + "__" + sanitize(suggestedName);
+        File dest = new File(inbox(ctx), fileName);
+        // Written elsewhere and moved in whole: ingestion runs on its own thread, and
+        // next() would otherwise read, and delete, a file still being written. The
+        // cache and files directories share a volume, so the rename is atomic.
+        File part = new File(ctx.getCacheDir(), fileName + ".part");
+        try (FileOutputStream out = new FileOutputStream(part)) {
             out.write(data);
-            return dest;
         } catch (IOException e) {
             Log.w(TAG, "could not store shared route: " + e.getMessage());
+            if (!part.delete()) Log.w(TAG, "could not delete " + part.getName());
             return null;
         }
+        if (!part.renameTo(dest)) {
+            Log.w(TAG, "could not move shared route into the inbox");
+            if (!part.delete()) Log.w(TAG, "could not delete " + part.getName());
+            return null;
+        }
+        return dest;
     }
 
     // ---------------------------------------------------------------- reading

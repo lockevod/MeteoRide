@@ -1,5 +1,6 @@
 package cc.meteoride.app;
 
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -10,11 +11,19 @@ import com.getcapacitor.BridgeActivity;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends BridgeActivity {
 
     /** Marks an intent whose route has already been taken, so it is not read twice. */
     private static final String EXTRA_HANDLED = "cc.meteoride.app.ROUTE_HANDLED";
+
+    /**
+     * Reading a shared file can stall (a cloud-backed provider, a slow stream), so it
+     * never runs on the main thread. One thread keeps one file in memory at a time.
+     */
+    private static final ExecutorService INGEST = Executors.newSingleThreadExecutor();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -32,19 +41,27 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        // The app was already running, so nothing else will wake the web layer.
-        if (ingest(intent)) MeteoRideSharePlugin.notifyRouteAvailable();
+        ingest(intent);
     }
 
-    /** Parks any route carried by the intent in the shared inbox. */
-    private boolean ingest(Intent intent) {
-        if (intent == null || intent.getBooleanExtra(EXTRA_HANDLED, false)) return false;
+    /**
+     * Parks any route carried by the intent in the shared inbox, off the main thread,
+     * then tells the web layer. It always tells: on a launch the first drain may have
+     * run before the file landed, and the plugin holds the event until JS listens.
+     */
+    private void ingest(Intent intent) {
+        if (intent == null || intent.getBooleanExtra(EXTRA_HANDLED, false)) return;
         intent.putExtra(EXTRA_HANDLED, true);
-        boolean stored = false;
-        for (Uri uri : routeUris(intent)) {
-            stored |= MeteoRideShareStore.ingest(this, uri);
-        }
-        return stored;
+        List<Uri> uris = routeUris(intent);
+        if (uris.isEmpty()) return;
+        Context app = getApplicationContext();
+        INGEST.execute(() -> {
+            boolean stored = false;
+            for (Uri uri : uris) {
+                stored |= MeteoRideShareStore.ingest(app, uri);
+            }
+            if (stored) MeteoRideSharePlugin.notifyRouteAvailable();
+        });
     }
 
     private List<Uri> routeUris(Intent intent) {

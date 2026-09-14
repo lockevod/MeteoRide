@@ -16,7 +16,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "MeteoRideShare")
 public class MeteoRideSharePlugin extends Plugin {
 
-    private static MeteoRideSharePlugin instance;
+    private static volatile MeteoRideSharePlugin instance;
 
     @Override
     public void load() {
@@ -68,10 +68,12 @@ public class MeteoRideSharePlugin extends Plugin {
     }
 
     /**
-     * Tells the web layer a route arrived while the app was already running. The
-     * activity cannot reach the plugin instance any other way.
+     * Tells the web layer a route landed in the inbox. The activity cannot reach the
+     * plugin instance any other way. Called from the ingest thread; retained so a
+     * route stored before JavaScript adds its listener is still announced.
      */
     static void notifyRouteAvailable() {
-        if (instance != null) instance.notifyListeners("sharedRouteAvailable", new JSObject());
+        MeteoRideSharePlugin plugin = instance;
+        if (plugin != null) plugin.notifyListeners("sharedRouteAvailable", new JSObject(), true);
     }
 }
