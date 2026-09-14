@@ -220,6 +220,9 @@ exactamente aquí):
 - **H1**: el test «picking a route file computes its forecast once» cuenta las
   llamadas a `reloadFull` y `fetchWeatherForSteps` por fichero elegido. Mirar solo
   `weatherData` ya no cazaba lanzamientos duplicados, porque ahora publica solo el último.
+- **H1**: con `initUI` ejecutándose una sola vez, al cargar `ui.js`, el botón de rutas
+  recientes podía pintarse antes de `loadSettings` y quedarse en inglés.
+  `applyTranslations` lo vuelve a etiquetar; test en `smoke.spec.mjs`.
 - **H6**: `/share` decodifica con `TextDecoder` estricto y responde 400 a lo que no es
   UTF-8 (2,5 MB de `0xFF` se guardaban como 7,5 MB), y un `cancel` que falla ya no
   convierte el 413 en 500. Tests nuevos para el margen multipart y el `Content-Length`.

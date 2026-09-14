@@ -151,6 +151,13 @@
     }
     const bclose = document.getElementById("closeConfig");
     if (bclose) bclose.setAttribute("aria-label", t("close"));
+    const brecent = document.getElementById("recentRoutesButton");
+    if (brecent) {
+      const label = t("recent_routes_count", { n: brecent.dataset.count });
+      brecent.title = label;
+      brecent.setAttribute("aria-label", label);
+      brecent.setAttribute("data-tooltip", label);
+    }
 
     // Document title
     if (typeof document !== "undefined") document.title = t("title");
@@ -1833,6 +1840,9 @@
     btn.id = 'recentRoutesButton';
     btn.className = 'recent-routes-button';
   btn.type = 'button';
+  // Kept so applyTranslations can relabel the button: it can be drawn before the saved
+  // language is loaded.
+  btn.dataset.count = routes.length;
   // Accessible label / tooltip text
   btn.title = pText;
   btn.setAttribute('aria-label', pText);

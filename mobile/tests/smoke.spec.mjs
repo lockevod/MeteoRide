@@ -1430,6 +1430,36 @@ test.describe('on a phone set to German', () => {
   });
 });
 
+// initUI runs when ui.js loads and draws the recent-routes button once IndexedDB
+// answers, which can be before app.js has loaded the settings: the select still holds
+// the markup's English, and nothing relabelled the button afterwards. Holding app.js
+// back makes that order certain instead of a matter of timing.
+test('the recent-routes button speaks the saved language even when it is drawn first', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('cwSettings', JSON.stringify({ language: 'es', windUnits: 'kmh' }));
+    localStorage.setItem('meteoride_recent_routes', JSON.stringify([{
+      name: 'Montseny.gpx', timestamp: Date.now(),
+      content: '<?xml version="1.0"?><gpx><trk><name>Montseny</name></trk></gpx>',
+    }]));
+  });
+  await goOffline(page);
+  let drawnFirst = false;
+  await page.route((url) => url.pathname === '/scripts/app.js', async (route) => {
+    await page.waitForFunction(() => !!document.getElementById('recentRoutesButton'), null, { timeout: 10000 });
+    drawnFirst = true;
+    await route.continue();
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(drawnFirst, 'the button was not drawn before app.js ran').toBe(true);
+  expect(await chosenLanguage(page)).toBe('es');
+  const button = page.locator('#recentRoutesButton');
+  await expect(button).toHaveAttribute('title', '1 rutas recientes');
+  await expect(button).toHaveAttribute('aria-label', '1 rutas recientes');
+});
+
 /* ---------- the file picker ---------- */
 
 const acceptAttr = (page) => page.evaluate(() => document.getElementById('gpxFile').getAttribute('accept'));
