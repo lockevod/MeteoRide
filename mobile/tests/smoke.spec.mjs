@@ -358,6 +358,24 @@ test('the native shell hands a shared route to the app', async ({ page }) => {
   expect(await page.evaluate(() => window.__swRegistered)).toBe(false);
 });
 
+// Both native inboxes take .kml as well as .gpx. The file picker converts KML; a KML
+// that came through a share used to go straight to the GPX loader and be refused.
+test('a KML shared from another app is converted, not refused', async ({ page }) => {
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</Placemark></Document></kml>`;
+  const loaderFailures = watchTheLoader(page);
+
+  await installNativeBridge(page, { routes: [{ name: 'Costa.kml', gpx: kml }] });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(loaderFailures).toEqual([]);
+});
+
 test('a route arriving mid-drain is not left behind', async ({ page }) => {
   const gpx = await readFile(FIXTURE, 'utf8');
   const loaderFailures = watchTheLoader(page);

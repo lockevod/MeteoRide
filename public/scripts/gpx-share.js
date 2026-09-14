@@ -52,9 +52,14 @@
   // and the native share extension.
   function cwInjectGPXFromText(gpxText, routeName){
     const name = routeName || 'Shared route';
-    const text = String(gpxText || '');
+    let text = String(gpxText || '');
     whenAppReady(() => {
       try {
+        // The native inboxes accept .kml too; the loader only reads GPX.
+        if (/<kml[\s>]/i.test(text.slice(0, 4096)) && typeof window.cwKmlToGpxText === 'function') {
+          const converted = window.cwKmlToGpxText(text);
+          if (converted) text = converted;
+        }
         if (typeof window.cwLoadGPXFromString === 'function') {
           window.cwLoadGPXFromString(text, name);
         } else {

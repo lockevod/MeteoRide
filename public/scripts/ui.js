@@ -608,6 +608,7 @@
   // Export geojsonToGpx helper so other scripts/userscripts can reuse it
   // Attach to window.cw namespace (created later in the file); create temporary holder now
   window._internal_geojsonToGpx = geojsonToGpx;
+  window.cwKmlToGpxText = kmlToGpxText;
 
   function reloadFull() {
     if (!window.lastGPXFile) {
