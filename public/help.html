@@ -140,6 +140,10 @@
             border-radius: 4px;
             font-family: monospace;
         }
+        /* Only inside the native shell: scripts/help.js adds the class. The website
+           has none of these buttons, so describing them there would be noise. */
+        .app-only { display: none; }
+        html.cw-native .app-only { display: block; }
         .icon { font-size: 1.2em; margin-right: 0.5em; }
         ul { padding-left: 1.5rem; }
         li { margin: 0.5rem 0; }
@@ -293,6 +297,50 @@
             <li>Ve a Archivo > Agregar al Dock.</li>
             <li>O, haz clic en el botón Compartir y selecciona "Agregar al Dock".</li>
         </ol>
+    </div>
+
+    <div class="section app-only">
+        <h2>📱 En la app de iPhone y Android</h2>
+        <p>Esta sección solo aparece dentro de la app nativa: son cosas que un navegador no puede hacer.</p>
+
+        <h3>📤 Enviar la ruta a otra app</h3>
+        <p>Con una ruta cargada, el botón 📤 de la barra superior abre la hoja de compartir del sistema con el GPX adjunto. Desde ahí va a tu ciclocomputador (Hammerhead, Wahoo), a Archivos, al correo o a donde quieras. El fichero no sale del dispositivo en ningún momento.</p>
+
+        <h3>📥 Recibir una ruta desde otra app</h3>
+        <p>Al revés también: en Komoot, Strava, Bikemap, Archivos o el correo, comparte el GPX y elige <strong>MeteoRide</strong>. La app se abre con la ruta ya cargada. Igual con "Abrir en MeteoRide" desde un fichero descargado.</p>
+        <div class="tip">
+            <strong>💡</strong> Si MeteoRide no aparece en la hoja de compartir la primera vez, reinicia el teléfono: el sistema tarda un poco en registrar la app como destino.
+        </div>
+
+        <h3>🔔 Avisos si cambia el tiempo de tu ruta</h3>
+        <p>Un pronóstico es una previsión hecha con horas de antelación. Cuando calculas una ruta, la app se queda vigilándola y te avisa si empeora para las horas en que vas a estar fuera:</p>
+        <ul>
+            <li>Estaba seco y va a llover, o la lluvia pasa a ser fuerte.</li>
+            <li>Había calma y va a hacer viento moderado o fuerte, o rachas por encima de 55 km/h.</li>
+            <li>Se emite un aviso oficial que solapa tu salida (necesita clave de OpenWeather y tener activadas las alertas oficiales).</li>
+        </ul>
+        <p>Cada cambio se avisa una sola vez; si luego empeora más, vuelve a avisar. Las mejoras no se avisan, y los tramos que ya has pasado tampoco. La vigilancia termina una hora después del último punto de la ruta.</p>
+        <p>Se activa y desactiva en <strong>Configuración → Alertas → "Avisarme si cambia el tiempo de la ruta"</strong>, y debajo te dice qué ruta está vigilando y hasta cuándo.</p>
+        <div class="warning">
+            <strong>Importante:</strong> la comprobación la ejecuta el sistema operativo cuando quiere, no la app. En iPhone hace falta tener activada la <em>Actualización en segundo plano</em> para MeteoRide (Ajustes → General), y el modo de bajo consumo la suspende. En Android, algunos fabricantes matan las tareas de fondo con su gestor de batería. Si el sistema no la va a ejecutar, la propia app te lo dice debajo del interruptor.
+        </div>
+
+        <h3>🚴 Sin cobertura</h3>
+        <p>El tiempo no se puede inventar, pero lo ya descargado no se tira:</p>
+        <ul>
+            <li>Al abrir la app vuelve la última ruta con su tabla, sin tener que cargar nada.</li>
+            <li>Si el pronóstico es antiguo se sigue mostrando, indicando cuántas horas tiene. Deja de hacerlo a las doce horas.</li>
+            <li>Las teselas del mapa que ya has mirado se guardan en el teléfono y vuelven a salir sin conexión. En una zona que no hayas abierto antes el fondo sale en blanco y el mapa lo indica.</li>
+            <li>Si no hay datos, lo dice: no se queda una pantalla vacía sin explicación.</li>
+        </ul>
+        <p>El botón <strong>📴</strong> guarda el pronóstico de la ruta que tengas cargada y lo protege del borrado automático. Púlsalo en casa antes de salir.</p>
+
+        <h3>📍 Mapa y ajustes</h3>
+        <ul>
+            <li>Sin ruta cargada, el mapa se abre donde estás en lugar de en Barcelona.</li>
+            <li>La app arranca en el idioma del teléfono mientras no elijas uno a mano.</li>
+            <li>Las unidades, el idioma y tu clave de API se guardan también fuera del navegador interno, así que no se pierden si el sistema libera espacio.</li>
+        </ul>
     </div>
 
     <div class="section">

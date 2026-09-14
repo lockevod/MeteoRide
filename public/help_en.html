@@ -141,6 +141,10 @@
             border-radius: 4px;
             font-family: monospace;
         }
+        /* Only inside the native shell: scripts/help.js adds the class. The website
+           has none of these buttons, so describing them there would be noise. */
+        .app-only { display: none; }
+        html.cw-native .app-only { display: block; }
         .icon { font-size: 1.2em; margin-right: 0.5em; }
         ul { padding-left: 1.5rem; }
         li { margin: 0.5rem 0; }
@@ -296,6 +300,50 @@
             <li>Go to File > Add to Dock.</li>
             <li>Or, click the Share button and select "Add to Dock".</li>
         </ol>
+    </div>
+
+    <div class="section app-only">
+        <h2>📱 In the iPhone and Android app</h2>
+        <p>This section only shows inside the native app: these are things a browser cannot do.</p>
+
+        <h3>📤 Send the route to another app</h3>
+        <p>With a route loaded, the 📤 button in the top bar opens the system share sheet with the GPX attached. From there it goes to your head unit (Hammerhead, Wahoo), to Files, to mail, wherever you like. The file never leaves the device.</p>
+
+        <h3>📥 Receive a route from another app</h3>
+        <p>The other way round too: in Komoot, Strava, Bikemap, Files or mail, share the GPX and pick <strong>MeteoRide</strong>. The app opens with the route already loaded. Same for "Open in MeteoRide" from a downloaded file.</p>
+        <div class="tip">
+            <strong>💡</strong> If MeteoRide does not appear in the share sheet the first time, restart the phone: the system takes a while to register the app as a destination.
+        </div>
+
+        <h3>🔔 Alerts when the weather on your route changes</h3>
+        <p>A forecast is a guess made hours ahead. When you work out a route, the app keeps watching it and tells you if it turns worse for the hours you will be out:</p>
+        <ul>
+            <li>It was dry and rain appears, or the rain becomes heavy.</li>
+            <li>It was calm and moderate or strong wind appears, or gusts above 55 km/h.</li>
+            <li>An official warning is issued that overlaps your ride (needs an OpenWeather key and official alerts switched on).</li>
+        </ul>
+        <p>Each change is reported once; if it gets worse again, you hear about it again. Improvements are not reported, and neither are stretches you have already ridden. The watch ends an hour after the route's last point.</p>
+        <p>Switch it on and off under <strong>Settings → Alerts → "Tell me if the weather on the route changes"</strong>, where a line underneath says which route is being watched and until when.</p>
+        <div class="warning">
+            <strong>Worth knowing:</strong> the check is run by the operating system when it feels like it, not by the app. On iPhone, Background App Refresh must be on for MeteoRide (Settings → General), and Low Power Mode suspends it. On Android, some manufacturers kill background tasks with their own battery manager. When the system is not going to run it, the app says so under the toggle.
+        </div>
+
+        <h3>🚴 Out of signal</h3>
+        <p>The weather cannot be invented, but what was already downloaded is not thrown away:</p>
+        <ul>
+            <li>Opening the app brings back the last route with its table, without loading anything.</li>
+            <li>An old forecast is still shown, labelled with how many hours old it is. It stops at twelve.</li>
+            <li>Map tiles you have already looked at are kept on the phone and come back offline. In an area you never opened, the background is blank and the map says so.</li>
+            <li>When there is no data at all, it says so rather than leaving an empty screen with no explanation.</li>
+        </ul>
+        <p>The <strong>📴</strong> button saves the forecast for the route you have loaded and protects it from the automatic clear-out. Press it at home before you leave.</p>
+
+        <h3>📍 Map and settings</h3>
+        <ul>
+            <li>With no route loaded, the map opens where you are rather than in Barcelona.</li>
+            <li>The app starts in the phone's language until you pick one by hand.</li>
+            <li>Units, language and your API key are also kept outside the internal browser, so they survive the system reclaiming space.</li>
+        </ul>
     </div>
 
     <div class="section">

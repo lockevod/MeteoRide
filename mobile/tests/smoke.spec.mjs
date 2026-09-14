@@ -1428,3 +1428,31 @@ test('the app fits the screen even with a taller header and a notice showing', a
   expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
   expect(await overflowBelow(page, '.wtc-wrap')).toBeLessThanOrEqual(1);
 });
+
+/* ---------- the help page ---------- */
+
+test('the help page describes the app-only features, but only in the app', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/help.html');
+  await expect(page.locator('.app-only')).toBeHidden();
+
+  await installNativeBridge(page);
+  await page.reload();
+  await expect(page.locator('.app-only')).toBeVisible();
+
+  // The things that exist only in the shell, each of which a reader has to be told
+  // about because no button explains itself.
+  for (const text of ['📤', '📴', 'Avisarme si cambia el tiempo', 'Actualización en segundo plano']) {
+    await expect(page.locator('.app-only')).toContainText(text);
+  }
+});
+
+test('the English help page says the same', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/help_en.html');
+  await expect(page.locator('.app-only')).toBeVisible();
+  for (const text of ['📤', '📴', 'Tell me if the weather on the route changes', 'Background App Refresh']) {
+    await expect(page.locator('.app-only')).toContainText(text);
+  }
+});

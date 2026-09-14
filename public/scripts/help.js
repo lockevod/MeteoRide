@@ -1,6 +1,18 @@
 // Shared by help.html and help_en.html. Lives in a file rather than inline so the
 // site can ship a Content-Security-Policy without 'unsafe-inline' for scripts.
 (function () {
+  // The app-only section is hidden unless this page is being read inside the native
+  // shell. The help page does not load native.js — that one wires up the toolbar and
+  // the route handling, none of which belongs here — but Capacitor injects its bridge
+  // into every page in the web view, so the check is available all the same.
+  try {
+    const cap = window.Capacitor;
+    if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
+      document.documentElement.classList.add('cw-native');
+
+    }
+  } catch (_) { /* a plain browser: leave the section hidden */ }
+
   const params = new URLSearchParams(window.location.search);
   if (params.get('return') === 'true') {
     const backBtn = document.getElementById('backBtn');

@@ -185,6 +185,12 @@ What is still open, and why it was left:
   because on a first run the restore waits seconds for routes that do not exist; a
   position is only applied while the map is still unclaimed, and a route fits itself
   afterwards regardless.
+- **The help pages carry an app-only section**, hidden behind `.app-only` and shown
+  when `html.cw-native` is set. `help.js` sets that class itself: the help page does
+  not load `native.js` (that one wires up the toolbar and route handling, none of
+  which belongs on a help page), but Capacitor injects its bridge into every page in
+  the web view, so the same check works. Anything added to the shell that a reader
+  cannot work out from a button belongs in both languages there.
 - **The icon set holds two different drawings.** Every PNG in `public/icons/` shares
   one artwork with a 9% transparent margin — except `icon-ios.png`, which is the one
   `<link rel="apple-touch-icon">` points at, so it is what iOS actually shows for the
