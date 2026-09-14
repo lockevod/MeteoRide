@@ -88,33 +88,49 @@ Piezas nativas que necesita y su estado:
   **simulador nunca ejecuta tareas en segundo plano**; modo de bajo consumo las
   suspende. `docs/IOS.md` tiene el comando lldb para forzar una ejecución.
 
-## 5. Pasos manuales pendientes en Xcode (del autor)
+## 5. Estado del proyecto Xcode del autor
 
-En sus logs del simulador no aparece ninguna llamada `MeteoRideShare`, así que el
-plugin propio **no está registrado** todavía en su proyecto. Faltan los pasos 2–6 de
-`docs/IOS.md`: añadir `mobile/native/ios/MeteoRideShare/*.swift` al target,
-`SceneDelegate` con `MeteoRideViewController`, App Group `group.cc.meteoride.app`,
-claves de `Info.plist.additions.xml`, share extension, Background Modes +
-AppDelegate + Time Sensitive. Hasta entonces: no llegan rutas compartidas, no hay
-alertas y no se muestra el aviso de background refresh.
+Los pasos 1–9 de `docs/IOS.md` ya están hechos en el Mac del autor y el proyecto
+**compila y arranca en el simulador**. Lo que confirmaron los logs del simulador:
+
+- `MeteoRideViewController` registra el plugin propio (`MeteoRideShare consumePending`
+  aparece en los logs), así que el `SceneDelegate` está puesto.
+- El App Group `group.cc.meteoride.app` funciona (antes de añadirlo los logs decían
+  `App Group ... unavailable`).
+- Team de firma: solo hay "(Personal Team)" disponible en el desplegable pese a tener
+  cuenta de desarrollador de pago; con eso basta para simulador y para App Groups.
+- `Minimum Deployments` se bajó a **iOS 16** (Xcode proponía 26.5 por defecto).
+- `ShareViewController.swift` se añadió por referencia ("Reference files in place"),
+  no copiado, para que editar el fichero del repo actualice el target.
+
+Queda del lado del autor: probar en iPhone real (las tareas en segundo plano **nunca**
+se ejecutan en el simulador), iconos de Android (siguen siendo la plantilla de
+Capacitor) y firma de release de Android.
 
 ## 6. Verificado / no verificado
 
-Verificado aquí: 68 tests (43 Playwright sobre el bundle real con la red cortada y
+Verificado aquí: **89 tests** (55 Playwright sobre el bundle real con la red cortada y
 el bridge nativo simulado; 16 de reglas; 9 del runner ensamblado con KV/notificaciones/
-fetch simulados); Java compilado contra stubs; nombres de API de Capacitor 8.5.2
-cotejados con las fuentes de `node_modules` (`CAPBridgedPlugin`,
-`registerPluginInstance`, `capacitorDidLoad`, `SceneDelegateProxy`,
-`BackgroundRunnerPlugin.registerBackgroundTask`); `cap sync android` ejecutado y los
-gradle generados commiteados.
+fetch simulados; 5 de iconos; 2 de nombres de plugin; 2 de traducciones); Java
+compilado contra stubs; nombres de API de Capacitor 8.5.2 cotejados con las fuentes de
+`node_modules` (`CAPBridgedPlugin`, `registerPluginInstance`, `capacitorDidLoad`,
+`SceneDelegateProxy`, `BackgroundRunnerPlugin.registerBackgroundTask`); `cap sync
+android` ejecutado y los gradle generados commiteados.
 
-**No verificado** (no hay Xcode ni SDK Android en el entorno de desarrollo):
-- Ningún Swift ha compilado ni corrido: plugin, view controller, share extension,
-  parche del plugin, `backgroundRefreshStatus`.
-- La tarea en segundo plano en dispositivo real (iOS y Android).
+Verificado por el autor en su Mac: el Swift **compila** (plugin, view controller,
+share extension, parche del plugin, `backgroundRefreshStatus`), la app arranca en el
+simulador, carga un GPX desde Archivos, calcula previsión y muestra el toggle de
+alertas con su aviso de límites del sistema.
+
+**No verificado** (no hay Xcode ni SDK Android en el entorno de desarrollo, y el autor
+aún no ha probado en dispositivo físico):
+- La tarea en segundo plano en dispositivo real (iOS y Android). En el simulador de
+  iOS BGTaskScheduler **no se ejecuta nunca**, así que ninguna alerta ha llegado aún
+  por la vía real; lo único probado es la lógica pura y el runner con stubs.
 - Que OpenStreetMap permita leer teselas con `fetch` desde `capacitor://localhost`
   (si no, el mapa funciona igual pero sin caché; hay fallback).
 - La CSP `<meta>` de la app solo se ha validado en Chromium, no en WKWebView.
+- Nada se ha compilado ni ejecutado en Android más allá de `cap sync`.
 
 ## 7. Trabajo abierto / ideas
 
@@ -125,10 +141,62 @@ tienen API pública); notificación en primer plano al reabrir la app.
 
 ## 8. Cómo retomar
 
+Desde cualquier máquina con el repo clonado:
+
+```bash
+git clone https://github.com/lockevod/meteoride.git      # o git pull si ya lo tienes
+cd meteoride
+git checkout native-ios-capacitor
+cd mobile && npm install                                 # postinstall parchea el runner
+```
+
 Prompt sugerido para un asistente:
 
-> Estoy en el repo MeteoRide, rama `native-ios-capacitor`. Lee `docs/HANDOFF.md` y
-> `AGENTS.md`. Convenciones: commits como Enderthor, sin atribución de IA, cada test
-> con comprobación por mutación, `npm test` en `mobile/` antes de cada commit, y no
-> ejecutar dos suites a la vez. La memoria de decisiones está en `AGENTS.md`;
-> actualízala cuando cambies algo que un lector no deduciría del código.
+> Estoy en el repo MeteoRide, rama `native-ios-capacitor`. Lee `AGENTS.md`,
+> `docs/HANDOFF.md` y `docs/REVIEW-2026-09-14.md` antes de tocar nada.
+> Convenciones: commits como Enderthor, **sin ninguna atribución de IA** (ni
+> `Co-Authored-By`, ni menciones en comentarios ni en el mensaje), cada test con
+> comprobación por mutación (rompe el código y confirma que el test falla), `npm test`
+> desde `mobile/` antes de cada commit, y **nunca dos suites a la vez** (comparten el
+> puerto 4173 y `www/`). La memoria de decisiones está en `AGENTS.md`; actualízala
+> cuando cambies algo que un lector no deduciría del código. Lo pendiente está en la
+> sección 9 de `docs/HANDOFF.md`.
+
+## 9. Lo pendiente: los seis hallazgos de la revisión
+
+`docs/REVIEW-2026-09-14.md` es una revisión externa de seis hallazgos. Se ejecutó su
+propio script de reproducción contra el HEAD de esta rama (`be77884`) y **los tres
+reproducibles salen exactamente como dice la revisión**:
+
+```
+H1: renders [["B"],["B","A"]]
+H2: prepare_offline_done
+H6: 2600011 bytes aceptados, HTTP 201
+```
+
+No hay desacuerdo sustancial con ninguno de los seis. Dos son de código añadido en
+este trabajo nativo (H2 y H6) y en H6 además había un comentario que afirmaba una
+protección que el código no da.
+
+| # | Dónde | Qué pasa |
+|---|-------|----------|
+| **H1** (alta, preexistente) | `app.js:514` resetea, `:1013` escribe, `:1090/:1099` pintan | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (`app.js:1425` → `native.js:635`) consume ese mismo global. |
+| **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. |
+| **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. |
+| **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. |
+| **H5** (media) | `utils.js:34-58` | Los avisos de proveedor usan un temporizador de 1,5 s que nunca se reinicia, así que un aviso nuevo puede desaparecer al instante. |
+| **H6** (media, seguridad, código propio) | `functions/share.js:20-60` | El límite de tamaño compara `raw.length` (unidades UTF-16, no bytes) y lo hace **después** de leer el cuerpo entero en memoria. Con multibyte pasan ~2,6 MB. |
+
+**Orden propuesto** (decisión del autor pendiente; la conversación se quedó
+exactamente aquí):
+
+1. **H2 + H6** — pequeños, aislados, de código propio, y los dos engañan hoy al
+   usuario (uno dice que la ruta está lista sin conexión cuando puede no estarlo, el
+   otro documenta una protección inexistente).
+2. **H1** — identidad de ejecución en `fetchWeatherForSteps`: solo la ejecución en
+   curso puede publicar tabla, marcadores, avisos y el evento `cw:forecast`. Es un
+   refactor de verdad del corazón del cálculo.
+3. **H5** — resolver con el estado de ejecución de H1, no con más temporizadores.
+4. **H4** — timeouts atados a esa misma identidad, preservando los fallbacks.
+5. **H3** — formato de caché, con cuidado en la migración de las claves fijadas para
+   uso sin conexión; medir antes de afirmar mejoras.

@@ -614,13 +614,25 @@ code does and what makes the race reproducible.
   provider response would make that tractable.
 - The suite runs on Chromium only. iOS ships WKWebView, so anything Safari-specific
   goes unnoticed; adding Playwright's `webkit` project would close most of that gap.
-- The iOS native code has never been compiled. Everything about it was checked by
-  reading the Capacitor sources in `node_modules/@capacitor/ios`, which is how the
-  plugin registration bug above was found, but reading is not building. The Android
-  code compiles (against hand-written stubs of the dozen SDK and Capacitor classes it
-  touches; there is no Android SDK here), and `cap sync android` runs here, so the
-  generated `capacitor.settings.gradle` / `capacitor.build.gradle` are committed in
-  step with the installed plugins.
+- The iOS native code has now been compiled and run in the simulator on the author's
+  Mac — the app launches, the app-local plugin registers, the App Group resolves and a
+  GPX loads from Files. Nothing here compiles it: everything written in this
+  environment was checked by reading the Capacitor sources in
+  `node_modules/@capacitor/ios`, which is how the plugin registration bug above was
+  found, but reading is not building, so a change to the Swift still has to go through
+  Xcode before anyone can call it working. The Android code compiles (against
+  hand-written stubs of the dozen SDK and Capacitor classes it touches; there is no
+  Android SDK here), and `cap sync android` runs here, so the generated
+  `capacitor.settings.gradle` / `capacitor.build.gradle` are committed in step with the
+  installed plugins. Android itself has never been built or run.
+- **Nothing has run on a physical device.** iOS background tasks never execute in the
+  simulator, so no ride alert has ever fired through the real path: the rules and the
+  runner are covered by tests, the delivery is not.
+- The six findings in `docs/REVIEW-2026-09-14.md` are all open, and all six reproduce
+  against this branch. Two of them (H2, offline preparation reporting success for the
+  wrong cache keys; H6, the `/share` size limit counting UTF-16 units after reading the
+  whole body) are in code added for the native app. `docs/HANDOFF.md` §9 has the table
+  and the proposed order.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`
