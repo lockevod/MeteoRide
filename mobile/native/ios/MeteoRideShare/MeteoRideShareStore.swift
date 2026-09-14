@@ -157,10 +157,19 @@ enum MeteoRideShareStore {
         String(format: "%013lld-%04ld__%@", millis, sequence % 10000, sanitize(name))
     }
 
-    /// A finished inbox entry, as opposed to an `.atomic` write's transient
-    /// `<name>.sb-XXXX` sibling or unrelated junk (e.g. `.DS_Store`).
+    /// Matches a finished inbox entry — the current `<millis>-<seq>__name` scheme or
+    /// the legacy pre-update `<millis>__name` one (no zero padding, no sequence) —
+    /// as opposed to an `.atomic` write's transient `<name>.sb-XXXX` sibling or
+    /// unrelated junk (e.g. `.DS_Store`). Case-insensitive: `sanitize` only checks
+    /// the extension case-insensitively and keeps whatever case the sender used, so
+    /// a name can legitimately end in `.GPX` or `.KML`.
+    private static let inboxNameRegex = try? NSRegularExpression(
+        pattern: "^(?:\\d{13}-\\d{4}__.+\\.(?:gpx|kml)|\\d+__.+\\.(?:gpx|kml))$",
+        options: [.caseInsensitive]
+    )
+
     static func isInboxName(_ name: String) -> Bool {
-        guard let regex = try? NSRegularExpression(pattern: "^\\d{13}-\\d{4}__.+\\.(gpx|kml)$") else { return false }
+        guard let regex = inboxNameRegex else { return false }
         let range = NSRange(name.startIndex..<name.endIndex, in: name)
         return regex.firstMatch(in: name, range: range) != nil
     }

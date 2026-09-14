@@ -392,9 +392,12 @@ What is still open, and why it was left:
   when two routes share a millisecond. On iOS that name also has to be filtered on the way
   back out: `Data.write(to:options:.atomic)` leaves a `<name>.sb-XXXX` sibling in the same
   directory for the instant of the rename, and `isInboxName`
-  (`MeteoRideShareStore.swift:162-166`) only accepts the full `\d{13}-\d{4}__.+\.(gpx|kml)`
-  pattern, so `pendingURLs()` skips that temp file rather than reading and deleting it
-  half-written.
+  (`MeteoRideShareStore.swift:159-173`) skips it rather than having `pendingURLs()` read and
+  delete it half-written. The filter accepts either that current pattern or the legacy
+  pre-update one (`<millis>__<name>`, no padding, no sequence) case-insensitively — `sanitize`
+  only checks the extension case-insensitively and keeps whatever case the sender used, so a
+  stored name can legitimately end in `.GPX`/`.KML`, and a route shared moments before an app
+  update must not sit unread until the 24-hour prune sweeps it.
 - **A naive UTF-8 decode does not throw, so a Latin-1 exporter's bytes have to be caught
   going in, not read back out.** `String(data:encoding:)` and `new String(bytes, UTF_8)`
   do not fail on invalid bytes by default — they substitute U+FFFD and hand back a
