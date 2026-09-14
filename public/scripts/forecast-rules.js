@@ -47,8 +47,7 @@ var cwForecastRules = (function () {
     }
     if (idx === -1 && !useMinutely) return null;
 
-    // As processWeatherData has always done it: a minutely index of 0 turns into -1.
-    const mIdx = minutelyIndex || -1;
+    const mIdx = useMinutely ? minutelyIndex : -1;
 
     const fromHourly = (name) => {
       const arr = hourly[name];

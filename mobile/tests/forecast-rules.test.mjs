@@ -90,3 +90,12 @@ test('routeLine gives null when there is no line to follow', () => {
   assert.equal(rules.routeLine({ features: [] }), null);
   assert.equal(rules.routeLine(null), null);
 });
+
+test('Open-Meteo: the first quarter of minutely_15 is read like any other', () => {
+  const r = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T06:00:00Z') });
+  assert.equal(r.source, 'minutely_15');
+  assert.equal(r.minutelyIndex, 0);
+  assert.equal(r.temp, 100);               // 08:00 local → quarter 0
+  assert.equal(r.weatherCode, 2);
+  assert.equal(r.isDay, 1);
+});

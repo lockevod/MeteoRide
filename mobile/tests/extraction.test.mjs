@@ -106,9 +106,7 @@ test('the golden covers every case and no other', () => {
 test('the golden is about the hours the fixtures were built for', () => {
   const om = golden.openmeteo;
   assert.equal(om[0].__useMinutely, true);
-  // 08:00 local is quarter 0, and `step.__minutelyIndex || -1` turns 0 into -1, so the
-  // first quarter comes out empty today. Pinned as it is; Task 4 fixes it on purpose.
-  assert.equal(om[0].temp, null);
+  assert.equal(om[0].temp, 100);            // 08:00 local → quarter 0
   assert.equal(om[1].temp, 101);            // 08:20 local → nearest quarter 08:15
   assert.equal(om[3].temp, 114);            // 11:30 local → quarter 14
   assert.equal(om[4].__useMinutely, false); // 16:10 local is outside minutely_15
