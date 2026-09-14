@@ -18,12 +18,14 @@ function gate() {
   return { promise, open, fail };
 }
 const flush = () => new Promise((r) => setImmediate(r));
+const plain = (x) => JSON.parse(JSON.stringify(x));
 
 /** A coordinator whose dependencies record what they were asked to do. */
-function harness({ confirmed = false, current = false, readTimeoutMs = 30000 } = {}) {
-  const calls = { parse: [], commit: [], launch: 0, notify: 0, paint: [] };
+function harness({ confirmed = false, current = false, readTimeoutMs = 30000, writeRecent, now } = {}) {
+  const calls = { parse: [], commit: [], launch: 0, notify: 0, notSaved: 0, paint: [] };
   const state = { confirmed, current, parseResult: null };
-  const s = { console, Promise, setTimeout, clearTimeout, Date };
+  // `now` makes the clock answer the same time on every reading.
+  const s = { console, Promise, setTimeout, clearTimeout, Date: now == null ? Date : { now: () => now } };
   vm.runInNewContext(`${rulesSrc}\n${src}`, s);
   const c = s.cwCreateRouteCoordinator({
     parse: (input) => { calls.parse.push(input); return state.parseResult ? state.parseResult(input) : { name: input.name }; },
@@ -33,6 +35,8 @@ function harness({ confirmed = false, current = false, readTimeoutMs = 30000 } =
     hasCurrentForecast: () => state.current,
     paintLoading: (visible) => calls.paint.push(visible),
     notifyFailed: () => { calls.notify++; },
+    writeRecent: writeRecent || (async (input) => ({ ok: true, name: input.name })),
+    notifyNotSaved: () => { calls.notSaved++; },
     readTimeoutMs,
   });
   return { c, calls, state };
@@ -181,4 +185,48 @@ test('the indicator stays on while another owner still holds it', () => {
   assert.deepEqual(calls.paint, [true]);
   c.releaseLoadingPrefix('forecast:');
   assert.deepEqual(calls.paint, [true, false]);
+});
+
+test('imports run in the order they arrived, even when the first write is the slowest', async () => {
+  const log = [];
+  const first = gate();
+  const { c } = harness({ writeRecent: async (input) => {
+    log.push(`start ${input.name}`);
+    if (input.name === 'a.gpx') await first.promise;
+    log.push(`end ${input.name}`);
+    return { ok: true, name: input.name };
+  } });
+  const a = c.importRoute({ text: 'A', name: 'a.gpx' });
+  const b = c.importRoute({ text: 'B', name: 'b.gpx' });
+  await flush();
+  assert.deepEqual(log, ['start a.gpx'], 'B started before A finished');
+  first.open();
+  assert.deepEqual(plain(await a), { ok: true, name: 'a.gpx' });
+  assert.deepEqual(plain(await b), { ok: true, name: 'b.gpx' });
+  assert.deepEqual(log, ['start a.gpx', 'end a.gpx', 'start b.gpx', 'end b.gpx']);
+});
+
+test('arrivedAt grows strictly on the same clock reading, and each write carries its fingerprint', async () => {
+  const seen = [];
+  const { c } = harness({ now: 1000, writeRecent: async (input) => {
+    seen.push([input.name, input.arrivedAt, input.fingerprint]);
+    return { ok: true, name: input.name };
+  } });
+  await Promise.all(['x', 'y', 'z'].map((n) => c.importRoute({ text: 'abc', name: `${n}.gpx` })));
+  assert.deepEqual(seen, [['x.gpx', 1000, '3:1a47e90b'], ['y.gpx', 1001, '3:1a47e90b'], ['z.gpx', 1002, '3:1a47e90b']]);
+});
+
+test('a failed import says so and does not hold up the ones after it', async () => {
+  const { c, calls } = harness({ writeRecent: async (input) => {
+    if (input.name === 'throws.gpx') throw new Error('QuotaExceededError');
+    if (input.name === 'refused.gpx') return { ok: false };
+    return { ok: true, name: input.name };
+  } });
+  const results = await Promise.all([
+    c.importRoute({ text: '1', name: 'throws.gpx' }),
+    c.importRoute({ text: '2', name: 'refused.gpx' }),
+    c.importRoute({ text: '3', name: 'fine.gpx' }),
+  ]);
+  assert.deepEqual(plain(results), [{ ok: false, name: 'throws.gpx' }, { ok: false, name: 'refused.gpx' }, { ok: true, name: 'fine.gpx' }]);
+  assert.equal(calls.notSaved, 2);
 });

@@ -1315,7 +1315,6 @@
   const IDB_VERSION = 1;
 
   let recentRoutesCache = [];
-  let recentRoutesDisabled = false;
 
   function openIDB() {
     return new Promise((resolve, reject) => {
@@ -1840,107 +1839,72 @@
     console.log('[MeteoRide] updateRecentRoutesUI: Completed');
   }
 
+  // The name a route is kept under: no path separators or line breaks, at most 64
+  // characters before the extension, and .gpx or .kml as written, or .gpx added.
+  function recentRouteName(name) {
+    const raw = String(name || 'route.gpx');
+    const ext = (/\.(gpx|kml)$/i.exec(raw) || [''])[0];
+    let base = raw.slice(0, raw.length - ext.length).replace(/[\\/\n\r\t]+/g, '-').replace(/\s+/g, ' ').trim();
+    if (base.length > 64) base = base.substring(0, 64).trim();
+    return `${base || 'route'}${ext || '.gpx'}`;
+  }
+
+  // Imports a route into recent routes in one readwrite transaction: read what is stored,
+  // choose a name that does not take another route's, write, and trim to the newest by
+  // arrival. It has worked only once the transaction completes. No IndexedDB, a route
+  // too big to keep or an aborted transaction all come back as { ok: false }; the import
+  // queue in route-requests.js says so. Nothing falls back to localStorage any more.
+  async function idbImportRoute({ text, name, arrivedAt, fingerprint }) {
+    const bytes = new Blob([text]).size;
+    if (bytes > MAX_RECENT_ROUTE_SIZE) return { ok: false };
+    let db;
+    try { db = await openIDB(); } catch (e) { return { ok: false }; }
+    const result = await new Promise((resolve) => {
+      let tx;
+      try { tx = db.transaction(IDB_STORE, 'readwrite'); } catch (e) { return resolve({ ok: false }); }
+      let chosen = null;
+      tx.oncomplete = () => resolve({ ok: true, name: chosen });
+      tx.onabort = () => resolve({ ok: false });
+      tx.onerror = () => resolve({ ok: false });
+      const store = tx.objectStore(IDB_STORE);
+      const all = store.getAll();
+      all.onsuccess = () => {
+        const records = all.result || [];
+        const pick = cwForecastRules.uniqueRouteName(records, { name: recentRouteName(name), fingerprint, bytes });
+        chosen = pick.name;
+        const record = {
+          name: pick.name, size: bytes, lastModified: arrivedAt, timestamp: arrivedAt, fingerprint,
+          blob: new Blob([text], { type: 'application/gpx+xml' }),
+        };
+        let write;
+        if (pick.replaceId != null) {
+          record.id = pick.replaceId;
+          write = store.put(record);
+        } else {
+          write = store.add(record);
+        }
+        write.onsuccess = () => {
+          const kept = records.filter((r) => r.id !== pick.replaceId).concat([{ id: write.result, timestamp: arrivedAt }]);
+          kept.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          kept.slice(MAX_RECENT_ROUTES).forEach((r) => store.delete(r.id));
+        };
+      };
+    });
+    if (result.ok) {
+      try { recentRoutesCache = await idbGetAllRoutes(); } catch (e) { /* the menu catches up next time */ }
+      updateRecentRoutesUI();
+    }
+    return result;
+  }
+  window.cwIdbImportRoute = idbImportRoute;
+
+  // For callers holding a File (userscripts included): it joins the import queue.
   async function saveRecentRoute(file) {
     try {
-      if (recentRoutesDisabled) {
-        console.log('[MeteoRide] saveRecentRoute: recent routes disabled, skipping');
-        return;
-      }
-      const MAX_NAME_LEN = 64;
-      function sanitizeName(n) {
-        if (!n) return '';
-        // remove path separators and non-printable chars
-        let s = String(n).replace(/[\\/\n\r\t]+/g, '-').trim();
-        // collapse multiple spaces
-        s = s.replace(/\s+/g, ' ');
-        // truncate sensibly
-        if (s.length > MAX_NAME_LEN) s = s.substring(0, MAX_NAME_LEN).trim();
-        return s;
-      }
-      // Stored under the name the route arrived with. The name on screen used to win, and
-      // while a new route is still being read that is the previous route's name.
-      const rawSourceName = (file && file.name) ? String(file.name) : 'route.gpx';
-      const chosenBase = sanitizeName(rawSourceName.replace(/\.gpx$/i, '').replace(/\.[^/.]+$/, '')) || 'route';
-      let chosenName = chosenBase;
-      if (!/\.gpx$/i.test(chosenName)) chosenName = `${chosenName}.gpx`;
-      console.log('[MeteoRide] saveRecentRoute: Starting to save route, sourceName=', rawSourceName, 'chosenName=', chosenName, 'size:', file.size);
-
-      // Skip files that are too large (configurable) to avoid huge storage usage in the UI
-      if (file.size > MAX_RECENT_ROUTE_SIZE) {
-        console.log('[MeteoRide] saveRecentRoute: File too large (', file.size, 'bytes), skipping save; limit=', MAX_RECENT_ROUTE_SIZE);
-        return;
-      }
-
-      // We store the original file as a Blob in IndexedDB and only keep metadata in memory.
-      try {
-  const blob = file instanceof Blob ? file : new Blob([file], { type: 'application/gpx+xml' });
-  const routeRecord = { name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), blob };
-
-        // Always overwrite if a route with same name exists
-        try {
-          const existing = await idbFindRouteByName(chosenName);
-          if (existing && existing.id != null) {
-            // Overwrite existing record
-            routeRecord.id = existing.id;
-            const id = await idbPutRoute(routeRecord);
-            console.log('[MeteoRide] saveRecentRoute: overwrote existing IndexedDB id=', id);
-            // Update in-memory metadata cache
-            const meta = { id: id, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
-            const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
-            if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-            recentRoutesCache.unshift(meta);
-            if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
-            updateRecentRoutesUI();
-            return;
-          }
-          // Otherwise add new
-          const id = await idbAddRoute(routeRecord);
-          // Update in-memory metadata cache
-          const meta = { id: id, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
-          const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
-          if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-          recentRoutesCache.unshift(meta);
-          if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
-
-          console.log('[MeteoRide] saveRecentRoute: persisted blob to IndexedDB id=', id);
-          updateRecentRoutesUI();
-          return;
-        } catch (idbErr) {
-          console.warn('[MeteoRide] saveRecentRoute: IndexedDB add failed, attempting fallback to localStorage', idbErr);
-          // Fallback: try to read as text and save a single newest route to localStorage
-          try {
-            const txt = await file.text();
-            const compressedContent = txt.replace(/\s+/g, ' ').trim();
-            // Overwrite by name in localStorage fallback
-            try {
-              const stored = localStorage.getItem(RECENT_ROUTES_KEY);
-              let arr = stored ? JSON.parse(stored) : [];
-              // Remove any existing with same name
-              arr = arr.filter(r => r.name !== chosenName);
-              arr.unshift({ name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), content: compressedContent });
-              arr = arr.slice(0, MAX_RECENT_ROUTES);
-              localStorage.setItem(RECENT_ROUTES_KEY, JSON.stringify(arr));
-            } catch (_){ /* ignore localStorage write errors */ }
-            // Remove any existing with same name from cache before adding
-            const existingIndex = recentRoutesCache.findIndex(r => r.name === chosenName);
-            if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-            recentRoutesCache.unshift({ id: null, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now() });
-            if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
-            updateRecentRoutesUI();
-            return;
-          } catch (txtErr) {
-            console.error('[MeteoRide] saveRecentRoute: Fallback localStorage failed, disabling recent routes', txtErr);
-            recentRoutesDisabled = true;
-            try { localStorage.removeItem(RECENT_ROUTES_KEY); } catch(_){ }
-            updateRecentRoutesUI();
-            return;
-          }
-        }
-      } catch (e) {
-        console.error('[MeteoRide] saveRecentRoute: Exception while storing blob:', e);
-      }
+      return await window.cw.importRoute({ text: await file.text(), name: file.name });
     } catch (e) {
       console.error('[MeteoRide] saveRecentRoute: Exception:', e);
+      return { ok: false };
     }
   }
 
@@ -2053,10 +2017,11 @@
         const file = this.files && this.files[0];
         if (!file) return;
         console.log('[MeteoRide] initUI: Processing file', file.name, 'size:', file.size);
-        // A file that turns out not to be a route leaves the one on screen, and is not
-        // kept among the recent routes.
-        window.cw.requestRoute({ source: 'file', read: async () => ({ text: await file.text(), name: file.name }) })
-          .then((status) => { if (status === 'committed') saveRecentRoute(file); });
+        // A file that turns out not to be a route leaves the one on screen and is not kept
+        // among the recent routes; a route that is shown goes in under the file's name.
+        let text = null;
+        window.cw.requestRoute({ source: 'file', read: async () => ({ text: (text = await file.text()), name: file.name }) })
+          .then((status) => { if (status === 'committed') window.cw.importRoute({ text, name: file.name }); });
       });
       console.log('[MeteoRide] initUI: File input event listener added');
     }

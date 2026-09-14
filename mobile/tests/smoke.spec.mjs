@@ -1222,6 +1222,100 @@ test('a file with a route and a track of two segments draws them all and follows
   expect(lats.every((lat) => lat <= 41.4 && lat >= 41.39)).toBe(true);
 });
 
+/* ---------- importing into recent routes ---------- */
+
+const importRecent = (page, text, name) =>
+  page.evaluate(([t, n]) => window.cw.importRoute({ text: t, name: n }), [text, name]);
+const storedNames = async (page) => (await storedRoutes(page)).map((r) => r.name).sort();
+const notSavedNotice = /could not be saved|No se ha podido guardar/;
+
+test('two different routes under the same name are both kept', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(await importRecent(page, routeAt('Uno', 41.48), 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  expect(await importRecent(page, routeAt('Dos', 40.42), 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta (2).gpx' });
+  expect(await storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx']);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name).sort()))
+    .toEqual(['Ruta (2).gpx', 'Ruta.gpx']);
+});
+
+test('the same route imported twice is kept once', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const text = routeAt('Uno', 41.48);
+  expect(await importRecent(page, text, 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  expect(await importRecent(page, text, 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  expect(await storedNames(page)).toEqual(['Ruta.gpx']);
+});
+
+test('four imports in a row keep the last three to arrive', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const texts = [1, 2, 3, 4].map((i) => routeAt(`Ruta ${i}`, 41 + i / 10));
+  const results = await page.evaluate((all) =>
+    Promise.all(all.map((text, i) => window.cw.importRoute({ text, name: `r${i + 1}.gpx` }))), texts);
+  expect(results.every((r) => r.ok)).toBe(true);
+  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx']);
+});
+
+// Success is the transaction completing. The write is let through and the transaction
+// aborted straight after, which is the case a success on the write alone would report
+// as saved.
+test('an import whose transaction aborts says it was not saved and leaves nothing behind', async ({ page }) => {
+  await recordNotices(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const result = await page.evaluate((text) => {
+    const real = { add: IDBObjectStore.prototype.add, put: IDBObjectStore.prototype.put };
+    for (const method of ['add', 'put']) {
+      IDBObjectStore.prototype[method] = function (...args) {
+        const request = real[method].apply(this, args);
+        if (this.name === 'routes') {
+          Object.assign(IDBObjectStore.prototype, real);
+          request.addEventListener('success', () => request.transaction.abort());
+        }
+        return request;
+      };
+    }
+    return window.cw.importRoute({ text, name: 'Ruta.gpx' });
+  }, routeAt('Uno', 41.48));
+  expect(result.ok).toBe(false);
+  expect(await storedRoutes(page)).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.__notices))
+    .toEqual(expect.arrayContaining([expect.stringMatching(notSavedNotice)]));
+});
+
+test('a route too big for recent routes says it was not saved', async ({ page }) => {
+  await recordNotices(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const big = routeAt('Grande', 41.48).replace('</gpx>', `<!-- ${'x'.repeat(760000)} --></gpx>`);
+  expect((await importRecent(page, big, 'Grande.gpx')).ok).toBe(false);
+  expect(await storedRoutes(page)).toEqual([]);
+  await expect.poll(() => page.evaluate(() => window.__notices))
+    .toEqual(expect.arrayContaining([expect.stringMatching(notSavedNotice)]));
+});
+
+test('a picked file that is not a route stays out of recent routes; a route goes in under its file name', async ({ page }) => {
+  await recordNotices(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await pickText(page, 'broken.gpx', 'this is not a route');
+  await expect.poll(() => page.evaluate(() => window.__notices))
+    .toEqual(expect.arrayContaining([expect.stringMatching(loadFailedNotice)]));
+  await page.waitForTimeout(300);
+  expect(await storedRoutes(page)).toEqual([]);
+
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => storedNames(page)).toEqual(['route.gpx']);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {

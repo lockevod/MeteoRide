@@ -5,7 +5,8 @@
    that a later one has replaced stops at its next wait and touches nothing. Settings
    changed while a request is still acquiring are remembered and consumed by the next
    computation, so confirming and reconciling cannot launch two. The loading indicator
-   is on while anyone holds a claim on it.
+   is on while anyone holds a claim on it. Keeping a route among the recent ones is a
+   separate queue, in arrival order, that does not care which route is on screen.
 
    A plain script, like forecast-rules.js: the page builds one coordinator wired to
    app.js and ui.js at runtime, and Node tests build their own with fake dependencies.
@@ -122,8 +123,35 @@ var cwCreateRouteCoordinator = function (deps) {
     }
   }
 
+  /* ---------- importing into recent routes ---------- */
+
+  // Imports run one at a time, in the order they arrived, however long each write takes.
+  // arrivedAt is fixed on arrival and is what the store keeps, so trimming to the newest
+  // routes keeps the last to arrive even when an earlier write finishes later. An import
+  // is independent of the request showing the same route: it goes on whatever that ends as.
+  let importQueue = Promise.resolve();
+  let lastArrivedAt = 0;
+
+  function importRoute({ text, name, arrivedAt }) {
+    const at = arrivedAt != null ? arrivedAt : Math.max(Date.now(), lastArrivedAt + 1);
+    lastArrivedAt = Math.max(lastArrivedAt, at);
+    const job = importQueue.then(async () => {
+      let result = null;
+      try {
+        result = await deps.writeRecent({ text, name, arrivedAt: at, fingerprint: cwForecastRules.fingerprint(text) });
+      } catch (_) { result = null; }
+      if (!result || !result.ok) {
+        deps.notifyNotSaved();
+        return { ok: false, name };
+      }
+      return result;
+    });
+    importQueue = job;
+    return job;
+  }
+
   return {
-    requestRoute, settingsChanged, startForecast,
+    requestRoute, settingsChanged, startForecast, importRoute,
     claimLoading, releaseLoading, releaseLoadingPrefix: (prefix) => releaseLoadingPrefix(prefix),
   };
 };
@@ -141,6 +169,8 @@ var cwCreateRouteCoordinator = function (deps) {
     hasCurrentForecast: () => !!(window.cwHasCurrentForecast && window.cwHasCurrentForecast()),
     paintLoading: (visible) => { if (window.cw.ui && window.cw.ui.paintLoading) window.cw.ui.paintLoading(visible); },
     notifyFailed: () => { if (window.setNotice) window.setNotice(t('route_load_failed'), 'error'); },
+    writeRecent: (input) => window.cwIdbImportRoute(input),
+    notifyNotSaved: () => { if (window.setNotice) window.setNotice(t('route_not_saved'), 'warn'); },
   });
   window.cw = window.cw || {};
   Object.assign(window.cw, {
@@ -150,5 +180,6 @@ var cwCreateRouteCoordinator = function (deps) {
     claimLoading: coordinator.claimLoading,
     releaseLoading: coordinator.releaseLoading,
     releaseLoadingPrefix: coordinator.releaseLoadingPrefix,
+    importRoute: coordinator.importRoute,
   });
 })();

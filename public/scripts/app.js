@@ -3165,9 +3165,7 @@ window.cwLoadGPXFromString = function loadGPXFromString(gpxText, nameHint = "rou
     return Promise.resolve("failed");
   }
   logDebug(`cwLoadGPXFromString: len=${gpxText.length}, name=${nameHint}`);
-  if (typeof window.saveRecentRoute === "function") {
-    window.saveRecentRoute(new File([gpxText], nameHint, { type: "application/gpx+xml" }));
-  }
+  window.cw.importRoute({ text: gpxText, name: nameHint });
   return window.cw.requestRoute({ source, read: async () => ({ text: gpxText, name: nameHint }) });
 };
 // --- end routes ---
