@@ -328,3 +328,23 @@ test('an answer whose body cannot be read says the provider is not responding', 
   const [snapshot] = s.published();
   assert.equal(snapshot.outcome.transportFailures, 1);
 });
+
+test('a replaced run writes nothing to the cache when its AROME standard companion answers after replacement', async () => {
+  const writes = [];
+  const { s, run, answer, pending } = harness({ provider: 'aromehd', stubs: {
+    isAromeHdCovered: () => true,
+    aromeResponseLooksInvalid: () => false,
+    makeCacheKey: (prov, d, t, w, lat) => `${prov}:${lat}`,
+    setCache: (key) => writes.push(key),
+  } });
+  const aromeBody = { hourly: { time: ['2026-01-01T00:00'], temperature_2m: [10] } };
+  const a = run(41);
+  answer(0, ok(aromeBody)); // A's own AROME answer, valid
+  await waitFor(() => pending.length === 2); // A's standard Open-Meteo companion is now in flight
+  s.apiSource = 'openmeteo';
+  const b = run(42);
+  answer(2, ok(openMeteo())); await b;
+  answer(1, failed(500)); // A's companion answers only now, while A is replaced
+  await a;
+  assert.deepEqual(writes, ['openmeteo:42']);
+});

@@ -51,13 +51,31 @@ test('settings.alerts === true lets the lookup run and fill the sink', async () 
 test('a lookup whose computation was replaced stops before the next point', async () => {
   const s = harness();
   const writes = [];
-  s.setCache = (key) => writes.push(key);
-  let calls = 0;
-  const isCurrent = () => (calls++ === 0);
+  // Stays current through the whole first point (several isCurrent checks land inside
+  // that one iteration); replaced only once that point is fully written, before the next.
+  let current = true;
+  s.setCache = (key) => { writes.push(key); current = false; };
   const threeSteps = () => [{ lat: 41, lon: 2 }, { lat: 41.1, lon: 2 }, { lat: 41.2, lon: 2 }];
   const threeTimes = () => [new Date(), new Date(), new Date()];
   const sink = [];
-  await s.checkWeatherAlertsIndependent(threeSteps(), threeTimes(), sink, settings(true), isCurrent);
+  await s.checkWeatherAlertsIndependent(threeSteps(), threeTimes(), sink, settings(true), () => current);
   assert.equal(s.fetchCalls, 1);
   assert.equal(writes.length, 1);
+});
+
+test('a lookup replaced while its request was in flight writes nothing and fills nothing', async () => {
+  const s = harness();
+  let current = true;
+  s.fetch = async () => {
+    s.fetchCalls++;
+    current = false; // the computation was replaced before this request came back
+    return { ok: true, json: async () => ({ alerts: [{ event: 'Viento' }] }) };
+  };
+  const writes = [];
+  s.setCache = (key) => writes.push(key);
+  const sink = [];
+  await s.checkWeatherAlertsIndependent(step(), times(), sink, settings(true), () => current);
+  assert.equal(s.fetchCalls, 1);
+  assert.deepEqual(sink, []);
+  assert.deepEqual(writes, []);
 });

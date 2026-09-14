@@ -772,6 +772,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSet
               const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
               if (run !== forecastRun) return;
               const resStd = await fetch(urlStd, { cwRecorder: recorder });
+              if (run !== forecastRun) return;
               if (resStd.ok) {
                 const std = await readJson(resStd);
                 if (run !== forecastRun) return;
@@ -3475,8 +3476,10 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
       
       try {
         const response = await fetch(alertsUrl);
+        if (isCurrent && !isCurrent()) return;
         if (response.ok) {
           const data = await response.json();
+          if (isCurrent && !isCurrent()) return;
           if (data.alerts && Array.isArray(data.alerts)) {
             if (sink) sink.push(...data.alerts);
             else processWeatherAlerts(data.alerts, p, timeAt);
