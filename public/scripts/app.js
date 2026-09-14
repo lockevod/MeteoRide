@@ -1127,123 +1127,37 @@ function processWeatherData() {
       return;
     }
     const w = step.weather;
-    let idx = -1;
+    let idx = -1;              // only the MeteoBlue branch still reads it
+    let extracted = null;
     if (prov === "openmeteo" || prov === "aromehd") {
       // Ensure we have at least hourly data shape to work with
       if (!w.hourly || !w.hourly.time) return;
-
-      // Compute closest hourly index (existing behaviour)
-      try {
-        const dt = step.time instanceof Date ? step.time : new Date(step.time);
-        const minute = dt.getMinutes();
-        if (minute >= 30) {
-          idx = (window.findClosestFutureIndex ? window.findClosestFutureIndex(w.hourly.time, step.time) : findClosestIndex(w.hourly.time, step.time));
-        } else {
-          idx = findClosestIndex(w.hourly.time, step.time);
-        }
-      } catch (e) {
-        idx = findClosestIndex(w.hourly.time, step.time);
-      }
-
-      // If provider returned minutely_15 data, prefer it for this step when the
-      // step timestamp falls within the minutely_15 time range (near-term).
-      // minutely_15 has its own `.time` array and variable arrays mirroring hourly.
-      step.__useMinutely = false; // debug flag
-      let minIdx = -1;
-      if (w.minutely_15 && Array.isArray(w.minutely_15.time)) {
-        try {
-          const mTimes = w.minutely_15.time;
-          minIdx = (window.findClosestFutureIndex ? window.findClosestFutureIndex(mTimes, step.time) : findClosestIndex(mTimes, step.time));
-          const firstM = new Date(mTimes[0]).getTime();
-          const lastM = new Date(mTimes[mTimes.length - 1]).getTime();
-          const stepMs = (step.time instanceof Date ? step.time.getTime() : new Date(step.time).getTime());
-          if (stepMs >= firstM && stepMs <= lastM && minIdx !== -1) {
-            step.__useMinutely = true;
-            step.__minutelyIndex = minIdx;
-          }
-        } catch (e) {
-          /* ignore minutely parsing errors and fall back to hourly */
-        }
-      }
+      extracted = cwForecastRules.extractStep(w, { provider: prov, time: step.time });
+      step.__useMinutely = !!(extracted && extracted.useMinutely);
+      if (step.__useMinutely) step.__minutelyIndex = extracted.minutelyIndex;
     }
     // NEW: OpenWeather extraction (prefer hourly, fallback to daily)
     if (prov === "openweather") {
-      const timeMs = (step.time instanceof Date ? step.time : new Date(step.time)).getTime();
-
-      // Helper: pick closest index in OWM arrays by dt (seconds)
-      const closestByDt = (arr) => {
-        if (!Array.isArray(arr) || !arr.length) return -1;
-        let best = -1, bestDiff = Infinity;
-        for (let i = 0; i < arr.length; i++) {
-          const t = Number(arr[i]?.dt) * 1000;
-          const df = Math.abs(t - timeMs);
-          if (df < bestDiff) { bestDiff = df; best = i; }
-        }
-        return best;
-      };
-
-      let useHourly = Array.isArray(w.hourly) && w.hourly.length > 0;
-      let hi = useHourly ? closestByDt(w.hourly) : -1;
-      let di = (!useHourly || hi === -1) ? closestByDt(w.daily) : -1;
-
-      const hourly = (useHourly && hi !== -1) ? w.hourly[hi] : null;
-      const daily = (!hourly && Array.isArray(w.daily) && di !== -1) ? w.daily[di] : null;
-
       // isDaylight via SunCalc (robust for icons/luminance)
       try {
-        const pos = SunCalc.getPosition(new Date(timeMs), step.lat, step.lon);
+        const pos = SunCalc.getPosition(new Date(step.time), step.lat, step.lon);
         step.isDaylight = pos.altitude > 0 ? 1 : 0;
       } catch { step.isDaylight = 1; }
 
-      // Units normalization: derive km/h from API units
-      const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
-      const toKmhFromOW = (ws) => {
-        const v = Number(ws) || 0;
-        if (units === "imperial") return v * 1.60934; // mph -> km/h
-        return v * 3.6; // metric/standard m/s -> km/h
-      };
-
-      if (hourly) {
-        step.temp = safeNum(hourly.temp);
-        step.windSpeed = safeNum(windToUnits(toKmhFromOW(hourly.wind_speed), windUnit));
-        step.windDir = Number(hourly.wind_deg || 0);
-        step.windGust = safeNum(
-          hourly.wind_gust != null
-            ? windToUnits(toKmhFromOW(hourly.wind_gust), windUnit)
-            : null
-        );
-        step.humidity = safeNum(hourly.humidity);
-        const rainH = Number(hourly.rain?.["1h"] ?? 0);
-        const snowH = Number(hourly.snow?.["1h"] ?? 0);
-        step.precipitation = safeNum(rainH + snowH);
-        step.timeLabel = formatTime(step.time);
-        // Populate additional hourly fields: weather code, UV, cloud cover, precip probability, luminance
-        step.weatherCode = Array.isArray(hourly.weather) && hourly.weather[0] ? hourly.weather[0].id : null;
-        step.uvindex = safeNum(hourly.uvi ?? w.current?.uvi ?? null);
-        // OpenWeather hourly uses 'clouds' percent; accept alternative names defensively
-        step.cloudCover = safeNum(hourly.clouds ?? hourly.cloud_cover ?? null);
-        // 'pop' is probability of precipitation (0..1) in hourly; convert to percentage
-        step.precipProb = safeNum((Number(hourly.pop) || 0) * 100);
-        step.luminance = computeLuminance(step);
-      } else if (daily) {
-        // Approximate from daily if beyond hourly range
-        const dtemp = (daily.temp && (daily.temp.day ?? daily.temp.max ?? daily.temp.min)) || null;
-        step.temp = safeNum(dtemp);
-        step.windSpeed = safeNum(windToUnits(toKmhFromOW(daily.wind_speed), windUnit));
-        step.windDir = Number(daily.wind_deg || 0);
-        step.windGust = safeNum(
-          daily.wind_gust != null
-            ? windToUnits(toKmhFromOW(daily.wind_gust), windUnit)
-            : null
-        );
-        step.humidity = safeNum(daily.humidity);
-        const rainD = Number(daily.rain ?? 0);
-        const snowD = Number(daily.snow ?? 0);
-        step.precipitation = safeNum(rainD + snowD);
-        step.precipProb = safeNum((Number(daily.pop) || 0) * 100);
-        step.weatherCode = Array.isArray(daily.weather) && daily.weather[0] ? daily.weather[0].id : null;
-        step.uvindex = safeNum(daily.uvi ?? w.current?.uvi ?? null);
-        step.cloudCover = safeNum(daily.clouds);
+      // The request asked OpenWeather for imperial units when the table shows °F.
+      const payloadUnits = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
+      const r = cwForecastRules.extractStep(w, { provider: prov, time: step.time, payloadUnits });
+      if (r) {
+        step.temp = safeNum(r.temp);
+        step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+        step.windDir = r.windDir;
+        step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
+        step.humidity = safeNum(r.humidity);
+        step.precipitation = safeNum(r.precipitation);
+        step.precipProb = safeNum(r.precipProb);
+        step.weatherCode = r.weatherCode;
+        step.uvindex = safeNum(r.uvIndex);
+        step.cloudCover = safeNum(r.cloudCover);
         step.luminance = computeLuminance(step);
         step.timeLabel = formatTime(step.time);
       } else {
@@ -1290,71 +1204,20 @@ function processWeatherData() {
       step.cloudCover = safeNum(w.total_cloud_cover?.[idx] ?? w.cloudcover?.[idx]);
       step.luminance = computeLuminance(step);
 
-    } else if ((prov === "openmeteo" || prov === "aromehd") && (idx !== -1 || step.__useMinutely)) {
-      // Prefer minutely_15 values when available for this step
-      const useMin = !!step.__useMinutely && w.minutely_15 && Array.isArray(w.minutely_15.time);
-      const hIdx = idx;
-      const mIdx = step.__minutelyIndex || -1;
-
-      const getVar = (varName) => {
-        // Special case for fields that may be null in minutely_15 but available in hourly (merged from fallback)
-        if (varName === 'uv_index' || varName === 'precipitation_probability') {
-          if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx && w.minutely_15[varName][mIdx] != null) {
-            return w.minutely_15[varName][mIdx];
-          }
-          // Fall back to hourly
-          if (w.hourly && w.hourly[varName] && Array.isArray(w.hourly[varName])) {
-            if (w.hourly[varName].length > hIdx) return w.hourly[varName][hIdx];
-            // Fallback: try to find closest hourly index by matching times array
-            try {
-              const times = Array.isArray(w.hourly.time) ? w.hourly.time : null;
-              const finder = (window.findClosestIndex || (window.cw && window.cw.findClosestIndex));
-              if (times && typeof finder === 'function') {
-                const alt = finder(times, step.time);
-                if (alt != null && alt >= 0 && w.hourly[varName].length > alt) return w.hourly[varName][alt];
-              }
-            } catch (_) {}
-          }
-          return null;
-        }
-        // For other variables, use minutely if available, else hourly
-        if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx) {
-          return w.minutely_15[varName][mIdx];
-        }
-        if (w.hourly && w.hourly[varName] && Array.isArray(w.hourly[varName])) {
-          if (w.hourly[varName].length > hIdx) return w.hourly[varName][hIdx];
-          // Fallback: try to find closest hourly index by matching times array
-          try {
-            const times = Array.isArray(w.hourly.time) ? w.hourly.time : null;
-            const finder = (window.findClosestIndex || (window.cw && window.cw.findClosestIndex));
-            if (times && typeof finder === 'function') {
-              const alt = finder(times, step.time);
-              if (alt != null && alt >= 0 && w.hourly[varName].length > alt) return w.hourly[varName][alt];
-            }
-          } catch (_) {}
-        }
-        return null;
-      };
-
-      step.temp = safeNum(getVar('temperature_2m'));
-      step.windSpeed = safeNum(windToUnits(getVar('wind_speed_10m'), windUnit));
-      step.windDir = getVar('winddirection_10m') || 0;
-      step.windGust = safeNum(windToUnits(getVar('wind_gusts_10m'), windUnit));
-      step.humidity = safeNum(getVar('relative_humidity_2m'));
-      step.precipitation = safeNum(getVar('precipitation'));
+    } else if ((prov === "openmeteo" || prov === "aromehd") && extracted) {
+      const r = extracted;
+      step.temp = safeNum(r.temp);
+      step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+      step.windDir = r.windDir || 0;
+      step.windGust = safeNum(windToUnits(r.gust, windUnit));
+      step.humidity = safeNum(r.humidity);
+      step.precipitation = safeNum(r.precipitation);
       // AROME may lack precipitation_probability; merged earlier when available
-      step.precipProb = safeNum(getVar('precipitation_probability'));
-      step.weatherCode = getVar('weathercode');
-      // Debug: when in AROME processing, show whether uv_index array exists and what getVar returns
-      try {
-        if (window.cw && window.cw.DEBUG_MERGE && prov === 'aromehd') {
-          const uvArr = (w && w.hourly && Array.isArray(w.hourly.uv_index)) ? (w.hourly.uv_index.slice(0,5)) : null;
-          console.debug('[proc][app] prov=aromehd idx=', idx, 'getVar(uv_index)=', getVar('uv_index'), 'hourly.uv_index_sample=', uvArr, 'useMin=', !!useMin, 'minutely_present=', !!(w && w.minutely_15));
-        }
-      } catch (_) {}
-      step.uvindex = (getVar('uv_index') != null) ? safeNum(getVar('uv_index')) : null;
-      step.isDaylight = getVar('is_day');
-      step.cloudCover = safeNum(w.hourly.cloud_cover?.[idx]); // 0–100
+      step.precipProb = safeNum(r.precipProb);
+      step.weatherCode = r.weatherCode;
+      step.uvindex = (r.uvIndex != null) ? safeNum(r.uvIndex) : null;
+      step.isDaylight = r.isDay;
+      step.cloudCover = safeNum(r.cloudCover); // 0–100
       step.luminance = computeLuminance(step);
 
       // NEW: AROME fallbacks and selective reconciliation
