@@ -51,6 +51,9 @@ public class MainActivity extends BridgeActivity {
      */
     private void ingest(Intent intent) {
         if (intent == null || intent.getBooleanExtra(EXTRA_HANDLED, false)) return;
+        // Reopening the task from Recent Apps relaunches onCreate(null) with this same
+        // flag and the original intent: not a genuine new share, so do not re-import it.
+        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return;
         intent.putExtra(EXTRA_HANDLED, true);
         List<Uri> uris = routeUris(intent);
         if (uris.isEmpty()) return;

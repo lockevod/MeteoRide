@@ -11,9 +11,14 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Drop box for routes that arrive from outside the app: a GPX shared from another
@@ -30,6 +35,8 @@ final class MeteoRideShareStore {
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList("gpx", "kml");
     private static final int MAX_BYTES = 25 * 1024 * 1024;
     private static final long MAX_AGE_MS = 24 * 60 * 60 * 1000L;
+    // Two shares can land in the same millisecond; this tells their file names apart.
+    private static final AtomicInteger SEQUENCE = new AtomicInteger();
 
     private MeteoRideShareStore() {}
 
@@ -71,8 +78,9 @@ final class MeteoRideShareStore {
 
     static File store(Context ctx, byte[] data, String suggestedName) {
         if (data == null || data.length == 0) return null;
-        // Timestamp prefix keeps arrival order and avoids collisions between shares.
-        String fileName = System.currentTimeMillis() + "__" + sanitize(suggestedName);
+        // Timestamp+sequence prefix keeps arrival order and avoids collisions between
+        // shares that land in the same millisecond.
+        String fileName = inboxFileName(System.currentTimeMillis(), SEQUENCE.incrementAndGet(), suggestedName);
         File dest = new File(inbox(ctx), fileName);
         // Written elsewhere and moved in whole: ingestion runs on its own thread, and
         // next() would otherwise read, and delete, a file still being written. The
@@ -179,10 +187,22 @@ final class MeteoRideShareStore {
     }
 
     /** GPX is XML and normally UTF-8; some exporters still emit Latin-1. */
-    private static String decode(byte[] data) {
-        String text = new String(data, StandardCharsets.UTF_8);
-        // U+FFFD means the bytes were not valid UTF-8 after all.
-        return text.indexOf('\uFFFD') >= 0 ? new String(data, StandardCharsets.ISO_8859_1) : text;
+    static String decode(byte[] data) {
+        try {
+            return StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(data))
+                    .toString();
+        } catch (CharacterCodingException e) {
+            // Not valid UTF-8 after all.
+            return new String(data, StandardCharsets.ISO_8859_1);
+        }
+    }
+
+    /** Timestamp+sequence file name: unique across shares, sorts in arrival order. */
+    static String inboxFileName(long millis, int sequence, String name) {
+        return String.format(Locale.ROOT, "%013d-%04d__%s", millis, sequence % 10000, sanitize(name));
     }
 
     private static boolean looksLikeRoute(byte[] data) {
