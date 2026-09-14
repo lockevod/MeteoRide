@@ -21,21 +21,40 @@ const flush = () => new Promise((r) => setImmediate(r));
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
 /** A coordinator whose dependencies record what they were asked to do. */
-function harness({ confirmed = false, current = false, readTimeoutMs = 30000, writeRecent, now } = {}) {
-  const calls = { parse: [], commit: [], launch: 0, notify: 0, notSaved: 0, paint: [] };
+function harness({ confirmed = false, current = false, readTimeoutMs = 30000, writeRecent, touchRecent, now } = {}) {
+  const calls = { parse: [], commit: [], launch: 0, notify: 0, readFailed: 0, notSaved: 0, paint: [], warn: 0 };
+  // commitThrows, launchThrows and paintThrows make that dependency throw; onLaunch runs
+  // inside each launch.
   const state = { confirmed, current, parseResult: null };
   // `now` makes the clock answer the same time on every reading.
-  const s = { console, Promise, setTimeout, clearTimeout, Date: now == null ? Date : { now: () => now } };
+  const s = {
+    console: { ...console, warn: () => { calls.warn++; } },
+    Promise, setTimeout, clearTimeout, Date: now == null ? Date : { now: () => now },
+  };
   vm.runInNewContext(`${rulesSrc}\n${src}`, s);
   const c = s.cwCreateRouteCoordinator({
     parse: (input) => { calls.parse.push(input); return state.parseResult ? state.parseResult(input) : { name: input.name }; },
-    commit: (parsed, requestId) => { calls.commit.push([parsed.name, requestId]); state.confirmed = true; },
-    launch: () => { calls.launch++; state.current = true; },
+    commit: (parsed, requestId) => {
+      calls.commit.push([parsed.name, requestId]);
+      state.confirmed = true;
+      if (state.commitThrows) throw new Error('commit');
+    },
+    launch: () => {
+      calls.launch++;
+      if (state.launchThrows) throw new Error('launch');
+      state.current = true;
+      if (state.onLaunch) state.onLaunch();
+    },
     hasConfirmedRoute: () => state.confirmed,
     hasCurrentForecast: () => state.current,
-    paintLoading: (visible) => calls.paint.push(visible),
+    paintLoading: (visible) => {
+      calls.paint.push(visible);
+      if (state.paintThrows) throw new Error('paint');
+    },
     notifyFailed: () => { calls.notify++; },
+    notifyReadFailed: () => { calls.readFailed++; },
     writeRecent: writeRecent || (async (input) => ({ ok: true, name: input.name })),
+    touchRecent: touchRecent || (async () => true),
     notifyNotSaved: () => { calls.notSaved++; },
     readTimeoutMs,
   });
@@ -76,7 +95,7 @@ test('a route that fails to parse leaves the confirmed one and its computation a
   state.parseResult = () => null;
   const status = await c.requestRoute({ source: 'file', read: async () => ({ text: 'junk', name: 'x.gpx' }) });
   assert.equal(status, 'failed');
-  assert.equal(calls.notify, 1);
+  assert.deepEqual([calls.notify, calls.readFailed], [1, 0]);
   assert.deepEqual(calls.commit, []);
   assert.equal(calls.launch, 0);
 });
@@ -85,21 +104,46 @@ test('a parse that throws counts as a failure too', async () => {
   const { c, calls, state } = harness();
   state.parseResult = () => { throw new Error('boom'); };
   assert.equal(await c.requestRoute({ source: 'file', read: async () => ({ text: 'x', name: 'x.gpx' }) }), 'failed');
-  assert.equal(calls.notify, 1);
+  assert.deepEqual([calls.notify, calls.readFailed], [1, 0]);
 });
 
 test('a read that never answers fails at its deadline and lets go of the indicator', async () => {
   const { c, calls } = harness({ readTimeoutMs: 20 });
   const status = await c.requestRoute({ source: 'recent', read: () => new Promise(() => {}) });
   assert.equal(status, 'failed');
-  assert.equal(calls.notify, 1);
+  assert.deepEqual([calls.readFailed, calls.notify], [1, 0], 'a read that timed out is not a file without a route');
   assert.deepEqual(calls.paint, [true, false]);
 });
 
-test('a read that rejects fails with a notice', async () => {
+test('a read that rejects fails with the notice that it could not be read', async () => {
   const { c, calls } = harness();
   assert.equal(await c.requestRoute({ source: 'file', read: async () => { throw new Error('unreadable'); } }), 'failed');
-  assert.equal(calls.notify, 1);
+  assert.deepEqual([calls.readFailed, calls.notify], [1, 0], 'a read that failed is not a file without a route');
+});
+
+test('a read that fails after a later request was made is superseded, and says nothing', async () => {
+  const { c, calls } = harness();
+  const a = gate();
+  const b = gate();
+  const ra = c.requestRoute({ source: 'file', read: () => a.promise });
+  await flush();
+  const rb = c.requestRoute({ source: 'file', read: () => b.promise });
+  a.fail(new Error('unreadable'));
+  assert.equal(await ra, 'superseded');
+  assert.deepEqual([calls.readFailed, calls.notify], [0, 0]);
+  b.open({ text: 'B', name: 'b.gpx' });
+  assert.equal(await rb, 'committed');
+});
+
+test('a request replaced in the same tick never reads', async () => {
+  const { c, calls } = harness();
+  let readsA = 0;
+  const ra = c.requestRoute({ source: 'file', read: async () => { readsA++; return { text: 'A', name: 'a.gpx' }; } });
+  const rb = c.requestRoute({ source: 'file', read: async () => ({ text: 'B', name: 'b.gpx' }) });
+  assert.equal(await ra, 'superseded');
+  assert.equal(await rb, 'committed');
+  assert.equal(readsA, 0);
+  assert.deepEqual(calls.commit, [['b.gpx', 2]]);
 });
 
 test('a read with nothing to open fails quietly', async () => {
@@ -136,6 +180,49 @@ test('settings changed while a new route is acquired and then fails recompute th
   assert.equal(calls.launch, 1);
 });
 
+test('settings changed while a confirmed route launches its computation are not lost', async () => {
+  const { c, calls, state } = harness();
+  state.onLaunch = () => { if (calls.launch === 1) c.settingsChanged(); };
+  assert.equal(await c.requestRoute({ source: 'file', read: async () => ({ text: 'A', name: 'a.gpx' }) }), 'committed');
+  assert.equal(calls.launch, 2);
+});
+
+test('a confirmed route whose computation stops at once is not launched again', async () => {
+  const { c, calls, state } = harness();
+  state.onLaunch = () => { state.current = false; };
+  assert.equal(await c.requestRoute({ source: 'file', read: async () => ({ text: 'A', name: 'a.gpx' }) }), 'committed');
+  assert.equal(calls.launch, 1);
+});
+
+test('a commit that throws still counts as confirmed: one launch, and the request resolves and lets go', async () => {
+  // Committing clears the forecast on screen before it throws, as the page's does.
+  const { c, calls, state } = harness({ confirmed: true, current: false });
+  state.commitThrows = true;
+  assert.equal(await c.requestRoute({ source: 'file', read: async () => ({ text: 'A', name: 'a.gpx' }) }), 'committed');
+  assert.equal(calls.launch, 1);
+  assert.deepEqual(calls.paint, [true, false]);
+  assert.equal(calls.warn, 1, 'the error is logged');
+});
+
+test('a launch that throws is attempted once, and the request resolves and lets go', async () => {
+  const { c, calls, state } = harness();
+  state.launchThrows = true;
+  assert.equal(await c.requestRoute({ source: 'file', read: async () => ({ text: 'A', name: 'a.gpx' }) }), 'committed');
+  assert.equal(calls.launch, 1);
+  assert.deepEqual(calls.paint, [true, false]);
+  assert.equal(calls.warn, 1, 'the error is logged');
+  c.settingsChanged();
+  assert.equal(calls.launch, 2, 'a setting changed later launches again, and does not throw either');
+});
+
+test('an indicator that cannot be painted does not stop the request', async () => {
+  const { c, calls, state } = harness();
+  state.paintThrows = true;
+  assert.equal(await c.requestRoute({ source: 'file', read: async () => ({ text: 'A', name: 'a.gpx' }) }), 'committed');
+  assert.equal(calls.launch, 1);
+  assert.deepEqual(calls.paint, [true, false]);
+});
+
 test('settings changed with no request in flight launch at once, and only with a route', () => {
   const withRoute = harness({ confirmed: true, current: true });
   withRoute.c.settingsChanged();
@@ -169,12 +256,15 @@ test('the indicator: each request claims it and every ending lets go', async () 
   const a = gate();
   const b = gate();
   const ra = h.c.requestRoute({ source: 'file', read: () => a.promise });
-  h.c.requestRoute({ source: 'file', read: () => b.promise });
+  const rb = h.c.requestRoute({ source: 'file', read: () => b.promise });
   h.c.releaseLoading('request:2');
   assert.deepEqual(h.calls.paint, [true, false], 'request 1 had already let go');
   a.open({ text: 'A', name: 'a.gpx' });
   assert.equal(await ra, 'superseded');
   assert.deepEqual(h.calls.paint, [true, false]);
+  // No read left waiting on its deadline once the test ends.
+  b.open(null);
+  assert.equal(await rb, 'failed');
 });
 
 test('the indicator stays on while another owner still holds it', () => {
@@ -204,6 +294,36 @@ test('imports run in the order they arrived, even when the first write is the sl
   assert.deepEqual(plain(await a), { ok: true, name: 'a.gpx' });
   assert.deepEqual(plain(await b), { ok: true, name: 'b.gpx' });
   assert.deepEqual(log, ['start a.gpx', 'end a.gpx', 'start b.gpx', 'end b.gpx']);
+});
+
+test('moving a recent route to the top waits for the imports before it, and a later clock reading', async () => {
+  const log = [];
+  const first = gate();
+  const { c } = harness({
+    now: 1000,
+    writeRecent: async (input) => {
+      log.push(`import ${input.arrivedAt}`);
+      await first.promise;
+      log.push('imported');
+      return { ok: true, name: input.name };
+    },
+    touchRecent: async (id, at) => {
+      log.push(`touch ${id} ${at}`);
+      if (id === 'gone') throw new Error('transaction failed');
+      return true;
+    },
+  });
+  const a = c.importRoute({ text: 'A', name: 'a.gpx' });
+  const moved = c.touchRecent(7);
+  const failed = c.touchRecent('gone');
+  const b = c.importRoute({ text: 'B', name: 'b.gpx' });
+  await flush();
+  assert.deepEqual(log, ['import 1000'], 'the move ran before the import in front of it finished');
+  first.open();
+  await Promise.all([a, b]);
+  assert.equal(await moved, true);
+  assert.equal(await failed, false, 'a move that throws resolves false');
+  assert.deepEqual(log, ['import 1000', 'imported', 'touch 7 1001', 'touch gone 1002', 'import 1003', 'imported']);
 });
 
 test('arrivedAt grows strictly on the same clock reading, and each write carries its fingerprint', async () => {
