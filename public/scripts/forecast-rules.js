@@ -187,5 +187,90 @@ var cwForecastRules = (function () {
     return null;
   }
 
-  return { parseProviderTime, nearestIndex, extractStep, routeLine };
+  /**
+   * AROME HD answers lack some variables the standard Open-Meteo model has. This fills
+   * them in, in place, from the standard answer for the same place and returns the AROME
+   * answer. Moved here unchanged from fetchWeatherForSteps.
+   */
+  function mergeAromeWithStandard(json, std) {
+    const stdH = (std && std.hourly) || {};
+    const mergeKeys = ['precipitation_probability', 'weathercode', 'cloud_cover', 'uv_index', 'is_day'];
+    json.hourly = json.hourly || {};
+    try {
+      const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
+      const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
+      let stdIndexByTime = null;
+      if (aromeTimes && stdTimes) {
+        stdIndexByTime = Object.create(null);
+        for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
+      }
+      mergeKeys.forEach((k) => {
+        const aVal = json.hourly[k];
+        // Accept common variants in the standard payload
+        let sVal = stdH[k];
+        if (!Array.isArray(sVal)) {
+          if (k === 'uv_index') {
+            sVal = stdH.uv_index || stdH.uvindex || stdH.uvi || stdH.uv || null;
+            if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object'
+                && std.current.uvi != null) {
+              const v = Number(std.current.uvi);
+              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
+            }
+          } else if (k === 'cloud_cover') {
+            sVal = stdH.cloud_cover || stdH.cloudcover || null;
+          } else if (k === 'precipitation_probability') {
+            sVal = stdH.precipitation_probability || stdH.pop || null;
+          }
+        }
+        if (!Array.isArray(aVal) && Array.isArray(sVal)) {
+          // AROME lacks the array: copy the standard one
+          json.hourly[k] = sVal.slice();
+        } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
+          const merged = aVal.slice();
+          if (stdIndexByTime) {
+            for (let i = 0; i < aromeTimes.length; i++) {
+              if (merged[i] == null) {
+                const si = stdIndexByTime[String(aromeTimes[i])];
+                if (si != null && sVal[si] != null) merged[i] = sVal[si];
+              }
+            }
+          } else {
+            // No time axis to match on: fill missing positions by index
+            for (let mi = 0; mi < sVal.length; mi++) {
+              if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
+            }
+          }
+          json.hourly[k] = merged;
+        }
+      });
+      if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+      if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0)
+          && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
+        json.minutely_15 = std.minutely_15;
+      }
+    } catch (mergeErr) {
+      mergeKeys.forEach((k) => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
+      if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+    }
+    // Probability of precipitation under other names, as a fraction or a percentage
+    try {
+      if (!Array.isArray(json.hourly.precipitation_probability)) {
+        const candNames = ['precipitation_probability', 'precipitationProbability', 'precip_prob', 'pop', 'probability_of_precipitation'];
+        for (const n of candNames) {
+          if (Array.isArray(stdH[n])) {
+            const arr = stdH[n].slice();
+            const nums = arr.filter((v) => v != null && !Number.isNaN(Number(v))).map(Number);
+            const max = nums.length ? Math.max(...nums) : null;
+            json.hourly.precipitation_probability = (max != null && max <= 1)
+              ? arr.map((v) => (v == null ? null : Number(v) * 100))
+              : arr;
+            break;
+          }
+        }
+      }
+    } catch (_) { /* ignore */ }
+    return json;
+  }
+
+  return { parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard };
 })();
