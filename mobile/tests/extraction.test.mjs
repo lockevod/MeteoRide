@@ -44,7 +44,7 @@ const code = [
 const FIELDS = ['temp', 'windSpeed', 'windDir', 'windGust', 'humidity', 'precipitation',
   'precipProb', 'weatherCode', 'uvindex', 'isDaylight', 'cloudCover', '__useMinutely', 'timeLabel'];
 
-function run(provider, payload, units = { temp: 'C', wind: 'kmh' }) {
+function run(provider, payload, units = { temp: 'C', wind: 'kmh' }, events = []) {
   const steps = STEP_TIMES.map((iso) => ({
     lat: 41.4, lon: 2.2, time: new Date(iso), provider, weather: structuredClone(payload),
   }));
@@ -67,7 +67,7 @@ function run(provider, payload, units = { temp: 'C', wind: 'kmh' }) {
         return { altitude: h >= 5 && h < 18 ? 1 : -1 };
       },
     },
-    document: { getElementById: () => null, dispatchEvent() {} },
+    document: { getElementById: () => null, dispatchEvent: (e) => events.push(e) },
     CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
   };
   ctx.window = ctx;
@@ -122,3 +122,11 @@ for (const name of Object.keys(CASES)) {
     assert.deepEqual(actual[name], golden[name]);
   });
 }
+
+// cw:forecast announces a computation, and only publish() may send it: a repaint (a
+// language or unit change) is not a new forecast, and used to arm the ride watch again.
+test('repainting the table announces nothing', () => {
+  const events = [];
+  run('openmeteo', openMeteo(), undefined, events);
+  assert.equal(events.length, 0);
+});

@@ -932,6 +932,44 @@ test('a rejected API key is named as such', async ({ page }) => {
   await expect(page.locator('.notice')).toContainText(/API key/);
 });
 
+// Each computation hands fetch its own recorder, and the wrapper in utils.js notes the
+// provider answers there and nowhere else. A request without one is not watched.
+test('a provider request carrying a recorder notes its outcome there', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const kind = new URL(route.request().url()).searchParams.get('case');
+    if (kind === 'down') return route.abort();
+    return route.fulfill({ status: kind === 'key' ? 401 : 200, contentType: 'application/json', body: '{}' });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  const recorded = await page.evaluate(async () => {
+    const rec = window.cw.utils.createRecorder();
+    const base = 'https://api.open-meteo.com/v1/forecast?case=';
+    await fetch(base + 'ok', { cwRecorder: rec });
+    await fetch(base + 'down', { cwRecorder: rec }).catch(() => {});
+    await fetch(base + 'key', { cwRecorder: rec });
+    await fetch(base + 'key');   // no recorder: noted nowhere
+    return rec;
+  });
+  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0 });
+});
+
+test('a stale cache read without connection notes its age in the recorder', async ({ page }) => {
+  await goOffline(page);
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  const read = await page.evaluate(() => {
+    localStorage.setItem('cw_weather_probe', JSON.stringify({ data: { probe: 1 }, timestamp: Date.now() - 100 * 60000 }));
+    const rec = window.cw.utils.createRecorder();
+    return { data: window.cw.utils.getCache('cw_weather_probe', rec), age: rec.staleAgeMs };
+  });
+  expect(read.data).toEqual({ probe: 1 });
+  expect(read.age).toBeGreaterThanOrEqual(100 * 60000);
+  expect(read.age).toBeLessThan(101 * 60000);
+});
+
 test('the app reopens on the last route, with no network', async ({ page }) => {
   const control = { celsius: 18, offline: false };
   await installNativeBridge(page);

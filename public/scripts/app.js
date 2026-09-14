@@ -516,7 +516,8 @@ let forecastRun = 0;
 async function fetchWeatherForSteps(steps, timeSteps) {
   const run = ++forecastRun;
   const results = [];
-  clearNotice(); // reset UI notice at the start
+  // What this computation's requests and cache reads saw; the notice is decided from it.
+  const recorder = window.cw.utils.createRecorder();
 
   let apiKeyFinal = ""
   if (apiSource === "meteoblue") {
@@ -556,6 +557,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   let quotaOnceOWM = false;
   let httpErrOnceOWM = false;
   let lastHttpStatusOWM = null;
+  let httpErrOnceOM = false;
+  let lastHttpStatusOM = null;
 
   // NEW: fail-fast state for OpenWeather
   let providerHardFailCodeOWM = null;
@@ -678,7 +681,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   const mkPrim = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
   const keyPrim = mkPrim(prov, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
   try { window.logDebug && window.logDebug(`cache lookup key=${keyPrim} provider=${prov}`); } catch(e){}
-  const cachedPrim = getCache(keyPrim);
+  const cachedPrim = getCache(keyPrim, recorder);
       if (cachedPrim) {
         results.push({ ...p, provider: prov, weather: cachedPrim });
         logDebug(`Cache usado paso ${i + 1} (${prov})`);
@@ -689,7 +692,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
       try {
         const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit);
-        res = await fetch(urlPrim);
+        res = await fetch(urlPrim, { cwRecorder: recorder });
         // Diagnostic logging for OpenWeather: record status and masked URL (hide appid)
         if (prov === "openweather") {
           try {
@@ -738,7 +741,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           if (prov === "aromehd") {
             try {
               const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
-              const resStd = await fetch(urlStd);
+              const resStd = await fetch(urlStd, { cwRecorder: recorder });
               if (resStd.ok) {
                 const std = await resStd.json();
                 try {
@@ -755,10 +758,10 @@ async function fetchWeatherForSteps(steps, timeSteps) {
               const prov2 = "openmeteo";
               const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
               const key2 = mk2(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-              const cached2 = getCache(key2);
+              const cached2 = getCache(key2, recorder);
               if (cached2) { results.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
-              const res2 = await fetch(url2);
+              const res2 = await fetch(url2, { cwRecorder: recorder });
               if (res2.ok) { const json2 = await res2.json();
                 results.push({ ...p, provider: prov2, weather: json2 });
                 setCache(key2, json2);
@@ -807,7 +810,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const prov2 = "openmeteo";
             const mk3 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
             const key2 = mk3(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2);
+            const cached2 = getCache(key2, recorder);
             usedFallback = true;
             usedFallbackError = true;
 
@@ -816,7 +819,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            const res2 = await fetch(url2);
+            const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await res2.json();
               results.push({ ...p, provider: prov2, weather: json2 });
@@ -850,7 +853,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const prov2 = "openmeteo";
             const mk4 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
             const key2 = mk4(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2);
+            const cached2 = getCache(key2, recorder);
             usedFallback = true;
             usedFallbackError = true;
 
@@ -859,7 +862,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            const res2 = await fetch(url2);
+            const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await res2.json();
               results.push({ ...p, provider: prov2, weather: json2 });
@@ -874,13 +877,13 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const prov2 = "openmeteo";
             const mk5 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
             const key2 = mk5(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2);
+            const cached2 = getCache(key2, recorder);
             if (cached2) {
               results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            const res2 = await fetch(url2);
+            const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
               const json2 = await res2.json();
               results.push({ ...p, provider: prov2, weather: json2 });
@@ -892,8 +895,9 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             }
           } else {
             // Non-recoverable or non-meteoblue error -> blank step but keep going
-            if (!httpErrOnce) {
-              httpErrOnce = true;
+            lastHttpStatusOM = res.status;
+            if (!httpErrOnceOM) {
+              httpErrOnceOM = true;
               logDebug(t("provider_http_error", { prov: "Open‑Meteo", status: res.status }), true);
             }
           }
@@ -947,78 +951,71 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   await checkWeatherAlertsIndependent(steps, timeSteps);
   if (run !== forecastRun) return;
 
-  if (!showAllNotices) {
-     // Only show notices when fallback is due to key/provider errors (or missing key)
-     if (missingKeyFallback && providerNeedsKey) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_missing", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((invalidKeyOnce || invalidKeyOnceOWM) && usedFallbackError) {
-       const provName = invalidKeyOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_invalid", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((quotaOnce || quotaOnceOWM) && usedFallbackError) {
-       const provName = quotaOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_quota_exceeded", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((httpErrOnce || httpErrOnceOWM) && usedFallbackError) {
-       const provName = httpErrOnceOWM ? "OpenWeather" : "MeteoBlue";
-       const st = httpErrOnceOWM
-         ? (lastHttpStatusOWM != null ? String(lastHttpStatusOWM) : "…")
-         : (lastHttpStatusMB != null ? String(lastHttpStatusMB) : "…");
-       setNotice(t("provider_http_error", { prov: provName, status: st }) + " " + t("fallback_short"), "error");
-     } else if (usedFallbackError) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("fallback_due_error", { prov: provName }), "warn");
-     } else {
-       clearNotice(); // suppress horizon/other non-critical notices
-     }
-   } else {
-     // Original verbose notice policy
-     if (beyondHorizon) {
-       setNotice(t("horizon_exceeded", { days: OPENMETEO_MAX_DAYS }), "warn");
-     } else if (usedFallbackHorizon) {
-       setNotice(t("fallback_to_openmeteo", { days: horizonDaysUsed ?? METEOBLUE_MAX_DAYS }), "warn");
-     } else if (missingKeyFallback && providerNeedsKey) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_missing", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((invalidKeyOnce || invalidKeyOnceOWM) && usedFallbackError) {
-       const provName = invalidKeyOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_invalid", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((quotaOnce || quotaOnceOWM) && usedFallbackError) {
-       const provName = quotaOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_quota_exceeded", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((httpErrOnce || httpErrOnceOWM) && usedFallbackError) {
-       const provName = httpErrOnceOWM ? "OpenWeather" : "MeteoBlue";
-       const st = httpErrOnceOWM
-         ? (lastHttpStatusOWM != null ? String(lastHttpStatusOWM) : "…")
-         : (lastHttpStatusMB != null ? String(lastHttpStatusMB) : "…");
-       setNotice(t("provider_http_error", { prov: provName, status: st }) + " " + t("fallback_short"), "error");
-     } else if (invalidKeyOnce || invalidKeyOnceOWM) {
-       const provName = invalidKeyOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_invalid", { prov: provName }), "error");
-     } else if (quotaOnce || quotaOnceOWM) {
-       const provName = quotaOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_quota_exceeded", { prov: provName }), "error");
-     } else if (httpErrOnce || httpErrOnceOWM) {
-       const provName = httpErrOnceOWM ? "OpenWeather" : "MeteoBlue";
-       const st = httpErrOnceOWM
-         ? (lastHttpStatusOWM != null ? String(lastHttpStatusOWM) : "…")
-         : (lastHttpStatusMB != null ? String(lastHttpStatusMB) : "…");
-       setNotice(t("provider_http_error", { prov: provName, status: st }), "error");
-     } else if (usedFallbackError) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("fallback_due_error", { prov: provName }), "warn");
-     } else {
-       clearNotice();
-     }
-  }
-  // Always render after computing notices
-  weatherData = results;
-  processWeatherData();
+  const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
+  const snapshotSteps = results.map((r) => ({
+    lat: r.lat, lon: r.lon, time: r.time, distanceM: r.distanceM, provider: r.provider,
+    payloadUnits: r.provider === "openweather" ? owUnits : null,
+    payload: r.weather,
+  }));
+  publish({
+    version: 1,
+    computationId: run,
+    route: { name: (window.lastGPXFile && window.lastGPXFile.name) || "" },
+    settings: { provider: apiSource, units: { temp: tempUnit, wind: windUnit }, noticeAll: showAllNotices },
+    steps: snapshotSteps,
+    alerts: [],
+    outcome: {
+      requestedProvider: apiSource,
+      usableSteps: cwForecastRules.usableSteps(snapshotSteps),
+      transportFailures: recorder.failed,
+      lastFailStatus: recorder.lastFailStatus,
+      offline: window.cw.utils.isOffline(),
+      staleAgeMs: recorder.staleAgeMs,
+      beyondHorizon,
+      openMeteoMaxDays: OPENMETEO_MAX_DAYS,
+      usedFallback,
+      usedFallbackError,
+      usedFallbackHorizon,
+      horizonDays: horizonDaysUsed ?? METEOBLUE_MAX_DAYS,
+      missingKey: missingKeyFallback && providerNeedsKey,
+      providers: {
+        meteoblue: { invalidKey: invalidKeyOnce, quota: quotaOnce, httpError: httpErrOnce, httpStatus: lastHttpStatusMB },
+        openweather: { invalidKey: invalidKeyOnceOWM, quota: quotaOnceOWM, httpError: httpErrOnceOWM, httpStatus: lastHttpStatusOWM },
+        openmeteo: { httpError: httpErrOnceOM, httpStatus: lastHttpStatusOM },
+      },
+    },
+    origin: "live",
+    createdAt: Date.now(),
+  });
   } catch (err) {
     logDebug(t("error_api", { msg: err.message }), true);
-    setNotice(t("error_api", { msg: err.message }), "error");
-  } finally {
-    if (run === forecastRun) hideLoading();
+    if (run === forecastRun) {
+      setNotice(t("error_api", { msg: err.message }), "error");
+      hideLoading();
+    }
   }
+}
+
+/**
+ * Puts a finished computation on screen, and nothing else may. Every effect happens
+ * here in one go, with no wait between checking that the computation is still the
+ * latest and the last effect: the table, the notice, `cw:forecast` and the indicator.
+ */
+function publish(snapshot) {
+  if (!snapshot || snapshot.computationId !== forecastRun) return false;
+  weatherData = snapshot.steps.map((s) => ({
+    lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
+    provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
+  }));
+  processWeatherData();
+  const notice = cwForecastRules.decideNotice(snapshot.outcome, { noticeAll: snapshot.settings.noticeAll });
+  if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
+  else clearNotice();
+  try {
+    document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
+  } catch (e) { /* ignore */ }
+  hideLoading();
+  return true;
 }
 
 function processWeatherData() {
@@ -1207,11 +1204,6 @@ function processWeatherData() {
   // Invalidate size first (in case container resized)
   if (map) map.invalidateSize();
   [120, 300, 700].forEach((delay, idx) => setTimeout(() => fitRouteOnce(idx === 0 ? [6,6] : [9,9]), delay));
-
-  // The app shell watches the forecast in the background; tell it what was rendered.
-  try {
-    document.dispatchEvent(new CustomEvent('cw:forecast', { detail: { steps: weatherData } }));
-  } catch (e) { /* ignore */ }
 }
 
 function buildSunHeaderCell(lat, lon, dateLike) {

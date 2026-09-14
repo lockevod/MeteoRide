@@ -15,47 +15,19 @@
     catch (_) { return new Set(); }
   }
 
-  // Forecast requests are watched so the app can say why a table came out empty,
-  // instead of leaving the user staring at nothing. Wrapping fetch once here beats
-  // threading a callback through every provider call site in app.js and compare.js,
-  // and it changes no behaviour: the original result is passed straight through.
+  // Forecast requests are watched so the app can say why a table came out empty. A
+  // computation hands fetch its own recorder (`cwRecorder`) and the wrapper notes each
+  // provider answer there and nowhere else, so what one computation saw can never turn
+  // into a notice over another. A request without a recorder is not watched at all.
   const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org', 'my.meteoblue.com'];
 
-  let providerOk = 0;
-  let providerFailed = 0;
-  let providerStatus = '';
-  let providerTimer = null;
+  function createRecorder() {
+    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0 };
+  }
 
   function isProviderUrl(url) {
     try { return PROVIDER_HOSTS.includes(new URL(String(url), location.href).hostname); }
     catch (_) { return false; }
-  }
-
-  function noteProvider(ok, status) {
-    if (ok) providerOk++;
-    else { providerFailed++; if (status) providerStatus = status; }
-    if (providerTimer) return;
-    // Wait for the run to finish: a chain that falls back to another provider is a
-    // success, and only a run where nothing at all worked is worth a message.
-    providerTimer = setTimeout(reportProviderOutcome, 1500);
-  }
-
-  function reportProviderOutcome() {
-    providerTimer = null;
-    const failed = providerFailed;
-    const ok = providerOk;
-    const status = providerStatus;
-    providerOk = providerFailed = 0;
-    providerStatus = '';
-    if (!failed || ok) return;   // something came back, so the table has data
-
-    try {
-      let msg;
-      if (isOffline()) msg = t('offline_no_data');
-      else if (status === '401' || status === '403') msg = t('provider_rejected');
-      else msg = t('provider_unreachable');
-      window.setNotice && window.setNotice(msg, 'warn');
-    } catch (e) { logDebug(`reportProviderOutcome failed: ${e.message}`, true); }
   }
 
   function watchProviderRequests() {
@@ -66,12 +38,15 @@
     const original = window.fetch.bind(window);
     window.fetch = function (input, init) {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
-      // `cwSilent` marks a request whose failure says nothing about the table (the
-      // ride-watch baseline, read after the forecast): unknown keys are ignored by fetch.
-      if (!isProviderUrl(url) || (init && init.cwSilent)) return original(input, init);
+      const recorder = init && init.cwRecorder;
+      if (!recorder || !isProviderUrl(url)) return original(input, init);
       return original(input, init).then(
-        (res) => { noteProvider(res.ok, String(res.status)); return res; },
-        (err) => { noteProvider(false, 'network'); throw err; }
+        (res) => {
+          if (res.ok) recorder.ok++;
+          else { recorder.failed++; recorder.lastFailStatus = String(res.status); }
+          return res;
+        },
+        (err) => { recorder.failed++; recorder.lastFailStatus = 'network'; throw err; }
       );
     };
   }
@@ -498,7 +473,7 @@
   // DEBUG FLAG: when true, disable use of localStorage weather cache to force fresh fetches
   // Set to false to enable cache (default for normal operation)
   const DISABLE_WEATHER_CACHE = false;
-  function getCache(key) {
+  function getCache(key, recorder) {
     try {
       if (DISABLE_WEATHER_CACHE) {
         logDebug(`getCache disabled by flag key=${key}`);
@@ -519,7 +494,7 @@
       if (age > cacheTTL) {
         if (isOffline() && age <= staleMaxAge) {
           logDebug(`getCache stale-but-offline key=${key} age=${age}ms`);
-          reportStale(age);
+          if (recorder) recorder.staleAgeMs = Math.max(recorder.staleAgeMs, age);
           return obj.data;
         }
         logDebug(`getCache expired key=${key} age=${age}ms > ${cacheTTL}ms`);
@@ -571,30 +546,6 @@
       }
     }
   }
-  // Tell the user once per run that what they are reading is not current. Collapsed
-  // to the oldest value seen, because a route serves dozens of cache entries.
-  let staleTimer = null;
-  let oldestStale = 0;
-
-  function reportStale(ageMs) {
-    oldestStale = Math.max(oldestStale, ageMs);
-    if (staleTimer) return;
-    staleTimer = setTimeout(() => {
-      staleTimer = null;
-      const age = oldestStale;
-      oldestStale = 0;
-      try {
-        const hours = Math.floor(age / 3600000);
-        const mins = Math.round((age % 3600000) / 60000);
-        const when = hours ? `${hours} h ${mins} min` : `${mins} min`;
-        // t() does the placeholder substitution and blanks out anything it is not
-        // given, so the value has to go through it rather than after it.
-        const msg = t('offline_stale_forecast', { age: when });
-        window.setNotice && window.setNotice(msg, 'warn');
-      } catch (e) { logDebug(`reportStale failed: ${e.message}`, true); }
-    }, 400);
-  }
-
   /** Marks the cache entries a route depends on, so a quota clear-out spares them. */
   function pinCacheKeys(keys) {
     try {
@@ -1005,6 +956,7 @@
        getVal,
        getCache,
        setCache,
+       createRecorder,
        staleMaxAge,
        pinCacheKeys,
        cachedWeatherKeys,

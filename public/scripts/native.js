@@ -583,9 +583,9 @@
     const rules = window.cwWatchRules;
     if (offline()) return;
     try {
-      // cwSilent: a failure here must not become a "provider unreachable" notice on
-      // top of a table that loaded fine.
-      const res = await fetch(rules.forecastUrl(watch.points, Date.now()), { cwSilent: true });
+      // No cwRecorder: a failure here belongs to no computation, so it never becomes a
+      // notice over a table that loaded fine.
+      const res = await fetch(rules.forecastUrl(watch.points, Date.now()));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       watch.baseline = rules.readForecast(await res.json(), watch.points);
     } catch (e) {
