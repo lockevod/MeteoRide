@@ -648,16 +648,13 @@ code does and what makes the race reproducible.
 - **Nothing has run on a physical device.** iOS background tasks never execute in the
   simulator, so no ride alert has ever fired through the real path: the rules and the
   runner are covered by tests, the delivery is not.
-- Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit) and
-  H2 (offline preparation) are fixed; H1, H3, H4 and H5 are open and reproduce against
-  this branch. H1 was not only a fast-clicking race: one ordinary file pick started
-  three forecasts, because `bindUIEvents` and `initUI` both listened to `#gpxFile` and
-  `initUI` ran twice (on script load in `ui.js` and from `app.js` on
-  DOMContentLoaded). The three runs interleaved every step into `weatherData` three
-  times. That trigger is removed — one listener, `initUI` guarded — and tested; the
-  race itself (a speed or provider change while a run is in flight) still needs the
-  run identity the review describes. `docs/HANDOFF.md` §9 has the table and the order
-  being followed.
+- Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
+  H2 (offline preparation) and H1 (overlapping forecasts) are fixed; H3, H4 and H5 are
+  open. H5 and H4 should build on H1's run number rather than add timers.
+  `docs/HANDOFF.md` §9 has the table and the order being followed.
+- A comparison run (`compare.js`) sets `weatherData` through `cw.setWeatherData` and
+  has no run number, so a normal run finishing after it can still replace its data.
+  Not observed, not tested.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`

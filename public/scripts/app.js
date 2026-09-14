@@ -511,8 +511,14 @@ function segmentRouteByTime(geojson) {
   fetchWeatherForSteps(steps, timeSteps);
 }
 
+// Each run takes a number, and only the latest may publish. A speed, provider or route
+// change starts a new run while the old one is still fetching; the old one used to write
+// into weatherData alongside it and render whatever had accumulated when it finished.
+let forecastRun = 0;
+
 async function fetchWeatherForSteps(steps, timeSteps) {
-  weatherData = [];
+  const run = ++forecastRun;
+  const results = [];
   clearNotice(); // reset UI notice at the start
 
   let apiKeyFinal = ""
@@ -665,7 +671,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           logDebug(`Fecha fuera de horizonte (${OPENMETEO_MAX_DAYS} días) para Open‑Meteo. Algunos pasos no tendrán datos.`, true);
           warnedBeyondOM = true;
         }
-        weatherData.push({ ...p, provider: "openmeteo", weather: null });
+        results.push({ ...p, provider: "openmeteo", weather: null });
         continue;
       }
 
@@ -677,7 +683,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   try { window.logDebug && window.logDebug(`cache lookup key=${keyPrim} provider=${prov}`); } catch(e){}
   const cachedPrim = getCache(keyPrim);
       if (cachedPrim) {
-        weatherData.push({ ...p, provider: prov, weather: cachedPrim });
+        results.push({ ...p, provider: prov, weather: cachedPrim });
         logDebug(`Cache usado paso ${i + 1} (${prov})`);
         continue;
       }
@@ -834,15 +840,15 @@ async function fetchWeatherForSteps(steps, timeSteps) {
               const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
               const key2 = mk2(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
               const cached2 = getCache(key2);
-              if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
+              if (cached2) { results.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
               const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
               const res2 = await fetch(url2);
               if (res2.ok) { const json2 = await res2.json();
-                weatherData.push({ ...p, provider: prov2, weather: json2 });
+                results.push({ ...p, provider: prov2, weather: json2 });
                 setCache(key2, json2);
                 continue;
               } else {
-                weatherData.push({ ...p, provider: prov2, weather: null });
+                results.push({ ...p, provider: prov2, weather: null });
                 continue;
               }
             }
@@ -890,18 +896,18 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             usedFallbackError = true;
 
             if (cached2) {
-              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: cached2.provider, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
             const res2 = await fetch(url2);
             if (res2.ok) {
               const json2 = await res2.json();
-              weatherData.push({ ...p, provider: prov2, weather: json2 });
+              results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
             } else {
-              weatherData.push({ ...p, provider: prov2, weather: null });
+              results.push({ ...p, provider: prov2, weather: null });
               continue;
             }
           } else if (prov === "openweather") {
@@ -933,18 +939,18 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             usedFallbackError = true;
 
             if (cached2) {
-              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: cached2.provider, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
             const res2 = await fetch(url2);
             if (res2.ok) {
               const json2 = await res2.json();
-              weatherData.push({ ...p, provider: prov2, weather: json2 });
+              results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
             } else {
-              weatherData.push({ ...p, provider: prov2, weather: null });
+              results.push({ ...p, provider: prov2, weather: null });
               continue;
             }
           } else if (prov === "aromehd") {
@@ -954,18 +960,18 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const key2 = mk5(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
             const cached2 = getCache(key2);
             if (cached2) {
-              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: cached2.provider, weather: cached2 });
               continue;
             }
             const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
             const res2 = await fetch(url2);
             if (res2.ok) {
               const json2 = await res2.json();
-              weatherData.push({ ...p, provider: prov2, weather: json2 });
+              results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
             } else {
-              weatherData.push({ ...p, provider: prov2, weather: null });
+              results.push({ ...p, provider: prov2, weather: null });
               continue;
             }
           } else {
@@ -983,7 +989,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       if (ok && json) {
         // Check for weather alerts if using OpenWeather and alerts are enabled
         if (prov === "openweather" && json.alerts && Array.isArray(json.alerts) && getVal("showWeatherAlerts") !== false) {
-          processWeatherAlerts(json.alerts, p, timeAt);
+          if (run === forecastRun) processWeatherAlerts(json.alerts, p, timeAt);
         }
         
         // For OpenWeather: the response contains an array of hourly entries. Cache
@@ -1010,18 +1016,20 @@ async function fetchWeatherForSteps(steps, timeSteps) {
         } else {
           try { setCache(keyPrim, json); window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`); } catch(e) {}
         }
-        weatherData.push({ ...p, provider: prov, weather: json });
+        results.push({ ...p, provider: prov, weather: json });
         logDebug(`Datos recibidos paso ${i + 1} (${prov})`);
         await new Promise(r => setTimeout(r, 70));
       } else {
-        weatherData.push({ ...p, provider: prov, weather: null });
+        results.push({ ...p, provider: prov, weather: null });
       }
 
       logDebug(`step ${i+1}/${steps.length} effectiveProv(final)=${prov}`);
     }
 
   // Check for weather alerts independently if we have OpenWeather API key
+  if (run !== forecastRun) return;
   await checkWeatherAlertsIndependent(steps, timeSteps);
+  if (run !== forecastRun) return;
 
   if (!showAllNotices) {
      // Only show notices when fallback is due to key/provider errors (or missing key)
@@ -1087,12 +1095,13 @@ async function fetchWeatherForSteps(steps, timeSteps) {
      }
   }
   // Always render after computing notices
+  weatherData = results;
   processWeatherData();
   } catch (err) {
     logDebug(t("error_api", { msg: err.message }), true);
     setNotice(t("error_api", { msg: err.message }), "error");
   } finally {
-    hideLoading();
+    if (run === forecastRun) hideLoading();
   }
 }
 
