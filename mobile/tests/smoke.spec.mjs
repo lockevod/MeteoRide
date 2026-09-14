@@ -746,11 +746,22 @@ test('picking a route file computes its forecast once', async ({ page }) => {
   await stubProvider(page, control);
   await page.goto('/index.html');
   await mapReady(page);
+  // Only the latest run publishes now, so the table and weatherData look right however
+  // many runs a pick starts. Count the launches themselves. segmentRouteByTime calls
+  // fetchWeatherForSteps as a global, which resolves through this window property.
+  await page.evaluate(() => {
+    window.__launches = { reloadFull: 0, fetchWeatherForSteps: 0 };
+    for (const name of Object.keys(window.__launches)) {
+      const real = window[name];
+      window[name] = function (...args) { window.__launches[name]++; return real.apply(this, args); };
+    }
+  });
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   // The extra runs started within milliseconds of the first; half a second is ample
-  // for any of them to have appended its steps.
+  // for any of them to have been launched.
   await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__launches)).toEqual({ reloadFull: 1, fetchWeatherForSteps: 1 });
   const times = await page.evaluate(() => window.weatherData.map((s) => +new Date(s.time)));
   expect(times.length).toBeGreaterThan(0);
   expect(new Set(times).size, 'the same step was computed more than once').toBe(times.length);

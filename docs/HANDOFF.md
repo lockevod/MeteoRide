@@ -214,3 +214,9 @@ exactamente aquí):
 4. **H4** — timeouts atados a esa misma identidad, preservando los fallbacks.
 5. **H3** — formato de caché, con cuidado en la migración de las claves fijadas para
    uso sin conexión; medir antes de afirmar mejoras.
+
+**Repasos de lo ya corregido:**
+
+- **H1**: el test «picking a route file computes its forecast once» cuenta las
+  llamadas a `reloadFull` y `fetchWeatherForSteps` por fichero elegido. Mirar solo
+  `weatherData` ya no cazaba lanzamientos duplicados, porque ahora publica solo el último.
