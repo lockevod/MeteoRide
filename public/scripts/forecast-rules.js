@@ -284,5 +284,80 @@ var cwForecastRules = (function () {
     return json;
   }
 
-  return { parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard };
+  /* ---------- what a computation produced, and what to say about it ---------- */
+
+  /**
+   * Steps the table can show: the answer holds a temperature or a wind for the step's
+   * time. A step served from cache counts; an HTTP 200 with nothing in it does not.
+   * MeteoBlue answers are not extracted here (spec §2), so any MeteoBlue answer counts.
+   */
+  function usableSteps(steps) {
+    let n = 0;
+    for (const s of steps || []) {
+      if (!s || s.payload == null) continue;
+      if (s.provider === 'meteoblue') { n++; continue; }
+      const r = extractStep(s.payload, { provider: s.provider, time: s.time, payloadUnits: s.payloadUnits });
+      if (r && (Number.isFinite(r.temp) || Number.isFinite(r.wind))) n++;
+    }
+    return n;
+  }
+
+  function formatAge(ms) {
+    const hours = Math.floor(ms / 3600000);
+    const mins = Math.round((ms % 3600000) / 60000);
+    return hours ? `${hours} h ${mins} min` : `${mins} min`;
+  }
+
+  /**
+   * The notice a published computation deserves, or null for none. Returns
+   * `{ parts: [[i18nKey, params], ...], type }`; the page joins the translated parts.
+   *
+   * Order: an empty table whose requests failed says why; otherwise data read from the
+   * cache without connection says how old it is; otherwise the provider policy that
+   * used to live at the end of fetchWeatherForSteps, quiet or detailed (`noticeAll`).
+   */
+  function decideNotice(outcome, { noticeAll } = {}) {
+    const o = outcome || {};
+    const pv = o.providers || {};
+    const mb = pv.meteoblue || {};
+    const ow = pv.openweather || {};
+    const om = pv.openmeteo || {};
+    const say = (type, ...parts) => ({ parts, type });
+
+    if (!o.usableSteps && o.transportFailures > 0) {
+      if (o.offline) return say('warn', ['offline_no_data', {}]);
+      if (o.lastFailStatus === '401' || o.lastFailStatus === '403') return say('warn', ['provider_rejected', {}]);
+      return say('warn', ['provider_unreachable', {}]);
+    }
+    if (o.staleAgeMs > 0) return say('warn', ['offline_stale_forecast', { age: formatAge(o.staleAgeMs) }]);
+
+    const keyed = o.requestedProvider === 'openweather' ? 'OpenWeather' : 'MeteoBlue';
+    const named = (flag) => (ow[flag] ? 'OpenWeather' : mb[flag] ? 'MeteoBlue' : null);
+    const httpFrom = ow.httpError ? ow : mb.httpError ? mb : om.httpError ? om : null;
+    const httpName = ow.httpError ? 'OpenWeather' : mb.httpError ? 'MeteoBlue' : 'Open-Meteo';
+    const httpParams = () => ({ prov: httpName, status: httpFrom.httpStatus != null ? String(httpFrom.httpStatus) : '…' });
+    const short = ['fallback_short', {}];
+    const fallbackError = !!o.usedFallbackError;
+
+    if (noticeAll) {
+      if (o.beyondHorizon) return say('warn', ['horizon_exceeded', { days: o.openMeteoMaxDays }]);
+      if (o.usedFallbackHorizon) return say('warn', ['fallback_to_openmeteo', { days: o.horizonDays }]);
+    }
+    if (o.missingKey) return say('error', ['provider_key_missing', { prov: keyed }], short);
+    if (named('invalidKey') && fallbackError) return say('error', ['provider_key_invalid', { prov: named('invalidKey') }], short);
+    if (named('quota') && fallbackError) return say('error', ['provider_quota_exceeded', { prov: named('quota') }], short);
+    if (httpFrom && fallbackError) return say('error', ['provider_http_error', httpParams()], short);
+    if (noticeAll) {
+      if (named('invalidKey')) return say('error', ['provider_key_invalid', { prov: named('invalidKey') }]);
+      if (named('quota')) return say('error', ['provider_quota_exceeded', { prov: named('quota') }]);
+      if (httpFrom) return say('error', ['provider_http_error', httpParams()]);
+    }
+    if (fallbackError) return say('warn', ['fallback_due_error', { prov: keyed }]);
+    return null;
+  }
+
+  return {
+    parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
+    usableSteps, decideNotice,
+  };
 })();
