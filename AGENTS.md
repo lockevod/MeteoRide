@@ -582,6 +582,39 @@ hosts instead of allowing `https:` wholesale, which is what stops script that so
 ran there from posting the stored API key to an attacker. **Adding a deep link that
 opens a route by URL means widening that list again, on purpose.**
 
+## Reading a provider answer
+
+`public/scripts/forecast-rules.js` holds the pure rules behind the table, the way
+`watch-rules.js` holds the ride-watch rules: a plain script the page loads and Node tests
+run in a bare `vm` context. `processWeatherData` asks it which values a provider answer
+holds for a step (`extractStep`), `segmentRouteByTime` asks it which line of a file to
+follow (`routeLine`), and `fetchWeatherForSteps` asks it to complete an AROME answer from
+the standard Open-Meteo one (`mergeAromeWithStandard`). Presentation stays in
+`processWeatherData`: display units, daylight from SunCalc, the AROME weather-code
+reconciliation and luminance.
+
+Three things changed on purpose when the extraction moved, each in its own commit:
+
+- **The first quarter of `minutely_15` came out empty.** `index || -1` turned index 0 into
+  -1, so a step on that quarter had no temperature, wind or weather code.
+- **Open-Meteo times are read in the answer's offset.** With `timezone=auto` they arrive as
+  wall-clock times with `utc_offset_seconds` beside them, and they were read in the phone's
+  zone: a phone in another zone than the route read other hours. Without that field the old
+  reading stays.
+- **AROME is completed hour by hour.** A variable AROME lacks was copied from Open-Meteo slot
+  by slot even when the two time axes differed. A value is now taken only for an hour both
+  answers have; with no standard time axis nothing is copied onto AROME hours.
+
+Two things that look like bugs are kept, because the table has always worked that way:
+`window.findClosestFutureIndex` was never assigned, so a step reads the nearest hour, not
+the next one; and OpenWeather beyond its hourly range reads the last hour, not daily.
+
+`mobile/tests/extraction.test.mjs` and `mobile/tests/aromehd-merge.test.mjs` compare against
+golden files in `mobile/tests/fixtures/`, built from synthetic answers
+(`fixtures/providers.mjs`; no real answers are captured in the repository). Regenerate a
+golden only for a change you mean to make, with `UPDATE_GOLDEN=1`, and read its diff before
+committing: a diff wider than that change is a regression.
+
 ## Verifying a change
 
 ```bash

@@ -235,3 +235,13 @@ exactamente aquí):
   de todas las rutas recientes (`idbSaveAll` vaciaba el almacén y reescribía la caché, que
   solo tiene metadatos) y el arranque sin cobertura ya no tenía qué restaurar. Ahora solo
   se reescribe el registro abierto con otro `timestamp`; test en `smoke.spec.mjs`.
+
+### Rediseño del ciclo de vida: fase 1 (reglas y extracción)
+
+Diseño en `docs/superpowers/specs/2026-09-14-route-lifecycle-and-offline-design.md` y plan en
+`docs/superpowers/plans/2026-09-14-fase-1-reglas-y-extraccion.md`. Ninguno de los dos está
+en git: `docs/superpowers/` está en el `.gitignore` global del autor. La extracción por
+proveedor, la elección de la línea de la ruta y la fusión de AROME están en
+`public/scripts/forecast-rules.js`, con tres correcciones intencionadas: el primer cuarto de
+`minutely_15`, las horas según `utc_offset_seconds` y la fusión alineada por hora. Las
+fases 2 a 7 tendrán cada una su plan cuando empiecen.
