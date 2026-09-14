@@ -882,6 +882,17 @@
 
           window.saveSettings();
           if (id === "language") window.applyTranslations();
+          // Settings that only change how the forecast looks. Nothing is computed again:
+          // language and detailed notices repaint the forecast on screen, unless the
+          // comparison table is what is showing, and the debug button and ride alerts have
+          // already done their part.
+          if (id === "showDebugButton" || id === "rideAlerts") return;
+          if (id === "language" || id === "noticeAll") {
+            const row2 = document.getElementById('datetimeRoute2Row');
+            const compareOnScreen = window.apiSource === "compare" || (row2 && row2.style.display !== 'none');
+            if (!compareOnScreen && window.cwRepaintPublished) window.cwRepaintPublished();
+            return;
+          }
           // If compare-by-dates UI is visible, refresh the compare view instead of full reload
           const row2 = document.getElementById('datetimeRoute2Row');
           const compareActive = row2 && row2.style.display !== 'none';

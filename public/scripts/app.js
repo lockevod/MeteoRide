@@ -1125,21 +1125,42 @@ function showOfficialAlerts(snapshot) {
 function publish(snapshot) {
   if (!cwForecastRules.shouldPublish(snapshot, publishState())) return false;
   publishedSnapshot = snapshot;
-  weatherData = snapshot.steps.map((s) => ({
-    lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
-    provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
-  }));
+  weatherData = mirrorSteps(snapshot);
   processWeatherData();
   showOfficialAlerts(snapshot);
-  const notice = cwForecastRules.decideNotice(snapshot.outcome, { noticeAll: snapshot.settings.noticeAll });
-  if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
-  else clearNotice();
+  showNotice(snapshot.outcome, snapshot.settings.noticeAll);
   try {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
   window.cw.releaseLoading("forecast:" + snapshot.computationId);
   return true;
 }
+
+// The steps of a snapshot in the shape the table and the markers read (window.weatherData).
+function mirrorSteps(snapshot) {
+  return snapshot.steps.map((s) => ({
+    lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
+    provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
+  }));
+}
+
+function showNotice(outcome, noticeAll) {
+  const notice = cwForecastRules.decideNotice(outcome, { noticeAll });
+  if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
+  else clearNotice();
+}
+
+// Paints the published snapshot again for a setting that only changes how it looks
+// (language, detailed notices): the table from the answers it holds, and its notice
+// decided with the checkbox as it is now. Nothing is fetched, cw:forecast is not sent
+// and the indicator is left alone.
+window.cwRepaintPublished = function () {
+  if (!publishedSnapshot) return false;
+  weatherData = mirrorSteps(publishedSnapshot);
+  processWeatherData();
+  showNotice(publishedSnapshot.outcome, !!document.getElementById("noticeAll")?.checked);
+  return true;
+};
 
 function processWeatherData() {
   const tempUnit = getVal("tempUnits");

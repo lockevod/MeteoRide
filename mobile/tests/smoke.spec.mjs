@@ -1316,6 +1316,79 @@ test('a picked file that is not a route stays out of recent routes; a route goes
   await expect.poll(() => storedNames(page)).toEqual(['route.gpx']);
 });
 
+/* ---------- settings that only change how it looks ---------- */
+
+const flipControl = (page, id) =>
+  page.evaluate((elId) => {
+    const el = document.getElementById(elId);
+    if (el.type === 'checkbox') el.checked = !el.checked;
+    else el.value = [...el.options].map((o) => o.value).find((v) => v !== el.value);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, id);
+
+test('settings that only change how it looks never compute the forecast again', async ({ page }) => {
+  let requests = 0;
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    requests += 1;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(21)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+
+  const before = await shownTemperatures(page);
+  const asked = requests;
+  await countLaunches(page);
+  await page.evaluate(() => {
+    window.__forecasts = 0;
+    document.addEventListener('cw:forecast', () => { window.__forecasts++; });
+    window.__repaints = 0;
+    const paint = window.processWeatherData;
+    window.processWeatherData = function (...args) { window.__repaints++; return paint.apply(this, args); };
+  });
+
+  // Language and detailed notices repaint; the debug button and ride alerts do not even that.
+  await flipControl(page, 'language');
+  await flipControl(page, 'noticeAll');
+  await flipControl(page, 'showDebugButton');
+  await flipControl(page, 'rideAlerts');
+  await page.waitForTimeout(800);
+
+  expect(requests).toBe(asked);
+  expect(await page.evaluate(() => ({ launches: window.__launches.launch, forecasts: window.__forecasts, repaints: window.__repaints })))
+    .toEqual({ launches: 0, forecasts: 0, repaints: 2 });
+  expect(await shownTemperatures(page)).toEqual(before);
+});
+
+test('detailed notices switch the notice of the forecast on screen on and off', async ({ page }) => {
+  let calls = 0;
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    calls += 1;
+    return calls === 1
+      ? route.fulfill({ status: 500, contentType: 'application/json', body: '{}' })
+      : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(21)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(await page.evaluate(() => document.getElementById('noticeAll').checked)).toBe(true);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  const notice = page.locator('#horizonNotice');
+  await expect(notice).toContainText('500');
+  const asked = calls;
+
+  await flipControl(page, 'noticeAll');
+  await expect(notice).toBeHidden();
+  await flipControl(page, 'noticeAll');
+  await expect(notice).toContainText('500');
+  expect(calls).toBe(asked);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {
