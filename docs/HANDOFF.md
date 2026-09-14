@@ -194,7 +194,7 @@ protección que el código no da.
 | **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. **Corregido**: reconstruye las claves de los pasos pintados con `makeCacheKey` y distingue nada, completo, parcial ("n de total") y fallo al fijar; cuatro tests en `smoke.spec.mjs`. |
 | **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. |
 | **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. |
-| **H5** (media) | `utils.js:34-58` | Los avisos de proveedor usan un temporizador de 1,5 s que nunca se reinicia, así que un aviso nuevo puede desaparecer al instante. |
+| **H5** (media) | `utils.js:34-58` | Los avisos de proveedor usan un temporizador de 1,5 s que nunca se reinicia, así que un aviso nuevo puede desaparecer al instante. **Corregido en la fase 2**: cada cálculo anota en su propio registro (`cwRecorder`) y el aviso se decide al publicar con `decideNotice`; `mobile/tests/forecast-runs.test.mjs` y `mobile/tests/forecast-outcome.test.mjs`. |
 | **H6** (media, seguridad, código propio) | `functions/share.js:20-60` | El límite de tamaño compara `raw.length` (unidades UTF-16, no bytes) y lo hace **después** de leer el cuerpo entero en memoria. Con multibyte pasan ~2,6 MB. **Corregido**: el cuerpo se lee con tope de bytes antes de parsear (`readCapped`), texto y multipart; `mobile/tests/share.test.mjs`. |
 
 **Orden propuesto** (decisión del autor pendiente; la conversación se quedó
@@ -243,9 +243,14 @@ proveedor, la elección de la línea de la ruta y la fusión de AROME están en
 corrección de `utc_offset_seconds` solo cubre la tabla; `public/scripts/compare.js` todavía
 elige las horas de Open-Meteo con `window.cw.findClosestIndex` en la zona del teléfono, así
 que un teléfono en otra zona que la ruta puede ver horas distintas en comparar que en la
-tabla hasta que se mueva a las mismas reglas, en la fase 4. `processWeatherData` también
-sigue derivando `payloadUnits` de OpenWeather de la unidad de temperatura actual y no de la
-unidad con la que se pidió la respuesta cacheada (una respuesta métrica de caché mostrada
-tras cambiar a °F convierte el viento como si fuera mph); lo arregla la instantánea de la
-fase 2, que guarda `payloadUnits` por paso. Las fases 2 a 7 tendrán cada una su plan cuando
-empiecen.
+tabla hasta que se mueva a las mismas reglas, en la fase 4.
+
+La fase 2 (registro, foto y publicación) tiene su plan en
+`docs/superpowers/plans/2026-09-14-fase-2-registro-foto-publicacion.md`, también fuera de
+git. Cada cálculo anota lo que ven sus peticiones en su propio registro, lee sus ajustes una
+vez y termina en una foto con pasos, alertas oficiales y resultado; solo `publish()` la lleva
+a pantalla, y el aviso sale de `decideNotice`, sin temporizadores (H5). Con ella se corrigen
+la casilla «mostrar alertas», que nunca dejaba fuera los avisos, y la unidad con que se lee
+al repintar una respuesta de OpenWeather cacheada. Mientras no llegue la fase 4, comparar no
+da avisos de proveedor y `revalidateWeatherAlerts` sigue mostrando alertas por su cuenta. Las
+fases 3 a 7 tendrán cada una su plan cuando empiecen.

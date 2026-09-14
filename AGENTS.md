@@ -472,15 +472,22 @@ an old forecast as if it were current is worse than showing nothing.
 `navigator.onLine` is only trusted when it says false, which is the case that matters —
 out of coverage, rather than behind a captive portal.
 
-A run where no provider answered now says so instead of leaving an empty table. A
-single `fetch` wrapper in `utils.js` watches the three forecast hosts and, 1.5 seconds
-after the last failure, reports one of three things: offline with nothing saved, the
-provider not responding, or the provider rejecting the request, which usually means a
-bad API key. It stays quiet whenever any provider answered, because the app falls back
-through a chain and a recovered run is a working run, not an error. Wrapping fetch once
-beats threading a callback through every call site in `app.js` and `compare.js`, and it
-passes the original result straight through. All three messages, and the silence on a
-recovered run, have tests that fail without them.
+A computation where no provider answered says so instead of leaving an empty table, and
+only the computation on screen may say anything. Each computation makes a recorder
+(`cw.utils.createRecorder()`) and hands it to every provider request as
+`fetch(url, { cwRecorder })` and to `getCache(key, recorder)`. The single `fetch` wrapper
+in `utils.js` notes each provider answer in that recorder and nowhere else, and `getCache`
+notes the age of an old entry it serves without connection. A request without a recorder
+is not watched: the ride-watch baseline, the API-key test and, until phase 4, the compare
+view never produce a provider notice. The notice is
+`cwForecastRules.decideNotice(outcome, { noticeAll })`, decided in `publish()`: an empty
+table whose requests failed says offline, rejected (401/403, usually a bad API key) or not
+responding; otherwise data read from the cache without connection says how old it is;
+otherwise the provider policy that used to sit at the end of `fetchWeatherForSteps` (key,
+quota and HTTP errors that forced a fallback, and with `noticeAll` the rest). A chain that
+recovered is a working computation and says nothing. This replaces two timers (1.5 s and
+400 ms) shared by every request, which let a replaced computation put its notice over the
+next one (H5 in the review).
 
 The header's 📴 button pins the cache entries a prepared route depends on, so the
 clear-out that runs when localStorage fills up skips them, and tells the user how many
@@ -511,8 +518,8 @@ The forecast is a plan; this watches whether it still holds. Four pieces:
   events, `saveWatch`, `loadWatch` and `checkWatch`. The build concatenates the rules
   in front of it into `www/runners/watch.js`, the path `capacitor.config.json` names,
   and refuses `import`/`export` in either file because the runner has no loader.
-- `native.js`, "ride alerts": `app.js` dispatches `cw:forecast` with the rendered
-  steps; `buildWatch` samples them to twelve points with a clock label and a km mark
+- `native.js`, "ride alerts": `publish()` in `app.js` dispatches `cw:forecast` with
+  the snapshot and its rendered steps; `buildWatch` samples them to twelve points with a clock label and a km mark
   (the runner has no trustworthy locale or timezone, so labels are made here),
   `seedBaseline` reads the baseline from the same request the runner will make, and
   `storeWatch` hands it to the runner through `dispatchEvent`, whose KV store
@@ -566,11 +573,10 @@ Things that were decided rather than discovered:
   `%` from an official warning ("80% ...") or a route file name would be read as a
   specifier with no arguments. `compose` swaps `%` for the full-width `％` in every
   string that comes from outside; its own texts carry none.
-- **The baseline request is marked `cwSilent`.** The provider reporter in `utils.js`
-  turns a lone failed provider request into a "provider unreachable" notice; the
-  seed is read after the table has loaded, so its failure would put that notice on
-  top of a table that is fine. `fetch(url, { cwSilent: true })` bypasses the
-  reporter; fetch ignores the unknown key.
+- **The baseline request carries no recorder.** Provider notices come only from the
+  recorder of the computation on screen, and the seed is read after the table has
+  loaded; a request without a recorder is never noted, so its failure cannot put a
+  notice over a table that is fine.
 - **Notification permission is asked when the first forecast is computed**, not at
   start-up, and a refusal switches the toggle off and says so; the user has to grant
   it in the system settings and tick it again. iOS background tasks never run in the
@@ -645,6 +651,33 @@ golden files in `mobile/tests/fixtures/`, built from synthetic answers
 (`fixtures/providers.mjs`; no real answers are captured in the repository). Regenerate a
 golden only for a change you mean to make, with `UPDATE_GOLDEN=1`, and read its diff before
 committing: a diff wider than that change is a regression.
+
+## Publishing a forecast
+
+`fetchWeatherForSteps` computes; `publish(snapshot)` in `app.js` is the only thing that
+puts a forecast on screen. A computation reads its settings once (`readForecastSettings`:
+provider, units, API keys, `noticeAll`, `showWeatherAlerts`), so a setting changed while it
+is still fetching reaches the next computation, never its later steps. It ends with a
+snapshot: its steps as the provider answered them (`payload`, plus `payloadUnits` for
+OpenWeather), the official warnings it found and an `outcome` for the notice. `publish`
+checks that the computation is still the latest (`forecastRun`, until phase 3 replaces it)
+and then, with no wait in between, mirrors the steps into `window.weatherData`, repaints,
+shows the warnings, decides the notice, dispatches `cw:forecast` with `{ snapshot, steps }`
+and hides the loading indicator. `processWeatherData` only paints: a repaint for a language
+or unit change is not a new forecast and no longer arms the ride watch again.
+
+Official warnings are collected during the computation, from the OpenWeather forecast
+answers and from `checkWeatherAlertsIndependent`, kept when they overlap the ride with four
+hours either side, and shown from now or the start, whichever is later, to the end
+(`cwForecastRules.alertsInWindow`). They used to be filtered to an hour around each step
+and shown as soon as each answer arrived. `revalidateWeatherAlerts` still shows warnings on
+its own until phase 4 removes it.
+
+Two corrections went in with this, each in its own commit. The "show weather alerts"
+checkbox was read with `getVal`, which returns `"on"` whatever its state, so unticking it
+never kept warnings out. And a repaint read a cached OpenWeather answer in the units shown
+now rather than the ones it was requested in, so a metric answer repainted in °F had its
+wind read as mph.
 
 ## Verifying a change
 
