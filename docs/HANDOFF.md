@@ -190,7 +190,7 @@ protección que el código no da.
 
 | # | Dónde | Qué pasa |
 |---|-------|----------|
-| **H1** (alta, preexistente) | `app.js:514` resetea, `:1013` escribe, `:1090/:1099` pintan | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (`app.js:1425` → `native.js:635`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`), acumula en local y solo la última publica tabla, avisos, alertas, `cw:forecast` y `hideLoading`; `mobile/tests/forecast-runs.test.mjs`. Queda fuera `compare.js`, que escribe `weatherData` sin número. |
+| **H1** (alta, preexistente) | `app.js:514` resetea, `:1013` escribe, `:1090/:1099` pintan | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (`app.js:1425` → `native.js:635`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`, que la fase 3 sustituye por `requestId` y `computationId`), acumula en local y solo la última publica tabla, avisos, alertas, `cw:forecast` y `hideLoading`; `mobile/tests/forecast-runs.test.mjs`. Queda fuera `compare.js`, que escribe `weatherData` sin número. |
 | **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. **Corregido**: reconstruye las claves de los pasos pintados con `makeCacheKey` y distingue nada, completo, parcial ("n de total") y fallo al fijar; cuatro tests en `smoke.spec.mjs`. |
 | **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. |
 | **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. |
@@ -214,7 +214,8 @@ exactamente aquí):
 **Repasos de lo ya corregido:**
 
 - **H1**: el test «picking a route file computes its forecast once» cuenta las
-  llamadas a `reloadFull` y `fetchWeatherForSteps` por fichero elegido. Mirar solo
+  peticiones de ruta (`cw.requestRoute`) y los cálculos lanzados (`cwLaunchComputation`)
+  por fichero elegido; hasta la fase 3 contaba `reloadFull` y `fetchWeatherForSteps`. Mirar solo
   `weatherData` ya no cazaba lanzamientos duplicados, porque ahora publica solo el último.
 - **H1**: con `initUI` ejecutándose una sola vez, al cargar `ui.js`, el botón de rutas
   recientes podía pintarse antes de `loadSettings` y quedarse en inglés.
@@ -252,8 +253,24 @@ vez y termina en una foto con pasos, alertas oficiales y resultado; solo `publis
 a pantalla, y el aviso sale de `decideNotice`, sin temporizadores (H5). Con ella se corrigen
 la casilla «mostrar alertas», que nunca dejaba fuera los avisos, y la unidad con que se lee
 al repintar una respuesta de OpenWeather cacheada. Mientras no llegue la fase 4, comparar no
-da avisos de proveedor y `revalidateWeatherAlerts` sigue mostrando alertas por su cuenta. Las
-fases 3 a 7 tendrán cada una su plan cuando empiecen.
+da avisos de proveedor y `revalidateWeatherAlerts` sigue mostrando alertas por su cuenta.
+
+La fase 3 (coordinador de rutas para fichero y recientes) tiene su plan en
+`docs/superpowers/plans/2026-09-14-fase-3-coordinador-rutas.md`, también fuera de git. Toda
+ruta pasa por `cw.requestRoute` (`public/scripts/route-requests.js`): toma su `requestId` antes
+de cualquier espera, se lee, se parsea fuera del mapa y solo se confirma si tiene una línea que
+seguir; una petición sustituida no toca nada y una que falla avisa y deja la ruta que había.
+Cada cálculo lleva `computationId` y solo publica el último de la ruta confirmada
+(`forecastRun` desaparece). Los ajustes cambiados durante una lectura se aplican en el único
+cálculo que lanza la confirmación; idioma y avisos detallados repintan sin recalcular. El
+indicador de carga funciona por reclamaciones, así que comparar ya no lo apaga a mitad de un
+cálculo. Recientes importa en cola, con nombre único (`Ruta (2).gpx`) y en una sola
+transacción, sin respaldo en `localStorage` al escribir. La restauración al arrancar pide su
+ruta antes de esperar a recientes: una ruta compartida que llega durante esa espera gana, y
+ahora tiene test. Quedan para la fase 4 comparar, `revalidateWeatherAlerts` y desarmar la alerta
+de ruta al confirmar otra; para la fase 5, cada entrada de fuera con su fuente (hoy siguen
+entrando por `cwLoadGPXFromString`, que ya es un envoltorio del coordinador). Detalle en
+`AGENTS.md`, «Route requests». Las fases 4 a 7 tendrán cada una su plan cuando empiecen.
 
 ### Revisión adversarial de las correcciones (852f61a..8b6e3fb)
 
@@ -272,7 +289,7 @@ rutas compartidas llevan secuencia en el nombre de fichero, con Android ignorand
 intents relanzados desde Recientes. Detalle completo en `AGENTS.md`.
 
 Queda para fases posteriores, documentado pero no corregido en esta revisión: identidad por
-petición en `fetchWeatherForSteps` (fase 3); `compare.js` y `revalidateWeatherAlerts`, que
+petición en `fetchWeatherForSteps` (hecha en la fase 3, abajo); `compare.js` y `revalidateWeatherAlerts`, que
 todavía no pasan por el registro por cálculo ni por `decideNotice` (fase 4); y, para la fase
 5, un coordinador de arranque y una importación duradera — hoy Android puede perder una ruta
 compartida si el proceso muere entre marcar el intent como gestionado y escribir el fichero

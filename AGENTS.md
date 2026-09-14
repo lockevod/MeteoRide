@@ -339,13 +339,13 @@ What is still open, and why it was left:
   and the answer to that call was decided before it arrived. A request that turns up
   mid-drain therefore sets a flag and the drain repeats, rather than being dropped
   until the app is next activated.
-- **Route injection races the app boot.** `cwLoadGPXFromString` draws straight onto
-  the Leaflet map, so `window.map` must exist. Shared routes regularly arrive before
-  `initMap` has run. `cwInjectGPXFromText` in `gpx-share.js` now waits for both the
-  loader and the map, and every handoff path goes through it. Do not call
-  `cwLoadGPXFromString` directly from a handoff path: it only reads GPX, and
-  `cwInjectGPXFromText` is also where a shared KML is converted (`cwKmlToGpxText`,
-  the same conversion the file picker uses).
+- **Route injection races the app boot.** A route is parsed off the map, but confirming
+  it (`cwCommitRoute`) draws onto the Leaflet map, so `window.map` must exist by then.
+  Shared routes regularly arrive before `initMap` has run. `cwInjectGPXFromText` in
+  `gpx-share.js` waits for both the loader and the map, and every handoff path goes
+  through it. Do not call `cwLoadGPXFromString` directly from a handoff path until
+  phase 5 gives each path its own request: `cwInjectGPXFromText` is where the wait for
+  the map lives, and where a shared KML is converted before it reaches the loader.
 - **A `.kml`-named share is renamed to `.gpx` whether or not the conversion actually
   produced a route.** `cwKmlToGpxText` always returns a syntactically valid GPX wrapper,
   even for a malformed KML or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never
@@ -353,18 +353,21 @@ What is still open, and why it was left:
   (`gpx-share.js:53-93`) only swaps in the converted text when it actually carries a
   track, route or waypoint; when it does not — a real GPX misnamed `.kml` converts into
   that empty wrapper too — it keeps the original text but still renames a `.kml` name to
-  `.gpx`. Either way, keeping the `.kml` name would send the GPX text (converted or not)
-  back through the KML converter on every recompute, since `reloadFull` picks the
-  converter by `window.lastGPXFile`'s extension, and lose the track. `geojsonToGpx`
+  `.gpx`. The rename used to matter on every recompute, when `reloadFull` re-read
+  `window.lastGPXFile` and picked the converter by its extension. A recompute now segments
+  the confirmed route's geojson and reads no file, and `cwParseRoute` converts by name or
+  by content; the comments in `gpx-share.js` still give the old reason until phase 5
+  rewrites that file. `geojsonToGpx`
   (`ui.js:370-417`) also recurses into a `GeometryCollection`, which is what `togeojson`
   turns a KML `<MultiGeometry>` with more than one child geometry into, rather than one of
   the geometry types it otherwise switches on: every line in it is drawn on the map, but
   `cwForecastRules.routeLine` — the line the forecast follows — only reads the first
   `LineString`/`MultiLineString` feature with at least two valid points, so the forecast
   only follows that first line, the same as a GPX carrying several `<trk>` tracks.
-- **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
-  executes long after `initGpxShare()` is called from line 76 of the same file. Any
-  code running at load time must poll for it rather than assume it exists.
+- **`window.cwLoadGPXFromString` is assigned near the end of `app.js`,** which
+  executes long after `initGpxShare()` is called near its top. Any code running at load
+  time must poll for it rather than assume it exists. It is a thin wrapper now: it
+  imports the text into recent routes and returns `cw.requestRoute(...)`.
 - **The iOS share sheet hands over web URLs too.** The activation rule accepts any
   `public.data` attachment, and a link shared from Strava, Komoot or a browser arrives
   as a URL item. `Data(contentsOf:)` accepts an https URL and performs a blocking,
@@ -498,12 +501,14 @@ table and the sunrise times are all drawn client-side and all present without ti
 A preloaded map would add the beige background and nothing else.
 
 A route arriving from a share takes precedence: `boot` waits for the inbox drain and
-only restores when nothing came in, and `restoreLastRoute` re-checks `lastGPXFile`
-after its wait. That precedence has **no test**. Three attempts could not build one
-that fails when the guards are removed, because the share always lands last in a
-stubbed bridge and whichever route loads last is the one on screen either way. Rather
-than keep an assertion that cannot fail, it was deleted. The guards are still the
-right thing; they are just unproven.
+only restores when nothing came in. `restoreLastRoute` then asks the route coordinator
+for its route *before* waiting for the recent routes (the wait is inside the request's
+`read`), so a route that arrives during that wait is a later request and replaces it.
+This used to rest on `lastGPXFile` checks after the wait, with no test that could fail.
+Two tests pin it now: a share that publishes while the recent route is still being read
+wins, and a share still being read when the recent routes turn up is not replaced by the
+older route. The second fails against the old order, request after the wait. While it
+waits, the restore holds the loading indicator — up to five seconds on a first run.
 
 ## The forecast cache without coverage
 
@@ -526,7 +531,9 @@ only the computation on screen may say anything. Each computation makes a record
 (`cw.utils.createRecorder()`) and hands it to every provider request as
 `fetch(url, { cwRecorder })` and to `getCache(key, recorder)`. The single `fetch` wrapper
 in `utils.js` notes each provider answer in that recorder and nowhere else, and `getCache`
-notes the age of an old entry it serves without connection. A request without a recorder
+notes the age of an old entry it serves without connection. Both also note that it happened
+offline, when it happens (`recorder.offline`): by the time the computation publishes the
+connection may be back, and the notice would blame the provider instead. A request without a recorder
 is not watched: the ride-watch baseline, the API-key test and, until phase 4, the compare
 view never produce a provider notice. The notice is
 `cwForecastRules.decideNotice(outcome, { noticeAll })`, decided in `publish()`: an empty
@@ -723,11 +730,12 @@ provider, units, API keys, `noticeAll`, `showWeatherAlerts`), so a setting chang
 is still fetching reaches the next computation, never its later steps. It ends with a
 snapshot: its steps as the provider answered them (`payload`, plus `payloadUnits` for
 OpenWeather), the official warnings it found and an `outcome` for the notice. `publish`
-checks that the computation is still the latest (`forecastRun`, until phase 3 replaces it)
-and then, with no wait in between, mirrors the steps into `window.weatherData`, repaints,
-shows the warnings, decides the notice, dispatches `cw:forecast` with `{ snapshot, steps }`
-and hides the loading indicator. `processWeatherData` only paints: a repaint for a language
-or unit change is not a new forecast and no longer arms the ride watch again. A notice now
+checks that the snapshot belongs to the current computation (`cwForecastRules.shouldPublish`,
+see "Route requests" below) and then, with no wait in between, mirrors the steps into
+`window.weatherData`, repaints, shows the warnings, decides the notice, dispatches
+`cw:forecast` with `{ snapshot, steps }` and lets go of the computation's claim on the
+loading indicator. `processWeatherData` only paints: a repaint for a language or notice
+change is not a new forecast and does not arm the ride watch again. A notice now
 stays on screen while the next computation fetches, until that computation publishes: the
 old `clearNotice()` at the start of a computation is gone, so a notice always describes the
 forecast currently on screen.
@@ -740,18 +748,18 @@ and shown as soon as each answer arrived. `revalidateWeatherAlerts` still shows 
 its own until phase 4 removes it.
 
 A replaced run writes nothing once it no longer matters: every `setCache` after an
-`await` — including the AROME standard companion answer (`app.js:784`) — is guarded by
-the same `run === forecastRun` check as the table, and so is the independent alert
-lookup, tested before each of its fetches, after each fetch resolves, after its body is
-read and again after the delay between requests (`checkWeatherAlertsIndependent`,
-`app.js:3429-3495`). The companion request can also reject instead of resolving — offline,
-CORS, an abort — and the empty `catch` around it used to let that path fall straight
-through to the primary write with no fresh check; a guard placed right before that write
-(`app.js:949`) now covers it too, whichever way the companion request ends.
+`await` — including the AROME standard companion answer — is guarded by the same
+`isCurrent()` check as the table, and so is the independent alert lookup, tested before
+each of its fetches, after each fetch resolves, after its body is read and again after the
+delay between requests (`checkWeatherAlertsIndependent`). The companion request can also
+reject instead of resolving — offline, CORS, an abort — and the empty `catch` around it
+used to let that path fall straight through to the primary write with no fresh check; a
+guard placed right before that write now covers it too, whichever way the companion
+request ends.
 
 A response body that fails to parse counts as a transport failure
 rather than a success with no data: `readJson` catches it and sets
-`recorder.lastFailStatus = 'body'` before rethrowing (`app.js:543-548`), so `decideNotice`
+`recorder.lastFailStatus = 'body'` before rethrowing, so `decideNotice`
 treats it the same as offline or rejected instead of a working computation that says
 nothing.
 
@@ -760,6 +768,74 @@ checkbox was read with `getVal`, which returns `"on"` whatever its state, so unt
 never kept warnings out. And a repaint read a cached OpenWeather answer in the units shown
 now rather than the ones it was requested in, so a metric answer repainted in °F had its
 wind read as mph.
+
+## Route requests
+
+`public/scripts/route-requests.js` decides which route is on screen, and nothing else
+does. Every way a route gets in calls `cw.requestRoute({ source, read })`: the file
+picker, a recent route, the restore at start-up and, until phase 5 gives each its own
+source, everything that still enters through `cwLoadGPXFromString` (the share inboxes,
+`?gpx_url=`, `shared_id`, `postMessage`). The coordinator is built by
+`cwCreateRouteCoordinator(deps)` so Node tests can give it fake dependencies; the page's
+instance looks up `cwParseRoute`, `cwCommitRoute`, `cwLaunchComputation` and the rest at
+runtime, because `app.js` and `ui.js` load after it.
+
+- **Identities.** A request takes its `requestId` the moment it is made, before any wait.
+  A computation takes its `computationId` when it is launched (`cwLaunchComputation`). A
+  snapshot publishes only if it matches both the confirmed route's request and the latest
+  computation. A request still in flight invalidates nothing; confirming another route or
+  launching another computation does. Nothing of this is stored.
+- **Phases.** `read()` with a 30 s deadline → `cwParseRoute` (KML converted, sanitised,
+  leaflet-gpx builds a layer that is never added to the map, `routeLine` must find a line,
+  fingerprint of the text as read) → `cwCommitRoute` (clears the previous route's table,
+  markers and warnings, draws the whole layer, sets the name and `lastGPXFile`, confirms)
+  → `startForecast()`, with nothing in between those two. After each wait a request that
+  a later one replaced stops as `'superseded'` and touches nothing. A failure ends as
+  `'failed'` with the `route_load_failed` notice and leaves the confirmed route and its
+  computation alone; a `read` that resolves `null` (nothing to open) fails quietly.
+- **leaflet-gpx off the map**, verified in Chromium: with `async: true` it fires `loaded`
+  without ever being added to a map, and draws nothing. Text that does not start with `<`
+  it takes for a URL and fetches, so `cwParseRoute` refuses that first. It parses in a
+  zero-delay timer of its own; a zero-delay timer scheduled right after constructing the
+  layer runs after that one, and ends the parse as failed if the library threw instead of
+  firing `loaded` or `error` — otherwise the request would hang with the indicator on.
+- **Settings.** One that needs a new computation (units, provider, speed, interval, date,
+  keys, `showWeatherAlerts`) calls `cw.settingsChanged()`: settings are marked pending and
+  a computation is launched at once unless a request is in flight. Launching clears the
+  mark, so a request that confirms uses the settings changed while it was read, in its one
+  computation. When the latest request ends any other way it reconciles: a confirmed route
+  with pending settings, or with neither a published snapshot of its latest computation
+  nor that computation running, is computed again. A request that confirms does not
+  reconcile — it has just launched — which is also what keeps a start date out of range
+  from being tried twice. The confirm-and-launch path is guarded twice (the mark cleared,
+  no reconcile after confirming), so the browser test only fails with both removed; the
+  Node tests catch each one. Language and detailed notices only repaint the published
+  snapshot (`cwRepaintPublished`: no request, no `cw:forecast`); the debug button and ride
+  alerts do neither. `updateUnits` is no longer called; a unit change computes again.
+- **Loading indicator.** On while anyone holds a claim: `request:<id>`, `forecast:<id>`,
+  `share-upload`, and `legacy`, which is what `showLoading`/`hideLoading` claim now for
+  `compare.js` and `createDiscreteLoadingIndicator`. A comparison hiding its own
+  indicator cannot switch off a computation's.
+- **Recent routes** are written through their own queue, `cw.importRoute({ text, name })`:
+  one at a time in arrival order, with `arrivedAt` fixed on arrival (one millisecond after
+  the previous one on a tie) and stored as the timestamp, so trimming to three keeps the
+  last three to arrive. `cwIdbImportRoute` does it in one `readwrite` transaction: read the
+  store, pick the name (`cwForecastRules.uniqueRouteName`: the same content replaces,
+  different content gets ` (2)`, ` (3)`… even when the name already carries a suffix),
+  write, trim. It is saved only on `oncomplete`; an abort, no IndexedDB or a route over
+  750 KB is reported with `route_not_saved`. **Nothing falls back to localStorage on write
+  any more**; reading and migrating old localStorage entries stay. A record from before
+  this has no fingerprint and counts as the same route when name and size in bytes match.
+  The file picker imports only a route that was confirmed, under the file's name; a route
+  from outside is imported as it arrives, whether or not it ends up on screen. The name on
+  screen no longer decides the stored name: while a new route is read it is the old one's.
+
+Left for later phases on purpose: compare runs still write `weatherData` and paint with no
+identity, and `revalidateWeatherAlerts` still shows warnings on its own (phase 4); the ride
+watch is not disarmed when another route is confirmed (phase 4); each outside entry with its
+own source and a durable import (phase 5); the start-time rule, replaying a prepared snapshot
+and `startForecast` choosing between them (phase 6). `window.reloadFull` survives only as a
+one-line alias to `cw.settingsChanged()`, because `compare.js` still calls it.
 
 ## Verifying a change
 
@@ -785,11 +861,11 @@ Two things about it are worth knowing before you extend it:
   and cannot be tested offline; the bundle is the same code plus local copies. The one
   exception is the structured-data check, which reads `public/index.html` because the
   build strips those blocks from the bundle.
-- **The loader swallows its own failures.** `cwLoadGPXFromString` catches, logs and
-  shows an `alert`, so a route can "load" with the track missing from the map. The
-  tests therefore watch for dialogs and loader console errors, not just for the route
-  name appearing. Drop that and the suite stops catching the boot race entirely; this
-  was confirmed by reintroducing the bug and watching the tests stay green.
+- **A route that cannot be used says so and changes nothing.** Every route goes through
+  `cw.requestRoute`; one that fails ends as `'failed'` with the `route_load_failed`
+  notice and the route on screen untouched. The old loader showed an `alert` and could
+  leave a route name with no track, which is why the tests still watch for dialogs and
+  loader console errors and look for the track on the map, not just for the name.
 
 If you add a handoff path, add a test for it. If you add a CDN reference, the build
 fails before the tests even run.
@@ -861,10 +937,11 @@ code does and what makes the race reproducible.
   durable-import work planned for phase 5.
 - Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
   H2 (offline preparation) and H1 (overlapping forecasts) are fixed; H3, H4 and H5 are
-  open. H5 and H4 should build on H1's run number rather than add timers.
+  open. H5 and H4 should build on the computation identities rather than add timers.
   `docs/HANDOFF.md` §9 has the table and the order being followed.
 - A comparison run (`compare.js`) sets `weatherData` through `cw.setWeatherData` and
-  has no run number, so a normal run finishing after it can still replace its data.
+  has no computation identity (phase 4), so a normal run finishing after it can still
+  replace its data.
   Not observed, not tested.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
