@@ -403,7 +403,8 @@ What is still open, and why it was left:
   only checks the extension case-insensitively and keeps whatever case the sender used, so a
   stored name can legitimately end in `.GPX`/`.KML`, and a route shared moments before an app
   update must not sit unread until the 24-hour prune sweeps it. `sanitize` also replaces any
-  control character (a stray `\n`, `\r`, `\t`…) in the shared name with `-` before writing,
+  C0 control character (a scalar below U+0020, e.g. a stray `\n`, `\r`, `\t`) in the shared
+  name with `-` before writing,
   and `isInboxName`'s regex spans line separators (`.dotMatchesLineSeparators`) so a name
   stored by an older build, before that replacement existed, is still delivered rather than
   silently pruned after 24 hours.

@@ -280,8 +280,9 @@ en el buzón, e iOS lee un fichero abierto con «Abrir en» de forma síncrona e
 principal en vez de en un hilo aparte, como ya hace Android.
 
 Una revisión adversarial de Codex dirigida sobre 852f61a..87c56c4 cerró seis de sus siete
-hallazgos originales (los seis restantes quedan para la fase 5) y encontró estos cuatro,
-corregidos en esta tanda: el buzón de iOS no entregaba una ruta con salto de línea en el
+hallazgos originales; el que queda, el sexto —Android pierde la importación si el proceso
+muere a mitad—, sigue para la fase 5. Además encontró estos cuatro, corregidos en esta
+tanda: el buzón de iOS no entregaba una ruta con salto de línea en el
 nombre; el dato diario de OpenWeather podía elegir el día anterior justo en la medianoche
 local; una temperatura diaria de 0°C se perdía; y dos imprecisiones de `AGENTS.md` sobre la
 decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes en Android.
