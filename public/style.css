@@ -3366,6 +3366,53 @@ html.cw-native main {
   padding-right: calc(0.5rem + env(safe-area-inset-right));
 }
 
+/* The website sizes `main` as `calc(100vh - 3rem)`, taking the header to be exactly
+   3rem. In the app it is not: it grows by the safe-area inset, which is around 60px
+   on a phone with a notch, and `main` then runs off the bottom of the screen. Rather
+   than guess a new number, let the page be a column — the header takes what it needs
+   and main gets the rest. Both panels that are not header or main (#configMenu,
+   #debugSection) are positioned out of the flow, so nothing else becomes a flex item. */
+html.cw-native body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+}
+
+html.cw-native header {
+  flex: 0 0 auto;
+}
+
+html.cw-native main {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;   /* without this the children refuse to shrink and overflow instead */
+}
+
+/* 300px is a third of a phone screen and cannot shrink, so a notice appearing pushed
+   the table off the bottom. Let the map give up the space instead — it is the one
+   element here that reads fine at any height. */
+html.cw-native #map {
+  min-height: 150px;
+  max-height: 45vh;
+}
+
+/* Last resort: if the controls still do not fit, they scroll rather than vanish. */
+html.cw-native #controlsPanel {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The panel is positioned from the top of the page, so it needs the same inset the
+   header got or it opens over it. */
+html.cw-native #configMenu {
+  top: calc(3.5rem + env(safe-area-inset-top));
+  max-height: calc(100dvh - 5rem - env(safe-area-inset-top));
+  overflow-y: auto;
+}
+
 /* The app adds two buttons the website does not have, and on a phone that pushed the
    row onto a second line. Tighten the toolbar rather than move the controls. */
 html.cw-native header nav {

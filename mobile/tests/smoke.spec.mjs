@@ -1348,3 +1348,57 @@ test('on the website the picker keeps the tight list', async ({ page }) => {
   await page.waitForTimeout(300);
   expect(await acceptAttr(page)).toBe('.gpx,.kml');
 });
+
+/* ---------- defaults and vertical space ---------- */
+
+test('a fresh install shows the speed and interval the markup declares', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  // loadSettings used to blank every field with nothing stored, which threw away
+  // the defaults in index.html: the speed came up empty and the interval select,
+  // given an invalid value, showed nothing at all.
+  expect(await page.evaluate(() => document.getElementById('cyclingSpeed').value)).toBe('12');
+  expect(await page.evaluate(() => document.getElementById('intervalSelect').value)).toBe('15');
+
+  // And a stored value still wins.
+  await page.evaluate(() => {
+    document.getElementById('cyclingSpeed').value = '24';
+    window.saveSettings();
+  });
+  await page.reload();
+  await mapReady(page);
+  expect(await page.evaluate(() => document.getElementById('cyclingSpeed').value)).toBe('24');
+});
+
+/** How far the bottom of an element falls past the bottom of the screen, in pixels.
+ *  Measured rather than read off scrollHeight, which `overflow: hidden` on the body
+ *  clips to the viewport whatever the content does — an assertion that cannot fail. */
+const overflowBelow = (page, selector) =>
+  page.evaluate(
+    (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().bottom - window.innerHeight),
+    selector
+  );
+
+test('the app fits the screen even with a taller header and a notice showing', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+
+  // Chromium reports no safe-area inset, so stand in for the notch. The point is
+  // that main takes whatever the header leaves rather than assuming 3rem: sized by
+  // that assumption, it would now hang 60px off the bottom.
+  await page.addStyleTag({ content: 'html.cw-native header { padding-top: 60px !important; }' });
+  await page.waitForTimeout(100);
+  expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+
+  // A notice must push the table down within main, not off the bottom: the map is
+  // what gives up the space.
+  await page.evaluate(() => window.setNotice('Un aviso bastante largo sobre el horizonte de la previsión', 'warn'));
+  await page.waitForTimeout(100);
+  await expect(page.locator('#horizonNotice')).toBeVisible();
+  expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+  expect(await overflowBelow(page, '.wtc-wrap')).toBeLessThanOrEqual(1);
+});

@@ -222,6 +222,22 @@ What is still open, and why it was left:
   now reads every installed package's `registerPlugin()` call and fails on a name
   `native.js` uses that nothing registers. A stub is only evidence when something
   independent pins it to the real contract.
+- **`main` is sized by flex, not by `calc(100vh - 3rem)`.** That calc takes the
+  header to be exactly 3rem, and in the app it is taller by the safe-area inset —
+  about 60px on a phone with a notch — so `main` ran off the bottom of the screen.
+  `body` is a flex column of `100dvh` under `html.cw-native` and `main` takes what is
+  left; `#configMenu` and `#debugSection` are positioned out of the flow, so nothing
+  else becomes a flex item. The map's `min-height: 300px` is lowered too, so a notice
+  appearing takes space from the map instead of pushing the table off the bottom.
+- **`loadSettings` used to blank every field with nothing stored**, throwing away the
+  defaults written in `index.html`: the speed came up empty and the interval select,
+  handed an invalid value, showed nothing at all. The markup holds the default now
+  and the loader only overwrites what it actually has.
+- **Two CSS rules that cover for each other cannot be mutation-tested one at a time.**
+  Removing the body flex left `height: auto` on main, which alone prevented the
+  overflow, and removing only the height left flex-shrink to do the same — the layout
+  test passed both times and looked like it proved something. It only fails with both
+  reverted, which is what the original state was.
 - **`hidden` loses to `display: flex`.** `#configMenu .config-row` is a flex row, and
   an element's own display rule beats the user-agent `[hidden] { display: none }`,
   so the app-only ride-alerts row was visible on the website with the panel open. A

@@ -413,7 +413,10 @@
         return;
       }
       if (el.type === "checkbox") el.checked = !!s[id];
-      else el.value = s[id] != null ? s[id] : "";
+      // Nothing stored: leave whatever the markup already holds. Blanking it here
+      // threw away the defaults written in index.html — speed 12 and interval 15
+      // came up empty on a fresh install, and an empty <select> shows nothing at all.
+      else if (s[id] != null) el.value = s[id];
     });
 
     // Apply sensible defaults when missing and persist them so subsequent loads are consistent
