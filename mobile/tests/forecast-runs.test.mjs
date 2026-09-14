@@ -310,6 +310,36 @@ test('a current computation that throws lets go of its claim and says so; a repl
   h.answer(1, ok(openMeteo())); await b;
 });
 
+test('a computation that throws before it fetches lets go of its claim, says so and is not current', async () => {
+  const breaks = {
+    'while segmenting the route': (s) => { s.getVal = () => { throw new Error('boom'); }; },
+    'at the start of the computation': (s) => { s.cw.utils.createRecorder = () => { throw new Error('boom'); }; },
+  };
+  for (const [where, breakIt] of Object.entries(breaks)) {
+    const { s, run } = harness();
+    breakIt(s);
+    try { await run(41); } catch (_) { /* asserted below */ }
+    assert.deepEqual([...s.claims], [], `${where}: the claim stayed`);
+    assert.equal(s.cwHasCurrentForecast(), false, `${where}: a request ending would never compute it again`);
+    assert.deepEqual(s.notices, [['error_api', 'error']], where);
+  }
+});
+
+test('a start date that is empty or not a date says so, and leaves nothing current', async () => {
+  let h = harness();
+  h.s.values.datetimeRoute = '';
+  await h.run(41);
+  assert.deepEqual(h.s.notices, [['route_date_empty', 'error']]);
+  assert.deepEqual([...h.s.claims], []);
+  assert.equal(h.s.cwHasCurrentForecast(), false);
+
+  h = harness();
+  h.s.getValidatedDateTime = () => new Date(NaN);
+  await h.run(41);
+  assert.deepEqual(h.s.notices, [['route_date_invalid', 'error']]);
+  assert.deepEqual([...h.s.claims], []);
+});
+
 test('a computation in flight is current until it ends', async () => {
   const { s, run, answer } = harness();
   assert.equal(s.cwHasCurrentForecast(), false, 'no route');
@@ -471,6 +501,17 @@ test('an answer whose body cannot be read says the provider is not responding', 
   assert.deepEqual(s.notices, [['provider_unreachable', 'warn']]);
   const [snapshot] = s.published();
   assert.equal(snapshot.outcome.transportFailures, 1);
+});
+
+test('an answer whose body cannot be read without connection says offline', async () => {
+  const { s, run, answer } = harness();
+  const a = run(41);
+  s.offline = true;
+  answer(0, { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } });
+  await a;
+  const [snapshot] = s.published();
+  assert.equal(snapshot.outcome.offline, true);
+  assert.deepEqual(s.notices, [['offline_no_data', 'warn']]);
 });
 
 test('a replaced computation writes nothing to the cache when its AROME standard companion answers after replacement', async () => {

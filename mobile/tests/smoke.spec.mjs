@@ -1120,6 +1120,27 @@ test('a file with no line to follow leaves the route on screen', async ({ page }
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
 });
 
+test('a route whose drawing throws halfway is still the one confirmed and computed, once', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await countLaunches(page);
+  await page.evaluate(() => {
+    const real = window.replaceGPXMarkers;
+    window.replaceGPXMarkers = () => { window.replaceGPXMarkers = real; throw new Error('drawing failed'); };
+  });
+
+  await requestHeld(page, 'B');
+  await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
+  await expect.poll(() => requestStatus(page, 'B')).toBe('committed');
+  await expect.poll(() => page.evaluate(() =>
+    window.weatherData.length > 0 && window.weatherData.every((s) => s.lat <= 40.42 && s.lat > 40.3))).toBe(true);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__launches.launch)).toBe(1);
+});
+
 test('a speed changed while a route is read is used by its one computation', async ({ page }) => {
   await stubProvider(page, { celsius: 21, offline: false });
   await page.goto('/index.html');

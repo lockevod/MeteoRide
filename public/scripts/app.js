@@ -402,6 +402,7 @@ function segmentRouteByTime(geojson) {
   const datetimeValue = getVal("datetimeRoute");
   if (!datetimeValue) {
     logDebug(t("route_date_empty"), true);
+    if (window.setNotice) window.setNotice(t("route_date_empty"), 'error');
     return null;
   }
 
@@ -409,6 +410,7 @@ function segmentRouteByTime(geojson) {
 
   if (isNaN(startDateTime.getTime())) {
     logDebug(t("route_date_invalid", { val: datetimeValue }), true);
+    if (window.setNotice) window.setNotice(t("route_date_invalid", { val: datetimeValue }), 'error');
     return null;
   }
 
@@ -534,20 +536,26 @@ function publishState() {
 // Launches a computation of the confirmed route. The number is taken, and the previous
 // computation's claim on the indicator dropped, before anything is read: the computation
 // it replaces cannot publish over it, even when this one stops at once on its start date.
+// One that stops or throws before it fetches lets go here, or it would stay current forever.
 window.cwLaunchComputation = function () {
   if (!confirmedRoute) return null;
   const cid = ++lastComputationId;
   window.cw.releaseLoadingPrefix("forecast:");
   window.cw.claimLoading("forecast:" + cid);
   runningComputationId = cid;
-  const segmented = segmentRouteByTime(confirmedRoute.geojson);
-  if (!segmented) {
-    window.cw.releaseLoading("forecast:" + cid);
-    runningComputationId = null;
-    return cid;
+  try {
+    const segmented = segmentRouteByTime(confirmedRoute.geojson);
+    if (segmented) {
+      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, readForecastSettings(),
+        { requestId: confirmedRoute.requestId, computationId: cid });
+      return cid;
+    }
+  } catch (err) {
+    logDebug(t("error_api", { msg: err.message }), true);
+    setNotice(t("error_api", { msg: err.message }), "error");
   }
-  fetchWeatherForSteps(segmented.steps, segmented.timeSteps, readForecastSettings(),
-    { requestId: confirmedRoute.requestId, computationId: cid });
+  window.cw.releaseLoading("forecast:" + cid);
+  runningComputationId = null;
   return cid;
 };
 
@@ -575,6 +583,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   // Still the latest computation launched, of the route last confirmed. Checked after
   // every wait: a computation that is not stops without writing or asking for anything.
   const isCurrent = () => cwForecastRules.shouldPublish(ids, publishState());
+  // Anything thrown from here on ends in the catch below, which lets go of the claim.
+  try {
   const route = confirmedRoute
     ? { name: confirmedRoute.name, fingerprint: confirmedRoute.fingerprint }
     : { name: "", fingerprint: "" };
@@ -589,6 +599,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   const readJson = (response) => response.json().catch((err) => {
     recorder.failed++;
     recorder.lastFailStatus = 'body';
+    if (window.cw.utils.isOffline()) recorder.offline = true;
     throw err;
   });
 
@@ -642,7 +653,6 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   // If provider requires key but not provided (MB or OWM), fallback to Open‑Meteo
   const providerNeedsKey = (settings.provider === "meteoblue" || settings.provider === "openweather");
   const hasKey = (apiKeyFinal || "").trim().length >= 5;
-  try {
     for (let i = 0; i < steps.length; i++) {
       if (!isCurrent()) return;
       const p = steps[i];
@@ -3136,12 +3146,16 @@ window.cwParseRoute = async function ({ text, name }) {
   };
 };
 
-// Puts a parsed route on screen with no wait anywhere: what belonged to the route before
-// goes, the whole layer is drawn and framed, and it becomes the confirmed route. The
-// coordinator launches its computation straight after.
+// Puts a parsed route on screen with no wait anywhere: it becomes the confirmed route, what
+// belonged to the route before goes, and the whole layer is drawn and framed. Confirming
+// comes first, so a step that throws midway never leaves the old route confirmed under the
+// new layer and name. The coordinator launches its computation straight after.
 window.cwCommitRoute = function (parsed, requestId) {
-  weatherData = [];
+  confirmedRoute = {
+    requestId, name: parsed.name, fingerprint: parsed.fingerprint, geojson: parsed.geojson, text: parsed.text,
+  };
   publishedSnapshot = null;
+  weatherData = [];
   window.activeWeatherAlerts = [];
   const alertContainer = document.getElementById("weather-alerts-container");
   if (alertContainer) {
@@ -3172,9 +3186,6 @@ window.cwCommitRoute = function (parsed, requestId) {
     rutaEl.style.fontStyle = "";
   }
   window.lastGPXFile = new File([parsed.gpxText], parsed.name, { type: "application/gpx+xml" });
-  confirmedRoute = {
-    requestId, name: parsed.name, fingerprint: parsed.fingerprint, geojson: parsed.geojson, text: parsed.text,
-  };
 };
 
 // Routes from outside the page (the share inboxes, ?gpx_url=, shared_id, postMessage) still
