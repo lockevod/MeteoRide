@@ -869,8 +869,11 @@ runtime, because `app.js` and `ui.js` load after it.
   it can neither overwrite a boot-time import with the older list it read nor race it. A
   job in the queue must never wait on the queue. Opening a recent route moves it to the top
   as a job in the same queue (`cw.touchRecent`). That job is one `readwrite` transaction: it
-  rewrites the whole record with a newer timestamp, and writes nothing if an import trimmed
-  the route first. Only when that move succeeds is the menu's list read back from the store.
+  rewrites the whole record with a timestamp above every other stored route's — not just the
+  arrival stamp, since a clock set back after the others were imported would otherwise make
+  the opened route the oldest and the next import would trim it — and writes nothing if an
+  import trimmed the route first. Only when that move succeeds is the menu's list read back
+  from the store.
   The move used to read and then put the record outside the queue, which dropped its
   fingerprint and could write a trimmed route back. The name on
   screen no longer decides the stored name: while a new route is read it is the old one's.

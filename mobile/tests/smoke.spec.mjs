@@ -1512,6 +1512,48 @@ test('an opened recent route moves up the list only once it moved in the store',
   expect(first.timestamp).toBe(stored);
 });
 
+test('opening the newest recent route survives a later import after the clock runs back', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  // Seed 3 routes directly in IndexedDB with timestamps far in the future, as if the
+  // phone's clock was running ahead when they were imported. r3 is the newest.
+  const future = 5_000_000_000_000;
+  const routes = [1, 2, 3].map((i) => [`r${i}.gpx`, routeAt(`Ruta ${i}`, 41 + i / 10)]);
+  await page.evaluate(([base, entries]) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('meteoride_recent_routes_db');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('routes', 'readwrite');
+      const store = tx.objectStore('routes');
+      entries.forEach(([name, text], i) => {
+        const blob = new Blob([text], { type: 'application/gpx+xml' });
+        store.add({ name, size: blob.size, lastModified: base + i, timestamp: base + i, fingerprint: name, blob });
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    };
+  }), [future, routes]);
+
+  // A cold start picks up the seeded routes, newest first.
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name)))
+    .toEqual(['r3.gpx', 'r2.gpx', 'r1.gpx']);
+
+  // The clock is back to normal, far below the seeded timestamps, and the newest route
+  // (r3) is opened from the recents menu.
+  const opened = await page.evaluate(async () => {
+    return window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === 'r3.gpx'));
+  });
+  expect(opened).toBe('committed');
+
+  // One more route arrives. r3, the one just opened and on screen, must not be trimmed.
+  expect((await importRecent(page, routeAt('Ruta 4', 41.4), 'r4.gpx')).ok).toBe(true);
+  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx']);
+});
+
 test('a route requested while a tapped recent route is still being read wins, and the menu closes at once', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');

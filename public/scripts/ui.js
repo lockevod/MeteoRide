@@ -1476,10 +1476,11 @@
     }
   }
 
-  // Moves a stored route to the top: the whole record, fingerprint included, gets a newer
-  // timestamp in one readwrite transaction, and nothing is written if the record is gone.
-  // It runs in the import queue (cw.touchRecent), so an import that trimmed the route
-  // first is never undone. True once the transaction completes with the record moved.
+  // Moves a stored route to the top: the whole record, fingerprint included, gets a
+  // timestamp above every other stored route, in one readwrite transaction, and nothing
+  // is written if the record is gone. It runs in the import queue (cw.touchRecent), so an
+  // import that trimmed the route first is never undone. True once the transaction
+  // completes with the record moved.
   async function idbTouchRoute(id, timestamp) {
     let db;
     try { db = await openIDB(); } catch (e) { return false; }
@@ -1491,10 +1492,16 @@
       tx.onabort = () => resolve(false);
       tx.onerror = () => resolve(false);
       const store = tx.objectStore(IDB_STORE);
-      const get = store.get(id);
-      get.onsuccess = () => {
-        if (!get.result) return;
-        store.put(Object.assign(get.result, { timestamp }));
+      const all = store.getAll();
+      all.onsuccess = () => {
+        const records = all.result || [];
+        const current = records.find((r) => r.id === id);
+        if (!current) return;
+        // Stored times can be ahead of this clock (the phone's clock was changed since
+        // the others were imported). Stay above every OTHER record so opening a route
+        // never demotes it below routes that arrived earlier while the clock ran fast.
+        const top = records.reduce((max, r) => (r.id === id ? max : Math.max(max, Number(r.timestamp) || 0)), 0);
+        store.put(Object.assign(current, { timestamp: Math.max(timestamp, top + 1) }));
         moved = true;
       };
     });
