@@ -17,6 +17,16 @@ enum MeteoRideShareStore {
     private static let maxBytes = 25 * 1024 * 1024
     private static let maxAge: TimeInterval = 24 * 60 * 60
 
+    // Two shares can land in the same millisecond; this tells their file names apart.
+    private static var sequenceCounter = 0
+    private static let sequenceLock = NSLock()
+    private static func nextSequence() -> Int {
+        sequenceLock.lock()
+        defer { sequenceLock.unlock() }
+        sequenceCounter += 1
+        return sequenceCounter
+    }
+
     /// Shared folder, created on first use. Nil means the App Group is misconfigured.
     static var inboxURL: URL? {
         let fm = FileManager.default
@@ -37,9 +47,8 @@ enum MeteoRideShareStore {
     @discardableResult
     static func store(data: Data, suggestedName: String) -> URL? {
         guard let dir = inboxURL, !data.isEmpty, data.count <= maxBytes else { return nil }
-        let safeName = sanitize(suggestedName)
-        // Timestamp prefix keeps arrival order and avoids collisions between shares.
-        let fileName = "\(Int(Date().timeIntervalSince1970 * 1000))__\(safeName)"
+        let millis = Int64(Date().timeIntervalSince1970 * 1000)
+        let fileName = inboxFileName(millis: millis, sequence: nextSequence(), name: suggestedName)
         let dest = dir.appendingPathComponent(fileName)
         do {
             try data.write(to: dest, options: .atomic)
@@ -109,7 +118,11 @@ enum MeteoRideShareStore {
         guard let dir = inboxURL else { return [] }
         prune(in: dir)
         let items = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        return items.sorted().map { dir.appendingPathComponent($0) }
+        // `.atomic` writes leave a `<name>.sb-XXXX` temp file in the same directory
+        // for the instant of the rename; excluding anything that is not a finished
+        // inbox name keeps that temp file from being read and deleted as if it were
+        // a real, complete route.
+        return items.filter(isInboxName).sorted().map { dir.appendingPathComponent($0) }
     }
 
     /// A route shared while the web layer never got to run would sit here forever.
@@ -135,6 +148,22 @@ enum MeteoRideShareStore {
     }
 
     // MARK: - Helpers
+
+    /// Timestamp+sequence file name: unique across shares, sorts in arrival order.
+    /// Mirrors the Android side's `%013d-%04d__name` format.
+    static func inboxFileName(millis: Int64, sequence: Int, name: String) -> String {
+        // %d reads a 32-bit int and would truncate a 13-digit millisecond
+        // timestamp; %lld/%ld match the actual 64-bit argument width.
+        String(format: "%013lld-%04ld__%@", millis, sequence % 10000, sanitize(name))
+    }
+
+    /// A finished inbox entry, as opposed to an `.atomic` write's transient
+    /// `<name>.sb-XXXX` sibling or unrelated junk (e.g. `.DS_Store`).
+    static func isInboxName(_ name: String) -> Bool {
+        guard let regex = try? NSRegularExpression(pattern: "^\\d{13}-\\d{4}__.+\\.(gpx|kml)$") else { return false }
+        let range = NSRange(name.startIndex..<name.endIndex, in: name)
+        return regex.firstMatch(in: name, range: range) != nil
+    }
 
     /// GPX is XML and normally UTF-8; some exporters still emit Latin-1.
     private static func decode(_ data: Data) -> String? {

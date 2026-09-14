@@ -58,16 +58,14 @@ class ShareViewController: UIViewController {
         }
 
         if provider.hasItemConformingToTypeIdentifier(dataType) {
-            provider.loadItem(forTypeIdentifier: dataType, options: nil) { [ingestQueue] item, _ in
-                if let url = item as? URL {
-                    ingestQueue.sync { completion(MeteoRideShareStore.ingest(fileURL: url)) }
-                } else if let data = item as? Data {
-                    let name = provider.suggestedName ?? "route.gpx"
-                    guard MeteoRideShareStore.accepts(name: name, data: data) else { return completion(false) }
-                    completion(MeteoRideShareStore.store(data: data, suggestedName: name) != nil)
-                } else {
-                    completion(false)
-                }
+            // `loadFileRepresentation` hands the provider's content over as a
+            // temporary file, valid only inside this callback — unlike
+            // `loadItem`, which for this type would load the whole attachment
+            // into memory before any size cap applies. Ingesting synchronously
+            // here routes it through `readCapped` and the ingest queue instead.
+            provider.loadFileRepresentation(forTypeIdentifier: dataType) { [ingestQueue] url, _ in
+                guard let url else { return completion(false) }
+                ingestQueue.sync { completion(MeteoRideShareStore.ingest(fileURL: url)) }
             }
             return
         }
