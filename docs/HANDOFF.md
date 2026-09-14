@@ -243,5 +243,13 @@ Diseño en `docs/superpowers/specs/2026-09-14-route-lifecycle-and-offline-design
 en git: `docs/superpowers/` está en el `.gitignore` global del autor. La extracción por
 proveedor, la elección de la línea de la ruta y la fusión de AROME están en
 `public/scripts/forecast-rules.js`, con tres correcciones intencionadas: el primer cuarto de
-`minutely_15`, las horas según `utc_offset_seconds` y la fusión alineada por hora. Las
-fases 2 a 7 tendrán cada una su plan cuando empiecen.
+`minutely_15`, las horas según `utc_offset_seconds` y la fusión alineada por hora. La
+corrección de `utc_offset_seconds` solo cubre la tabla; `public/scripts/compare.js` todavía
+elige las horas de Open-Meteo con `window.cw.findClosestIndex` en la zona del teléfono, así
+que un teléfono en otra zona que la ruta puede ver horas distintas en comparar que en la
+tabla hasta que se mueva a las mismas reglas, en la fase 4. `processWeatherData` también
+sigue derivando `payloadUnits` de OpenWeather de la unidad de temperatura actual y no de la
+unidad con la que se pidió la respuesta cacheada (una respuesta métrica de caché mostrada
+tras cambiar a °F convierte el viento como si fuera mph); lo arregla la instantánea de la
+fase 2, que guarda `payloadUnits` por paso. Las fases 2 a 7 tendrán cada una su plan cuando
+empiecen.
