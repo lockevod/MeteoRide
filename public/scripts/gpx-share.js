@@ -61,7 +61,12 @@
         const looksLikeKml = /<kml[\s>]/i.test(text.slice(0, 4096)) || /\.kml$/i.test(name);
         if (looksLikeKml && typeof window.cwKmlToGpxText === 'function') {
           const converted = window.cwKmlToGpxText(text);
-          if (converted) {
+          // A malformed KML, or a real GPX misnamed .kml, converts into a
+          // syntactically valid but track-less GPX wrapper: toGeoJSON.kml() always
+          // returns a FeatureCollection, even with zero Placemarks. Only accept the
+          // conversion when it actually carries a track/route/waypoint; otherwise
+          // keep the original text and name, since the input was likely GPX already.
+          if (converted && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(converted)) {
             text = converted;
             // reloadFull() re-reads window.lastGPXFile by its extension on every
             // recompute; keeping the .kml name would run this already-converted GPX

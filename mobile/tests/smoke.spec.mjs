@@ -449,6 +449,23 @@ ${padding}
   expect(loaderFailures).toEqual([]);
 });
 
+// kmlToGpxText always returns a syntactically valid GPX wrapper, even for input that
+// carries no Placemark (togeojson.kml() returns an empty FeatureCollection rather than
+// null). A real GPX shared under a .kml name used to be run through the KML converter
+// on the strength of its name alone and come out empty.
+test('a real GPX shared under a .kml name is drawn, not emptied', async ({ page }) => {
+  const gpx = await readFile(FIXTURE, 'utf8');
+  const loaderFailures = watchTheLoader(page);
+
+  await installNativeBridge(page, { routes: [{ name: 'route.kml', gpx }] });
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  expect(loaderFailures).toEqual([]);
+});
+
 test('a route arriving mid-drain is not left behind', async ({ page }) => {
   const gpx = await readFile(FIXTURE, 'utf8');
   const loaderFailures = watchTheLoader(page);
