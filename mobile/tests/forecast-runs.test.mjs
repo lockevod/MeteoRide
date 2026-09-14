@@ -325,6 +325,22 @@ test('a computation that throws before it fetches lets go of its claim, says so 
   }
 });
 
+test('a computation that throws lets go of its claim first, even when saying so throws too', async () => {
+  const breaks = {
+    'while segmenting the route': (s) => { s.getVal = () => { throw new Error('boom'); }; },
+    'at the start of the computation': (s) => { s.cw.utils.createRecorder = () => { throw new Error('boom'); }; },
+  };
+  for (const [where, breakIt] of Object.entries(breaks)) {
+    const { s, run } = harness();
+    breakIt(s);
+    s.logDebug = () => { throw new Error('log'); };
+    s.setNotice = () => { throw new Error('notice'); };
+    try { await run(41); } catch (_) { /* asserted below */ }
+    assert.deepEqual([...s.claims], [], `${where}: the claim stayed`);
+    assert.equal(s.cwHasCurrentForecast(), false, where);
+  }
+});
+
 test('a start date that is empty or not a date says so, and leaves nothing current', async () => {
   let h = harness();
   h.s.values.datetimeRoute = '';

@@ -543,6 +543,7 @@ window.cwLaunchComputation = function () {
   window.cw.releaseLoadingPrefix("forecast:");
   window.cw.claimLoading("forecast:" + cid);
   runningComputationId = cid;
+  let failure = null;
   try {
     const segmented = segmentRouteByTime(confirmedRoute.geojson);
     if (segmented) {
@@ -551,11 +552,15 @@ window.cwLaunchComputation = function () {
       return cid;
     }
   } catch (err) {
-    logDebug(t("error_api", { msg: err.message }), true);
-    setNotice(t("error_api", { msg: err.message }), "error");
+    failure = err;
   }
+  // Let go before saying anything, so a notice that throws cannot keep the indicator on.
   window.cw.releaseLoading("forecast:" + cid);
   runningComputationId = null;
+  if (failure) {
+    logDebug(t("error_api", { msg: failure.message }), true);
+    setNotice(t("error_api", { msg: failure.message }), "error");
+  }
   return cid;
 };
 
@@ -1089,11 +1094,11 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     createdAt: Date.now(),
   });
   } catch (err) {
+    // Let go first, so a notice that throws cannot keep the indicator on.
+    const current = isCurrent();
+    if (current) window.cw.releaseLoading("forecast:" + ids.computationId);
     logDebug(t("error_api", { msg: err.message }), true);
-    if (isCurrent()) {
-      setNotice(t("error_api", { msg: err.message }), "error");
-      window.cw.releaseLoading("forecast:" + ids.computationId);
-    }
+    if (current) setNotice(t("error_api", { msg: err.message }), "error");
   } finally {
     if (runningComputationId === ids.computationId) runningComputationId = null;
   }
