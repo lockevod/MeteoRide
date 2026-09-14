@@ -256,7 +256,12 @@ var cwWatchRules = (function () {
     }
     const changes = compare(watch.baseline, current, watch.points, now);
     const fresh = newAlerts(alerts, watch.notified, Math.max(watch.start, now), watch.end);
-    if (!changes.length && !fresh.length) return { notification: null, watch: next };
+    if (!changes.length && !fresh.length) {
+      // A point with no forecast when the watch was armed is seeded as soon as one
+      // arrives; otherwise compare would skip it for the rest of the ride.
+      next.baseline = current.map((c, i) => watch.baseline[i] || c || null);
+      return { notification: null, watch: next };
+    }
 
     next.baseline = current.map((c, i) => c || watch.baseline[i] || null);
     next.notified = (watch.notified || []).concat(fresh.map((a) => a.id));

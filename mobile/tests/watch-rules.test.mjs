@@ -161,6 +161,29 @@ test('a point with no data neither triggers nor loses its baseline', () => {
   same(out.watch.baseline[2], base[2]);
 });
 
+test('a point missing from the baseline is seeded on a quiet check, then watched', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  base[1] = null;   // no forecast for that point when the watch was armed
+  const calm = reading({ rain: 0, wind: 10, gust: 15 });
+  const quiet = rules.evaluate(watchWith(base), calm, [], now);
+  assert.equal(quiet.notification, null);
+  same(quiet.watch.baseline[1], calm[1], 'the gap is filled from the reading that arrived');
+
+  const stormy = reading({ rain: 0, wind: 10, gust: 15 });
+  stormy[1] = { rain: 6, wind: 45, gust: 70 };
+  const out = rules.evaluate(quiet.watch, stormy, [], now + 1);
+  assert.ok(out.notification, 'the recovered point now speaks');
+  assert.match(out.notification.body, /11:00/);
+});
+
+test('a quiet check never moves an established baseline', () => {
+  const base = reading({ rain: 0.2, wind: 19, gust: 30 });
+  const nudge = reading({ rain: 0.35, wind: 21, gust: 41 });
+  const out = rules.evaluate(watchWith(base), nudge, [], now);
+  assert.equal(out.notification, null);
+  same(out.watch.baseline, base, 'creeping up must not hide a later worsening');
+});
+
 test('a watch is over an hour after the ride ends', () => {
   const w = watchWith(null);
   assert.equal(rules.expired(w, w.end), false);
