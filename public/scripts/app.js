@@ -513,7 +513,19 @@ function segmentRouteByTime(geojson) {
 // into weatherData alongside it and render whatever had accumulated when it finished.
 let forecastRun = 0;
 
-async function fetchWeatherForSteps(steps, timeSteps) {
+// Everything a computation depends on, read once when it starts. A setting changed while
+// it is still fetching belongs to the next computation, never to the rest of this one.
+function readForecastSettings() {
+  return {
+    provider: apiSource,
+    units: { temp: getVal("tempUnits"), wind: getVal("windUnits") },
+    keys: { meteoblue: getVal("apiKey") || "", openweather: getVal("apiKeyOW") || "" },
+    noticeAll: !!document.getElementById("noticeAll")?.checked,
+    alerts: getVal("showWeatherAlerts") !== false,
+  };
+}
+
+async function fetchWeatherForSteps(steps, timeSteps, settings = readForecastSettings()) {
   const run = ++forecastRun;
   const results = [];
   // What this computation's requests and cache reads saw; the notice is decided from it.
@@ -522,19 +534,18 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   // only if it is published.
   const alertsSeen = [];
 
-  let apiKeyFinal = ""
-  if (apiSource === "meteoblue") {
-    apiKeyFinal = getVal("apiKey");
-  } else if (apiSource === "openweather") {
-    apiKeyFinal= getVal("apiKeyOW");
-  } 
-  const date = getVal("datetimeRoute").substring(0, 10);
-  const tempUnit = getVal("tempUnits");
-  const windUnit = getVal("windUnits");
+  let apiKeyFinal = "";
+  if (settings.provider === "meteoblue") {
+    apiKeyFinal = settings.keys.meteoblue;
+  } else if (settings.provider === "openweather") {
+    apiKeyFinal = settings.keys.openweather;
+  }
+  const tempUnit = settings.units.temp;
+  const windUnit = settings.units.wind;
   const now = new Date();
 
   showLoading();
-  const showAllNotices = !!document.getElementById("noticeAll")?.checked;
+  const showAllNotices = settings.noticeAll;
   // Notice flags
   let warnedFallback = false;
   let warnedBeyondOM = false;
@@ -572,7 +583,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   let horizonDaysUsed = null;
 
   // If provider requires key but not provided (MB or OWM), fallback to Open‑Meteo
-  const providerNeedsKey = (apiSource === "meteoblue" || apiSource === "openweather");
+  const providerNeedsKey = (settings.provider === "meteoblue" || settings.provider === "openweather");
   const hasKey = (apiKeyFinal || "").trim().length >= 5;
   try {
     for (let i = 0; i < steps.length; i++) {
@@ -582,29 +593,29 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       const daysAhead = (timeAt - now) / MS_PER_DAY;
       const hoursAhead = (timeAt - now) / MS_PER_HOUR;   // NEW
 
-      let prov = apiSource;
+      let prov = settings.provider;
 
       // NEW: resolve chain provider (e.g. ow2_arome_openmeteo) per timestamp
       let isChain = false;
       try {
         const chains = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
-        isChain = !!chains[String(apiSource || '').toLowerCase()];
+        isChain = !!chains[String(settings.provider || '').toLowerCase()];
         if (isChain) {
           const resolver = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp;
           if (typeof resolver === 'function') {
-            const eff = resolver(apiSource, timeAt, now, { lat: p.lat, lon: p.lon });
+            const eff = resolver(settings.provider, timeAt, now, { lat: p.lat, lon: p.lon });
             if (eff) prov = eff;
           }
         }
       } catch(e){ console.warn('chain resolve error', e); }
 
       // Determine API key for this effective provider (chain-aware)
-      const stepApiKey = (prov === 'meteoblue') ? (getVal('apiKey') || '') : (prov === 'openweather') ? (getVal('apiKeyOW') || '') : '';
+      const stepApiKey = (prov === 'meteoblue') ? settings.keys.meteoblue : (prov === 'openweather') ? settings.keys.openweather : '';
       const hasKeyProv = stepApiKey.trim().length >= 5;
 
       // store provider on step so later processing knows real source (may still change if fallback)
       p.provider = prov;
-      if (i === 0) logDebug(`chainMode=${apiSource} -> first provider=${prov}`);
+      if (i === 0) logDebug(`chainMode=${settings.provider} -> first provider=${prov}`);
       logDebug(`step ${i+1}/${steps.length} effectiveProv(pre)=${prov} t=${timeAt.toISOString()}`);
 
       // Hard-fail skip for MB
@@ -911,7 +922,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
       if (ok && json) {
         // Check for weather alerts if using OpenWeather and alerts are enabled
-        if (prov === "openweather" && Array.isArray(json.alerts) && getVal("showWeatherAlerts") !== false) {
+        if (prov === "openweather" && Array.isArray(json.alerts) && settings.alerts) {
           alertsSeen.push(...json.alerts);
         }
         
@@ -951,7 +962,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
 
   // Check for weather alerts independently if we have OpenWeather API key
   if (run !== forecastRun) return;
-  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen);
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings);
   if (run !== forecastRun) return;
 
   const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
@@ -964,7 +975,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
     version: 1,
     computationId: run,
     route: { name: (window.lastGPXFile && window.lastGPXFile.name) || "" },
-    settings: { provider: apiSource, units: { temp: tempUnit, wind: windUnit }, noticeAll: showAllNotices },
+    settings: { provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts },
     steps: snapshotSteps,
     // Providers only report warnings active when asked; keep those near the ride.
     alerts: timeSteps.length
@@ -973,7 +984,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           timeSteps[timeSteps.length - 1].getTime() / 1000 + 4 * 3600)
       : [],
     outcome: {
-      requestedProvider: apiSource,
+      requestedProvider: settings.provider,
       usableSteps: cwForecastRules.usableSteps(snapshotSteps),
       transportFailures: recorder.failed,
       lastFailStatus: recorder.lastFailStatus,
@@ -3388,11 +3399,11 @@ window.debugAlertPosition = function() {
 // Check for weather alerts independently of main provider
 // With `sink`, the warnings found are added to it for the computation to keep; without
 // it (revalidateWeatherAlerts, until it goes in phase 4) they are shown straight away.
-async function checkWeatherAlertsIndependent(steps, timeSteps, sink) {
+async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings) {
   // Only check if alerts are enabled and we have OpenWeather API key
-  if (getVal("showWeatherAlerts") === false) return;
+  if (settings ? !settings.alerts : getVal("showWeatherAlerts") === false) return;
   
-  const apiKeyOW = getVal("apiKeyOW");
+  const apiKeyOW = settings ? settings.keys.openweather : getVal("apiKeyOW");
   if (!apiKeyOW || apiKeyOW.trim().length < 5) return;
   
   console.log('Checking weather alerts independently...');
@@ -3420,7 +3431,7 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink) {
       const p = steps[i];
       const timeAt = timeSteps[i];
       
-      const tempUnit = getVal("tempUnits");
+      const tempUnit = settings ? settings.units.temp : getVal("tempUnits");
       const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
       
       // Build OpenWeather URL specifically for alerts (exclude everything else to save bandwidth)

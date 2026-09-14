@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { openMeteo } from './fixtures/providers.mjs';
+import { openMeteo, openWeather } from './fixtures/providers.mjs';
 
 const SCRIPTS = join(dirname(fileURLToPath(import.meta.url)), '../../public/scripts');
 const src = await readFile(join(SCRIPTS, 'app.js'), 'utf8');
@@ -20,6 +20,12 @@ assert.ok(start !== -1 && end > start && src.slice(start, end).includes('functio
 const plain = (x) => JSON.parse(JSON.stringify(x));
 const ok = (body) => ({ ok: true, status: 200, json: async () => structuredClone(body) });
 const failed = (status) => ({ ok: false, status, text: async () => '' });
+const waitFor = async (cond) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 10)); };
+const twoSteps = () => {
+  const t1 = new Date(Date.now() + 3600000);
+  const t2 = new Date(Date.now() + 7200000);
+  return [[{ lat: 41, lon: 2, time: t1, distanceM: 0 }, { lat: 41.1, lon: 2, time: t2, distanceM: 1000 }], [t1, t2]];
+};
 
 /** The real computation and publish(), with the network, the cache and the page replaced. */
 function harness({ provider = 'openmeteo', stubs = {} } = {}) {
@@ -29,8 +35,8 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     apiSource: provider, weatherData: [],
     MS_PER_DAY: 86400000, MS_PER_HOUR: 3600000, OPENMETEO_MAX_DAYS: 14, METEOBLUE_MAX_DAYS: 7,
     OPENWEATHER_MAX_DAYS: 4, OPENWEATHER_MAX_HOURS: 1, AROMEHD_MAX_HOURS: 48, isAromeHdCovered: () => false,
-    getVal: (id) => ({ datetimeRoute: new Date().toISOString(), tempUnits: 'C', windUnits: 'kmh',
-      apiKey: 'a-valid-looking-key', apiKeyOW: 'a-valid-looking-key' }[id] || ''),
+    values: { datetimeRoute: new Date().toISOString(), tempUnits: 'C', windUnits: 'kmh',
+      apiKey: 'a-valid-looking-key', apiKeyOW: 'a-valid-looking-key' },
     logDebug() {}, t: (key) => key,
     getCache: () => null, setCache() {}, makeCacheKey: () => 'key',
     buildProviderUrl: (prov) => prov, classifyProviderError: () => 'http',
@@ -42,6 +48,7 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     activeWeatherAlerts: [], elements: {},
   };
   Object.assign(s, {
+    getVal: (id) => s.values[id] ?? '',
     document: {
       getElementById: (id) => s.elements[id] || { checked: true, style: {}, querySelectorAll: () => [] },
       dispatchEvent: (ev) => s.events.push(ev),
@@ -219,6 +226,36 @@ test('a forecast read from the cache without connection says how old it is', asy
   } });
   await run(41);
   assert.deepEqual(s.notices, [['offline_stale_forecast', 'warn']]);
+});
+
+test('settings changed while a computation is fetching do not reach the rest of it', async () => {
+  const { s, answer, pending } = harness({ stubs: {
+    buildProviderUrl: (prov, p, t, key, wind, temp) => `${prov}:${temp}:${key}`,
+  } });
+  const done = s.fetchWeatherForSteps(...twoSteps());
+  assert.equal(pending[0].url, 'openmeteo:C:');
+  s.apiSource = 'openweather';
+  s.values.tempUnits = 'F';
+  answer(0, ok(openMeteo()));
+  await waitFor(() => pending.length === 2);
+  assert.equal(pending[1].url, 'openmeteo:C:', 'the second step used what changed after the start');
+  answer(1, ok(openMeteo()));
+  await done;
+  assert.deepEqual(plain(s.published()[0].settings),
+    { provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true });
+});
+
+test('an API key changed while a computation is fetching is not used by its later steps', async () => {
+  const { s, answer, pending } = harness({ provider: 'openweather', stubs: {
+    buildProviderUrl: (prov, p, t, key) => `${prov}:${key}`,
+  } });
+  const done = s.fetchWeatherForSteps(...twoSteps());
+  s.values.apiKeyOW = 'a-key-typed-later';
+  answer(0, ok(openWeather('metric')));
+  await waitFor(() => pending.length === 2);
+  assert.equal(pending[1].url, 'openweather:a-valid-looking-key');
+  answer(1, ok(openWeather('metric')));
+  await done;
 });
 
 // When the chosen provider answers with an error, each branch falls back to Open-Meteo
