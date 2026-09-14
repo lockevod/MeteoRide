@@ -521,7 +521,7 @@ function readForecastSettings() {
     units: { temp: getVal("tempUnits"), wind: getVal("windUnits") },
     keys: { meteoblue: getVal("apiKey") || "", openweather: getVal("apiKeyOW") || "" },
     noticeAll: !!document.getElementById("noticeAll")?.checked,
-    alerts: getVal("showWeatherAlerts") !== false,
+    alerts: !!document.getElementById("showWeatherAlerts")?.checked,
   };
 }
 
@@ -3401,7 +3401,7 @@ window.debugAlertPosition = function() {
 // it (revalidateWeatherAlerts, until it goes in phase 4) they are shown straight away.
 async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings) {
   // Only check if alerts are enabled and we have OpenWeather API key
-  if (settings ? !settings.alerts : getVal("showWeatherAlerts") === false) return;
+  if (settings ? !settings.alerts : !document.getElementById("showWeatherAlerts")?.checked) return;
   
   const apiKeyOW = settings ? settings.keys.openweather : getVal("apiKeyOW");
   if (!apiKeyOW || apiKeyOW.trim().length < 5) return;
@@ -3885,7 +3885,7 @@ function resetAlertProcessedFlags() {
 
 // Re-validate weather alerts when parameters change (date, speed, etc.)
 async function revalidateWeatherAlerts() {
-  if (getVal("showWeatherAlerts") === false) return;
+  if (!document.getElementById("showWeatherAlerts")?.checked) return;
   if (!window.weatherData || !window.weatherData.length) return;
   
   console.log('Re-validating weather alerts for parameter changes...');

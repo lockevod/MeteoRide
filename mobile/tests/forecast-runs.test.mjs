@@ -258,6 +258,20 @@ test('an API key changed while a computation is fetching is not used by its late
   await done;
 });
 
+test('unticking "show weather alerts" keeps warnings out of the computation', async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const { s, run, answer } = harness({ provider: 'openweather' });
+  s.elements.showWeatherAlerts = { checked: false };
+  const a = run(41);
+  answer(0, ok({ hourly: [{ dt: now + 3600, temp: 20, wind_speed: 3 }],
+    alerts: [{ sender_name: 'AEMET', event: 'Viento', start: now, end: now + 7200 }] }));
+  await a;
+  const [snapshot] = s.published();
+  assert.equal(snapshot.settings.alerts, false);
+  assert.deepEqual(plain(snapshot.alerts), []);
+  assert.deepEqual(plain(s.shownAlerts), []);
+});
+
 // When the chosen provider answers with an error, each branch falls back to Open-Meteo
 // and, when that is cached, used to label the step with `cached2.provider` — a field
 // the raw Open-Meteo JSON does not have. The step then carried no provider at all, so
