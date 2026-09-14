@@ -126,7 +126,7 @@ test('loads a route from the file picker', async ({ page }) => {
   expect(loaderFailures).toEqual([]);
 });
 
-/** Every stored recent route as {id, name, bytes}, read straight from IndexedDB. */
+/** Every stored recent route as {id, name, bytes, fingerprint}, read straight from IndexedDB. */
 const storedRoutes = (page) =>
   page.evaluate(
     () =>
@@ -139,14 +139,14 @@ const storedRoutes = (page) =>
           all.onsuccess = () =>
             resolve(
               all.result
-                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : 0 }))
+                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : 0, fingerprint: r.fingerprint }))
                 .sort((a, b) => a.id - b.id)
             );
         };
       })
   );
 
-test('opening an older recent route keeps every stored route', async ({ page }) => {
+test('opening an older recent route keeps every stored route, fingerprint included', async ({ page }) => {
   await goOffline(page);
   const tracks = ['Ruta Uno', 'Ruta Dos', 'Ruta Tres'];
   for (const [i, track] of tracks.entries()) {
@@ -167,6 +167,8 @@ test('opening an older recent route keeps every stored route', async ({ page }) 
   await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(3);
   const before = await storedRoutes(page);
   expect(before.every((r) => r.bytes > 0)).toBe(true);
+  // Without it a route counts as one from an older version, matched by name and size only.
+  expect(before.every((r) => r.fingerprint), 'an imported route has its fingerprint').toBe(true);
 
   // The oldest one, last in the list.
   const oldest = await page.evaluate(async () => {
@@ -1335,6 +1337,53 @@ test('a picked file that is not a route stays out of recent routes; a route goes
 
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(() => storedNames(page)).toEqual(['route.gpx']);
+});
+
+test('moving an opened recent route to the top never writes back a route an import trimmed', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  for (const i of [1, 2, 3]) {
+    expect((await importRecent(page, routeAt(`Ruta ${i}`, 41 + i / 10), `r${i}.gpx`)).ok).toBe(true);
+  }
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(3);
+
+  // r1, the oldest, is opened. As soon as it is confirmed and the move to the top opens its
+  // transaction, r4 arrives, and importing it trims the store to three.
+  const opened = await page.evaluate(async (text) => {
+    const request = window.cw.requestRoute;
+    window.cw.requestRoute = async (...args) => {
+      const status = await request(...args);
+      const open = IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction = function (...targs) {
+        const tx = open.apply(this, targs);
+        if ([].concat(targs[0]).includes('routes')) {
+          IDBDatabase.prototype.transaction = open;
+          window.__import = window.cw.importRoute({ text, name: 'r4.gpx' });
+        }
+        return tx;
+      };
+      return status;
+    };
+    const status = await window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === 'r1.gpx'));
+    window.cw.requestRoute = request;
+    await window.__import;
+    return status;
+  }, routeAt('Ruta 4', 41.45));
+  expect(opened).toBe('committed');
+  // The move went first and made r1 the newest, so the import trimmed r2.
+  expect(await storedNames(page)).toEqual(['r1.gpx', 'r3.gpx', 'r4.gpx']);
+
+  // r3 is now the oldest. The import that trims it is queued before the move of r3, which
+  // then finds nothing to move and writes nothing back.
+  const r3 = (await storedRoutes(page)).find((r) => r.name === 'r3.gpx').id;
+  const [imported, moved] = await page.evaluate(([text, id]) => Promise.all([
+    window.cw.importRoute({ text, name: 'r5.gpx' }),
+    window.cw.touchRecent(id),
+  ]), [routeAt('Ruta 5', 41.5), r3]);
+  expect(imported.ok).toBe(true);
+  expect(moved).toBe(false);
+  expect(await storedNames(page)).toEqual(['r1.gpx', 'r4.gpx', 'r5.gpx']);
 });
 
 /* ---------- settings that only change how it looks ---------- */

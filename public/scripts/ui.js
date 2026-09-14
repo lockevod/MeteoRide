@@ -1476,26 +1476,30 @@
     }
   }
 
-  // Put (insert or replace) a route record; returns the record id/key
-  async function idbPutRoute(route) {
-    try {
-      const db = await openIDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        const store = tx.objectStore(IDB_STORE);
-        // If route includes id, ensure we set it on the object so put replaces
-        const obj = { name: route.name, size: route.size, lastModified: route.lastModified, timestamp: route.timestamp };
-        if (route.blob) obj.blob = route.blob;
-        if (route.id != null) obj.id = route.id;
-        const req = store.put(obj);
-        req.onsuccess = function (ev) { resolve(ev.target.result); };
-        req.onerror = function () { reject(req.error || new Error('put failed')); };
-      });
-    } catch (e) {
-      console.warn('[MeteoRide] idbPutRoute failed', e);
-      throw e;
-    }
+  // Moves a stored route to the top: the whole record, fingerprint included, gets a newer
+  // timestamp in one readwrite transaction, and nothing is written if the record is gone.
+  // It runs in the import queue (cw.touchRecent), so an import that trimmed the route
+  // first is never undone. True once the transaction completes with the record moved.
+  async function idbTouchRoute(id, timestamp) {
+    let db;
+    try { db = await openIDB(); } catch (e) { return false; }
+    return new Promise((resolve) => {
+      let tx;
+      try { tx = db.transaction(IDB_STORE, 'readwrite'); } catch (e) { return resolve(false); }
+      let moved = false;
+      tx.oncomplete = () => resolve(moved);
+      tx.onabort = () => resolve(false);
+      tx.onerror = () => resolve(false);
+      const store = tx.objectStore(IDB_STORE);
+      const get = store.get(id);
+      get.onsuccess = () => {
+        if (!get.result) return;
+        store.put(Object.assign(get.result, { timestamp }));
+        moved = true;
+      };
+    });
   }
+  window.cwIdbTouchRoute = idbTouchRoute;
 
   // Delete a route record by id
   async function idbDeleteRoute(id) {
@@ -1977,11 +1981,10 @@
       if (idx > 0) {
         const [r] = recentRoutesCache.splice(idx, 1);
         recentRoutesCache.unshift(r);
+        r.timestamp = Date.now();
         // The cache holds metadata only. Writing it back to the store would drop every
-        // stored GPX, so only the opened route's full record is touched.
-        const rec = await idbGetRouteById(r.id);
-        rec.timestamp = r.timestamp = Date.now();
-        await idbPutRoute(rec);
+        // stored GPX, so only the opened route's record is moved, in the import queue.
+        await window.cw.touchRecent(r.id);
         updateRecentRoutesUI();
       }
     } catch (e) {
