@@ -69,10 +69,10 @@ test('the merge golden covers every case and no other', () => {
   assert.deepEqual(Object.keys(golden).sort(), Object.keys(CASES).sort());
 });
 
-test('the merge golden shows how the merge behaved before it moved', () => {
+test('the merge golden shows how AROME answers are completed', () => {
   const both = golden['arome lacks variables, both have a time axis'].hourly;
-  // A variable AROME lacks is copied whole, slot by slot, although the time axes differ.
-  assert.deepEqual(both.uv_index.slice(0, 3), [0, 1, 2]);
+  // A variable AROME lacks is taken on AROME's hours: 08:00 is the third standard slot.
+  assert.deepEqual(both.uv_index.slice(0, 3), [2, 3, 4]);
   // Gaps in a variable AROME has are filled by matching the time.
   assert.deepEqual(both.cloud_cover, [10, 903, 30, 905, 50, 907]);
   // Without a time axis on the AROME side, gaps are filled by position.
@@ -85,3 +85,26 @@ test('the merge golden shows how the merge behaved before it moved', () => {
 for (const name of Object.keys(CASES)) {
   test(`AROME merge: ${name}`, () => assert.deepEqual(actual[name], golden[name]));
 }
+
+// Arrays built inside the vm context have their own prototypes; compare through JSON.
+const same = (a, b) => assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
+
+test('a variable AROME lacks is laid on AROME\'s own hours', () => {
+  const out = merge({ hourly: { time: hours(8, 3) } },
+    { hourly: { time: hours(9, 3), uv_index: [1, 2, 3], weathercode: [61, 62, 63] } });
+  same(out.hourly.uv_index, [null, 1, 2]);      // 08:00 has no standard value
+  same(out.hourly.weathercode, [null, 61, 62]);
+});
+
+test('without a standard time axis nothing is copied or filled onto AROME hours', () => {
+  const out = merge({ hourly: { time: hours(8, 3), cloud_cover: [null, 5, null] } },
+    { hourly: { uv_index: [1, 2, 3], cloud_cover: [7, 8, 9] } });
+  assert.equal(out.hourly.uv_index, undefined);
+  same(out.hourly.cloud_cover, [null, 5, null]);
+});
+
+test('a probability found under another name is laid on AROME hours too', () => {
+  const out = merge({ hourly: { time: hours(8, 3) } },
+    { hourly: { time: hours(9, 3), probability_of_precipitation: [0.25, 0.5, 0.75] } });
+  same(out.hourly.precipitation_probability, [null, 25, 50]);
+});

@@ -190,20 +190,35 @@ var cwForecastRules = (function () {
   /**
    * AROME HD answers lack some variables the standard Open-Meteo model has. This fills
    * them in, in place, from the standard answer for the same place and returns the AROME
-   * answer. Moved here unchanged from fetchWeatherForSteps.
+   * answer. Every standard series is laid on AROME's own hours: a value is only taken for
+   * an hour both answers have.
    */
   function mergeAromeWithStandard(json, std) {
     const stdH = (std && std.hourly) || {};
     const mergeKeys = ['precipitation_probability', 'weathercode', 'cloud_cover', 'uv_index', 'is_day'];
     json.hourly = json.hourly || {};
+
+    const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
+    const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
+    let stdIndexByTime = null;
+    if (aromeTimes && stdTimes) {
+      stdIndexByTime = Object.create(null);
+      for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
+    }
+    // A standard series on AROME's hours. With no AROME time axis, AROME takes the
+    // standard one below, so the series is kept as it is. With no standard time axis
+    // there is nothing to match on, and the series is left out rather than copied by
+    // position onto hours it does not belong to.
+    const onAromeHours = (series) => {
+      if (!aromeTimes) return series.slice();
+      if (!stdIndexByTime) return null;
+      return aromeTimes.map((t) => {
+        const si = stdIndexByTime[String(t)];
+        return si != null && series[si] != null ? series[si] : null;
+      });
+    };
+
     try {
-      const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
-      const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
-      let stdIndexByTime = null;
-      if (aromeTimes && stdTimes) {
-        stdIndexByTime = Object.create(null);
-        for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
-      }
       mergeKeys.forEach((k) => {
         const aVal = json.hourly[k];
         // Accept common variants in the standard payload
@@ -223,8 +238,9 @@ var cwForecastRules = (function () {
           }
         }
         if (!Array.isArray(aVal) && Array.isArray(sVal)) {
-          // AROME lacks the array: copy the standard one
-          json.hourly[k] = sVal.slice();
+          // AROME lacks the array: take the standard one on AROME's hours
+          const aligned = onAromeHours(sVal);
+          if (aligned) json.hourly[k] = aligned;
         } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
           const merged = aVal.slice();
           if (stdIndexByTime) {
@@ -234,8 +250,8 @@ var cwForecastRules = (function () {
                 if (si != null && sVal[si] != null) merged[i] = sVal[si];
               }
             }
-          } else {
-            // No time axis to match on: fill missing positions by index
+          } else if (!aromeTimes) {
+            // AROME has no hours of its own and takes the standard ones below
             for (let mi = 0; mi < sVal.length; mi++) {
               if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
             }
@@ -244,13 +260,16 @@ var cwForecastRules = (function () {
         }
       });
       if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+      // minutely_15 carries its own time axis, so it is taken whole
       if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0)
           && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
         json.minutely_15 = std.minutely_15;
       }
     } catch (mergeErr) {
-      mergeKeys.forEach((k) => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-      if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+      if (!aromeTimes) {
+        mergeKeys.forEach((k) => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
+        if (Array.isArray(stdH.time)) json.hourly.time = stdH.time;
+      }
     }
     // Probability of precipitation under other names, as a fraction or a percentage
     try {
@@ -261,9 +280,11 @@ var cwForecastRules = (function () {
             const arr = stdH[n].slice();
             const nums = arr.filter((v) => v != null && !Number.isNaN(Number(v))).map(Number);
             const max = nums.length ? Math.max(...nums) : null;
-            json.hourly.precipitation_probability = (max != null && max <= 1)
+            const normalized = (max != null && max <= 1)
               ? arr.map((v) => (v == null ? null : Number(v) * 100))
               : arr;
+            const aligned = onAromeHours(normalized);
+            if (aligned) json.hourly.precipitation_probability = aligned;
             break;
           }
         }
