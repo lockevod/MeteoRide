@@ -609,6 +609,13 @@ code does and what makes the race reproducible.
 ## Open work
 
 - Android release signing config is not set up; `assembleRelease` will not sign.
+- The Android launcher icons are still the Capacitor template. `npm run icons` only
+  writes the iOS asset catalogue; Android needs the mipmap set (and an adaptive icon,
+  which is a foreground/background pair rather than one square), so the installer has
+  to grow a second output before `android/` looks like the app.
+- The remote branch `claude/cool-allen-w8evld` is stale — it predates this work and
+  nothing on it is wanted. It has to be deleted from the GitHub side by the author;
+  an agent session here gets a 403 trying.
 - The smoke suite does not touch the forecast itself: providers, the weather table,
   comparison modes and the unit/language settings are all untested. Stubbing a
   provider response would make that tractable.

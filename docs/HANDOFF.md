@@ -134,10 +134,24 @@ aún no ha probado en dispositivo físico):
 
 ## 7. Trabajo abierto / ideas
 
-Lista mantenida en `AGENTS.md → Open work`. Lo más relevante: firma de release
-Android; suite solo en Chromium (añadir `webkit`); CI en GitHub Actions; tip jar en
-la app solo como compra in-app; conexión con Strava vía OAuth (Komoot/Hammerhead no
-tienen API pública); notificación en primer plano al reabrir la app.
+La lista completa está en `AGENTS.md → Open work`; esto es lo que hay que tener
+presente para la app nativa:
+
+- Probar en iPhone y Android **físicos**: las tareas en segundo plano no se ejecutan
+  en el simulador, así que ninguna alerta ha llegado aún por la vía real.
+- Iconos de Android: siguen siendo la plantilla de Capacitor. `npm run icons` solo
+  escribe el catálogo de iOS; Android necesita los mipmaps y un icono adaptativo
+  (primer plano y fondo separados), así que el instalador tiene que crecer.
+- Firma de release de Android sin configurar: `assembleRelease` no firma.
+- Borrar la rama remota obsoleta `claude/cool-allen-w8evld` (desde GitHub, por el
+  autor: una sesión de agente recibe 403).
+- Suite solo en Chromium; iOS usa WKWebView. Añadir el proyecto `webkit` de
+  Playwright cerraría casi todo ese hueco.
+- Nada ejecuta los tests automáticamente: un job de GitHub Actions en los PR cuesta
+  unas pocas líneas.
+- Ideas, no pendientes: tip jar (en iOS solo como compra in-app), conexión con Strava
+  vía OAuth (Komoot y Hammerhead no tienen API pública), notificación en primer plano
+  al reabrir la app.
 
 ## 8. Cómo retomar
 
