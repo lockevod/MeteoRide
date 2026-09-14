@@ -336,7 +336,9 @@ What is still open, and why it was left:
   the Leaflet map, so `window.map` must exist. Shared routes regularly arrive before
   `initMap` has run. `cwInjectGPXFromText` in `gpx-share.js` now waits for both the
   loader and the map, and every handoff path goes through it. Do not call
-  `cwLoadGPXFromString` directly from a handoff path.
+  `cwLoadGPXFromString` directly from a handoff path: it only reads GPX, and
+  `cwInjectGPXFromText` is also where a shared KML is converted (`cwKmlToGpxText`,
+  the same conversion the file picker uses).
 - **`window.cwLoadGPXFromString` is assigned at line ~3150 of `app.js`,** which
   executes long after `initGpxShare()` is called from line 76 of the same file. Any
   code running at load time must poll for it rather than assume it exists.
@@ -350,6 +352,16 @@ What is still open, and why it was left:
   activity with the same intent still attached, so `onCreate` would ingest the same
   route again. `MainActivity` guards on `savedInstanceState == null` and marks the
   intent with an extra once its route has been taken.
+- **Android reads a shared file off the main thread.** A cloud-backed provider can
+  stall the stream, and the 25 MB cap bounds size, not time. `MainActivity` hands the
+  URIs to a single-thread executor, which then fires `sharedRouteAvailable` with
+  `retainUntilConsumed`, because on a launch the boot drain may already have run and
+  JavaScript may not be listening yet. Since the drain can now run while a file is
+  being written, `store` writes to the cache directory and renames into the inbox:
+  `next()` deletes what it reads, so it must never see half a file.
+- **iOS reads a shared file in chunks and stops at the cap.** `Data(contentsOf:)`
+  loaded the whole file before the 25 MB check, and the share extension has a small
+  memory budget. The extension also ingests its attachments one at a time.
 - **Share types are a mess.** Plenty of apps hand a `.gpx` over as
   `application/octet-stream` with no usable name, so both stores accept an item whose
   name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
@@ -513,7 +525,10 @@ Things that were decided rather than discovered:
 - **Levels with a margin, and the baseline moves after each notification.** A value
   sitting on 20 km/h would otherwise wake the phone every half hour. After a report
   the current reading becomes the baseline, so a change is said once and a further
-  worsening is said again; easing is never reported.
+  worsening is said again; easing is never reported. A quiet check leaves the
+  baseline alone, except that a point which had no forecast when the watch was armed
+  takes the first reading that arrives; `compare` skips points without a baseline, so
+  otherwise that stretch of the ride would never be watched.
 - **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
   notification describes the forecast that will actually hold.
 - **Only what is still ahead.** `compare` skips steps whose time has passed (with
@@ -656,6 +671,18 @@ Two things about it are worth knowing before you extend it:
 
 If you add a handoff path, add a test for it. If you add a CDN reference, the build
 fails before the tests even run.
+
+The suite does not compile the native code. To check the Android Java compiles from a
+terminal on this machine, the global `~/.gradle/gradle.properties` pins JDK 17 and
+Capacitor 8 needs 21, and the background-runner plugin's Kotlin target disagrees with
+its Java target:
+
+```bash
+cd mobile/android
+ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew \
+  "-Dorg.gradle.java.home=/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  -Pkotlin.jvm.target.validation.mode=warning :app:compileDebugJavaWithJavac
+```
 
 A Playwright glob matches the whole URL, query string included, so `**/route.gpx`
 also matches a navigation to `index.html?gpx_url=/route.gpx` and hijacks the page
