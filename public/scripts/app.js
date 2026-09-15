@@ -1189,6 +1189,8 @@ function showOfficialAlerts(snapshot) {
  */
 function publish(snapshot) {
   if (!cwForecastRules.shouldPublish(snapshot, publishState())) return false;
+  // Painting replaces a date comparison on screen; it is launched again below if it runs by itself.
+  const datesOnScreen = !!document.getElementById("weatherTable")?.classList?.contains("compare-dates-mode");
   publishedSnapshot = snapshot;
   weatherData = mirrorSteps(snapshot);
   processWeatherData();
@@ -1198,9 +1200,11 @@ function publish(snapshot) {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
   window.cw.releaseLoading("forecast:" + snapshot.computationId);
-  // With compare chosen, the comparison of this snapshot starts here and nowhere else.
-  if (snapshot.origin === "live" && document.getElementById("apiSource")?.value === "compare") {
-    window.cw.runCompareMode?.();
+  // The comparison of this snapshot starts here: the date comparison that was on screen when
+  // it runs by itself, otherwise the providers comparison when compare is chosen.
+  if (snapshot.origin === "live") {
+    if (datesOnScreen && window.cw.compareDatesAuto?.()) window.cw.runCompareDatesMode?.();
+    else if (document.getElementById("apiSource")?.value === "compare") window.cw.runCompareMode?.();
   }
   return true;
 }

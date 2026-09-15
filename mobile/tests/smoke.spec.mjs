@@ -2981,6 +2981,109 @@ test('choosing compare while a new forecast is computed leaves its indicator on 
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
 });
 
+/* ---------- comparing dates ---------- */
+
+const setDateB = (page, days) =>
+  page.evaluate((d) => {
+    const a = new Date(document.getElementById('datetimeRoute').value);
+    const b = new Date(a.getTime() + d * 86400000);
+    const pad = (n) => String(n).padStart(2, '0');
+    document.getElementById('datetimeRoute2').value =
+      `${b.getFullYear()}-${pad(b.getMonth() + 1)}-${pad(b.getDate())}T${pad(b.getHours())}:${pad(b.getMinutes())}`;
+    return `${pad(b.getDate())}/${pad(b.getMonth() + 1)}`;
+  }, days);
+/** Opens compare-by-dates the way the toggle does (the run button decides when), date B a day after A. */
+async function openCompareDates(page) {
+  await page.evaluate(() => document.getElementById('toggleCompareDates').click());
+  await setDateB(page, 1);
+}
+const runCompareDates = (page) => page.evaluate(() => document.getElementById('compareDatesNow').click());
+const datesShown = (page) => page.evaluate(() => document.getElementById('weatherTable').classList.contains('compare-dates-mode'));
+/** Records every date comparison that paints: it stores its rows right after drawing them. */
+const watchDatePaints = (page) =>
+  page.evaluate(() => {
+    window.__datePaints = [];
+    let rows;
+    Object.defineProperty(window.cw, 'weatherDataA', {
+      configurable: true,
+      get: () => rows,
+      set: (v) => {
+        rows = v;
+        const labels = document.querySelectorAll('#weatherTable .date-label');
+        window.__datePaints.push({ lat: v && v[0] ? v[0].lat : null, dateB: labels[1] ? labels[1].textContent.trim() : null });
+      },
+    });
+  });
+
+test('a date comparison still fetching when another route is confirmed never paints', async ({ page }) => {
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await openCompareDates(page);
+  await watchDatePaints(page);
+  await forgetForecasts(page);
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await runCompareDates(page);
+  await page.waitForTimeout(300);
+
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__datePaints)).toEqual([]);
+  expect(await datesShown(page)).toBe(false);
+});
+
+test('of two date comparisons launched one after the other, only the last paints', async ({ page }) => {
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await openCompareDates(page);
+  await watchDatePaints(page);
+  await forgetForecasts(page);
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await runCompareDates(page);
+  await page.waitForTimeout(300);
+  const second = await setDateB(page, 2);
+  await runCompareDates(page);
+  await page.waitForTimeout(300);
+
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(() => datesShown(page)).toBe(true);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__datePaints)).toEqual([{ lat: expect.any(Number), dateB: second }]);
+});
+
+test('the run button compares dates for the forecast on screen, and does nothing without one', async ({ page }) => {
+  let forecasts = 0;
+  page.on('request', (r) => { if (new URL(r.url()).hostname === 'api.open-meteo.com') forecasts++; });
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await page.waitForTimeout(500);
+  expect(await datesShown(page)).toBe(false);
+  expect(forecasts).toBe(0);
+
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await setDateB(page, 1);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+});
+
 /* ---------- starting language ---------- */
 
 const chosenLanguage = (page) => page.evaluate(() => document.getElementById('language').value);

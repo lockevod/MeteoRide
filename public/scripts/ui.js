@@ -80,9 +80,9 @@
       el.style.pointerEvents = "none";
     }
   }
-  // compare.js and createDiscreteLoadingIndicator still show and hide the overlay
-  // themselves. They share one claim, so a comparison ending cannot switch off the
-  // indicator of a computation or a route request still in flight.
+  // createDiscreteLoadingIndicator still shows and hides the overlay itself, through one
+  // claim of its own, so it cannot switch off the indicator of a computation, a comparison
+  // or a route request still in flight.
   function showLoading() { window.cw.claimLoading("legacy"); }
   function hideLoading() { window.cw.releaseLoading("legacy"); }
 
@@ -680,6 +680,11 @@
   // Explicit compare-by-dates mode flag: when true and compare UI is visible,
   // date changes do NOT auto-recalculate; user must click the "Run compare" button.
   let explicitCompareActive = false;
+  // Compare-by-dates showing and running by itself; publish (app.js) relaunches it only then.
+  window.cw.compareDatesAuto = () => {
+    const row = document.getElementById('datetimeRoute2Row');
+    return !!row && row.style.display !== 'none' && !explicitCompareActive;
+  };
 
   // Bind UI events
   function bindUIEvents() {
@@ -751,18 +756,8 @@
         } else {
           dtEl.value = rounded;
         }
-          // If compare-by-dates is active, refresh compare instead of full reload
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive) {
-          if (!explicitCompareActive && window.cw?.runCompareDatesMode) {
-            window.cw.runCompareDatesMode();
-          }
-          // In explicit mode, do nothing until user clicks Run Compare
-        } else {
-          // Recomputed; with compare chosen, publishing launches the comparison.
-          window.cw.settingsChanged();
-        }
+        // Recomputed; publishing launches the comparison chosen, or a date comparison running by itself.
+        window.cw.settingsChanged();
       });
     }
 
@@ -824,18 +819,7 @@
             } else {
               window.clearNotice();
             }
-            // If compare-by-dates is active, refresh compare instead of full reload
-            const row2 = document.getElementById('datetimeRoute2Row');
-            const compareActive = row2 && row2.style.display !== 'none';
-            if (compareActive && window.cw?.runCompareDatesMode) {
-              window.saveSettings();
-              if (!explicitCompareActive) {
-                window.cw.runCompareDatesMode();
-                return; // avoid falling through to a recompute
-              }
-              // In explicit mode, do not auto-run; just save settings
-              return;
-            } else if (el.value === "compare" && window.cw?.runCompareMode) {
+            if (el.value === "compare" && window.cw?.runCompareMode) {
               // If switching TO compare-providers mode, run compare
               window.saveSettings();
               window.cw.runCompareMode();
@@ -888,16 +872,6 @@
             if (!compareOnScreen && window.cwRepaintPublished) window.cwRepaintPublished();
             return;
           }
-          // If compare-by-dates UI is visible, refresh the compare view instead of full reload
-          const row2 = document.getElementById('datetimeRoute2Row');
-          const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive && window.cw?.runCompareDatesMode) {
-            if (!explicitCompareActive) {
-              window.cw.runCompareDatesMode();
-              return;
-            }
-            return;
-          }
           // Official warnings are looked up by the computation this launches, and with compare
           // chosen its publish launches the comparison.
           window.cw.settingsChanged();
@@ -916,13 +890,9 @@
           if (window.setNotice) window.setNotice(routeValidation.error, 'error');
           return;
         }
-        // If date-compare is active and a normal provider is selected, re-run date compare with the new provider
+        // With compare-by-dates showing, the computation this change launched decides what is painted.
         const row2 = document.getElementById('datetimeRoute2Row');
-        const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive && prov !== 'compare') {
-          if (window.cw?.runCompareDatesMode && !explicitCompareActive) window.cw.runCompareDatesMode();
-          return;
-        }
+        if (row2 && row2.style.display !== 'none' && prov !== 'compare') return;
         // Choosing compare launched the comparison in the handler above, once.
         if (prov === "compare") return;
         window.renderWeatherTable();
@@ -1037,14 +1007,7 @@
         if (cs) cs.value = v;
         window.lastAppliedSpeed = Number(v);
         window.saveSettings();
-        // Check mode: if we're in compare-dates (row2 visible) do NOT auto-refresh here.
-        // Just save the speed and let the user trigger the compare explicitly with the Run button.
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive) {
-          return;
-        }
-        // Recomputed; with compare chosen, publishing launches the comparison.
+        // Recomputed; publishing launches the comparison chosen, or a date comparison running by itself.
         window.cw.settingsChanged();
       });
     }
@@ -1056,10 +1019,6 @@
         if (ev.key === "Enter") {
           window.lastAppliedSpeed = Number(cyclingInput.value);
           window.saveSettings();
-          // If in compare-dates mode, do NOT auto-refresh on Enter; user should press Run
-          const row2 = document.getElementById('datetimeRoute2Row');
-          const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive) return;
           window.cw.settingsChanged();
         }
       });
@@ -1069,10 +1028,6 @@
         if (window.lastAppliedSpeed === null || Number(v) !== Number(window.lastAppliedSpeed)) {
           window.lastAppliedSpeed = Number(v);
           window.saveSettings();
-          // If in compare-dates mode, do NOT auto-refresh on blur; user should press Run
-          const row2 = document.getElementById('datetimeRoute2Row');
-          const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive) return;
           window.cw.settingsChanged();
         }
       });

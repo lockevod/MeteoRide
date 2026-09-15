@@ -1,9 +1,4 @@
 (function () {
-  // Re-render guard and simple dedupe key to avoid self-trigger loops
-  let compareMO = null;
-  let compareRendering = false;
-  let lastCompareKey = "";
-
   // Provider abbreviations for change indicators
   const providerAbbreviations = {
     'openmeteo': 'OPM',
@@ -444,17 +439,13 @@
       return;
     }
 
-    // Prevent re-entrancy
-    if (compareRendering) return;
-    compareRendering = true;
-    try { compareMO && compareMO.disconnect(); } catch(_) {}
+    // Compares the snapshot on screen at two dates, or nothing. A newer comparison, another
+    // computation or another route replaces this one, which then paints and stores nothing.
+    const run = window.cwLaunchComparison && window.cwLaunchComparison("dates");
+    if (!run) return;
+    const current = () => window.cwIsComparisonCurrent(run);
 
-    // Clear any existing markers since we can't show two dates at once (only once per session)
-    if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
-      window.cw.clearMarkers();
-      try { window.cw._compareMarkersCleared = true; } catch(_) {}
-    }
-
+    try {
     // Helper: parse "YYYY-MM-DDTHH:mm" (or with space) as local time reliably
     function parseLocalDateTime(val) {
       try {
@@ -468,15 +459,23 @@
       } catch (_) { return null; }
     }
 
-    const steps = (window.cw.getSteps && window.cw.getSteps()) || [];
-    if (!steps.length) { compareRendering = false; return; }
+    const snapshot = run.snapshot;
+    const steps = snapshotSteps(snapshot);
+    if (!steps.length) return;
 
-    const units = (window.cw.getUnits && window.cw.getUnits()) || { temp: "C", wind: "kmh", precip: "mm", distance: "km" };
-  // Use the currently selected provider in the main select; coerce invalid 'compare' to openmeteo
-  let provider = (document.getElementById('apiSource')?.value) || 'openmeteo';
+    // Temperature and wind as the snapshot was computed; rain and distance only change how it looks.
+    const units = {
+      temp: snapshot.settings.units.temp,
+      wind: snapshot.settings.units.wind,
+      precip: document.getElementById("precipUnits")?.value || "mm",
+      distance: document.getElementById("distanceUnits")?.value || "km",
+    };
+    const keys = snapshot.settings.keys || {};
+  // The provider the snapshot was computed with; 'compare' compares dates with Open-Meteo
+  let provider = snapshot.settings.provider || 'openmeteo';
   if (provider === 'compare') provider = 'openmeteo';
 
-  // Read both datetimes (full YYYY-MM-DDTHH:mm) and parse locally
+  // The two dates are what this comparison is asked for (full YYYY-MM-DDTHH:mm, parsed locally)
   const dtA = document.getElementById("datetimeRoute")?.value || "";
   const dtB = document.getElementById("datetimeRoute2")?.value || "";
 
@@ -486,21 +485,17 @@
 
   if (!validationA.valid) {
     const table = document.getElementById("weatherTable");
-    if (table) {
+    if (table && current()) {
       table.innerHTML = `<tbody><tr><td><span style="color: red;">${validationA.error}</span></td></tr></tbody>`;
     }
-    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-    compareRendering = false;
     return;
   }
 
   if (!validationB.valid) {
     const table = document.getElementById("weatherTable");
-    if (table) {
+    if (table && current()) {
       table.innerHTML = `<tbody><tr><td><span style="color: red;">${validationB.error}</span></td></tr></tbody>`;
     }
-    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-    compareRendering = false;
     return;
   }
 
@@ -509,12 +504,10 @@
   if (!baseA || !baseB) {
       // nothing to do yet; render notice
       const table = document.getElementById("weatherTable");
-      if (table) {
+      if (table && current()) {
         const msg = (window.t ? window.t('choose_compare_both_dates') : 'Please pick both dates to compare.');
         table.innerHTML = `<tbody><tr><td><span data-i18n="choose_compare_both_dates">${msg}</span></td></tr></tbody>`;
       }
-      try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-      compareRendering = false;
       return;
     }
 
@@ -526,7 +519,7 @@
       const d = (s0.time instanceof Date) ? s0.time : new Date(s0.time);
       return isNaN(d) ? null : d;
     })();
-    const intervalMin = Number((window.getVal && window.getVal('intervalSelect')) || 15) || 15;
+    const intervalMin = Number(snapshot.settings.interval) || 15;
     const intervalMs = intervalMin * 60000;
     const offsets = steps.map((s, i) => {
       const d = (s.time instanceof Date) ? s.time : new Date(s.time);
@@ -555,17 +548,19 @@
           return (h <= 48) ? 'openweather' : 'openmeteo';
         }
         if (pid === 'meteoblue') {
-          const hasMB = ((document.getElementById('apiKey')?.value || '').trim().length >= 5);
+          const hasMB = ((keys.meteoblue || '').trim().length >= 5);
           return hasMB ? 'meteoblue' : 'openmeteo';
         }
         return 'openmeteo';
       } catch (_) { return 'openmeteo'; }
     };
 
-    // For each base datetime, build an array of step-metrics by fetching with timeAt = base + offset
+    // For each base datetime, build an array of step-metrics by fetching with timeAt = base + offset.
+    // Null once this comparison has been replaced: it stops asking.
     async function fetchDataForBase(baseDate) {
       const arr = [];
       for (let i = 0; i < steps.length; i++) {
+        if (!current()) return null;
         const p = steps[i];
         const offMs = offsets[i] || 0;
         const timeAt = new Date(baseDate.getTime() + offMs);
@@ -574,12 +569,12 @@
         // Decide effective provider for this timestamp/location
         let effProv = resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider;
         // Ensure keys exist when required; fallback to OpenMeteo if missing
-        if (effProv === 'meteoblue' && !(document.getElementById('apiKey')?.value || '').trim()) effProv = 'openmeteo';
-        if (effProv === 'openweather' && !(document.getElementById('apiKeyOW')?.value || '').trim()) effProv = 'openmeteo';
+        if (effProv === 'meteoblue' && !(keys.meteoblue || '').trim()) effProv = 'openmeteo';
+        if (effProv === 'openweather' && !(keys.openweather || '').trim()) effProv = 'openmeteo';
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
   const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-  const dateStr2 = (function () { const dt = document.getElementById('datetimeRoute')?.value || ''; return dt ? dt.substring(0,10) : new Date().toISOString().substring(0,10); })();
+  const dateStr2 = localDateOf(steps[0].time);
   const key = mk2(effProv, dateStr2, units.temp, units.wind, p.lat, p.lon, timeAt);
   const cached = window.cw.getCache && window.cw.getCache(key);
         if (cached) {
@@ -589,13 +584,14 @@
           continue;
         }
         try {
-          const apiKeyMB  = document.getElementById("apiKey")?.value || "";
-          const apiKeyOWM = document.getElementById("apiKeyOW")?.value || "";
+          const apiKeyMB  = keys.meteoblue || "";
+          const apiKeyOWM = keys.openweather || "";
           const apiKey = (effProv === 'meteoblue') ? apiKeyMB : (effProv === 'openweather' ? apiKeyOWM : '');
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
           const res = await fetch(url, { cache: 'no-store' });
           if (res.ok) {
             const json = await res.json();
+            if (!current()) return null;
             window.cw.setCache && window.cw.setCache(key, json);
             const s = extractStepMetrics(effProv, json, baseForIndex, units.wind);
             s.provider = effProv;
@@ -611,21 +607,17 @@
       return arr;
     }
 
-    try {
-      // Show global loading overlay for consistency
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.showLoading === 'function') window.cw.ui.showLoading();
-        else if (typeof window.showLoading === 'function') window.showLoading();
-      } catch(_) {}
-
       const dataA = await fetchDataForBase(baseA);
+      if (!dataA) return;
       const dataB = await fetchDataForBase(baseB);
+      // Replaced by another comparison, another computation or another route: nothing reaches the page.
+      if (!dataB || !current()) return;
 
-      // Hide global loading overlay
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-        else if (typeof window.hideLoading === 'function') window.hideLoading();
-      } catch(_) {}
+      // Clear any existing markers since we can't show two dates at once (only once per session)
+      if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
+        window.cw.clearMarkers();
+        try { window.cw._compareMarkersCleared = true; } catch(_) {}
+      }
 
       // Render combined table: header (times) then block A (label row + data rows), block B
       const labelA = formatDateOnly(baseA);
@@ -635,17 +627,9 @@
       // Store data for row selection
       window.cw.weatherDataA = dataA;
       window.cw.weatherDataB = dataB;
-
-      lastCompareKey = `${provider}|${steps.length}|${baseA.toISOString()}|${baseB.toISOString()}`;
     } finally {
-      // Ensure global loading is hidden even if there's an error
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-        else if (typeof window.hideLoading === 'function') window.hideLoading();
-      } catch(_) {}
-
-      try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-      compareRendering = false;
+      // Only this comparison's claim: a newer one, or a computation, holds its own.
+      window.cw.releaseLoading("compare:" + run.comparisonId);
     }
   }
 
