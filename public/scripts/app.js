@@ -3219,12 +3219,16 @@ window.cwLoadGPXFromString = function loadGPXFromString(gpxText, nameHint = "rou
     return Promise.resolve("failed");
   }
   logDebug(`cwLoadGPXFromString: len=${gpxText.length}, name=${nameHint}`);
-  // Text with no sign of a track, a route, waypoints or a KML (converted when parsed) is not
-  // kept: a truncated share or a web page would become the newest recent route, and the one
-  // the next start-up tries, and fails, to restore.
-  if (/<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b|<kml[\s>]/i.test(gpxText)) {
-    window.cw.importRoute({ text: gpxText, name: nameHint });
+  // Text with no sign of a track, a route or waypoints is not kept: a truncated share or a web
+  // page would become the newest recent route, and the one the next start-up tries, and
+  // fails, to restore. A KML counts only once converted, since one with no Placemark still
+  // converts into an empty GPX.
+  const hasRoute = (s) => typeof s === "string" && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(s);
+  let importable = hasRoute(gpxText);
+  if (/<kml[\s>]/i.test(gpxText)) {
+    try { importable = !!window.cwKmlToGpxText && hasRoute(window.cwKmlToGpxText(gpxText)); } catch (_) { importable = false; }
   }
+  if (importable) window.cw.importRoute({ text: gpxText, name: nameHint });
   return window.cw.requestRoute({ source, read: async () => ({ text: gpxText, name: nameHint }) });
 };
 // --- end routes ---

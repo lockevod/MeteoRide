@@ -1474,6 +1474,64 @@ test('text from outside that holds no route stays out of recent routes; a route 
   expect(await storedNames(page)).toEqual(['after.gpx', 'ok.gpx']);
 });
 
+// A KML with no Placemark converts into an empty GPX. It used to be imported just for saying
+// <kml, became the newest recent route and the one the next cold start failed to restore.
+test('a shared KML with nothing to follow stays out of recent routes; a KML route still goes in', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const importsDone = () => page.evaluate(() => window.cw.enqueueRecents(() => true));
+
+  await page.evaluate(() =>
+    window.cwLoadGPXFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document/></kml>', 'Empty.kml'));
+  await importsDone();
+  expect(await storedRoutes(page)).toEqual([]);
+
+  await page.evaluate((text) => window.cwLoadGPXFromString(text, 'Costa.kml'), `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</Placemark></Document></kml>`);
+  await importsDone();
+  expect(await storedNames(page)).toEqual(['Costa.kml']);
+});
+
+// A record from an older version has no fingerprint, so nothing says what it holds. Matching
+// it by name and size replaced it with a route that differed by one digit.
+test('a stored route from an older version is never replaced by another of the same name and size', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const old = routeAt('Uno', 41.48);
+  const other = routeAt('Uno', 41.49);
+  expect(other.length).toBe(old.length);
+  expect(await importRecent(page, old, 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  // What an older version stored: the same record, without a fingerprint.
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('meteoride_recent_routes_db');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('routes', 'readwrite');
+      const store = tx.objectStore('routes');
+      const all = store.getAll();
+      all.onsuccess = () => all.result.forEach((r) => { delete r.fingerprint; store.put(r); });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    };
+  }));
+  const [legacy] = await storedRoutes(page);
+  expect(legacy.fingerprint).toBeUndefined();
+
+  expect(await importRecent(page, other, 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta (2).gpx' });
+  expect(await storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx']);
+  const kept = await page.evaluate(() => new Promise((resolve) => {
+    indexedDB.open('meteoride_recent_routes_db').onsuccess = (e) => {
+      const all = e.target.result.transaction('routes').objectStore('routes').getAll();
+      all.onsuccess = async () => resolve(await all.result.find((r) => r.name === 'Ruta.gpx').blob.text());
+    };
+  }));
+  expect(kept).toBe(old);
+});
+
 test('an import comes out newest even when the stored routes carry times later than the clock', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');

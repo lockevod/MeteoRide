@@ -870,10 +870,16 @@ runtime, because `app.js` and `ui.js` load after it.
   write, trim. It is saved only on `oncomplete`; an abort, no IndexedDB or a route over
   750 KB is reported with `route_not_saved`. **Nothing falls back to localStorage on write
   any more**; reading and migrating old localStorage entries stay. A record from before
-  this has no fingerprint and counts as the same route when name and size in bytes match.
+  this has no fingerprint, so what it holds is unknown and it is never replaced: an import
+  under its name takes the next free suffix. It used to count as the same route when name
+  and size in bytes matched, but changing one digit of a coordinate keeps the size, and a
+  different route silently replaced the stored one. Importing an old route again now costs
+  one ` (2)` duplicate.
   The file picker imports only a route that was confirmed, under the file's name. A route
   from outside is imported as it arrives, whether or not it ends up on screen, but only if
-  its text carries `<trk`, `<trkpt`, `<rte`, `<rtept`, `<wpt` or `<kml`. Without that check a
+  its text carries `<trk`, `<trkpt`, `<rte`, `<rtept` or `<wpt`, or it is a KML whose
+  conversion (`cwKmlToGpxText`) does: a KML with no Placemark converts into an empty GPX, so
+  `<kml` alone is not enough. Without that check a
   truncated share or a web page became the newest recent route, and the next cold start
   tried to restore it and restored nothing. The import stores the later of `arrivedAt` and
   one millisecond past the newest stored timestamp. Stored times can be ahead of the clock

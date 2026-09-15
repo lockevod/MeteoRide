@@ -63,9 +63,12 @@ test('uniqueRouteName does not read a suffix the name already carries', () => {
   assert.deepEqual(unique([rec(1, 'Ruta (2).gpx', 'a')], 'Ruta (2).gpx'), { name: 'Ruta (2) (2).gpx', replaceId: null });
 });
 
-test('uniqueRouteName compares an old record without a fingerprint by size', () => {
-  assert.deepEqual(unique([rec(9, 'Ruta.gpx', undefined, 100)], 'Ruta.gpx', 'fp-new', 100), { name: 'Ruta.gpx', replaceId: 9 });
+test('uniqueRouteName never replaces an old record without a fingerprint', () => {
+  // Nothing says what it holds: the same name and size can be a route one digit away.
+  assert.deepEqual(unique([rec(9, 'Ruta.gpx', undefined, 100)], 'Ruta.gpx', 'fp-new', 100), { name: 'Ruta (2).gpx', replaceId: null });
   assert.deepEqual(unique([rec(9, 'Ruta.gpx', undefined, 99)], 'Ruta.gpx', 'fp-new', 100), { name: 'Ruta (2).gpx', replaceId: null });
+  assert.deepEqual(unique([rec(9, 'Ruta.gpx', undefined, 100), rec(10, 'Ruta (2).gpx', undefined, 100)], 'Ruta.gpx', 'fp-new', 100),
+    { name: 'Ruta (3).gpx', replaceId: null });
   // A record that has a fingerprint is never matched by size alone.
   assert.deepEqual(unique([rec(9, 'Ruta.gpx', 'other', 100)], 'Ruta.gpx', 'fp-new', 100), { name: 'Ruta (2).gpx', replaceId: null });
 });

@@ -426,13 +426,14 @@ var cwForecastRules = (function () {
    * The name an imported route is stored under. Walks `name`, `base (2)ext`,
    * `base (3)ext`… and takes the first that is free, or the first held by the same
    * content, which is then replaced. A suffix already in `name` is not interpreted.
-   * Old records carry no fingerprint and match by size in bytes instead.
+   * An old record carries no fingerprint, so its content is unknown and it is never
+   * replaced: the same name and size in bytes can still be a different route.
    */
-  function uniqueRouteName(records, { name, fingerprint: fp, bytes }) {
+  function uniqueRouteName(records, { name, fingerprint: fp }) {
     const m = /\.(gpx|kml)$/i.exec(name);
     const ext = m ? m[0] : '';
     const base = m ? name.slice(0, -ext.length) : name;
-    const same = (r) => (r.fingerprint ? r.fingerprint === fp : r.size === bytes);
+    const same = (r) => !!r.fingerprint && r.fingerprint === fp;
     for (let n = 1; ; n++) {
       const candidate = n === 1 ? name : `${base} (${n})${ext}`;
       const taken = (records || []).filter((r) => r && r.name === candidate);
