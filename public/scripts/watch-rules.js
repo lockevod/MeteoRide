@@ -100,6 +100,12 @@ var cwWatchRules = (function () {
    * null when the response has nothing within an hour of it. Open-Meteo answers a
    * multi-location request with an array in request order, a single one with an
    * object.
+   *
+   * Wind and gust are the nearest hourly entry. Rain is the hour being ridden, as the
+   * table shows it: (H, H+60 min] with H the point's time floored to the hour, which is
+   * the entry labelled H+60, because Open-Meteo's hourly value is the hour before its
+   * label. The request is in UTC unix time, so H is the UTC hour: the table's hour in
+   * any zone with a whole-hour offset. No H+60 entry, no rain value.
    */
   function readForecast(json, points) {
     const list = Array.isArray(json) ? json : [json];
@@ -113,11 +119,13 @@ var cwWatchRules = (function () {
         if (gap < bestGap) { bestGap = gap; best = k; }
       }
       if (best < 0 || bestGap > 3600) return null;
-      const num = (arr) => (arr && arr[best] != null ? Number(arr[best]) : NaN);
+      const hourRidden = Math.floor(p.t / 3600) * 3600 + 3600;
+      const rainAt = h.time.findIndex((x) => Number(x) === hourRidden);
+      const num = (arr, k) => (k >= 0 && arr && arr[k] != null ? Number(arr[k]) : NaN);
       return {
-        rain: num(h.precipitation),
-        wind: num(h.wind_speed_10m),
-        gust: num(h.wind_gusts_10m),
+        rain: num(h.precipitation, rainAt),
+        wind: num(h.wind_speed_10m, best),
+        gust: num(h.wind_gusts_10m, best),
       };
     });
   }

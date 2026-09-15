@@ -49,8 +49,10 @@ const points = [
   { lat: 41.55, lon: 2.40, t: t0 + HOUR, label: '11:00', km: 20 },
 ];
 
+// Hourly entries on UTC hours, as Open-Meteo sends them with timeformat=unixtime&timezone=UTC:
+// rain is read from the entry an hour after the hour the rider is in, which must exist.
 function openMeteo(v) {
-  const time = Array.from({ length: 48 }, (_, i) => t0 - 3 * HOUR + i * HOUR);
+  const time = Array.from({ length: 48 }, (_, i) => Math.floor(t0 / HOUR) * HOUR - 3 * HOUR + i * HOUR);
   const fill = (x) => time.map(() => x);
   return points.map(() => ({ hourly: { time, precipitation: fill(v.rain), wind_speed_10m: fill(v.wind), wind_gusts_10m: fill(v.gust) } }));
 }

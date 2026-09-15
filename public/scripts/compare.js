@@ -112,7 +112,8 @@
 
   // A provider's answer for one step, got as the table gets it: AROME filled in from standard
   // Open-Meteo (cwForecastRules.mergeAromeWithStandard) and replaced by Open-Meteo when unusable.
-  // Null when the provider does not answer 200; `effProv` is the provider the answer comes from.
+  // Null when the provider does not answer 200, or AROME is unusable and Open-Meteo does not either;
+  // `effProv` is the provider the answer comes from, the one to file it under.
   async function fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init = {}) {
     const ask = (prov, key) =>
       fetch(window.cw.buildProviderUrl(prov, p, timeAt, key, units.wind, units.temp), { ...init, cwRecorder: recorder });
@@ -126,7 +127,8 @@
       } catch {}
       if (aromeResponseLooksInvalid(json)) {
         const r3 = await ask("openmeteo", "");
-        if (r3.ok) json = await window.cw.utils.readJson(r3, recorder);
+        if (!r3.ok) return null;
+        json = await window.cw.utils.readJson(r3, recorder);
         effProv = "openmeteo";
       }
     }
@@ -266,7 +268,8 @@
             const json = answer.json;
             effProv = answer.effProv;
             if (!current()) return;
-            window.cw.setCache && window.cw.setCache(key, json);
+            // Filed under the provider the answer comes from, as the table files a fallback.
+            window.cw.setCache && window.cw.setCache(mk(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt), json);
             const s = extractStepMetrics(effProv, json, p, units);
             // Preserve effective provider and original requested provider separately.
             s._effProv = effProv;
@@ -523,7 +526,8 @@
             const json = answer.json;
             effProv = answer.effProv;
             if (!current()) return null;
-            window.cw.setCache && window.cw.setCache(key, json);
+            // Filed under the provider the answer comes from, as the table files a fallback.
+            window.cw.setCache && window.cw.setCache(mk2(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt), json);
             const s = extractStepMetrics(effProv, json, baseForIndex, units);
             s.provider = effProv;
             arr.push(s);
@@ -922,7 +926,8 @@
 
       if (prov === "openmeteo" || prov === "aromehd") {
         // The table's own reading: the hour by the answer's utc_offset_seconds, and the quarter of
-        // minutely_15 while the step falls within it (the first 5 h), uv and probability from hourly.
+        // minutely_15 whenever the answer has one for the step, with uv, probability and weather code
+        // from hourly when the quarter has none. Precipitation is the hour being ridden, (H, H+60 min].
         const r = cwForecastRules.extractStep(raw, { provider: prov, time: step.time });
         if (r) {
           step.temp = safeNum(r.temp);

@@ -687,7 +687,9 @@ The forecast is a plan; this watches whether it still holds. Four pieces:
 - `public/scripts/watch-rules.js` — every decision, pure, in one plain script:
   levels (`rainLevel`, `windLevel`), the Open-Meteo request (`forecastUrl`, one
   request with every point, `timeformat=unixtime`, km/h), `readForecast` (the hour the
-  rider passes each point), `compare` (a step that moved *up* a level), `newAlerts`
+  rider passes each point: wind and gust from the nearest hourly entry, rain from the same hour
+  the table shows, (H, H+60 min], the entry labelled H+60; the request is in UTC unix time, so H
+  is the UTC hour, the table's hour in any whole-hour zone; no H+60 entry, no rain value), `compare` (a step that moved *up* a level), `newAlerts`
   (official warnings overlapping the ride, once), `compose` (one notification, es/en)
   and `evaluate`, which ties them together and returns the watch as it should be
   stored next. `mobile/tests/watch-rules.test.mjs` runs it in a bare `vm` context,
@@ -1222,14 +1224,19 @@ a replay takes the ones in use ("Preparing and replaying").
     uv, probability and weather code come from `hourly` when the quarter has none (AROME HD sends
     all three null there). The same unit conversion as the table
     (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from
-    the sun when missing, the code synthesised or reconciled with rain and cloud. OpenWeather is
+    the sun when missing, the code synthesised or reconciled with rain and cloud, and a probability
+    under 10 % dropped when the rain is 0 mm or missing (the table's rule, so compare now drops it
+    too when H+60 is not in the answer). OpenWeather is
     still read by hand there. The comparison tables are unchanged (spec §2).
   - **AROME answers.** Both comparisons get them through `fetchAnswer`, as the table does: the
     standard Open-Meteo answer merged in with `cwForecastRules.mergeAromeWithStandard`, and
-    Open-Meteo instead when AROME's answer is unusable, before caching. Compare-by-dates used to
+    Open-Meteo instead when AROME's answer is unusable, before caching; if that fallback fails too
+    there is no answer and nothing is cached, as in the table. Compare-by-dates used to
     cache AROME unmerged under the key the table reads.
   - **Cache keys.** Both comparisons file and read answers under `makeCacheKey` with each step's
-    UTC date (`timeAt.toISOString()`), exactly as the table does. They used the local date of
+    UTC date (`timeAt.toISOString()`), exactly as the table does, and store an answer under the provider it came from, so an
+    Open-Meteo fallback for an unusable AROME answer is filed as Open-Meteo, not under the AROME key
+    built before asking. They used the local date of
     the ride's first step, so from 00:00 to 02:00 in Spain neither read the other's answers.
 - **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
   name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval

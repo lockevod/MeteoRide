@@ -85,6 +85,29 @@ test('readForecast picks the hour the rider passes and gives up beyond an hour',
   assert.equal(single[0].wind, 5, 'a single-location answer is an object, not an array');
 });
 
+// Open-Meteo's hourly value is the hour before its label. The table shows the hour being ridden,
+// (H, H+60 min] with H the point's time floored to the hour, so that is the entry labelled H+60.
+// The nearest entry read the hour before from :00 to :30. Wind and gust stay on the nearest.
+test('readForecast reads rain from the hour being ridden, as the table does, and wind from the nearest hour', () => {
+  assert.equal(t0 % HOUR, 0, 't0 is on the hour (UTC, the base the request asks in)');
+  const time = Array.from({ length: 6 }, (_, i) => t0 - HOUR + i * HOUR); // 09:00 … 14:00
+  const answer = { hourly: {
+    time,
+    precipitation: time.map((_, i) => i),
+    wind_speed_10m: time.map((_, i) => 10 * i),
+    wind_gusts_10m: time.map((_, i) => 100 + i),
+  } };
+  const at = (minutes) => ({ lat: 0, lon: 0, t: t0 + minutes * 60 });
+  const steps = [at(0), at(5), at(59), at(60), at(240)]; // 10:00, 10:05, 10:59, 11:00, 14:00
+  const r = rules.readForecast(steps.map(() => answer), steps);
+  same(r.slice(0, 4).map((x) => x.rain), [2, 2, 2, 3], 'rain of 10–11 for 10:00, 10:05 and 10:59; 11–12 for 11:00');
+  same(r.slice(0, 4).map((x) => x.wind), [10, 10, 20, 20]);
+  same(r.slice(0, 4).map((x) => x.gust), [101, 101, 102, 102]);
+  // 14:00 is the last entry: no 15:00, so no rain value, as for any missing value; the wind stays.
+  assert.ok(Number.isNaN(r[4].rain), String(r[4].rain));
+  assert.equal(r[4].wind, 50);
+});
+
 test('dry to rain is reported, with the first step it happens at', () => {
   const base = reading({ rain: 0, wind: 10, gust: 15 });
   const cur = reading({ rain: 1.5, wind: 10, gust: 15 });

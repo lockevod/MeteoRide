@@ -5697,6 +5697,54 @@ async function dateComparisonFeedsTheTable(page, now = Date.now()) {
 test('a date comparison with AROME stores the answer filled from standard Open-Meteo, and the table computed after reads it',
   ({ page }) => dateComparisonFeedsTheTable(page));
 
+// When AROME's answer is unusable both comparisons show the Open-Meteo answer they fall back to, as
+// the table does, but they filed it under the AROME key they had built before asking. A table in
+// AROME mode computed after read it from there as AROME instead of asking AROME.
+async function unusableAromeIsNotFiledAsArome(page, compare) {
+  const control = { aromeAsked: 0 };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const body = forecastWithQuarters();
+    if (isArome(new URL(route.request().url()))) {
+      control.aromeAsked++;
+      for (const series of [body.hourly, body.minutely_15]) series.temperature_2m = series.temperature_2m.map(() => null);
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await compare(page);
+
+  const asked = control.aromeAsked;
+  await page.evaluate(() => {
+    window.__published = 0;
+    document.addEventListener('cw:forecast', () => { window.__published++; });
+  });
+  await selectProvider(page, 'aromehd');
+  await expect.poll(() => page.evaluate(() => window.__published)).toBe(1);
+  expect(control.aromeAsked, 'the table read the Open-Meteo fallback from the AROME key').toBeGreaterThan(asked);
+}
+test('a comparison whose AROME answer is unusable does not file the Open-Meteo answer it shows under AROME',
+  ({ page }) => unusableAromeIsNotFiledAsArome(page, async () => {
+    await page.locator('#gpxFile').setInputFiles(FIXTURE);
+    await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+    await forgetForecasts(page);
+    await selectProvider(page, 'compare');
+    await expect.poll(() => page.evaluate(() => (window.cw.compareProviderData?.aromehd ?? []).filter((s) => s.temp != null).length)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.cw.compareProviderData.aromehd[0].provider)).toBe('openmeteo');
+  }));
+test('a date comparison whose AROME answer is unusable does not file the Open-Meteo answer it shows under AROME',
+  ({ page }) => unusableAromeIsNotFiledAsArome(page, async () => {
+    await selectProvider(page, 'aromehd');
+    await page.locator('#gpxFile').setInputFiles(FIXTURE);
+    await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+    await openCompareDates(page);
+    await forgetForecasts(page);
+    await runCompareDates(page);
+    await expect.poll(() => datesShown(page)).toBe(true);
+    expect(await page.evaluate(() => window.cw.weatherDataA[0].provider)).toBe('openmeteo');
+  }));
+
 // Compare filed its answers under the local date of the ride's first step, the table under each
 // step's UTC date: from 00:00 to 02:00 in Spain the two differ, and neither read the other's answers.
 test.describe('with the ride starting just after midnight in Spain', () => {

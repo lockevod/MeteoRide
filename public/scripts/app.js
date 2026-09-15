@@ -327,8 +327,8 @@ function reconcileAromeVsOmCode(omCode, precip, prob, cloud) {
 }
 
 // An AROME step as the table and the comparison show it: day or night from the sun when the answer
-// says nothing, and the weather code synthesised from rain and cloud when missing, or else
-// reconciled with them.
+// says nothing, the weather code synthesised from rain and cloud when missing, or else reconciled
+// with them, and a probability under 10 % dropped when AROME gives 0 mm or no rain value.
 function aromeCodeAndDay(step) {
   if (step.isDaylight == null) {
     try {
@@ -339,6 +339,9 @@ function aromeCodeAndDay(step) {
   step.weatherCode = step.weatherCode == null
     ? fallbackWmoFromBasics(step.precipitation, step.cloudCover)
     : reconcileAromeVsOmCode(step.weatherCode, step.precipitation, step.precipProb, step.cloudCover);
+  if (Number(step.precipitation) === 0 && (step.precipProb == null || Number(step.precipProb) < 10)) {
+    step.precipProb = null;
+  }
 }
 
 
@@ -1369,18 +1372,8 @@ function processWeatherData() {
 
       // NEW: AROME fallbacks and selective reconciliation
       if (prov === "aromehd") {
+        // AROME's rain is authoritative: with 0 mm or none, a probability under 10 % is dropped there.
         aromeCodeAndDay(step);
-
-        // Policy: prefer AROME precipitation as authoritative for icon decisions.
-        // If AROME reports precipitation == 0 for this (future-aligned) step, don't show probability
-        // and avoid displaying a rain icon even if the reconciled weatherCode suggests rain.
-        if (Number(step.precipitation) === 0) {
-          // If AROME reports 0 precipitation, prefer not to show small probabilities.
-          // Keep precipProb when it's meaningful (>=10%) so users see isolated/spotty chances.
-          if (step.precipProb == null || Number(step.precipProb) < 10) {
-            step.precipProb = null;
-          }
-        }
       }
     }
 

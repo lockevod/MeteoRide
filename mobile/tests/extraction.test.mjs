@@ -124,6 +124,22 @@ for (const name of Object.keys(CASES)) {
   });
 }
 
+// The table hid an AROME probability under 10 % when the step's rain was 0 or missing, after
+// aromeCodeAndDay; compare, with only its own check, kept it when the rain was missing. Both
+// call aromeCodeAndDay, which hides it now.
+test('an AROME step with no rain value, or 0 mm, loses a probability under 10 % in aromeCodeAndDay', () => {
+  const aromeCodeAndDay = vm.runInNewContext(`${code}\naromeCodeAndDay`, { window: {}, console });
+  const step = (precipitation, precipProb) => {
+    const s = { time: new Date(STEP_TIMES[0]), lat: 41.4, lon: 2.2, isDaylight: 1, weatherCode: 1, cloudCover: 20, precipitation, precipProb };
+    aromeCodeAndDay(s);
+    return s.precipProb;
+  };
+  assert.equal(step(null, 5), null);
+  assert.equal(step(0, 5), null);
+  assert.equal(step(null, 30), 30, 'a probability of 10 % or more stays');
+  assert.equal(step(0.4, 5), 5, 'with rain it stays');
+});
+
 // cw:forecast announces a computation, and only publish() may send it: a repaint (a
 // language or unit change) is not a new forecast, and used to arm the ride watch again.
 test('repainting the table announces nothing', () => {
