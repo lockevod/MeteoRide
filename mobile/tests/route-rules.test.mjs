@@ -115,3 +115,23 @@ test('uniqueRouteName trims the base, not the suffix, so a suffixed name never p
   // A base already short enough for the suffix is not trimmed further.
   assert.deepEqual(unique([rec(1, 'Ruta.gpx', 'a')], 'Ruta.gpx'), { name: 'Ruta (2).gpx', replaceId: null });
 });
+
+test('uniqueRouteName trims by code points, not UTF-16 units, so a trimmed suffix never splits an emoji', () => {
+  // 59 'x' + one emoji (a surrogate pair, one code point, two UTF-16 units) + 4 more 'x':
+  // 64 code points, 65 UTF-16 units. The ` (2)` suffix (4 chars) needs the base down to 60
+  // code points. A UTF-16-unit slice(0, 60) would land inside the emoji's surrogate pair
+  // (59 'x' units + the emoji's lone high surrogate), leaving an unpaired surrogate.
+  const emoji = '\u{1F600}';
+  const base = `${'x'.repeat(59)}${emoji}${'x'.repeat(4)}`;
+  assert.equal(Array.from(base).length, 64);
+  assert.equal(base.length, 65);
+  const taken = rec(1, `${base}.gpx`, 'a');
+  const result = unique([taken], `${base}.gpx`);
+  // The whole emoji is kept or dropped, never split: 60 code points, the emoji included whole.
+  assert.equal(result.name, `${'x'.repeat(59)}${emoji} (2).gpx`);
+  assert.equal(Array.from(result.name.slice(0, -' (2).gpx'.length)).length, 60);
+  // No lone surrogate anywhere in the trimmed base: every low surrogate is preceded by its
+  // matching high surrogate, and every high surrogate is followed by its matching low one.
+  const trimmedBase = result.name.slice(0, -' (2).gpx'.length);
+  assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(trimmedBase), false);
+});

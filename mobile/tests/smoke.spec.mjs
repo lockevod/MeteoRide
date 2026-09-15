@@ -2450,11 +2450,13 @@ test('reimporting a route kept before fingerprints existed moves it up instead o
     .toEqual(['Ruta.gpx', 'otra.gpx']);
 });
 
-// A KML kept before phase 5, when it was converted and stored under a ".gpx" name with the
-// converted text, cannot be matched from its content: the name and the text it is reimported
-// under (the raw KML, unconverted, as the file arrived) both differ from what was stored.
-// Documented as a known limit in docs/HANDOFF.md §10; not fixed here.
-test('a KML kept before conversion moved into the store still duplicates on reimport (documented limit)', async ({ page }) => {
+// A KML kept before phase 5 was converted and stored under a ".gpx" name with the converted
+// text; today's reimport of the same file keeps its raw text under its own ".kml" name, so
+// neither the name nor the raw text match what is stored. But cwKmlToGpxText is deterministic,
+// so today's conversion of the same KML hashes the same as what the legacy record stored: that
+// is checked as a second candidate when the normal, name-based walk finds nothing, and the
+// legacy record is reused (its id kept, its name and content replaced) instead of duplicated.
+test('reimporting a KML kept converted before phase 5 moves it up instead of duplicating it', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
@@ -2466,9 +2468,43 @@ test('a KML kept before conversion moved into the store still duplicates on reim
   // What an older version stored: the KML converted to GPX, under a ".gpx" name, no fingerprint.
   expect(await importRecent(page, converted, 'Costa.gpx')).toEqual({ ok: true, name: 'Costa.gpx' });
   await dropStoredFingerprints(page);
+  const [legacy] = await storedRoutes(page);
 
   // The same KML file, reimported as it arrives today: unconverted text, its own ".kml" name.
   expect(await importRecent(page, kml, 'Costa.kml')).toEqual({ ok: true, name: 'Costa.kml' });
+  expect(await storedNames(page)).toEqual(['Costa.kml']);
+
+  // The legacy record's own id is reused, now under the raw-KML name and content: it stops
+  // being a legacy record going forward.
+  const kept = await page.evaluate((id) => new Promise((resolve) => {
+    indexedDB.open('meteoride_recent_routes_db').onsuccess = (e) => {
+      const get = e.target.result.transaction('routes').objectStore('routes').get(id);
+      get.onsuccess = async () => resolve({ name: get.result.name, text: await get.result.blob.text() });
+    };
+  }), legacy.id);
+  expect(kept).toEqual({ name: 'Costa.kml', text: kml });
+});
+
+// An unrelated ".kml" import must not be pulled into a ".gpx" record that merely shares its
+// converted text's length and hash by coincidence of a different route; only a real legacy
+// match (see above) is reused. Different KML content, different conversion, no match.
+test('an unrelated legacy .gpx record does not stop a different KML from being kept under its own name', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const kmlOld = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</Placemark></Document></kml>`;
+  const convertedOld = await page.evaluate((k) => window.cwKmlToGpxText(k), kmlOld);
+  expect(await importRecent(page, convertedOld, 'Costa.gpx')).toEqual({ ok: true, name: 'Costa.gpx' });
+  await dropStoredFingerprints(page);
+
+  const kmlNew = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Otra</name>
+<LineString><coordinates>2.5000,41.5000,0 2.5100,41.5050,0</coordinates></LineString>
+</Placemark></Document></kml>`;
+  expect(await importRecent(page, kmlNew, 'Costa.kml')).toEqual({ ok: true, name: 'Costa.kml' });
   expect(await storedNames(page)).toEqual(['Costa.gpx', 'Costa.kml']);
 });
 
@@ -3161,28 +3197,34 @@ test('a shared route read before a recent route is tapped, and imported after it
 
 // Spec §6. Imports run one at a time, so the gates cannot really open out of order; opening them
 // last to first still proves the order comes from arrival, not from which write is let through.
-test('four shared routes in a row: the fourth is shown and every route that arrived is kept, none over another', async ({ page }) => {
+// Six arrivals, one more than the cap of 5, so the trim still runs on this path (the native
+// bridge / shared-route import queue) and still keeps by arrival order under out-of-order
+// completion, not just by which gate opened first.
+test('six shared routes in a row: the sixth is shown and the last five to arrive are kept, the oldest trimmed', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
-  await holdImports(page, 4);
+  await holdImports(page, 6);
   const routes = [
     { name: 'a.gpx', gpx: routeAt('Primera', 41.48) },
     { name: 'Ruta.gpx', gpx: routeAt('Segunda', 41.2) },
     { name: 'Ruta.gpx', gpx: routeAt('Tercera', 40.9) },
-    { name: 'd.gpx', gpx: routeAt('Cuarta', 40.42) },
+    { name: 'b.gpx', gpx: routeAt('Cuarta', 40.7) },
+    { name: 'c.gpx', gpx: routeAt('Quinta', 40.6) },
+    { name: 'd.gpx', gpx: routeAt('Sexta', 40.42) },
   ];
   await page.evaluate((all) => { all.forEach((r) => window.__enqueue(r)); return window.cwConsumePendingShare(); }, routes);
-  for (const i of [3, 2, 1, 0]) {
+  for (const i of [5, 4, 3, 2, 1, 0]) {
     await page.evaluate((k) => window.__openImport[k](), i);
     await page.waitForTimeout(100);
   }
 
-  await expect.poll(() => storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx', 'a.gpx', 'd.gpx']);
+  // a.gpx, the oldest arrival, is trimmed even though its gate was not the first opened.
+  await expect.poll(() => storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx', 'b.gpx', 'c.gpx', 'd.gpx']);
   const stored = await storedRoutes(page);
-  expect(new Set(stored.map((r) => r.fingerprint)).size).toBe(4);
-  await expect(routeName(page)).toHaveText('Cuarta');
+  expect(new Set(stored.map((r) => r.fingerprint)).size).toBe(5);
+  await expect(routeName(page)).toHaveText('Sexta');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('d.gpx');
 });
 

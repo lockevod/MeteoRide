@@ -525,6 +525,9 @@ var cwForecastRules = (function () {
    * replaced: the same name and size in bytes can still be a different route.
    * The part before the extension never passes 64 characters: once a suffix is added,
    * the base gives up exactly the suffix's length, which the suffix itself never loses.
+   * Trimmed by Unicode code point, not UTF-16 code unit, so a base ending in an emoji or
+   * another character outside the Basic Multilingual Plane never gets its surrogate pair
+   * split into one lone, unpaired unit.
    */
   function uniqueRouteName(records, { name, fingerprint: fp }) {
     const m = /\.(gpx|kml)$/i.exec(name);
@@ -533,7 +536,7 @@ var cwForecastRules = (function () {
     const same = (r) => !!r.fingerprint && r.fingerprint === fp;
     for (let n = 1; ; n++) {
       const suffix = n === 1 ? '' : ` (${n})`;
-      const trimmedBase = suffix ? base.slice(0, Math.max(0, 64 - suffix.length)) : base;
+      const trimmedBase = suffix ? Array.from(base).slice(0, Math.max(0, 64 - suffix.length)).join('') : base;
       const candidate = `${trimmedBase}${suffix}${ext}`;
       const taken = (records || []).filter((r) => r && r.name === candidate);
       if (!taken.length) return { name: candidate, replaceId: null };

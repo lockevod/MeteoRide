@@ -1790,6 +1790,22 @@
     let db;
     try { db = await openIDB(); } catch (e) { return { ok: false }; }
     const withFingerprints = await withComputedFingerprints(db);
+    const storedName = recentRouteName(name);
+    // A .kml import may already be kept from before phase 5, converted to GPX text and stored
+    // under the matching .gpx name (no fingerprint, and a name the walk below never builds,
+    // since it only ever tries .kml candidates for a .kml import). cwKmlToGpxText is
+    // deterministic, so today's conversion of the same KML hashes the same as what that
+    // record stored. Computed once, used only when the normal walk finds no exact match by
+    // its own name, so a plain .kml import still walks (2), (3)... as before.
+    let legacyKmlName = null;
+    let legacyKmlFingerprint = null;
+    const kmlExt = /\.kml$/i.exec(storedName);
+    if (kmlExt && window.cwKmlToGpxText) {
+      try {
+        legacyKmlFingerprint = cwForecastRules.fingerprint(window.cwKmlToGpxText(text));
+        legacyKmlName = `${storedName.slice(0, -kmlExt[0].length)}.gpx`;
+      } catch (e) { legacyKmlFingerprint = null; }
+    }
     const result = await new Promise((resolve) => {
       let tx;
       try { tx = db.transaction(IDB_STORE, 'readwrite'); } catch (e) { return resolve({ ok: false }); }
@@ -1806,7 +1822,11 @@
         // just falls back to the record as read now.
         const byId = new Map((withFingerprints || []).map((r) => [r.id, r]));
         const forMatch = records.map((r) => byId.get(r.id) || r);
-        const pick = cwForecastRules.uniqueRouteName(forMatch, { name: recentRouteName(name), fingerprint, bytes });
+        let pick = cwForecastRules.uniqueRouteName(forMatch, { name: storedName, fingerprint, bytes });
+        if (pick.replaceId == null && legacyKmlFingerprint != null) {
+          const legacy = forMatch.find((r) => r && r.name === legacyKmlName && r.fingerprint === legacyKmlFingerprint);
+          if (legacy) pick = { name: pick.name, replaceId: legacy.id };
+        }
         chosen = pick.name;
         // Stored times can be ahead of this clock (the phone's clock was changed). The route
         // arriving now is still the newest, or the trim below would delete it.

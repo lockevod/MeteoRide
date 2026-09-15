@@ -997,7 +997,10 @@ runtime, because `app.js` and `ui.js` load after it.
   existing record up in place instead of duplicating it, different content gets ` (2)`,
   ` (3)`… even when the name already carries a suffix, and the part before the extension
   never passes 64 characters — once a suffix is added the base gives up exactly the
-  suffix's length, never the suffix), write, trim. It is saved only on `oncomplete`; an
+  suffix's length, never the suffix, trimmed by Unicode code point (`Array.from`) rather
+  than UTF-16 unit, so a base ending in an emoji or another character outside the Basic
+  Multilingual Plane never gets its surrogate pair split into one lone, unpaired unit),
+  write, trim. It is saved only on `oncomplete`; an
   abort, no IndexedDB or a route over 750 KB is reported with `route_not_saved`. **Nothing
   falls back to localStorage on write any more**; reading and migrating old localStorage
   entries stay. A record from before fingerprints existed (phase 3) has none stored: before
@@ -1100,14 +1103,17 @@ either the text or its conversion holds one (`cwImportIfRoute`). Keeping used to
 conversion alone, so such a file was shown and silently left out of recent routes. A KML with
 nothing to follow still stays out, since neither holds a route.
 A shared KML is kept as it arrived, under its own name (`Name.kml`) and with
-its raw KML text. Before phase 5 it was kept as `Name.gpx` with the converted GPX text, so sharing
-again a KML an older version stored adds a second entry, and forecast caches and ride-watch
-fingerprints computed from the old text do not match the new one. Unlike the plain no-fingerprint
-case above, this one is not fixed by computing the old record's fingerprint from its stored
-content: the name it was kept under (`Name.gpx`, converted text) and the name and text a reimport
-arrives under today (`Name.kml`, raw KML) both differ, so `uniqueRouteName` never even walks to
-the same candidate name to compare fingerprints. A KML kept this way before phase 5 still
-duplicates on reimport; left as a documented limit.
+its raw KML text. Before phase 5 it was kept as `Name.gpx` with the converted GPX text. Unlike
+the plain no-fingerprint case above, that record's name never matches what a `.kml` reimport
+walks (`Name.kml`, `Name (2).kml`…), so `uniqueRouteName`'s own candidate walk never reaches it.
+But `cwKmlToGpxText` is deterministic, so converting the same KML today hashes exactly what that
+old record stored: `idbImportRoute`, for a `.kml` import only, also checks a second candidate —
+name `${base}.gpx`, fingerprint of `cwKmlToGpxText(text)` — once the normal walk finds no exact
+match by name, and reuses that record's id if it matches, so it moves up under today's raw-KML
+name and content instead of duplicating. An unrelated `.gpx` record whose converted content
+happens to differ is left alone; only a real content match reuses it. Forecast caches and
+ride-watch fingerprints computed from the old converted text still never match a route now kept
+under the new one — that part is unrelated to recents and not fixed here.
 
 **The service worker slot has one reader.** `service-worker.js` stores one route in IndexedDB
 (`cw_shared_db`, store `files`, key `gpx`) and posts `cw-shared-gpx`.

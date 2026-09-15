@@ -395,12 +395,13 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
   la carga inicial.
 - **Recientes.**
   - Guarda 5 rutas; las de más de 750 KB se muestran pero no se guardan.
-  - Un KML guardado antes de la fase 5 quedó como `Nombre.gpx` con el texto ya convertido; desde
-    la fase 5 se guarda como `Nombre.kml` con el KML tal cual llegó. Compartir otra vez ese KML
-    crea una segunda entrada, y la caché y la huella de la alerta calculadas con el texto anterior
-    no coinciden con el nuevo. No se arregla: el nombre guardado (`Nombre.gpx`) y el de la
-    reimportación de hoy (`Nombre.kml`, sin convertir) ya difieren, así que `uniqueRouteName` ni
-    llega a comparar huellas entre ambos.
+  - Un KML guardado antes de la fase 5 quedó como `Nombre.gpx` con el texto ya convertido. Al
+    reimportar ese mismo KML hoy (`Nombre.kml`, sin convertir), `idbImportRoute` reconoce el
+    registro antiguo por una segunda comprobación: la huella de `cwKmlToGpxText(texto)` de hoy
+    contra la huella guardada, ya que la conversión es determinista. Lo sube al principio con el
+    nombre y el contenido de hoy en vez de duplicarlo. La caché de previsión y la huella de la
+    alerta de ruta calculadas antes con el texto convertido siguen sin coincidir con las de una
+    ruta abierta hoy desde ese `.kml`; eso es ajeno a recientes y no se toca aquí.
 - **Indicador en el primer arranque.** Sin rutas guardadas, el indicador de carga sigue encendido
   hasta 5 s mientras espera a recientes.
 - **Rutas que llegan de fuera.**
