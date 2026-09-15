@@ -268,8 +268,8 @@ cálculo. Recientes importa en cola, con nombre único (`Ruta (2).gpx`) y en una
 transacción, sin respaldo en `localStorage` al escribir. La restauración al arrancar pide su
 ruta antes de esperar a recientes: una ruta compartida que llega durante esa espera gana, y
 ahora tiene test. Quedan para la fase 4 comparar, `revalidateWeatherAlerts` y desarmar la alerta
-de ruta al confirmar otra; para la fase 5, cada entrada de fuera con su fuente (hoy siguen
-entrando por `cwLoadGPXFromString`, que ya es un envoltorio del coordinador). Detalle en
+de ruta al confirmar otra; para la fase 5, cada entrada de fuera con su fuente (hecho en la
+fase 5, abajo). Detalle en
 `AGENTS.md`, «Route requests». Las fases 4 a 7 tendrán cada una su plan cuando empiecen.
 
 La fase 4 (consumidores) tiene su plan en
@@ -282,6 +282,19 @@ AROME en la zona de la ruta. La alerta de ruta arma desde la foto, guarda y desa
 serial, conserva lo ya avisado al rearmar la misma ruta con la misma salida y se desarma al
 confirmar otra. Desaparecen `revalidateWeatherAlerts` y el alias `window.reloadFull`. Detalle en
 `AGENTS.md`, «Consumers of the snapshot».
+
+La fase 5 (rutas que llegan de fuera) tiene su plan en
+`docs/superpowers/plans/2026-09-15-fase-5-rutas-de-fuera.md`, también fuera de git. Toda ruta que
+llega de fuera entra por `cwReceiveRoute` (`gpx-share.js`), que pide su ruta al coordinador en la
+misma llamada: la descarga de `?gpx_url=` y `shared_id` y la espera al mapa van dentro de la
+lectura de la petición, con su plazo, así que una ruta elegida mientras tanto gana. Las
+compartidas (buzón nativo, service worker, `sessionStorage` y `shared_id`) se importan en recientes
+al llegar su texto, aunque la petición termine sustituida; un enlace y un mensaje, solo al
+confirmarse. El buzón del service worker tiene un único lector, que lee y borra en la misma
+transacción. El arranque nativo restaura sin esperar a vaciar el buzón, y una compartida que sale
+después gana por identidad. `postMessage` responde con el resultado de su petición (`status`), no
+al llegar. Desaparecen `whenAppReady`, `loadSharedGPX`, el segundo oyente del service worker y la
+conversión de KML del inyector. Detalle en `AGENTS.md`, «Routes from outside».
 
 ### Revisión adversarial de las correcciones (852f61a..8b6e3fb)
 
@@ -301,15 +314,16 @@ intents relanzados desde Recientes. Detalle completo en `AGENTS.md`.
 
 Queda para fases posteriores, documentado pero no corregido en esta revisión: identidad por
 petición en `fetchWeatherForSteps` (hecha en la fase 3, abajo); `compare.js` y `revalidateWeatherAlerts`, que
-no pasaban por el registro por cálculo ni por `decideNotice` (hecho en la fase 4); y, para la fase
-5, un coordinador de arranque y una importación duradera — hoy Android puede perder una ruta
+no pasaban por el registro por cálculo ni por `decideNotice` (hecho en la fase 4); y el orden del
+arranque y la importación duradera (hechos en la fase 5, en JavaScript). Quedan como límites
+aceptados (§10), porque la fase 5 no cambia los buzones nativos: Android puede perder una ruta
 compartida si el proceso muere entre marcar el intent como gestionado y escribir el fichero
 en el buzón, e iOS lee un fichero abierto con «Abrir en» de forma síncrona en el hilo
 principal en vez de en un hilo aparte, como ya hace Android.
 
 Una revisión adversarial de Codex dirigida sobre 852f61a..87c56c4 cerró seis de sus siete
 hallazgos originales; el que queda, el sexto —Android pierde la importación si el proceso
-muere a mitad—, sigue para la fase 5. Además encontró estos cuatro, corregidos en esta
+muere a mitad—, queda como límite aceptado (§10). Además encontró estos cuatro, corregidos en esta
 tanda: el buzón de iOS no entregaba una ruta con salto de línea en el
 nombre; el dato diario de OpenWeather podía elegir el día anterior justo en la medianoche
 local; una temperatura diaria de 0°C se perdía; y dos imprecisiones de `AGENTS.md` sobre la
@@ -320,24 +334,10 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: fase 4.
+en `AGENTS.md → Open work`. Última actualización: fase 5.
 
 ### Pendiente por fase del rediseño
 
-- **Fase 5 — rutas que llegan de fuera.**
-  - Cada entrada entra con su fuente, se importa al llegar y pasa por el coordinador:
-    - buzón nativo;
-    - lector único del service worker;
-    - `sessionStorage`;
-    - `shared_id`;
-    - `?gpx_url=`;
-    - `postMessage`, con acuse del resultado real.
-  - `postMessage` no espera al mapa.
-  - El arranque espera a `consumePendingShare` antes de crear la petición de restauración.
-  - Android pierde una ruta compartida si el proceso muere a mitad de la importación.
-  - El contador de secuencia del buzón de iOS no es único entre procesos.
-  - Los comentarios de `gpx-share.js` sobre `reloadFull` están obsoletos, y `loadSharedGPX` es
-    una rama muerta.
 - **Fase 6 — hora y uso sin cobertura.**
   - Guardar la hora de salida y aplicar la hora mínima al cargar y al volver a la app.
   - Preparar y reproducir con la foto, caducidad incluida.
@@ -378,7 +378,25 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
   - Un KML guardado antes como `.gpx` no coincide con el mismo fichero reimportado como `.kml`.
 - **Indicador en el primer arranque.** Sin rutas guardadas, el indicador de carga sigue encendido
   hasta 5 s mientras espera a recientes.
-- **iOS, «Abrir en».** Lee el fichero en el hilo principal (hasta 25 MB).
+- **Rutas que llegan de fuera.**
+  - Android pierde una ruta compartida si el proceso muere entre marcar el intent como gestionado
+    y escribir el fichero en el buzón. La importación duradera empieza cuando la ruta llega a
+    JavaScript; los buzones nativos quedan fuera (spec §2).
+  - El contador de secuencia del buzón de iOS no es único entre procesos: dos rutas guardadas en el
+    mismo milisegundo por la extensión y por la app pueden entregarse en otro orden.
+  - iOS, «Abrir en»: lee el fichero en el hilo principal (hasta 25 MB).
+  - El service worker guarda una sola ruta: de dos envíos antes de que la página lea queda el
+    último. `service-worker.js` tiene además dos manejadores `fetch` para `/share`; no se toca
+    (spec §2).
+  - Una lectura del hueco del service worker que no termina nunca detiene su lector hasta recargar,
+    como la cola de recientes.
+  - Una ruta de fuera que llega sin que el mapa llegue a existir falla a los 30 s con el aviso de
+    lectura.
+  - Un `shared_id` que ya no está en el servidor (error HTTP) muestra el aviso de lectura; antes no
+    decía nada.
+  - La posición del teléfono se aplica cuando termina el vaciado del buzón, no al arrancar.
+  - Una descarga de `?gpx_url=` o `shared_id` empieza aunque su petición quede sustituida en la
+    misma vuelta, porque la importación no puede depender de que la petición llegue a leer.
 - **Comparar.**
   - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
   - Con comparar fechas abierto (el botón lo abre siempre en modo explícito), un ajuste que
@@ -456,6 +474,14 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
     anteriores sí tiene test, con un proveedor que no contesta.
   - La comprobación de la foto en el turno del guardado de la alerta de ruta, con el guardado
     esperando detrás de otra operación en cola (ver «Comprobaciones en capas»).
+  - Un `?gpx_url=` que falla con otra ruta en pantalla. En la web no puede haberla antes, porque la
+    petición del enlace se hace al cargar la página; lo cubre el test de la fase 3 de una petición
+    fallida.
+  - Cuatro de los tests de la fase 5 pasan también con el código anterior: la reciente tocada tras
+    leer una compartida, cuatro compartidas seguidas, el traspaso por `sessionStorage` y el enlace
+    confirmado que entra en recientes. Fijan un comportamiento que ya existía, y a cada uno lo hace
+    fallar una mutación. En el de cuatro compartidas, «la puerta de IndexedDB abierta en orden
+    inverso» no puede abrirse de verdad fuera de orden, porque cada escritura espera a la anterior.
 
 ### Sin comprobar en dispositivo
 

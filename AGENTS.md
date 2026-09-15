@@ -64,7 +64,8 @@ Both platforms implement the same tiny plugin, `MeteoRideShare`, with two method
 - `pendingCount()` → `{count}`.
 
 A route arriving from another app is written to an on-disk inbox by native code, then
-`native.js` drains it and calls `cwInjectGPXFromText`. It is on disk rather than in
+`native.js` drains it and hands each route to `cwReceiveRoute` ("Routes from outside"). It is
+on disk rather than in
 memory because the process can be recreated between the share and the moment
 JavaScript asks for it, and on iOS the share extension is a separate process
 altogether (hence the App Group).
@@ -340,38 +341,33 @@ What is still open, and why it was left:
   mid-drain therefore sets a flag and the drain repeats, rather than being dropped
   until the app is next activated.
 - **Route injection races the app boot.** A route is parsed off the map, but confirming
-  it (`cwCommitRoute`) draws onto the Leaflet map, so `window.map` must exist by then.
-  Shared routes regularly arrive before `initMap` has run. `cwInjectGPXFromText` in
-  `gpx-share.js` waits for both the loader and the map, and the share inboxes, the
-  service worker, `?gpx_url=` and `shared_id` go through it. The one exception is the
-  `postMessage` listener in `ui.js` (trusted origins only), which calls
-  `cwLoadGPXFromString` directly: a message that lands before the map exists is confirmed
-  but not drawn, because the commit throws and the coordinator swallows it. Do not add
-  another direct caller until phase 5 gives each path its own request:
-  `cwInjectGPXFromText` is where the wait for the map lives, and where a shared KML is
-  converted before it reaches the loader.
-- **A `.kml`-named share is renamed to `.gpx` whether or not the conversion actually
-  produced a route.** `cwKmlToGpxText` always returns a syntactically valid GPX wrapper,
-  even for a malformed KML or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never
-  refuses to return an empty `FeatureCollection`. `cwInjectGPXFromText`
-  (`gpx-share.js:53-93`) only swaps in the converted text when it actually carries a
-  track, route or waypoint; when it does not — a real GPX misnamed `.kml` converts into
-  that empty wrapper too — it keeps the original text but still renames a `.kml` name to
-  `.gpx`. The rename used to matter on every recompute, when `reloadFull` re-read
-  `window.lastGPXFile` and picked the converter by its extension. A recompute now segments
-  the confirmed route's geojson and reads no file, and `cwParseRoute` converts by name or
-  by content; the comments in `gpx-share.js` still give the old reason until phase 5
-  rewrites that file. `geojsonToGpx`
+  it (`cwCommitRoute`) draws onto the Leaflet map, so `window.map` must exist by then, and
+  routes from outside regularly arrive before `initMap` has run: `initGpxShare()` is called
+  while `app.js` loads, and the native boot drain runs on `DOMContentLoaded` ahead of
+  `app.js`'s own handler. Every one of them goes through `cwReceiveRoute` in `gpx-share.js`,
+  which asks for its route at once and waits for the map inside the request's `read`, under
+  its deadline ("Routes from outside"). Do not wait for the map, a download or IndexedDB
+  before calling it: a wait outside the request has no identity, and a route picked
+  meanwhile loses to the older one. That is how a file picked while `?gpx_url=` downloaded
+  used to lose to the link.
+- **A shared `.kml` reaches the coordinator as it arrived.** The injector used to convert it
+  and rename it `.gpx`; now `cwParseRoute` converts by name or by content and names the
+  confirmed route `.gpx`, and the import keeps the text and name as they came.
+  `cwKmlToGpxText` always returns a syntactically valid GPX wrapper, even for a malformed KML
+  or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never refuses to return an empty
+  `FeatureCollection`, so the converted text is used only when it carries a track, route or
+  waypoint. `geojsonToGpx`
   (`ui.js:370-417`) also recurses into a `GeometryCollection`, which is what `togeojson`
   turns a KML `<MultiGeometry>` with more than one child geometry into, rather than one of
   the geometry types it otherwise switches on: every line in it is drawn on the map, but
   `cwForecastRules.routeLine` — the line the forecast follows — only reads the first
   `LineString`/`MultiLineString` feature with at least two valid points, so the forecast
   only follows that first line, the same as a GPX carrying several `<trk>` tracks.
-- **`window.cwLoadGPXFromString` is assigned near the end of `app.js`,** which
-  executes long after `initGpxShare()` is called near its top. Any code running at load
-  time must poll for it rather than assume it exists. It is a thin wrapper now: it
-  imports the text into recent routes and returns `cw.requestRoute(...)`.
+- **`cwLoadGPXFromString` and `cwInjectGPXFromText` are thin wrappers of `cwReceiveRoute`,**
+  with `message` and `share-native` as their default sources. The receiver lives in
+  `gpx-share.js`, which loads before `app.js`, so the entries started by `initGpxShare()`
+  can call it at once; what it needs from `app.js` (`cwImportIfRoute`, `cwParseRoute`) is
+  only looked up once a text has arrived, after `app.js` has finished loading.
 - **The iOS share sheet hands over web URLs too.** The activation rule accepts any
   `public.data` attachment, and a link shared from Strava, Komoot or a browser arrives
   as a URL item. `Data(contentsOf:)` accepts an https URL and performs a blocking,
@@ -505,15 +501,18 @@ deciding the map matters: the route line, the wind arrows, the rain markers, the
 table and the sunrise times are all drawn client-side and all present without tiles.
 A preloaded map would add the beige background and nothing else.
 
-A route arriving from a share takes precedence: `boot` waits for the inbox drain and
-only restores when nothing came in. `restoreLastRoute` then asks the route coordinator
-for its route *before* waiting for the recent routes (the wait is inside the request's
-`read`), so a route that arrives during that wait is a later request and replaces it.
-This used to rest on `lastGPXFile` checks after the wait, with no test that could fail.
-Two tests pin it now: a share that publishes while the recent route is still being read
-wins, and a share still being read when the recent routes turn up is not replaced by the
-older route. The second fails against the old order, request after the wait. While it
-waits, the restore holds the loading indicator — up to five seconds on a first run.
+A route arriving from a share wins by identity, not by waiting: `boot` launches the inbox
+drain and then the restore, without awaiting either. `restoreLastRoute` asks the route
+coordinator for its route *before* waiting for the recent routes (the wait is inside the
+request's `read`), and a shared route only comes out of the inbox after that, so it is the
+later request and replaces the restore, even once the restore has published. The restore
+still steps aside when anything asked for a route first (a `sessionStorage` handoff, say)
+or the URL carries a route. The map goes to the phone's position only when the drain
+brought nothing, so that waits for the drain. Three tests pin the order: a share that
+publishes while the recent route is still being read wins; a share still being read when
+the recent routes turn up is not replaced; and a drain that outlasts the restore still wins,
+which fails against the old order (restore only after the drain). While it waits, the
+restore holds the loading indicator — up to five seconds on a first run.
 
 ## The forecast cache without coverage
 
@@ -798,9 +797,8 @@ always matches.
 
 `public/scripts/route-requests.js` decides which route is on screen, and nothing else
 does. Every way a route gets in calls `cw.requestRoute({ source, read })`: the file
-picker, a recent route, the restore at start-up and, until phase 5 gives each its own
-source, everything that still enters through `cwLoadGPXFromString` (the share inboxes,
-`?gpx_url=`, `shared_id`, `postMessage`). The coordinator is built by
+picker, a recent route, the restore at start-up, and every route from outside the page
+through `cwReceiveRoute` ("Routes from outside" below). The coordinator is built by
 `cwCreateRouteCoordinator(deps)` so Node tests can give it fake dependencies; the page's
 instance looks up `cwParseRoute`, `cwCommitRoute`, `cwLaunchComputation` and the rest at
 runtime, because `app.js` and `ui.js` load after it.
@@ -883,8 +881,8 @@ runtime, because `app.js` and `ui.js` load after it.
   different route silently replaced the stored one. Importing an old route again now costs
   one ` (2)` duplicate.
   The file picker imports only a route that was confirmed, under the file's name. A route
-  from outside is imported as it arrives, whether or not it ends up on screen, but only if
-  its text carries `<trk`, `<trkpt`, `<rte`, `<rtept` or `<wpt`, or it is a KML whose
+  from outside is imported when its entry says ("Routes from outside"), whether or not it
+  ends up on screen, and only if (`cwImportIfRoute`) its text carries `<trk`, `<trkpt`, `<rte`, `<rtept` or `<wpt`, or it is a KML whose
   conversion (`cwKmlToGpxText`) does: a KML with no Placemark converts into an empty GPX, so
   `<kml` alone is not enough. Without that check a
   truncated share or a web page became the newest recent route, and the next cold start
@@ -905,9 +903,47 @@ runtime, because `app.js` and `ui.js` load after it.
   fingerprint and could write a trimmed route back. The name on
   screen no longer decides the stored name: while a new route is read it is the old one's.
 
-Left for later phases on purpose: each outside entry with its own source and a durable import
-(phase 5); the start-time rule, replaying a prepared snapshot and `startForecast` choosing
-between them (phase 6).
+### Routes from outside
+
+`cwReceiveRoute({ source, name, text, fetchText, importOn })` in `gpx-share.js` is the one way
+in for a route that comes neither from the file picker nor from recent routes. In the same call
+it asks the coordinator for its route; a download (`fetchText`) starts right after, and `read`
+awaits the text and then the map (`window.map` and `cwParseRoute`), all under the request's
+30 s deadline. A rejected download or an empty text ends the request as `'failed'` with
+`route_read_failed`. It resolves with what the request ended as.
+
+Keeping the route among the recent ones is separate from showing it, and when it happens
+depends on the entry:
+
+| Entry | Source | Imported into recent routes |
+|---|---|---|
+| Native inbox (`native.js`, `injectRoute`) | `share-native` | as it arrives |
+| Service worker slot | `share-sw` | as it arrives |
+| `sessionStorage` (`cw_gpx_text`, `cw_gpx_name`) | `share-session` | as it arrives |
+| `?shared_id=` | `shared-id` | as its text arrives; the server copy is deleted then, unawaited |
+| `?gpx_url=` / `?url=` | `url` | once confirmed; text without `<gpx` fails the request |
+| `postMessage` (`ui.js`, trusted origins) | `message` | once confirmed |
+
+The import and the download start on arrival, not inside `read`, on purpose: the coordinator
+never calls `read` for a request replaced in the same tick, and a share replaced that way must
+still be kept. `postMessage` answers with the result, not on arrival:
+`{ action: 'loadGPX:ack', ok: status === 'committed', status, name, size }`. A message from an
+origin not allowed is still refused with `forbidden_origin`, and one that throws synchronously
+with `exception`.
+
+**The service worker slot has one reader.** `service-worker.js` stores one route in IndexedDB
+(`cw_shared_db`, store `files`, key `gpx`) and posts `cw-shared-gpx`.
+`takeSharedFromServiceWorker` reads and deletes in one `readwrite` transaction, settled on
+`oncomplete`, one read at a time; a call while a read runs makes that read go round once more.
+It runs at start-up, which covers `?shared` (where the worker sends the page), and on every
+message, from a listener attached before the worker is registered. There used to be three
+readers, one of them reading and deleting in separate transactions, so a message could delete
+a route written in between or take the same route twice. The tests hold the slot's transactions
+and opens to force both orders; the first version of the "received once" test released them in
+a way the old code survived, which is why it answers the held opens one at a time.
+
+Left for later phases on purpose: the start-time rule, replaying a prepared snapshot and
+`startForecast` choosing between them (phase 6).
 
 ## Consumers of the snapshot
 
@@ -1104,8 +1140,9 @@ code does and what makes the race reproducible.
   Android hands `onCreate` the same original intent again — but the Recents guard above
   (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) now refuses that intent too, on purpose: a
   route already delivered must not be re-ingested from Recents. That accidental
-  recovery is gone along with the duplicates it used to cost. Belongs with the
-  durable-import work planned for phase 5.
+  recovery is gone along with the duplicates it used to cost. Phase 5 did not change it: its
+  durable import starts once a route reaches JavaScript, and the native inboxes are out of its
+  scope (`docs/HANDOFF.md` §10).
 - Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
   H2 (offline preparation), H1 (overlapping forecasts) and H5 (notices by time window, for the
   computation in phase 2 and the comparisons in phase 4) are fixed; H3 and H4 are open. H4
@@ -1113,8 +1150,6 @@ code does and what makes the race reproducible.
   `docs/HANDOFF.md` §9 has the table and the order being followed.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
-- `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`
-  that no longer exists; harmless, but it is a dead branch.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
   confirmation would be friendlier.
 - The share extension reaches the host app by walking the responder chain to
