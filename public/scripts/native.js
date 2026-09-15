@@ -620,8 +620,9 @@
     const current = () => token === armToken && window.cw.currentSnapshot() === snapshot;
     return queueWatch(async () => {
       if (!current()) return false;
-      await runnerCall('saveWatch', { watch: watch || null });
+      // Named before the runner answers, so it is always the last watch sent to it.
       watchFingerprint = watch ? watch.fingerprint : null;
+      await runnerCall('saveWatch', { watch: watch || null });
       if (current()) showWatchStatus(watch);
       return true;
     });
@@ -637,7 +638,6 @@
       if (!alertsWanted()) return;
       const fresh = buildWatch(snapshot);
       if (!fresh) return saveWatch(null, snapshot, mine);
-      watchFingerprint = fresh.fingerprint;
 
       const allowed = await notificationsAllowed();
       if (!current()) return;
@@ -651,8 +651,12 @@
       }
       fresh.channelId = channelReady ? WATCH_CHANNEL : '';
       // Read after every save and disarm already queued: arming the same ride again keeps
-      // what was notified, and the baseline when the points are the same.
-      const stored = await queueWatch(() => runnerCall('loadWatch', {}));
+      // what was notified, and the baseline when the points are the same. A read that fails
+      // arms afresh.
+      const stored = await queueWatch(() => runnerCall('loadWatch', {}).catch((e) => {
+        log('could not read the stored watch', e);
+        return null;
+      }));
       if (!current()) return;
       const watch = window.cwWatchRules.reuse(stored, fresh);
       if (!Array.isArray(watch.baseline)) {
@@ -665,12 +669,15 @@
     }
   }
 
-  function disarmWatch() {
+  // With `keepFor`, a route fingerprint, whether to disarm is decided when its turn comes: a
+  // watch stored for that route, or none, is left alone.
+  function disarmWatch(keepFor) {
     if (!runnerPlugin()) return;
     ++armToken;
     queueWatch(async () => {
-      await runnerCall('saveWatch', { watch: null });
+      if (keepFor !== undefined && (watchFingerprint === null || watchFingerprint === keepFor)) return;
       watchFingerprint = null;
+      await runnerCall('saveWatch', { watch: null });
       showWatchStatus(null);
     }).catch((e) => log('could not clear the watch', e));
   }
@@ -707,19 +714,22 @@
     // Called by app.js as a route is confirmed. The watch belongs to the route it was armed
     // for: another route disarms it; the same route keeps it, so arming it again keeps
     // what was already notified.
+    // Until the start-up read has answered, the queue decides after it.
     window.cwDisarmWatchFor = (fingerprint) => {
+      if (watchFingerprint === undefined) return disarmWatch(fingerprint);
       if (watchFingerprint === null || watchFingerprint === fingerprint) return;
       disarmWatch();
     };
 
-    // Reflect a watch stored by a previous session.
-    runner.dispatchEvent({ label: WATCH_LABEL, event: 'loadWatch', details: {} })
-      .then((watch) => {
-        if (watchFingerprint === undefined) watchFingerprint = watch ? (watch.fingerprint || '') : null;
-        const rules = window.cwWatchRules;
-        if (watch && rules && !rules.expired(watch, Date.now())) showWatchStatus(watch);
-      })
-      .catch((e) => log('could not read the stored watch', e));
+    // Reflect a watch stored by a previous session. The read goes first in the queue, so every
+    // other operation runs knowing the stored fingerprint, and the status it shows is what the
+    // runner holds until a later save or disarm changes both.
+    queueWatch(async () => {
+      const watch = await runnerCall('loadWatch', {});
+      watchFingerprint = watch ? (watch.fingerprint || '') : null;
+      const rules = window.cwWatchRules;
+      if (watch && rules && !rules.expired(watch, Date.now())) showWatchStatus(watch);
+    });
 
     warnIfBackgroundIsOff();
   }

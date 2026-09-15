@@ -318,9 +318,11 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
           // The key is the name the plugin registers with the bridge, which is NOT
           // its npm export — tests/plugin-names.test.mjs keeps the two in step.
           // A test can hold the system's permission answer (`__permissionHeld`, a promise), and
-          // the runner's answer to the next save of a watch (`__runnerHoldNext`). A save lands in
-          // the store when the runner answers it, which is when native code would have written
-          // it; `__runnerStored` lists what landed, in that order.
+          // the runner's answer to the next save of a watch (`__runnerHoldNext`), to the next
+          // disarm (`__runnerHoldDisarm`) and to the next read (`__runnerHoldLoad`); reads fail
+          // while `__runnerLoadFails` is set. A save lands in the store when the runner answers
+          // it, which is when native code would have written it; `__runnerStored` lists what
+          // landed, in that order.
           CapacitorBackgroundRunner: {
             checkPermissions: async () => ({ notifications: sessionStorage.getItem('__notif') || 'prompt' }),
             requestPermissions: async () => {
@@ -331,13 +333,17 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
             },
             dispatchEvent: async ({ label, event, details }) => {
               window.__runnerEvents.push({ label, event, details });
+              const hold = event === 'loadWatch' ? '__runnerHoldLoad' : details.watch ? '__runnerHoldNext' : '__runnerHoldDisarm';
+              const held = window[hold];
+              if (held) { window[hold] = null; await held; }
               if (event === 'saveWatch') {
-                const held = details.watch ? window.__runnerHoldNext : null;
-                if (held) { window.__runnerHoldNext = null; await held; }
                 sessionStorage.setItem('__watch', JSON.stringify(details.watch || null));
                 window.__runnerStored = (window.__runnerStored || []).concat([details.watch || null]);
               }
-              if (event === 'loadWatch') return JSON.parse(sessionStorage.getItem('__watch') || 'null');
+              if (event === 'loadWatch') {
+                if (window.__runnerLoadFails) throw new Error('the runner could not read the watch');
+                return JSON.parse(sessionStorage.getItem('__watch') || 'null');
+              }
               return undefined;
             },
           },
@@ -2849,6 +2855,123 @@ test('confirming another route disarms the watch; confirming the same route does
   await expect(routeName(page)).toHaveText('Ruta B');
   await expect.poll(() => lastStored(page)).toBeNull();
   await expect(page.locator('#rideAlertsStatus')).toHaveText('');
+});
+
+const flipRideAlerts = (page, ...states) =>
+  page.evaluate((all) => {
+    const el = document.getElementById('rideAlerts');
+    for (const on of all) {
+      el.checked = on;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }, states);
+
+test('a disarm the runner answers late cannot leave the old route armed once another route is confirmed', async ({ page }) => {
+  await installNativeBridge(page);
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+
+  // Off and on again while the runner is slow: the disarm is in flight, the new arm waits behind it.
+  await page.evaluate(() => {
+    window.__runnerHoldDisarm = new Promise((r) => { window.__answerDisarm = r; });
+    window.__runnerHoldNext = new Promise((r) => { window.__answerSave = r; });
+  });
+  await flipRideAlerts(page, false, true);
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__answerDisarm());
+  // The save of the same route has reached the runner, which has not answered it yet.
+  await expect.poll(() => page.evaluate(() => window.__runnerEvents.filter((e) => e.event === 'saveWatch' && e.details.watch).length)).toBe(2);
+
+  control.forecastHeld = heldPromise().promise;
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await page.evaluate(() => window.__answerSave());
+  await expect.poll(() => lastStored(page)).toBeNull();
+});
+
+test('the same route confirmed again while its watch waits for permission asks for no baseline and stores nothing', async ({ page }) => {
+  await installNativeBridge(page);
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.addInitScript(() => { window.__permissionHeld = new Promise((r) => { window.__grantPermission = r; }); });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.__notifAsked)).toBe(true);
+
+  // Confirming the same route disarms nothing and supersedes no arm; only the snapshot changed.
+  control.forecastHeld = heldPromise().promise;
+  await forgetForecasts(page);
+  await countLaunches(page);
+  await page.evaluate(() => { document.getElementById('gpxFile').value = ''; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.__launches.launch)).toBe(1);
+  await page.evaluate(() => window.__grantPermission());
+  await page.waitForTimeout(800);
+
+  expect(control.baselineAsked).toBe(0);
+  expect(await storedWatches(page)).toEqual([]);
+});
+
+test('a save the runner answers after the same route is confirmed again leaves the status line alone', async ({ page }) => {
+  await installNativeBridge(page);
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { window.__runnerHoldNext = new Promise((r) => { window.__answerSave = r; }); });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.__runnerEvents.some((e) => e.event === 'saveWatch' && e.details.watch))).toBe(true);
+
+  control.forecastHeld = heldPromise().promise;
+  await forgetForecasts(page);
+  await countLaunches(page);
+  await page.evaluate(() => { document.getElementById('gpxFile').value = ''; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.__launches.launch)).toBe(1);
+  await page.evaluate(() => window.__answerSave());
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  await page.waitForTimeout(300);
+  await expect(page.locator('#rideAlertsStatus')).toHaveText('');
+});
+
+test('the route restored at start-up keeps its stored watch even when it is confirmed before that watch is read', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubWatchProviders(page, { watch: { rain: 0, wind: 8, gust: 12 } });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  await expect.poll(async () => (await storedRoutes(page)).length).toBe(1);
+  await markStoredWatch(page);
+
+  await page.addInitScript(() => { window.__runnerHoldLoad = new Promise((r) => { window.__answerLoad = r; }); });
+  await page.reload();
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+  await page.waitForTimeout(500);
+  expect(await storedWatches(page)).toEqual([]);
+
+  await page.evaluate(() => window.__answerLoad());
+  await expect.poll(async () => (await storedWatches(page)).length).toBe(1);
+  const watch = await lastStored(page);
+  expect(watch).not.toBeNull();
+  expect(watch.notified).toEqual(['AEMET_Viento_1_2']);
+});
+
+test('a stored watch the runner cannot read still lets the route arm afresh', async ({ page }) => {
+  await installNativeBridge(page);
+  await page.addInitScript(() => { window.__runnerLoadFails = true; });
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  expect((await lastStored(page)).notified).toEqual([]);
 });
 
 /* ---------- comparing providers ---------- */
