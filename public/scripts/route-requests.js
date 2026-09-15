@@ -144,6 +144,9 @@ var cwCreateRouteCoordinator = function (deps) {
 
   // Whether any route has been asked for, even one still being read.
   const hasRouteRequests = () => lastRequestId > 0;
+  // Whether the latest request is still being read: it will commit (or fail) and reconcile on its
+  // own, so nothing else should launch a computation in its place meanwhile.
+  const hasRouteRequestPending = () => !lastFinished;
   // The identity of the last request made: a request taken right after asking is that request's own.
   const lastRouteRequestId = () => lastRequestId;
 
@@ -201,7 +204,8 @@ var cwCreateRouteCoordinator = function (deps) {
   }
 
   return {
-    requestRoute, hasRouteRequests, lastRouteRequestId, settingsChanged, startForecast, importRoute, touchRecent, enqueueRecents,
+    requestRoute, hasRouteRequests, hasRouteRequestPending, lastRouteRequestId, settingsChanged, startForecast,
+    importRoute, touchRecent, enqueueRecents,
     claimLoading, releaseLoading, releaseLoadingPrefix: (prefix) => releaseLoadingPrefix(prefix),
   };
 };
@@ -228,6 +232,7 @@ var cwCreateRouteCoordinator = function (deps) {
   Object.assign(window.cw, {
     requestRoute: coordinator.requestRoute,
     hasRouteRequests: coordinator.hasRouteRequests,
+    hasRouteRequestPending: coordinator.hasRouteRequestPending,
     lastRouteRequestId: coordinator.lastRouteRequestId,
     enqueueRecents: coordinator.enqueueRecents,
     settingsChanged: coordinator.settingsChanged,

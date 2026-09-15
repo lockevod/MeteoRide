@@ -598,6 +598,13 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, tanda final de cor
       el borrado haya salido bien);
     - IndexedDB no disponible al preparar;
     - que la web no reproduce;
+    - `replayIfComputedWithout` (native.js) ya no relanza mientras la última petición de ruta sigue
+      leyéndose (`cw.hasRouteRequestPending`, nuevo, a partir de `lastFinished` del coordinador: a
+      diferencia de `hasRouteRequests`, que una vez cierta ya no vuelve a false en la sesión, esta sí
+      refleja si la última petición ha terminado): esa petición confirmará y calculará por su cuenta.
+      No tiene test que lo tumbe: haría falta una lectura de ruta retrasada todavía en curso justo
+      cuando termina la lectura del registro preparado (una carrera de milisegundos entre dos
+      promesas), poco fiable con los helpers actuales;
   - La carrera entre la migración desde `localStorage` y una importación.
   - IndexedDB no disponible.
   - Una excepción dentro de `publish`.

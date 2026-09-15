@@ -326,6 +326,9 @@
   // read, a record that can stand in for it gets one more launch, which replays: only over an empty live
   // table, or with nothing published and nothing running.
   function replayIfComputedWithout() {
+    // A route request is still being read: it will commit and compute on its own, and this
+    // launch would only race it.
+    if (window.cw.hasRouteRequestPending()) return;
     if (!preparedStandsIn()) return;
     const shown = window.cw.currentSnapshot();
     const empty = shown ? shown.origin === 'live' && shown.outcome.usableSteps === 0 : !window.cwIsComputing();

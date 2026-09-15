@@ -867,7 +867,8 @@
           if (id === "showDebugButton" || id === "rideAlerts") return;
           if (id === "language" || id === "noticeAll") {
             const row2 = document.getElementById('datetimeRoute2Row');
-            const compareOnScreen = window.apiSource === "compare" || (row2 && row2.style.display !== 'none');
+            const compareOnScreen = (window.cwCompareOwnsTable ? window.cwCompareOwnsTable() : window.apiSource === "compare")
+              || (row2 && row2.style.display !== 'none');
             if (!compareOnScreen && window.cwRepaintPublished) window.cwRepaintPublished();
             return;
           }

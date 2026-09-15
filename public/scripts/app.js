@@ -615,11 +615,13 @@ function preparedRecordOfRoute() {
 }
 
 // Two readings of the settings that would compute the same forecast but for its start. Choosing
-// compare computes nothing of its own; language and notices only change how it looks.
+// compare computes nothing of its own (it computes as Open-Meteo, see prov above); language and
+// notices only change how it looks. So compare on either side is never a change of provider.
 function sameButStart(a, b) {
   const computed = (s) => JSON.stringify([s.units && s.units.temp, s.units && s.units.wind, s.speed, s.interval,
     s.alerts, s.keys && s.keys.meteoblue, s.keys && s.keys.openweather]);
-  return computed(a) === computed(b) && (b.provider === "compare" || a.provider === b.provider);
+  return computed(a) === computed(b)
+    && (a.provider === "compare" || b.provider === "compare" || a.provider === b.provider);
 }
 
 // Puts a prepared snapshot back on screen, moved to this computation's start (spec §4.9.3). It is a
@@ -665,6 +667,7 @@ function compareOwnsTable() {
   return document.getElementById("apiSource")?.value === "compare"
     && !(publishedSnapshot && comparisonHeldBack(publishedSnapshot));
 }
+window.cwCompareOwnsTable = compareOwnsTable;
 
 window.cwLaunchComparison = function (kind) {
   const snapshot = window.cw.currentSnapshot();

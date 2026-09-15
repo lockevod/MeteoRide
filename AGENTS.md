@@ -637,7 +637,10 @@ coverage is there because every provider failed, and its own notice stays up. On
 nothing prepares, comparing without connection still runs and says so (phase 4). A replay moved to another
 start arms the ride alert as the same ride ("Ride alerts", reuse). Nothing computes again when coverage
 comes back with the app in the foreground: only coming back to the app, a setting that computes, or
-another route do.
+another route do. A language or detailed-notices change repaints instead of computing, unless the table on
+screen is the compare one; that check is `window.cwCompareOwnsTable` (exposing `compareOwnsTable`), not a
+bare `apiSource === "compare"` read, since compare chosen over a snapshot it cannot own (a replay, or no
+coverage) still paints the normal table and must still repaint in the new language.
 
 **Opening and expiry.** The restore at start-up asks for its route before any wait, and its `read`
 loads the record first: until it has expired it opens the prepared GPX, whichever recent route is newest
@@ -660,13 +663,15 @@ replaced a route picked during the delete. `route_load_failed` stays up. When th
 session, and dropped without a word if it has expired. The route that arrived may have been computed
 before that read and found nothing, so once it is read, a record that can replay the confirmed route at the
 start in the field launches the forecast once more, which replays it, but only over a live table with no
-usable step, or with nothing published and nothing running (`replayIfComputedWithout`).
+usable step, or with nothing published and nothing running, and only when no route request is still being
+read (`replayIfComputedWithout`; that request will commit and compute on its own, this launch would only race it).
 
 **Changes with a replay on screen and no coverage.** A change that needs computing other than the start
 (units, provider, speed, interval, keys, warnings) is refused before any identity is taken, with
 `offline_cannot_recalculate` and the snapshot kept current, only when the settings differ both from those
 the last launch read (`launchedSettings` in `app.js`) and from the replayed snapshot's, which carry the
-keys in use (`sameButStart`; choosing compare counts as no change). A refused change becomes the launch
+keys in use (`sameButStart`; compare on either side counts as no change, since it computes as Open-Meteo
+regardless of which one was launched or is shown). A refused change becomes the launch
 reference too; the second comparison is what accepts going back to what the replay shows, and leaving
 compare after a launch made with it chosen. Comparing with the replayed record's settings alone, as in the
 first version, refused every later start once a setting had changed after preparing or a change had been

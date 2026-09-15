@@ -1223,6 +1223,22 @@ test('opening without coverage with compare saved shows the replayed table and s
     .toBeGreaterThan(0);
 });
 
+// The replayed table paints normally with compare chosen (no comparison can run over it): a language
+// change must still repaint it, not skip the repaint because compare is chosen in the field.
+test('opening without coverage with compare saved, changing language repaints the replayed table', async ({ page }) => {
+  await prepareThenLoseCoverage(page, { now: T0 }, '45:00');
+  await selectProvider(page, 'compare');
+  await page.reload();
+  await mapReady(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  expect(await compareShown(page)).toBe(false);
+
+  const label = () => page.evaluate(() => document.querySelector('#weatherTable .unit-temp')?.parentElement.textContent);
+  const before = await label();
+  await flipControl(page, 'language');
+  await expect.poll(label).not.toBe(before);
+});
+
 // With compare chosen the forecast asks Open-Meteo. Its steps labelled 'compare' never counted as usable:
 // a usable prepared snapshot replayed over working answers, and compare stayed off for up to three hours.
 test('with compare chosen and the route prepared, working answers are published live and compared', async ({ page }) => {
@@ -1788,6 +1804,37 @@ test('with a replayed forecast and no coverage, choosing compare is nothing to c
   await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');   // 10:00
   expect(await shownOrigin(page)).toBe('prepared');
   expect(await page.evaluate(() => window.__notices.join(' | '))).not.toMatch(cannotRecalculate);
+});
+
+// Prepared with compare chosen, the stored forecast is Open-Meteo's (compare computes nothing of its
+// own): leaving compare for Open-Meteo on the replay is not a change of provider on either side.
+test('with a replayed forecast and no coverage, leaving compare chosen at the last launch for Open-Meteo is accepted', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await routeWithForecast(page, control);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  // Choosing compare itself launches no computation; a further change does, and is what
+  // labels the published (and then prepared) snapshot's settings.provider as "compare".
+  const id = await page.evaluate(() => window.cw.currentSnapshot().computationId);
+  await setSpeed(page, 13);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.computationId)).toBeGreaterThan(id);
+  expect(await page.evaluate(() => window.cw.currentSnapshot()?.settings.provider)).toBe('compare');
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  control.offline = true;
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }));
+  await noLongerOnline(page);
+  await page.reload();
+  await mapReady(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  expect(await page.evaluate(() => window.cw.currentSnapshot()?.settings.provider)).toBe('compare');
+
+  await selectProvider(page, 'openmeteo');
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  expect(await shownOrigin(page)).toBe('prepared');
+  await expect(page.locator('.notice')).not.toContainText(cannotRecalculate);
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both
