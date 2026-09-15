@@ -361,7 +361,7 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: fase 6.
+en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de correcciones.
 
 ### Pendiente por fase del rediseño
 
@@ -519,8 +519,9 @@ en `AGENTS.md → Open work`. Última actualización: fase 6.
     - Un campo de hora vacío o ilegible cuenta como una hora pasada: el cálculo usa ahora
       redondeado y lo escribe en el campo, sin aviso. Antes avisaba `route_date_empty` o
       `route_date_invalid`.
-    - El redondeo ignora los segundos: a las 10:00:30 la salida queda a las 10:00, medio minuto
-      antes de ahora. Ya era así.
+    - El redondeo cuenta los segundos: a las 10:00:30 la salida queda a las 10:15. Los relojes falsos
+      de los tests de Playwright se instalan un minuto antes del cuarto (`startClock`), porque siguen
+      corriendo.
     - El `min` del campo se fija al cargar y no avanza en una sesión larga. Elegir una hora pasada
       la deja escrita hasta que un cálculo, una carga o volver a la app aplican la regla.
   - **Volver a la app.**
@@ -528,13 +529,24 @@ en `AGENTS.md → Open work`. Última actualización: fase 6.
       confirma, el cálculo de la ruta anterior queda sustituido.
     - Una foto reproducida tiene la antigüedad del registro, así que cada vuelta con cobertura la
       recalcula, y sin cobertura la vuelve a reproducir.
+    - Sin cobertura y sin foto preparada que sirva para la nueva salida no recalcula: la tabla se queda
+      con las horas de la salida anterior hasta que haya cobertura, con el aviso
+      `offline_cannot_recalculate`.
+    - Con la salida sin mover y el último cálculo aún en marcha no relanza nada, aunque la foto en
+      pantalla tenga más de 30 min.
+    - Nada recalcula cuando vuelve la cobertura con la app en primer plano: solo volver a la app, un
+      ajuste que recalcula u otra ruta.
   - **Ajustes sin cobertura con una foto reproducida.**
     - Un ajuste que no es la hora se rechaza, pero queda guardado. Nada lo aplica cuando vuelve la
       cobertura hasta otro cambio, volver a la app u otra ruta.
-    - La foto reproducida lleva la velocidad y el intervalo de la preparada. Si los de la página
-      son otros (se cambiaron antes de cerrar), un cambio de hora posterior se rechaza como cambio
-      de ajustes.
-    - Elegir comparar no cuenta como cambio. Esa excepción no tiene test.
+    - El cambio se compara con los ajustes que leyó el último lanzamiento, y un cambio rechazado pasa a
+      ser esa referencia. Volver después al ajuste anterior también se rechaza, y la tabla sigue con las
+      unidades de la foto preparada.
+    - La foto reproducida lleva la velocidad y el intervalo de la preparada, aunque los de la página
+      sean otros.
+    - Elegir comparar no cuenta como cambio. Con comparar elegido, la tabla normal no se repinta hasta
+      que pinta una comparación, así que una reproducción movida solo se ve en la foto. Salir de comparar
+      después de un lanzamiento con comparar elegido se rechaza como cambio de proveedor.
   - **Reproducción.**
     - Un proveedor que no responde retiene el cálculo y la reproducción tras un cálculo sin datos
       (H4). Tiene test.
@@ -542,6 +554,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 6.
       venir de caché.
     - El resultado (`outcome`) de una reproducción es el de la foto guardada con `preparedAt` y
       `preparedFor`. No se recuentan los pasos utilizables en modo reproducción.
+    - Una reproducción muestra los avisos oficiales guardados solo si están activados ahora.
+    - Con comparar elegido, los pasos de un cálculo en vivo llevan proveedor `compare` y no cuentan como
+      utilizables, así que con una foto preparada utilizable de esa ruta se reproduce aunque los
+      proveedores respondan. Se deduce del código; no tiene test ni se corrige en esta tanda.
     - MeteoBlue no se reproduce: sus pasos no cuentan como cubiertos y reproducidos salen sin datos
       (spec §2).
     - Fuera del margen la tabla sale sin datos aunque la respuesta guardada cubra esa hora.
@@ -556,22 +572,22 @@ en `AGENTS.md → Open work`. Última actualización: fase 6.
     - Borrar la foto caducada al arrancar puede borrar una que se prepare en ese mismo momento.
     - El aviso de caducidad sin cobertura lo tapa enseguida el del cálculo que viene después
       (`offline_no_data`).
+    - Cuando la restauración no pide nada (un enlace, el traspaso por `sessionStorage`, una ruta ya
+      pedida), la foto preparada se carga para la sesión, pero el cálculo de la ruta que llega pudo
+      lanzarse antes sin ella.
+    - Una ruta preparada cuyo GPX no se abre se borra y se abre la última reciente; el aviso de que no se
+      pudo abrir la ruta queda en pantalla.
   - **Sin medir.** El tamaño real de la foto en IndexedDB (la spec estimaba del orden de 1 MB para
     unas 20 etapas).
 - **Tests que faltan.**
   - Fase 6, sin test que las tumbe:
     - leer los ajustes dos veces al lanzar (equivalente: las dos lecturas caen en el mismo turno);
-    - la mitad de «foto reproducida» de la guarda de `cwLaunchComparison`, tapada por la de «sin
-      cobertura en la app»;
-    - la excepción de comparar en `sameButStart`;
     - quitar la corrección de `setupDateLimits` (equivalente a la regla al cargar);
     - la comprobación `origin !== 'live'` al preparar con una foto reproducida en pantalla, porque
       solo se prueba sin foto;
-    - un registro corrupto o de otra versión descartado;
+    - un registro de otra versión o sin huella descartado (`wellFormed`);
     - IndexedDB no disponible al preparar;
     - que la web no reproduce;
-    - la alerta de ruta de una foto recolocada, que conserva `notified` y recalcula `baseline`: la
-      cubre la reutilización de la fase 4, no un test de la fase 6.
   - La carrera entre la migración desde `localStorage` y una importación.
   - IndexedDB no disponible.
   - Una excepción dentro de `publish`.
