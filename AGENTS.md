@@ -1208,11 +1208,17 @@ a replay takes the ones in use ("Preparing and replaying").
     and the quarter of `minutely_15` whenever the answer carries one for the step, which it does
     when it was requested within 5 h (`buildProviderUrl` asks for quarters only then, but the
     answer then covers its whole date range, so a cached one keeps them). Precipitation is the
-    exception: it always means mm in the hour, so the rows read alike within 5 h and beyond and
-    beside OpenWeather's `1h`. From `minutely_15` it is the sum of the four quarters of the
-    nearest hour T, (T − 60 min, T], which is what Open-Meteo's hourly value sums; with any of
-    them missing or null, the hour's own value. In replay the sum is read only where a quarter
-    counts (within fifteen minutes) and the hour is within the hour gap, as the other fields.
+    exception: it is the hour being ridden, (H, H+60 min] with H the step's time floored to the
+    hour in the answer's own wall clock, so a step at 10:05, 10:40 or 10:00 all show 10:00–11:00.
+    From `minutely_15` it is the sum of the quarters labelled H+15, H+30, H+45 and H+60 (each
+    quarter is the 15 minutes before its label); with any of them missing or null, and beyond the
+    quarters, it is the hourly entry labelled H+60 (Open-Meteo's hourly value is the hour before
+    its label), never the nearest one. So it means the same within 5 h and beyond. When H+60 is
+    not in the answer the step has no rain value; the rest of the step is unaffected. In replay the
+    gap rule still decides whether the step has data at all, and H+60 is never more than an hour
+    from the step. OpenWeather is unchanged: it reads `rain['1h'] + snow['1h']` of the hourly
+    entry nearest the step (`closestByDt`). Whether that `1h` is the hour before or after its
+    `dt` is not stated in the code and is unverified, so its row may cover a different hour.
     uv, probability and weather code come from `hourly` when the quarter has none (AROME HD sends
     all three null there). The same unit conversion as the table
     (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from

@@ -76,22 +76,25 @@ var cwForecastRules = (function () {
       const arr = hourly[name];
       return Array.isArray(arr) && arr.length > idx ? arr[idx] : null;
     };
-    // Precipitation always means mm in the hour. From minutely_15 it is the sum of the four quarters
-    // that make up the nearest hour T, (T − 60 min, T], as Open-Meteo's hourly value sums the hour
-    // before T; with any of them missing or null, the hour's own value.
-    const hourRain = () => {
-      if (idx === -1 || !Array.isArray(m.precipitation)) return fromHourly('precipitation');
-      const T = parseProviderTime(hourly.time[idx], offset);
+    // Precipitation is the hour being ridden, (H, H+60 min], H the step's time floored to the hour on
+    // the answer's own wall clock. From minutely_15, the quarters labelled H+15 … H+60 (each the 15
+    // minutes before its label); with any of them missing or null, or beyond the quarters, the hourly
+    // entry labelled H+60 (the hour before its label), never the nearest one. No such entry: no value.
+    const rideHourRain = () => {
+      const HOUR = 4 * QUARTER_MS;
+      const offMs = Number.isFinite(offset) ? offset * 1000 : -new Date(timeMs).getTimezoneOffset() * 60000;
+      const H = Math.floor((timeMs + offMs) / HOUR) * HOUR - offMs;
+      const labelled = (times, ms) => times.findIndex((t) => parseProviderTime(t, offset) === ms);
+      const hi = labelled(hourly.time, H + HOUR);
+      const ofHour = hi !== -1 && Array.isArray(hourly.precipitation) ? (hourly.precipitation[hi] ?? null) : null;
+      if (!useMinutely || !Array.isArray(m.precipitation)) return ofHour;
       let sum = 0;
-      let n = 0;
-      for (let i = 0; i < m.time.length; i++) {
-        const t = parseProviderTime(m.time[i], offset);
-        if (t <= T - 4 * QUARTER_MS || t > T) continue;
-        if (m.precipitation[i] == null) return fromHourly('precipitation');
-        sum += Number(m.precipitation[i]);
-        n++;
+      for (let q = 1; q <= 4; q++) {
+        const qi = labelled(m.time, H + q * QUARTER_MS);
+        if (qi === -1 || m.precipitation[qi] == null) return ofHour;
+        sum += Number(m.precipitation[qi]);
       }
-      return n === 4 ? sum : fromHourly('precipitation');
+      return sum;
     };
     const get = (name) => {
       const arr = useMinutely ? m[name] : null;
@@ -111,7 +114,7 @@ var cwForecastRules = (function () {
       gust: get('wind_gusts_10m'),
       windDir: get('winddirection_10m'),
       humidity: get('relative_humidity_2m'),
-      precipitation: useMinutely ? hourRain() : fromHourly('precipitation'),
+      precipitation: rideHourRain(),
       precipProb: get('precipitation_probability'),
       weatherCode: get('weathercode'),
       uvIndex: get('uv_index'),

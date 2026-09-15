@@ -51,9 +51,11 @@ test('Open-Meteo: a quarter with no weather code takes the hour\'s', () => {
   assert.equal(r.weatherCode, [0, 1, 3, 61, 80][11 % 5]); // tie → 11:00 → slot 11
 });
 
-// Precipitation always means mm in the hour: from minutely_15 it is the sum of the four quarters
-// that make up the nearest hour, (T − 60 min, T], as Open-Meteo's hourly value is.
-// In the fixture quarter q is local 08:00 + 15 min × q; hour slot i is local i:00 on the 20th.
+// Precipitation is the hour being ridden, (H, H+60 min], H the step's hour: from minutely_15 the
+// quarters labelled H+15 … H+60 (each the 15 minutes before it); beyond them, or with any of them
+// missing or null, the hourly entry labelled H+60 (the hour before it). Other fields stay nearest.
+// In the fixture quarter q is local 08:00 + 15 min × q; hour slot i is local i:00 on the 20th,
+// with precipitation i/10 (0 when i is a multiple of 5).
 const quarter = (h, m) => (h - 8) * 4 + m / 15;
 const withQuarterRain = (values) => {
   const w = openMeteo();
@@ -63,43 +65,58 @@ const withQuarterRain = (values) => {
   }
   return w;
 };
-const rainAt1040 = { '10:15': 0.2, '10:30': 0.5, '10:45': 0.3, '11:00': 1.0 };
+const rain10to11 = { '10:15': 0.2, '10:30': 0.5, '10:45': 0.3, '11:00': 1.0 };
+const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `precipitation ${actual}, expected ${expected}`);
 
-test('Open-Meteo: from minutely_15, precipitation is the sum of the quarters of the nearest hour', () => {
-  const r = rules.extractStep(withQuarterRain(rainAt1040), { provider: 'openmeteo', time: at('2026-09-20T08:40:00Z') });
-  assert.equal(r.source, 'minutely_15');
-  assert.ok(Math.abs(r.precipitation - 2.0) < 1e-9, `precipitation ${r.precipitation}`);
-  assert.equal(r.temp, 111);               // 10:40 local → nearest quarter 10:45, as before
+test('Open-Meteo: from minutely_15, precipitation is the four quarters of the hour the step is in', () => {
+  const w = withQuarterRain(rain10to11);
+  const at1005 = rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T08:05:00Z') });
+  assert.equal(at1005.source, 'minutely_15');
+  close(at1005.precipitation, 2.0);
+  assert.equal(at1005.temp, 108);          // 10:05 local → nearest quarter 10:00, as before
+  const at1040 = rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T08:40:00Z') });
+  close(at1040.precipitation, 2.0);
+  assert.equal(at1040.temp, 111);          // nearest quarter 10:45
+  // On the hour: the hour ahead, (10:00, 11:00].
+  close(rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T08:00:00Z') }).precipitation, 2.0);
 });
 
-test('Open-Meteo: with a quarter of that hour null or missing, precipitation is the hour\'s', () => {
-  const nulled = rules.extractStep(withQuarterRain({ ...rainAt1040, '10:30': null }),
-    { provider: 'openmeteo', time: at('2026-09-20T08:40:00Z') });
+test('Open-Meteo: with a quarter of that hour null or missing, precipitation is the hourly entry that ends it', () => {
+  const nulled = rules.extractStep(withQuarterRain({ ...rain10to11, '10:30': null }),
+    { provider: 'openmeteo', time: at('2026-09-20T08:05:00Z') });
   assert.equal(nulled.source, 'minutely_15');
-  assert.equal(nulled.precipitation, 11 / 10);   // hour slot 11
-  // 08:10 local → 08:00, whose hour starts before the first quarter (08:00): three are missing.
-  const early = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T06:10:00Z') });
-  assert.equal(early.source, 'minutely_15');
-  assert.equal(early.precipitation, 8 / 10);     // hour slot 8
+  assert.equal(nulled.precipitation, 11 / 10);   // 11:00, not the nearest 10:00 (slot 10 is 0)
+  // 13:10 local: its hour ends at 14:00, one quarter past the last one (13:45).
+  const late = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T11:10:00Z') });
+  assert.equal(late.source, 'minutely_15');
+  assert.equal(late.precipitation, 14 / 10);     // 14:00, not the nearest 13:00
 });
 
-test('Open-Meteo: beyond minutely_15, precipitation is the hour\'s as before', () => {
-  const r = rules.extractStep(withQuarterRain(rainAt1040), { provider: 'openmeteo', time: at('2026-09-20T14:10:00Z') });
+test('Open-Meteo: beyond minutely_15, precipitation is the hourly entry that ends the step\'s hour', () => {
+  const r = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T14:05:00Z') });
   assert.equal(r.source, 'hourly');
-  assert.equal(r.precipitation, 16 / 10);        // 16:10 local → slot 16
+  assert.equal(r.temp, 26);                      // 16:05 local → nearest 16:00, as before
+  assert.equal(r.precipitation, 17 / 10);        // 17:00, not 16:00
+  // The answer's last hour (21st 23:00): the hour after it is not in the answer, so no rain value.
+  const last = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-21T21:10:00Z') });
+  assert.equal(last.temp, 57);
+  assert.equal(last.precipitation, null);
 });
 
-test('Open-Meteo replay: the hourly sum only where a quarter counts, and the hour\'s otherwise', () => {
-  const w = withQuarterRain(rainAt1040);
-  const inside = rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T08:40:00Z'), ...rules.REPLAY });
+test('Open-Meteo replay: the hour being ridden where the gap rule lets the step through, and no data otherwise', () => {
+  const w = withQuarterRain(rain10to11);
+  const R = rules.REPLAY;
+  const inside = rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T08:40:00Z'), ...R });
   assert.equal(inside.source, 'minutely_15');
-  assert.ok(Math.abs(inside.precipitation - 2.0) < 1e-9, `precipitation ${inside.precipitation}`);
-  // 14:10 local: the last quarter (13:45) is 25 min away, so no quarter counts: the hour, slot 14.
-  const outside = rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T12:10:00Z'), ...rules.REPLAY });
+  close(inside.precipitation, 2.0);
+  // 15:10 local: the last quarter (13:45) is 85 min away, so the hour: 16:00 ends it.
+  const outside = rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-20T13:10:00Z'), ...R });
   assert.equal(outside.source, 'hourly');
-  assert.equal(outside.precipitation, 14 / 10);
+  assert.equal(outside.precipitation, 16 / 10);
+  // At the answer's end the step passes the gap but its hour ends outside the answer: no rain value.
+  assert.equal(rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-21T21:10:00Z'), ...R }).precipitation, null);
   // An hour further than the gap is still no data.
-  assert.equal(rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-22T12:10:00Z'), ...rules.REPLAY }), null);
+  assert.equal(rules.extractStep(w, { provider: 'openmeteo', time: at('2026-09-22T12:10:00Z'), ...R }), null);
 });
 
 test('OpenWeather: wind comes back in km/h whether the request was metric or imperial', () => {
