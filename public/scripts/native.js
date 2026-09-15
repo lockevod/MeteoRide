@@ -676,8 +676,10 @@
     ++armToken;
     queueWatch(async () => {
       if (keepFor !== undefined && (watchFingerprint === null || watchFingerprint === keepFor)) return;
-      watchFingerprint = null;
+      // Nothing is named only once the runner has cleared it. While it has not, or if it refuses,
+      // the fingerprint still names the route it holds, so confirming another route disarms again.
       await runnerCall('saveWatch', { watch: null });
+      watchFingerprint = null;
       showWatchStatus(null);
     }).catch((e) => log('could not clear the watch', e));
   }

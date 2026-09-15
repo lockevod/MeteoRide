@@ -320,7 +320,7 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
           // A test can hold the system's permission answer (`__permissionHeld`, a promise), and
           // the runner's answer to the next save of a watch (`__runnerHoldNext`), to the next
           // disarm (`__runnerHoldDisarm`) and to the next read (`__runnerHoldLoad`); reads fail
-          // while `__runnerLoadFails` is set. A save lands in the store when the runner answers
+          // while `__runnerLoadFails` is set, and the next disarm fails once `__runnerDisarmFails` is. A save lands in the store when the runner answers
           // it, which is when native code would have written it; `__runnerStored` lists what
           // landed, in that order.
           CapacitorBackgroundRunner: {
@@ -336,6 +336,10 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
               const hold = event === 'loadWatch' ? '__runnerHoldLoad' : details.watch ? '__runnerHoldNext' : '__runnerHoldDisarm';
               const held = window[hold];
               if (held) { window[hold] = null; await held; }
+              if (event === 'saveWatch' && !details.watch && window.__runnerDisarmFails) {
+                window.__runnerDisarmFails = false;
+                throw new Error('the runner could not clear the watch');
+              }
               if (event === 'saveWatch') {
                 sessionStorage.setItem('__watch', JSON.stringify(details.watch || null));
                 window.__runnerStored = (window.__runnerStored || []).concat([details.watch || null]);
@@ -2996,15 +3000,44 @@ test('the route restored at start-up keeps its stored watch even when it is conf
   expect(watch.notified).toEqual(['AEMET_Viento_1_2']);
 });
 
-test('a stored watch the runner cannot read still lets the route arm afresh', async ({ page }) => {
+test('a stored watch the runner cannot read still lets the route arm afresh, and no read leaves its failure unhandled', async ({ page }) => {
   await installNativeBridge(page);
-  await page.addInitScript(() => { window.__runnerLoadFails = true; });
+  await page.addInitScript(() => {
+    window.__runnerLoadFails = true;
+    window.__unhandled = [];
+    window.addEventListener('unhandledrejection', (e) => window.__unhandled.push(String((e.reason && e.reason.message) || e.reason)));
+  });
   await stubWatchProviders(page, {});
   await page.goto('/index.html');
   await mapReady(page);
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
   expect((await lastStored(page)).notified).toEqual([]);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__unhandled)).toEqual([]);
+});
+
+test('a disarm the runner refuses still leaves the old route to be disarmed when the next route is confirmed', async ({ page }) => {
+  await installNativeBridge(page);
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+
+  // Another route is confirmed and the runner refuses to clear the watch: it still holds the first route.
+  control.forecastHeld = heldPromise().promise;
+  await page.evaluate(() => { window.__runnerDisarmFails = true; });
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await expect.poll(() => page.evaluate(() => window.__runnerDisarmFails)).toBe(false);
+  await page.waitForTimeout(300);
+  expect(await lastStored(page)).not.toBeNull();
+
+  await pickText(page, 'c.gpx', routeAt('Ruta C', 40.44));
+  await expect(routeName(page)).toHaveText('Ruta C');
+  await expect.poll(() => lastStored(page)).toBeNull();
 });
 
 /* ---------- comparing providers ---------- */
