@@ -449,11 +449,23 @@ var cwForecastRules = (function () {
 
     // OpenWeather is the only provider left that needs a key, so missingKey never fires for another one.
     const keyed = 'OpenWeather';
+    const short = ['fallback_short', {}];
+
+    // A comparison names every provider whose request for a step failed (`failedProviders`, id → the
+    // recorder's failure status): an HTTP status, or anything else ('network', 'body') as not
+    // responding. Without connection the failure is not the provider's, so it is not named.
+    const failed = Object.entries(o.failedProviders || {});
+    if (failed.length && !o.offline) {
+      const names = { openmeteo: 'Open-Meteo', openweather: 'OpenWeather', aromehd: 'AROME-HD' };
+      const key = o.missingKey ? [['provider_key_missing', { prov: keyed }], short] : [];
+      return say('error', ...key, ...failed.map(([id, status]) => /^\d+$/.test(status)
+        ? ['provider_http_error', { prov: names[id] || id, status }]
+        : ['provider_not_responding', { prov: names[id] || id }]));
+    }
     const named = (flag) => (ow[flag] ? 'OpenWeather' : null);
     const httpFrom = ow.httpError ? ow : om.httpError ? om : null;
     const httpName = ow.httpError ? 'OpenWeather' : 'Open-Meteo';
     const httpParams = () => ({ prov: httpName, status: httpFrom.httpStatus != null ? String(httpFrom.httpStatus) : '…' });
-    const short = ['fallback_short', {}];
     const fallbackError = !!o.usedFallbackError;
 
     if (noticeAll) {

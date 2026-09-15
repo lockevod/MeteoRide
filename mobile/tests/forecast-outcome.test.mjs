@@ -62,6 +62,22 @@ test('an empty table outranks stale data, and stale data outranks the provider p
     'offline_stale_forecast');
 });
 
+test('a comparison names each provider that failed: its HTTP status, or that it is not responding', () => {
+  const compare = { requestedProvider: 'compare', usableSteps: 4, transportFailures: 3, lastFailStatus: 'network' };
+  assert.deepEqual(decide({ ...compare, failedProviders: { aromehd: '500', openweather: 'network' } }), {
+    parts: [['provider_http_error', { prov: 'AROME-HD', status: '500' }], ['provider_not_responding', { prov: 'OpenWeather' }]],
+    type: 'error',
+  });
+  // A date comparison with OpenWeather and no key asks Open-Meteo, as the table does, and says so first.
+  assert.deepEqual(decide({ ...compare, missingKey: true, failedProviders: { openmeteo: 'body' } }), {
+    parts: [['provider_key_missing', { prov: 'OpenWeather' }], ['fallback_short', {}], ['provider_not_responding', { prov: 'Open-Meteo' }]],
+    type: 'error',
+  });
+  // Without connection the failure is not the provider's, and a comparison where none failed says nothing.
+  assert.equal(decide({ ...compare, offline: true, failedProviders: { openmeteo: 'network' } }), null);
+  assert.equal(decide({ ...compare, failedProviders: {} }), null);
+});
+
 test('quiet mode: key, quota and HTTP errors are named only when they forced a fallback', () => {
   assert.deepEqual(decide({ missingKey: true, requestedProvider: 'openweather' }),
     { parts: [['provider_key_missing', { prov: 'OpenWeather' }], ['fallback_short', {}]], type: 'error' });

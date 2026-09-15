@@ -5497,6 +5497,90 @@ test('a comparison whose answers cannot be read says the provider is not respond
   await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toContain('not responding');
 });
 
+const providerNotices = (page) =>
+  page.evaluate(() => window.__notices.filter((n) => /provider error|not responding|requires an API Key/.test(n)));
+
+// A provider that failed was left out of the comparison, or left gaps in it, without a word.
+test('a comparison names the provider that fails, and says nothing when every provider answers', async ({ page }) => {
+  await recordNotices(page);
+  const control = { aromeStatus: 200 };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const status = isArome(new URL(route.request().url())) ? control.aromeStatus : 200;
+    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await forgetForecasts(page);
+  await watchComparisons(page);
+
+  await selectProvider(page, 'compare');
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
+  expect(await page.evaluate(() => window.cw.compareProviderData.aromehd.length)).toBeGreaterThan(0);
+  expect(await providerNotices(page)).toEqual([]);
+
+  control.aromeStatus = 500;
+  await forgetForecasts(page);
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(2);
+  expect(await providerNotices(page)).toEqual(['AROME-HD provider error: HTTP 500.']);
+});
+
+test('a date comparison names the provider that fails, and says nothing when it answers', async ({ page }) => {
+  await recordNotices(page);
+  // Requests of the table and the comparisons are counted; from `failFrom` on they answer 500.
+  const control = { n: 0, failFrom: Infinity };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const asked = new URL(route.request().url()).searchParams.has('start_date');
+    const status = asked && ++control.n >= control.failFrom ? 500 : 200;
+    return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await openCompareDates(page);
+  await forgetForecasts(page);
+  await watchDatePaints(page);
+
+  await runCompareDates(page);
+  await expect.poll(() => page.evaluate(() => window.__datePaints.length)).toBe(1);
+  expect(await providerNotices(page)).toEqual([]);
+
+  // Date A asks once per step, then date B: B's requests fail.
+  const steps = await page.evaluate(() => window.cw.currentSnapshot().steps.length);
+  await forgetForecasts(page);
+  Object.assign(control, { n: 0, failFrom: steps + 1 });
+  await runCompareDates(page);
+  await expect.poll(() => page.evaluate(() => window.__datePaints.length)).toBe(2);
+  expect(await page.evaluate(() => window.cw.weatherDataA.filter((s) => s.temp != null).length)).toBe(steps);
+  expect(await providerNotices(page)).toEqual(['Open-Meteo provider error: HTTP 500.']);
+});
+
+// The table says OpenWeather needs a key and asks Open-Meteo; the date comparison asked Open-Meteo
+// for the same reason and cleared that notice.
+test('a date comparison with OpenWeather and no key says so, as the table does', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectProvider(page, 'openweather');
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await expect(page.locator('#horizonNotice')).toContainText('OpenWeather requires an API Key.');
+  await openCompareDates(page);
+  await watchDatePaints(page);
+
+  await page.evaluate(() => { document.getElementById('horizonNotice').textContent = ''; });
+  await runCompareDates(page);
+  await expect.poll(() => page.evaluate(() => window.__datePaints.length)).toBe(1);
+  await expect(page.locator('#horizonNotice')).toContainText('OpenWeather requires an API Key.');
+});
+
 test('a replaced comparison whose requests failed leaves no notice over the comparison that replaced it', async ({ page }) => {
   await recordNotices(page);
   // While `failing`, every request fails, and the one numbered `holdAt` only once `gate` opens.

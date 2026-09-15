@@ -135,16 +135,27 @@
     return { json, effProv };
   }
 
+  // fetchAnswer that never throws and, when a failed request left the step with nothing, notes the
+  // provider asked in `failed` with the recorder's failure status ('500', 'network', 'body'…), which
+  // is what the notice names. The run's requests go one after another, so the count is its own.
+  async function fetchAnswerNoting(failed, effProv, p, timeAt, apiKey, units, recorder, init) {
+    const before = recorder.failed;
+    const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init).catch(() => null);
+    if (!answer && recorder.failed > before) failed[effProv] = recorder.lastFailStatus;
+    return answer;
+  }
+
   // A comparison's steps: the published snapshot's, in the shape the table and markers read.
   function snapshotSteps(snapshot) {
     return (snapshot.steps || []).map((s) => ({ lat: s.lat, lon: s.lon, time: new Date(s.time), distanceM: s.distanceM }));
   }
 
   // A comparison on screen says what its own requests saw (spec §4.10): a table whose requests
-  // failed and that came out empty says why, and data read from the cache without connection says
-  // how old it is. Per-provider notices do not apply: every provider already has a row, empty
-  // when it gave nothing. A step counts when any painted row has a temperature or a wind for it.
-  function showComparisonNotice(recorder, rows, run) {
+  // failed and that came out empty says why, data read from the cache without connection says how
+  // old it is, and otherwise every provider that failed is named (`failedProviders`), with the
+  // missing OpenWeather key first when a date comparison asked another provider for lack of it. A step
+  // counts when any painted row has a temperature or a wind for it.
+  function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false } = {}) {
     const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
     let usableSteps = 0;
     for (let i = 0; i < length; i++) {
@@ -158,6 +169,8 @@
       lastFailStatus: recorder.lastFailStatus,
       offline: recorder.offline,
       staleAgeMs: recorder.staleAgeMs,
+      failedProviders,
+      missingKey,
     }, !!run.snapshot.settings.noticeAll, run);
   }
 
@@ -172,6 +185,8 @@
     const current = () => window.cwIsComparisonCurrent(run);
     // What this comparison's requests and cache reads saw; its notice is decided from it.
     const recorder = window.cw.utils.createRecorder();
+    // Providers whose request left a step with nothing, named in the notice.
+    const failedProviders = {};
 
     try {
     const snapshot = run.snapshot;
@@ -263,7 +278,7 @@
 
         try {
           const apiKey = (effProv === "openweather") ? apiKeyOWM : "";
-          const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder);
+          const answer = await fetchAnswerNoting(failedProviders, effProv, p, timeAt, apiKey, units, recorder);
           if (answer) {
             const json = answer.json;
             effProv = answer.effProv;
@@ -361,7 +376,7 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
-    showComparisonNotice(recorder, Object.values(compareData), run);
+    showComparisonNotice(recorder, Object.values(compareData), run, { failedProviders });
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -385,6 +400,8 @@
     const current = () => window.cwIsComparisonCurrent(run);
     // What this comparison's requests and cache reads saw; its notice is decided from it.
     const recorder = window.cw.utils.createRecorder();
+    // Providers whose request left a step with nothing, named in the notice.
+    const failedProviders = {};
 
     try {
     // Helper: parse "YYYY-MM-DDTHH:mm" (or with space) as local time reliably
@@ -415,6 +432,8 @@
   // The provider the snapshot was computed with; 'compare' compares dates with Open-Meteo
   let provider = snapshot.settings.provider || 'openmeteo';
   if (provider === 'compare') provider = 'openmeteo';
+  // OpenWeather chosen without a key is asked of another provider and, as the table does, says so.
+  const missingKey = provider === 'openweather' && (keys.openweather || '').trim().length < 5;
 
   // The two dates are what this comparison is asked for (full YYYY-MM-DDTHH:mm, parsed locally)
   const dtA = document.getElementById("datetimeRoute")?.value || "";
@@ -521,7 +540,7 @@
         try {
           const apiKeyOWM = keys.openweather || "";
           const apiKey = (effProv === 'openweather') ? apiKeyOWM : '';
-          const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, { cache: 'no-store' });
+          const answer = await fetchAnswerNoting(failedProviders, effProv, p, timeAt, apiKey, units, recorder, { cache: 'no-store' });
           if (answer) {
             const json = answer.json;
             effProv = answer.effProv;
@@ -562,7 +581,7 @@
       // Store data for row selection
       window.cw.weatherDataA = dataA;
       window.cw.weatherDataB = dataB;
-      showComparisonNotice(recorder, [dataA, dataB], run);
+      showComparisonNotice(recorder, [dataA, dataB], run, { failedProviders, missingKey });
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);

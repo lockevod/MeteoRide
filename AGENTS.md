@@ -1199,9 +1199,18 @@ a replay takes the ones in use ("Preparing and replaying").
   - **Notice.** Each run has its own recorder, passed to every provider request and cache read.
     When it paints it decides its notice with `decideNotice` (`cwShowForecastNotice`) on an
     outcome with `usableSteps` (steps with a temperature or wind in any painted row), the
-    recorder's failures, offline flag and stale age, and `requestedProvider: 'compare'`. The
-    per-provider notices do not apply: every provider already has its own row, empty when it
-    gave nothing. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
+    recorder's failures, offline flag and stale age, and `requestedProvider: 'compare'`. It also
+    names the providers that failed (`failedProviders`, id → status). `fetchAnswerNoting` compares
+    `recorder.failed` before and after `fetchAnswer` and, when the step got nothing, files the
+    recorder's `lastFailStatus` under the provider asked; the run's requests go one at a time, so
+    the difference is its own, and a failure the step recovered from (AROME's merge request) names
+    nobody. `decideNotice` makes a numeric status `provider_http_error` and anything else (`network`,
+    `body`, and a timeout once it records one) `provider_not_responding`, one part per provider,
+    after the empty-table and stale rules and never without connection. They show with detailed
+    notices off too: a failed provider leaves gaps or loses its row, where the table falls back. A
+    date comparison with OpenWeather chosen and a key under five characters says
+    `provider_key_missing` first, the table's rule; the providers comparison leaves OpenWeather out
+    without a key and says nothing about it. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
     `publish`, a comparison with nothing to say leaves up the notice of a route that failed to
     open while the run's computation was the latest. A 200 whose body cannot be read counts as a
     failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).
