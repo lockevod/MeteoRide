@@ -467,9 +467,10 @@ so they work with any app rather than a hardcoded list.
 
 Opening the app cold with no coverage used to show nothing at all: no route, no
 forecast, no explanation, just a grey map. Everything needed was already on the
-device. `restoreLastRoute` in `native.js` puts the most recent route back on screen,
-and the cached forecast fills in behind it. Native only, so the website's opening
-behaviour is unchanged.
+device. `restoreLastRoute` in `native.js` puts a route back on screen: the prepared route
+while its start is within three hours of the one in use ("Preparing and replaying" below),
+otherwise the most recent route, with the cached forecast behind it. Native only, so the
+website's opening behaviour is unchanged.
 
 A first run out of coverage has nothing to restore and no way to fetch anything, so
 it says that rather than sitting blank. The wait for the recent-route list is five
@@ -517,8 +518,8 @@ A preloaded map would add the beige background and nothing else.
 
 A route arriving from a share wins by identity, not by waiting: `boot` launches the inbox
 drain and then the restore, without awaiting either. `restoreLastRoute` asks the route
-coordinator for its route *before* waiting for the recent routes (the wait is inside the
-request's `read`), and a shared route only comes out of the inbox after that, so it is the
+coordinator for its route *before* reading the prepared record or waiting for the recent routes
+(both are inside the request's `read`), and a shared route only comes out of the inbox after that, so it is the
 later request and replaces the restore, even once the restore has published. The restore
 still steps aside when anything asked for a route first (a `sessionStorage` handoff, say)
 or the URL carries a route. The map goes to the phone's position only when the drain
@@ -563,18 +564,63 @@ recovered is a working computation and says nothing. This replaces two timers (1
 400 ms) shared by every request, which let a replaced computation put its notice over the
 next one (H5 in the review).
 
-The header's 📴 button pins the cache entries a prepared route depends on, so the
-clear-out that runs when localStorage fills up skips them, and tells the user how many
-points were stored. Running the forecast already fills the cache; what the button adds
-is the guarantee and the feedback — so the feedback has to be true. It used to pin every
-fresh entry in the cache, whichever route it came from, count entries as points and say
-"saved" even when the pin was never written. `prepareForOffline` now rebuilds the keys
-from the rendered steps with `makeCacheKey`, the same call `app.js` looks them up with,
-and says one of four things: nothing to save, saved, saved in part ("n of total"), or
-could not protect it. A point is a distinct key, not a step: steps at the same place in
-the same quarter hour share an entry. The tests count cache keys rather than
-`weatherData.length`, because a single route load currently leaves each step in that
-array three times over (H1 in the review).
+The stale reading above is for routes that were never prepared. A prepared route does not depend
+on the cache at all.
+
+### Preparing and replaying
+
+The header's 📴 button prepares the route on screen for riding without coverage. It used to pin
+cache entries and count them as points, which promised what reading without coverage could not
+find: the keys depend on the step times, and a cold start computes those again from now.
+`prepareForOffline` now stores the published snapshot itself, with the route text its request read,
+in IndexedDB (`meteoride_prepared`, store `snapshot`, key `current`): `{ version: 1, snapshot,
+gpx: { text, name } }`. Only a snapshot of origin `live` can be prepared; without one it says to
+load a route and wait for the forecast. The record carries no identities and no API keys
+(`settings.keys`, `settings.alertsKey`). It counts as saved only on `oncomplete`; an abort says it
+could not be saved and keeps nothing. There is one prepared route: preparing another replaces it
+and says so. The notice counts the points a replay can show for every start within three hours, in
+quarter hours (`cwForecastRules.preparedCoverage`): all of them, or "n of total". `pinCacheKeys`,
+`cachedWeatherKeys` and `cw_offline_pinned` still exist until phase 7, but nothing prepares through
+them any more.
+
+`native.js` keeps the last record read or written in memory (`cwPreparedRecord()`), and launching a
+computation decides with that copy, with no wait; `cwLoadPreparedRecord()` reads IndexedDB again. A
+record of another version, or one missing what a replay needs, counts as none, without a word.
+
+**Replaying.** `cwLaunchComputation` puts the prepared snapshot back instead of computing when
+`navigator.onLine` is false and the record belongs to the confirmed route (same fingerprint), with its
+start at most three hours from the one in use (`cwForecastRules.usablePrepared`). A computation that
+ends current with no usable step (every provider failing while there is coverage, say) replays it
+too, instead of publishing an empty table; a provider that never answers holds that back (H4).
+`replay()` is a computation: it runs under the identities it was launched with and publishes only
+while they are current, so reconciling never launches another one after it. It moves every step and
+the start by the difference (`retime`), keeps the stored answers, sets the keys in use now, and
+publishes with `origin: 'prepared'` and the record's `createdAt`. Its steps are read in replay mode
+(`mirrorSteps` marks them and `processWeatherData` passes `cwForecastRules.REPLAY`): the nearest
+hour must be within an hour, a quarter of `minutely_15` within fifteen minutes, and OpenWeather never
+reads a day, so a step moved past its answer shows no data instead of a distant hour. Official warnings
+are clipped from now, as for any snapshot, so those already over are gone. The notice
+(`prepared_replayed`, decided after an empty table and before stale data) says how old the snapshot is
+and for what start it was prepared. Comparing is never launched over a replayed snapshot, nor without
+coverage in the app; `cwLaunchComparison` says it needs coverage. On the website, where nothing
+prepares, comparing without connection still runs and says so (phase 4).
+
+**Opening and expiry.** The restore at start-up asks for its route before any wait, and its `read`
+loads the record first: within the margin it opens the prepared GPX, whichever recent route is newest
+(the request keeps its `source: 'recent'` label, fixed before the read; nothing reads it). A route shared
+at start-up still wins by identity. Past the margin, at start-up and when the app comes back, the record
+is deleted from IndexedDB and from memory and, without coverage, the user is told the forecast needs
+coverage (`prepared_expired_needs_coverage`). Expiry follows the distance between the two starts, not
+the age of the snapshot: prepared twelve hours ahead and opened half an hour after that start, it
+replays.
+
+**Changes with a replay on screen and no coverage.** A change that needs computing other than the start
+(units, provider, speed, interval, keys, warnings) is found by comparing the settings with those of the
+snapshot on screen (`sameButStart`; choosing compare counts as no change), and refused before any identity
+is taken: `offline_cannot_recalculate`, and the snapshot stays current. A new start replays again: within
+the margin it moves; beyond it every step shows no data with `prepared_out_of_range`, and the record is
+kept (only expiry deletes it). Language and notices repaint as before. With coverage, a change over a replay
+is computed like any other.
 
 ## Ride alerts
 
@@ -744,7 +790,8 @@ committing: a diff wider than that change is a regression.
 
 `fetchWeatherForSteps` computes; `publish(snapshot)` in `app.js` is the only thing that
 puts a forecast on screen. A computation reads its settings once (`readForecastSettings`:
-provider, units, API keys, `noticeAll`, `showWeatherAlerts`, interval, language), so a setting changed while it
+start, speed, provider, units, API keys, `noticeAll`, `showWeatherAlerts`, interval, language) and segments the
+route with those same settings rather than the page, so a setting changed while it
 is still fetching reaches the next computation, never its later steps. It ends with a
 snapshot: its steps as the provider answered them (`payload`, plus `payloadUnits` for
 OpenWeather), the official warnings it found and an `outcome` for the notice. `publish`
@@ -786,8 +833,9 @@ nothing.
 A computation that stops or throws before it fetches lets go at once: `cwLaunchComputation`
 catches what segmenting throws, and the `try` of `fetchWeatherForSteps` starts on its first
 line. Before, a throw there kept `forecast:<id>` claimed and `runningComputationId` set, so
-`cwHasCurrentForecast()` stayed true and no request ending ever recomputed the route. An
-empty or invalid start date now says so with a notice, like one out of range.
+`cwHasCurrentForecast()` stayed true and no request ending ever recomputed the route. Since
+phase 6 an empty or unreadable start date counts as one that has passed: the computation uses
+now, rounded up, and writes it into the field without a notice. A start out of range still says so.
 
 Two corrections went in with this, each in its own commit. The "show weather alerts"
 checkbox was read with `getVal`, which returns `"on"` whatever its state, so unticking it
@@ -1008,8 +1056,8 @@ a route written in between or take the same route twice. The tests hold the slot
 and opens to force both orders; the first version of the "received once" test released them in
 a way the old code survived, which is why it answers the held opens one at a time.
 
-Left for later phases on purpose: the start-time rule, replaying a prepared snapshot and
-`startForecast` choosing between them (phase 6).
+Phase 6 added the start-time rule and replaying a prepared snapshot ("Behaving like an app rather
+than a page" and "Preparing and replaying").
 
 ## Consumers of the snapshot
 
@@ -1021,8 +1069,9 @@ computation already replaced.
 `cw.currentSnapshot()` (`app.js`) is the published snapshot while it belongs to the confirmed
 route, or null; a route still being read changes nothing there. The snapshot's settings carry
 what the consumers need beyond its steps: `interval`, `lang`, `alertsKey` (the OpenWeather key
-when official warnings are shown, `''` otherwise) and `keys`. They live in memory only. Nothing
-stores a snapshot yet; whatever does (phase 6) must leave the keys out.
+when official warnings are shown, `''` otherwise) and `keys`, and since phase 6 `start` and
+`speed`. The keys live in memory only: the prepared record leaves `keys` and `alertsKey` out, and
+a replay takes the ones in use ("Preparing and replaying").
 
 - **Comparisons.** `cwLaunchComparison(kind)` returns a run `{ requestId, computationId,
   comparisonId, snapshot }`, or null with no current snapshot or while a computation of the

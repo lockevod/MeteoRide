@@ -296,6 +296,33 @@ después gana por identidad. `postMessage` responde con el resultado de su petic
 al llegar. Desaparecen `whenAppReady`, `loadSharedGPX`, el segundo oyente del service worker y la
 conversión de KML del inyector. Detalle en `AGENTS.md`, «Routes from outside».
 
+La fase 6 (hora y uso sin cobertura) tiene su plan en
+`docs/superpowers/plans/2026-09-15-fase-6-hora-y-sin-cobertura.md`, también fuera de git. La hora
+de salida nunca queda antes de ahora. La regla (`cwApplyStartRule`: la elegida si va por delante,
+si no ahora redondeado al cuarto siguiente) corre en tres momentos:
+- tras cada `loadSettings`;
+- al leer los ajustes de un cálculo;
+- al volver a la app, que además recalcula si la salida cambió o la foto en pantalla tiene más de
+  30 min.
+
+El campo se guarda al cambiarlo y el arranque ya no lo pisa. La foto lleva salida y velocidad, y la
+segmentación lee de los ajustes del cálculo. Preparar guarda la foto publicada en IndexedDB, sin
+identidades ni claves, y cuenta los puntos que una reproducción podrá mostrar con cualquier salida a
+3 h o menos.
+
+La foto preparada se recoloca a la hora real (`replay()`, un cálculo con sus identidades) en dos
+casos:
+- sin cobertura;
+- cuando un cálculo termina sin ningún paso utilizable.
+
+El aviso dice su antigüedad. Al arrancar se abre la ruta preparada dentro del margen; fuera de él se
+borra. Con una foto reproducida y sin cobertura:
+- un ajuste que no es la hora avisa y mantiene la foto;
+- una hora fuera del margen deja la tabla sin datos.
+
+Comparar no se lanza sobre una foto reproducida. Desaparece `warnIfStartTimeHasPassed`. Detalle en
+`AGENTS.md`, «Behaving like an app rather than a page» y «Preparing and replaying».
+
 ### Revisión adversarial de las correcciones (852f61a..8b6e3fb)
 
 Una segunda revisión adversarial, aparte de los seis hallazgos de
@@ -334,19 +361,13 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: fase 5.
+en `AGENTS.md → Open work`. Última actualización: fase 6.
 
 ### Pendiente por fase del rediseño
 
-- **Fase 6 — hora y uso sin cobertura.**
-  - Guardar la hora de salida y aplicar la hora mínima al cargar y al volver a la app.
-  - Preparar y reproducir con la foto, caducidad incluida.
-  - La foto lleva en memoria intervalo, idioma y claves (`alertsKey`, `keys`), pero no la salida
-    ni la velocidad, y la segmentación sigue leyendo esos valores del DOM. Al guardar la foto
-    preparada hay que dejar fuera las claves.
-  - Con cobertura ausente, comparar todavía se lanza como con cobertura (precedencia de §4.6).
 - **Fase 7 — retirada y documentación.**
-  - Quitar `pinCacheKeys`, `cw_offline_pinned` y `warnIfStartTimeHasPassed`.
+  - Quitar `pinCacheKeys`, `cachedWeatherKeys` y `cw_offline_pinned`, que preparar ya no usa, y borrar
+    `cw_offline_pinned` una vez al arrancar. `warnIfStartTimeHasPassed` ya salió en la fase 6.
   - Repaso final de `AGENTS.md` y de este documento.
 
 ### Hallazgos de la revisión del 14/09 aún abiertos
@@ -449,7 +470,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
   - Solo avisa de fallos de transporte, sin conexión y datos caducados; los avisos por proveedor no
     se aplican, porque cada proveedor ya tiene su fila.
   - En modo comparar, la foto normal lleva datos de Open-Meteo con proveedor `compare`, así que
-    sus pasos no cuentan como utilizables. Ya era así; importa para reproducir (fase 6).
+    sus pasos no cuentan como utilizables. Ya era así. Desde la fase 6, preparar en modo comparar
+    cuenta 0 puntos cubiertos, y reproducir esa foto la deja sin datos.
+  - Comparar sin conexión en la web se sigue lanzando y dice que no hay conexión (test de la fase 4).
+    Solo la app lo bloquea, porque en la web no se prepara nada.
 - **Alerta de ruta.**
   - Una llamada al runner que no responde nunca detiene la cola de guardados y desarmados sin aviso,
     y la ruta anterior puede quedar armada: el desarmado de la ruta confirmada después espera
@@ -490,7 +514,64 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
       armar no tiene test que falle, pero tampoco es inocua: con un desarmado rechazado y el armado
       descartado porque se confirma otra vez la misma ruta, la huella nombra esa ruta mientras el
       runner conserva la anterior, y no se vuelve a desarmar (reproducido fuera del navegador).
+- **Hora y uso sin cobertura (fase 6).**
+  - **Hora de salida.**
+    - Un campo de hora vacío o ilegible cuenta como una hora pasada: el cálculo usa ahora
+      redondeado y lo escribe en el campo, sin aviso. Antes avisaba `route_date_empty` o
+      `route_date_invalid`.
+    - El redondeo ignora los segundos: a las 10:00:30 la salida queda a las 10:00, medio minuto
+      antes de ahora. Ya era así.
+    - El `min` del campo se fija al cargar y no avanza en una sesión larga. Elegir una hora pasada
+      la deja escrita hasta que un cálculo, una carga o volver a la app aplican la regla.
+  - **Volver a la app.**
+    - Llama a `cw.startForecast()` aunque haya una petición de ruta en curso. Si esa petición
+      confirma, el cálculo de la ruta anterior queda sustituido.
+    - Una foto reproducida tiene la antigüedad del registro, así que cada vuelta con cobertura la
+      recalcula, y sin cobertura la vuelve a reproducir.
+  - **Ajustes sin cobertura con una foto reproducida.**
+    - Un ajuste que no es la hora se rechaza, pero queda guardado. Nada lo aplica cuando vuelve la
+      cobertura hasta otro cambio, volver a la app u otra ruta.
+    - La foto reproducida lleva la velocidad y el intervalo de la preparada. Si los de la página
+      son otros (se cambiaron antes de cerrar), un cambio de hora posterior se rechaza como cambio
+      de ajustes.
+    - Elegir comparar no cuenta como cambio. Esa excepción no tiene test.
+  - **Reproducción.**
+    - Un proveedor que no responde retiene el cálculo y la reproducción tras un cálculo sin datos
+      (H4). Tiene test.
+    - El aviso de antigüedad mide la foto (`createdAt` al publicar), no las respuestas, que pueden
+      venir de caché.
+    - El resultado (`outcome`) de una reproducción es el de la foto guardada con `preparedAt` y
+      `preparedFor`. No se recuentan los pasos utilizables en modo reproducción.
+    - MeteoBlue no se reproduce: sus pasos no cuentan como cubiertos y reproducidos salen sin datos
+      (spec §2).
+    - Fuera del margen la tabla sale sin datos aunque la respuesta guardada cubra esa hora.
+  - **Arranque y caducidad.**
+    - La petición de arranque lleva `source: 'recent'` también cuando abre la ruta preparada: la
+      fuente se fija antes de leer y nada la usa.
+    - Con cobertura, la ruta preparada dentro del margen también se abre al arrancar en vez de la
+      reciente más nueva, y se calcula en vivo (spec §4.9.3, pasos 1 y 7).
+    - Una transacción de IndexedDB de la foto preparada que no termina nunca deja preparar sin
+      respuesta. Retiene la restauración al arrancar hasta el plazo de 30 s de su petición, que
+      termina con el aviso de lectura.
+    - Borrar la foto caducada al arrancar puede borrar una que se prepare en ese mismo momento.
+    - El aviso de caducidad sin cobertura lo tapa enseguida el del cálculo que viene después
+      (`offline_no_data`).
+  - **Sin medir.** El tamaño real de la foto en IndexedDB (la spec estimaba del orden de 1 MB para
+    unas 20 etapas).
 - **Tests que faltan.**
+  - Fase 6, sin test que las tumbe:
+    - leer los ajustes dos veces al lanzar (equivalente: las dos lecturas caen en el mismo turno);
+    - la mitad de «foto reproducida» de la guarda de `cwLaunchComparison`, tapada por la de «sin
+      cobertura en la app»;
+    - la excepción de comparar en `sameButStart`;
+    - quitar la corrección de `setupDateLimits` (equivalente a la regla al cargar);
+    - la comprobación `origin !== 'live'` al preparar con una foto reproducida en pantalla, porque
+      solo se prueba sin foto;
+    - un registro corrupto o de otra versión descartado;
+    - IndexedDB no disponible al preparar;
+    - que la web no reproduce;
+    - la alerta de ruta de una foto recolocada, que conserva `notified` y recalcula `baseline`: la
+      cubre la reutilización de la fase 4, no un test de la fase 6.
   - La carrera entre la migración desde `localStorage` y una importación.
   - IndexedDB no disponible.
   - Una excepción dentro de `publish`.
@@ -555,4 +636,5 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
   temporizador de 0 ms, probado solo en Chromium), la durabilidad de IndexedDB y la lectura de
   teselas de OpenStreetMap con `fetch`.
 - **Android.** Probado en emulador, no en dispositivo físico.
-- **Uso sin cobertura real.** Sin comprobar en ninguno de los dos.
+- **Uso sin cobertura real.** Sin comprobar en ninguno de los dos, incluida la reproducción de una
+  ruta preparada tras cerrar la app y la durabilidad del registro en IndexedDB de WKWebView.
