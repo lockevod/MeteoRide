@@ -991,18 +991,24 @@ runtime, because `app.js` and `ui.js` load after it.
   computation's indicator.
 - **Recent routes** are written through their own queue, `cw.importRoute({ text, name })`:
   one at a time in arrival order, with `arrivedAt` fixed on arrival (one millisecond after
-  the previous one on a tie) and stored as the timestamp, so trimming to three keeps the
-  last three to arrive. `cwIdbImportRoute` does it in one `readwrite` transaction: read the
-  store, pick the name (`cwForecastRules.uniqueRouteName`: the same content replaces,
-  different content gets ` (2)`, ` (3)`… even when the name already carries a suffix),
-  write, trim. It is saved only on `oncomplete`; an abort, no IndexedDB or a route over
-  750 KB is reported with `route_not_saved`. **Nothing falls back to localStorage on write
-  any more**; reading and migrating old localStorage entries stay. A record from before
-  this has no fingerprint, so what it holds is unknown and it is never replaced: an import
-  under its name takes the next free suffix. It used to count as the same route when name
-  and size in bytes matched, but changing one digit of a coordinate keeps the size, and a
-  different route silently replaced the stored one. Importing an old route again now costs
-  one ` (2)` duplicate.
+  the previous one on a tie) and stored as the timestamp, so trimming to five keeps the
+  last five to arrive. `cwIdbImportRoute` does it in one `readwrite` transaction: read the
+  store, pick the name (`cwForecastRules.uniqueRouteName`: the same content moves the
+  existing record up in place instead of duplicating it, different content gets ` (2)`,
+  ` (3)`… even when the name already carries a suffix, and the part before the extension
+  never passes 64 characters — once a suffix is added the base gives up exactly the
+  suffix's length, never the suffix), write, trim. It is saved only on `oncomplete`; an
+  abort, no IndexedDB or a route over 750 KB is reported with `route_not_saved`. **Nothing
+  falls back to localStorage on write any more**; reading and migrating old localStorage
+  entries stay. A record from before fingerprints existed (phase 3) has none stored: before
+  matching, `idbImportRoute` reads once, outside the write transaction, every such record's
+  blob and computes its fingerprint from the content, so a route already kept under one of
+  these is still recognised and moved up rather than duplicated. That computed fingerprint
+  is not written back, so it is recomputed on every import while the record stays
+  unmatched (ponytail: negligible at five records; persist it the first time if this ever
+  shows up as slow). It is still never matched by name and size alone: changing one digit
+  of a coordinate keeps the size, and a different route must not silently replace the
+  stored one.
   The file picker imports only a route that was confirmed, under the file's name. A route
   from outside is imported when its entry says ("Routes from outside"), whether or not it
   ends up on screen, and only if (`cwImportIfRoute`) its text carries `<trk`, `<trkpt`, `<rte`, `<rtept` or `<wpt`, or it is a KML whose
@@ -1096,7 +1102,12 @@ nothing to follow still stays out, since neither holds a route.
 A shared KML is kept as it arrived, under its own name (`Name.kml`) and with
 its raw KML text. Before phase 5 it was kept as `Name.gpx` with the converted GPX text, so sharing
 again a KML an older version stored adds a second entry, and forecast caches and ride-watch
-fingerprints computed from the old text do not match the new one.
+fingerprints computed from the old text do not match the new one. Unlike the plain no-fingerprint
+case above, this one is not fixed by computing the old record's fingerprint from its stored
+content: the name it was kept under (`Name.gpx`, converted text) and the name and text a reimport
+arrives under today (`Name.kml`, raw KML) both differ, so `uniqueRouteName` never even walks to
+the same candidate name to compare fingerprints. A KML kept this way before phase 5 still
+duplicates on reimport; left as a documented limit.
 
 **The service worker slot has one reader.** `service-worker.js` stores one route in IndexedDB
 (`cw_shared_db`, store `files`, key `gpx`) and posts `cw-shared-gpx`.

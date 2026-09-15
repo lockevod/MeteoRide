@@ -1214,7 +1214,7 @@
 
   // GPX Recent Routes Storage Functions (IndexedDB-backed with in-memory cache)
   const RECENT_ROUTES_KEY = 'meteoride_recent_routes'; // kept for backward compatibility
-  const MAX_RECENT_ROUTES = 3;
+  const MAX_RECENT_ROUTES = 5;
   // Maximum size (in bytes) allowed for storing a recent route in the UI cache.
   // Increased from the original 50KB to 750KB to support longer routes (~250k-750k text length).
   const MAX_RECENT_ROUTE_SIZE = 750000;
@@ -1759,11 +1759,37 @@
   // arrival. It has worked only once the transaction completes. No IndexedDB, a route
   // too big to keep or an aborted transaction all come back as { ok: false }; the import
   // queue in route-requests.js says so. Nothing falls back to localStorage any more.
+  // A record kept before fingerprints existed (phase 3) carries none, so uniqueRouteName
+  // never matches it. Read once, outside the write transaction (its own blob read is not an
+  // IDB request and would let the transaction auto-commit under it): every record missing a
+  // fingerprint gets one computed from its stored content. Not written back; only used to
+  // match this import. Nothing else writes to the store between this read and the write
+  // transaction below, both being one job in the same import queue.
+  // ponytail: computed again on every import while the record stays unmatched; persisting it
+  // back the first time would save the reread, worth doing if this shows up as slow.
+  async function withComputedFingerprints(db) {
+    let records;
+    try {
+      records = await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error || new Error('getAll failed'));
+      });
+    } catch (e) { return null; }
+    return Promise.all(records.map(async (r) => {
+      if (r.fingerprint || !r.blob) return r;
+      try { return Object.assign({}, r, { fingerprint: cwForecastRules.fingerprint(await r.blob.text()) }); }
+      catch (e) { return r; }
+    }));
+  }
+
   async function idbImportRoute({ text, name, arrivedAt, fingerprint }) {
     const bytes = new Blob([text]).size;
     if (bytes > MAX_RECENT_ROUTE_SIZE) return { ok: false };
     let db;
     try { db = await openIDB(); } catch (e) { return { ok: false }; }
+    const withFingerprints = await withComputedFingerprints(db);
     const result = await new Promise((resolve) => {
       let tx;
       try { tx = db.transaction(IDB_STORE, 'readwrite'); } catch (e) { return resolve({ ok: false }); }
@@ -1775,7 +1801,12 @@
       const all = store.getAll();
       all.onsuccess = () => {
         const records = all.result || [];
-        const pick = cwForecastRules.uniqueRouteName(records, { name: recentRouteName(name), fingerprint, bytes });
+        // Matched by id against the pre-read, enriched copy; a record added or removed since
+        // then (nothing else writes here, but a match by identity stays correct either way)
+        // just falls back to the record as read now.
+        const byId = new Map((withFingerprints || []).map((r) => [r.id, r]));
+        const forMatch = records.map((r) => byId.get(r.id) || r);
+        const pick = cwForecastRules.uniqueRouteName(forMatch, { name: recentRouteName(name), fingerprint, bytes });
         chosen = pick.name;
         // Stored times can be ahead of this clock (the phone's clock was changed). The route
         // arriving now is still the newest, or the trim below would delete it.

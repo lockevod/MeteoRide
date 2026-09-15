@@ -95,3 +95,23 @@ test('uniqueRouteName keeps the extension as written, or none', () => {
   assert.deepEqual(unique([rec(1, 'Costa.KML', 'a')], 'Costa.KML'), { name: 'Costa (2).KML', replaceId: null });
   assert.deepEqual(unique([rec(1, 'Shared route', 'a')], 'Shared route'), { name: 'Shared route (2)', replaceId: null });
 });
+
+test('uniqueRouteName trims the base, not the suffix, so a suffixed name never passes 64 characters', () => {
+  const base = 'x'.repeat(64);
+  const taken = rec(1, `${base}.gpx`, 'a');
+  const result = unique([taken], `${base}.gpx`);
+  // The suffix ` (2)` is kept whole; the base gives up exactly its length.
+  assert.equal(result.name, `${'x'.repeat(60)} (2).gpx`);
+  assert.equal(result.replaceId, null);
+  assert.equal(result.name.length - '.gpx'.length, 64);
+
+  // A two-digit suffix gives up one more character of the base.
+  const takenMany = [taken, ...Array.from({ length: 8 }, (_, i) =>
+    rec(i + 2, `${'x'.repeat(60)} (${i + 2}).gpx`, 'a'))];
+  const result10 = unique(takenMany, `${base}.gpx`);
+  assert.equal(result10.name, `${'x'.repeat(59)} (10).gpx`);
+  assert.equal(result10.name.length - '.gpx'.length, 64);
+
+  // A base already short enough for the suffix is not trimmed further.
+  assert.deepEqual(unique([rec(1, 'Ruta.gpx', 'a')], 'Ruta.gpx'), { name: 'Ruta (2).gpx', replaceId: null });
+});

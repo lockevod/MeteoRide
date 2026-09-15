@@ -2315,15 +2315,15 @@ test('the same route imported twice is kept once', async ({ page }) => {
   expect(await storedNames(page)).toEqual(['Ruta.gpx']);
 });
 
-test('four imports in a row keep the last three to arrive', async ({ page }) => {
+test('six imports in a row keep the last five to arrive, the oldest out', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
-  const texts = [1, 2, 3, 4].map((i) => routeAt(`Ruta ${i}`, 41 + i / 10));
+  const texts = [1, 2, 3, 4, 5, 6].map((i) => routeAt(`Ruta ${i}`, 41 + i / 10));
   const results = await page.evaluate((all) =>
     Promise.all(all.map((text, i) => window.cw.importRoute({ text, name: `r${i + 1}.gpx` }))), texts);
   expect(results.every((r) => r.ok)).toBe(true);
-  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx']);
+  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx', 'r5.gpx', 'r6.gpx']);
 });
 
 // Success is the transaction completing. The write is let through and the transaction
@@ -2415,6 +2415,63 @@ test('a shared KML with nothing to follow stays out of recent routes; a KML rout
   expect(await storedNames(page)).toEqual(['Costa.kml']);
 });
 
+/** Deletes the fingerprint of every stored record, as an older version left them. */
+const dropStoredFingerprints = (page) => page.evaluate(() => new Promise((resolve, reject) => {
+  const open = indexedDB.open('meteoride_recent_routes_db');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const tx = open.result.transaction('routes', 'readwrite');
+    const store = tx.objectStore('routes');
+    const all = store.getAll();
+    all.onsuccess = () => all.result.forEach((r) => { delete r.fingerprint; store.put(r); });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  };
+}));
+
+// A route kept before fingerprints existed (phase 3) has none stored. Reimporting the exact
+// same route must still recognise it from its content and move it up, not add a "(2)".
+test('reimporting a route kept before fingerprints existed moves it up instead of duplicating it', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const text = routeAt('Uno', 41.48);
+  expect(await importRecent(page, text, 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  await dropStoredFingerprints(page);
+  const [legacy] = await storedRoutes(page);
+  expect(legacy.fingerprint).toBeUndefined();
+
+  // A second, older route arrives first, so Ruta.gpx is no longer the newest.
+  expect((await importRecent(page, routeAt('Dos', 40.42), 'otra.gpx')).ok).toBe(true);
+
+  expect(await importRecent(page, text, 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  expect(await storedNames(page)).toEqual(['Ruta.gpx', 'otra.gpx']);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name)))
+    .toEqual(['Ruta.gpx', 'otra.gpx']);
+});
+
+// A KML kept before phase 5, when it was converted and stored under a ".gpx" name with the
+// converted text, cannot be matched from its content: the name and the text it is reimported
+// under (the raw KML, unconverted, as the file arrived) both differ from what was stored.
+// Documented as a known limit in docs/HANDOFF.md §10; not fixed here.
+test('a KML kept before conversion moved into the store still duplicates on reimport (documented limit)', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
+<LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
+</Placemark></Document></kml>`;
+  const converted = await page.evaluate((k) => window.cwKmlToGpxText(k), kml);
+  // What an older version stored: the KML converted to GPX, under a ".gpx" name, no fingerprint.
+  expect(await importRecent(page, converted, 'Costa.gpx')).toEqual({ ok: true, name: 'Costa.gpx' });
+  await dropStoredFingerprints(page);
+
+  // The same KML file, reimported as it arrives today: unconverted text, its own ".kml" name.
+  expect(await importRecent(page, kml, 'Costa.kml')).toEqual({ ok: true, name: 'Costa.kml' });
+  expect(await storedNames(page)).toEqual(['Costa.gpx', 'Costa.kml']);
+});
+
 // A record from an older version has no fingerprint, so nothing says what it holds. Matching
 // it by name and size replaced it with a route that differed by one digit.
 test('a stored route from an older version is never replaced by another of the same name and size', async ({ page }) => {
@@ -2457,7 +2514,7 @@ test('an import comes out newest even when the stored routes carry times later t
   await page.goto('/index.html');
   await mapReady(page);
   const ahead = Date.now() + 365 * 86400000;
-  for (const i of [1, 2, 3]) {
+  for (const i of [1, 2, 3, 4, 5]) {
     const result = await page.evaluate(([text, name, at]) => window.cw.importRoute({ text, name, arrivedAt: at }),
       [routeAt(`Ruta ${i}`, 41 + i / 10), `r${i}.gpx`, ahead + i]);
     expect(result.ok).toBe(true);
@@ -2465,10 +2522,10 @@ test('an import comes out newest even when the stored routes carry times later t
   // A later session, whose clock is behind what the store holds (the phone's clock was changed).
   await page.reload();
   await mapReady(page);
-  expect(await importRecent(page, routeAt('Ruta 4', 41.45), 'r4.gpx')).toEqual({ ok: true, name: 'r4.gpx' });
-  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx']);
+  expect(await importRecent(page, routeAt('Ruta 6', 41.45), 'r6.gpx')).toEqual({ ok: true, name: 'r6.gpx' });
+  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx', 'r5.gpx', 'r6.gpx']);
   await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name)))
-    .toEqual(['r4.gpx', 'r3.gpx', 'r2.gpx']);
+    .toEqual(['r6.gpx', 'r5.gpx', 'r4.gpx', 'r3.gpx', 'r2.gpx']);
 });
 
 // Loading the list at start-up is a job in the import queue: an import that finished while
@@ -2510,13 +2567,13 @@ test('moving an opened recent route to the top never writes back a route an impo
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
-  for (const i of [1, 2, 3]) {
+  for (const i of [1, 2, 3, 4, 5]) {
     expect((await importRecent(page, routeAt(`Ruta ${i}`, 41 + i / 10), `r${i}.gpx`)).ok).toBe(true);
   }
-  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(3);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(5);
 
   // r1, the oldest, is opened. As soon as it is confirmed and the move to the top opens its
-  // transaction, r4 arrives, and importing it trims the store to three.
+  // transaction, r6 arrives, and importing it trims the store to five.
   const opened = await page.evaluate(async (text) => {
     const request = window.cw.requestRoute;
     window.cw.requestRoute = async (...args) => {
@@ -2526,7 +2583,7 @@ test('moving an opened recent route to the top never writes back a route an impo
         const tx = open.apply(this, targs);
         if ([].concat(targs[0]).includes('routes')) {
           IDBDatabase.prototype.transaction = open;
-          window.__import = window.cw.importRoute({ text, name: 'r4.gpx' });
+          window.__import = window.cw.importRoute({ text, name: 'r6.gpx' });
         }
         return tx;
       };
@@ -2536,21 +2593,21 @@ test('moving an opened recent route to the top never writes back a route an impo
     window.cw.requestRoute = request;
     await window.__import;
     return status;
-  }, routeAt('Ruta 4', 41.45));
+  }, routeAt('Ruta 6', 41.45));
   expect(opened).toBe('committed');
-  // The move went first and made r1 the newest, so the import trimmed r2.
-  expect(await storedNames(page)).toEqual(['r1.gpx', 'r3.gpx', 'r4.gpx']);
+  // The move went first and made r1 the newest, so the import trimmed r2, still the oldest.
+  expect(await storedNames(page)).toEqual(['r1.gpx', 'r3.gpx', 'r4.gpx', 'r5.gpx', 'r6.gpx']);
 
   // r3 is now the oldest. The import that trims it is queued before the move of r3, which
   // then finds nothing to move and writes nothing back.
   const r3 = (await storedRoutes(page)).find((r) => r.name === 'r3.gpx').id;
   const [imported, moved] = await page.evaluate(([text, id]) => Promise.all([
-    window.cw.importRoute({ text, name: 'r5.gpx' }),
+    window.cw.importRoute({ text, name: 'r7.gpx' }),
     window.cw.touchRecent(id),
-  ]), [routeAt('Ruta 5', 41.5), r3]);
+  ]), [routeAt('Ruta 7', 41.5), r3]);
   expect(imported.ok).toBe(true);
   expect(moved).toBe(false);
-  expect(await storedNames(page)).toEqual(['r1.gpx', 'r4.gpx', 'r5.gpx']);
+  expect(await storedNames(page)).toEqual(['r1.gpx', 'r4.gpx', 'r5.gpx', 'r6.gpx', 'r7.gpx']);
 });
 
 test('an opened recent route moves up the list only once it moved in the store', async ({ page }) => {
@@ -2593,10 +2650,10 @@ test('opening the newest recent route survives a later import after the clock ru
   await page.goto('/index.html');
   await mapReady(page);
 
-  // Seed 3 routes directly in IndexedDB with timestamps far in the future, as if the
-  // phone's clock was running ahead when they were imported. r3 is the newest.
+  // Seed 5 routes directly in IndexedDB with timestamps far in the future, as if the
+  // phone's clock was running ahead when they were imported. r5 is the newest.
   const future = 5_000_000_000_000;
-  const routes = [1, 2, 3].map((i) => [`r${i}.gpx`, routeAt(`Ruta ${i}`, 41 + i / 10)]);
+  const routes = [1, 2, 3, 4, 5].map((i) => [`r${i}.gpx`, routeAt(`Ruta ${i}`, 41 + i / 10)]);
   await page.evaluate(([base, entries]) => new Promise((resolve, reject) => {
     const open = indexedDB.open('meteoride_recent_routes_db');
     open.onerror = () => reject(open.error);
@@ -2616,18 +2673,18 @@ test('opening the newest recent route survives a later import after the clock ru
   await page.goto('/index.html');
   await mapReady(page);
   await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name)))
-    .toEqual(['r3.gpx', 'r2.gpx', 'r1.gpx']);
+    .toEqual(['r5.gpx', 'r4.gpx', 'r3.gpx', 'r2.gpx', 'r1.gpx']);
 
   // The clock is back to normal, far below the seeded timestamps, and the newest route
-  // (r3) is opened from the recents menu.
+  // (r5) is opened from the recents menu.
   const opened = await page.evaluate(async () => {
-    return window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === 'r3.gpx'));
+    return window.loadRecentRoute(window.getRecentRoutes().find((r) => r.name === 'r5.gpx'));
   });
   expect(opened).toBe('committed');
 
-  // One more route arrives. r3, the one just opened and on screen, must not be trimmed.
-  expect((await importRecent(page, routeAt('Ruta 4', 41.4), 'r4.gpx')).ok).toBe(true);
-  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx']);
+  // One more route arrives. r5, the one just opened and on screen, must not be trimmed.
+  expect((await importRecent(page, routeAt('Ruta 6', 41.4), 'r6.gpx')).ok).toBe(true);
+  expect(await storedNames(page)).toEqual(['r2.gpx', 'r3.gpx', 'r4.gpx', 'r5.gpx', 'r6.gpx']);
 });
 
 test('a route requested while a tapped recent route is still being read wins, and the menu closes at once', async ({ page }) => {
@@ -3104,7 +3161,7 @@ test('a shared route read before a recent route is tapped, and imported after it
 
 // Spec §6. Imports run one at a time, so the gates cannot really open out of order; opening them
 // last to first still proves the order comes from arrival, not from which write is let through.
-test('four shared routes in a row: the fourth is shown and the last three to arrive are kept, none over another', async ({ page }) => {
+test('four shared routes in a row: the fourth is shown and every route that arrived is kept, none over another', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
   await page.goto('/index.html');
@@ -3122,9 +3179,9 @@ test('four shared routes in a row: the fourth is shown and the last three to arr
     await page.waitForTimeout(100);
   }
 
-  await expect.poll(() => storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx', 'd.gpx']);
+  await expect.poll(() => storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx', 'a.gpx', 'd.gpx']);
   const stored = await storedRoutes(page);
-  expect(new Set(stored.map((r) => r.fingerprint)).size).toBe(3);
+  expect(new Set(stored.map((r) => r.fingerprint)).size).toBe(4);
   await expect(routeName(page)).toHaveText('Cuarta');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('d.gpx');
 });

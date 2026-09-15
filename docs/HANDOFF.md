@@ -394,14 +394,13 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
   apertura bloqueada) detiene la cola de recientes sin aviso: importaciones, subir al principio y
   la carga inicial.
 - **Recientes.**
-  - Guarda 3 rutas; las de más de 750 KB se muestran pero no se guardan.
-  - Una ruta guardada antes de la fase 3, reimportada, queda duplicada una vez como
-    `Nombre (2)`.
-  - Un sufijo puede pasar de los 64 caracteres del nombre.
+  - Guarda 5 rutas; las de más de 750 KB se muestran pero no se guardan.
   - Un KML guardado antes de la fase 5 quedó como `Nombre.gpx` con el texto ya convertido; desde
     la fase 5 se guarda como `Nombre.kml` con el KML tal cual llegó. Compartir otra vez ese KML
     crea una segunda entrada, y la caché y la huella de la alerta calculadas con el texto anterior
-    no coinciden con el nuevo.
+    no coinciden con el nuevo. No se arregla: el nombre guardado (`Nombre.gpx`) y el de la
+    reimportación de hoy (`Nombre.kml`, sin convertir) ya difieren, así que `uniqueRouteName` ni
+    llega a comparar huellas entre ambos.
 - **Indicador en el primer arranque.** Sin rutas guardadas, el indicador de carga sigue encendido
   hasta 5 s mientras espera a recientes.
 - **Rutas que llegan de fuera.**
