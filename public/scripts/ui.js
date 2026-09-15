@@ -947,6 +947,9 @@
           if (compareNowBtn) compareNowBtn.style.display = 'none';
           explicitCompareActive = false;
           
+          // A date comparison still fetching never paints once the row is closed, even while a
+          // route request holds the recomputation below back.
+          window.cwCancelComparisons?.();
           // Recalculate normal weather data when exiting compare-dates mode; with compare chosen,
           // its publish compares providers again.
           window.cw.settingsChanged();

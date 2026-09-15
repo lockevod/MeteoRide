@@ -1224,10 +1224,14 @@ function mirrorSteps(snapshot) {
 
 // keepFailure: a route failed to open while this computation ran and said so. With nothing
 // of its own to say, the computation leaves that notice up; a notice of its own replaces it.
+// Once replaced or cleared, the failure is forgotten: a later comparison of the same
+// computation with nothing to say clears whatever notice is up then.
 function showNotice(outcome, noticeAll, keepFailure = false) {
   const notice = cwForecastRules.decideNotice(outcome, { noticeAll });
   if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
-  else if (!keepFailure) clearNotice();
+  else if (keepFailure) return;
+  else clearNotice();
+  routeFailureComputationId = null;
 }
 // A comparison (compare.js) decides and shows its notice the same way, and leaves up the notice
 // of a route that failed to open while the computation it compares was the latest.
@@ -1242,7 +1246,10 @@ window.cwRepaintPublished = function () {
   if (!publishedSnapshot) return false;
   weatherData = mirrorSteps(publishedSnapshot);
   processWeatherData();
-  showNotice(publishedSnapshot.outcome, !!document.getElementById("noticeAll")?.checked);
+  // A failure still recorded was said over this snapshot, or over the computation that is
+  // replacing it (every publish after it forgets it), so the repaint leaves it up too.
+  showNotice(publishedSnapshot.outcome, !!document.getElementById("noticeAll")?.checked,
+    routeFailureComputationId !== null);
   return true;
 };
 
