@@ -363,7 +363,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
 - **Fichero roto al arrancar.** Si al arrancar la app se elige un fichero roto antes de que termine
   la restauración, no se restaura la última ruta; el usuario ve el aviso del fallo.
 - **Avisos que se pisan.** El aviso de una ruta que no se pudo abrir lo sustituye el aviso propio
-  de un cálculo que publica después.
+  de un cálculo que publica después. Solo los avisos que decide `showNotice` (publicar, comparar,
+  repintar) lo olvidan al sustituirlo o borrarlo. Un aviso puesto directamente con `setNotice`
+  desde otra parte lo tapa sin olvidarlo, así que una comparación del mismo cálculo sin nada que
+  decir deja ese otro aviso visible.
 - **Transacción colgada.** Una transacción de IndexedDB que no termina nunca (por ejemplo, una
   apertura bloqueada) detiene la cola de recientes sin aviso: importaciones, subir al principio y
   la carga inicial.
@@ -403,6 +406,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
     alerta guardada al arrancar, la primera confirmación también desarma.
   - Un guardado que llega después de ser sustituido deja el registro en el runner, pero no
     actualiza la línea de estado.
+  - Un guardado que el runner rechaza deja la huella con lo enviado aunque el runner conserve lo
+    anterior: la alerta nueva, o nada si era el guardado vacío de una ruta ya terminada. En ese
+    último caso, confirmar otra ruta no desarma la anterior. Un desarmado rechazado sí se cubre:
+    la huella se anula solo cuando el runner lo acepta.
   - **Comprobaciones en capas.** Algunas mutaciones sobreviven solas porque otra comprobación cubre
     el mismo caso:
     - La comprobación tras leer la alerta guardada y la de tras la línea base. Sin la primera, la
@@ -412,11 +419,18 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
       la que pueda entrar algo que no suba la ficha, así que cada una cubre a la otra. Sin las dos,
       falla «a baseline that answers after another route was confirmed stores nothing».
     - La ficha frente a la foto. Confirmar otra ruta sube la ficha solo si ya se había enviado una
-      alerta; confirmar la misma ruta no la sube nunca. Las dos comprobaciones de la foto (en
-      `armWatch` y en el turno del guardado) y la de la línea de estado tienen cada una un test que
-      falla si se quita solo esa.
-    - Anular la huella después de que el runner conteste un desarmado, o volver a fijarla al empezar
-      a armar, no cambia nada observable: como mucho encola un desarmado de más.
+      alerta; confirmar la misma ruta no la sube nunca. La comprobación de la foto en `armWatch` y
+      la de la línea de estado tienen cada una un test que falla si se quita solo esa. La de la foto
+      en el turno del guardado sobrevive sola: la de `armWatch` va justo antes y el guardado suele
+      correr en el mismo turno. Solo haría falta si el guardado esperase en la cola detrás de otra
+      operación mientras se vuelve a confirmar la misma ruta, y ese caso no tiene test.
+    - La huella no es un detalle equivalente frente a un runner que rechaza. Anularla antes de que
+      el runner acepte un desarmado la deja a null mientras el runner conserva la ruta anterior, y
+      la siguiente ruta confirmada no desarma; lo caza «a disarm the runner refuses still leaves the
+      old route to be disarmed when the next route is confirmed». Volver a fijarla al empezar a
+      armar no tiene test que falle, pero tampoco es inocua: con un desarmado rechazado y el armado
+      descartado porque se confirma otra vez la misma ruta, la huella nombra esa ruta mientras el
+      runner conserva la anterior, y no se vuelve a desarmar (reproducido fuera del navegador).
 - **Tests que faltan.**
   - La carrera entre la migración desde `localStorage` y una importación.
   - IndexedDB no disponible.
@@ -427,6 +441,13 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
   - La comprobación justo antes de pintar de comparar fechas: la cubren la del bucle y la previa a
     escribir en caché, salvo si la sustitución cae en la espera de 30 ms tras el último paso.
   - Que lanzar un cálculo suelte las reclamaciones `compare:*`.
+  - Que `cwCancelComparisons` suelte las reclamaciones `compare:*`. No se puede observar hoy:
+    cambiar de proveedor y cerrar comparar fechas siempre acaban lanzando un cálculo, que ya las
+    suelta. Lo lanzan al momento, o al terminar la petición de ruta que lo retiene, y esa petición
+    mantiene el indicador encendido mientras tanto. Que lanzar una comparación suelte las
+    anteriores sí tiene test, con un proveedor que no contesta.
+  - La comprobación de la foto en el turno del guardado de la alerta de ruta, con el guardado
+    esperando detrás de otra operación en cola (ver «Comprobaciones en capas»).
 
 ### Sin comprobar en dispositivo
 

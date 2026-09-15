@@ -827,7 +827,12 @@ runtime, because `app.js` and `ui.js` load after it.
   relaunched there can show a notice of its own (a start date out of range) that would cover
   it. It goes through `cwNotifyRouteFailure`, which records the latest computation at that
   moment. When that computation publishes with nothing to say, it leaves the failure up
-  instead of clearing it; a notice of its own still replaces it.
+  instead of clearing it; a notice of its own still replaces it. Whatever `showNotice` shows or
+  clears (a publish, a comparison, a repaint) forgets the failure, so a second comparison of the
+  same computation with nothing to say clears the notice of the first. A repaint of the published
+  snapshot keeps a failure still recorded: nothing published after it, so it was said over that
+  snapshot or over the computation replacing it. A notice set directly with `setNotice` covers
+  the failure without forgetting it.
 - **Asked for, not yet on screen.** `lastGPXFile` is set only when a route is confirmed, so it
   cannot tell whether a route is on its way. `cw.hasRouteRequests()` can: the restore at
   start-up returns on it, so a file picked and still being read is not replaced by the last
@@ -920,7 +925,8 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
 - **Comparisons.** `cwLaunchComparison(kind)` returns a run `{ requestId, computationId,
   comparisonId, snapshot }`, or null with no current snapshot or while a computation of the
   route is still running (its publish launches the comparison instead). It takes the next
-  `comparisonId`, drops earlier comparisons' claims and claims `compare:<id>`.
+  `comparisonId`, drops earlier comparisons' claims and claims `compare:<id>`. That drop matters
+  only when a provider never answers, so the earlier run's `finally` never comes; a test holds it.
   `cwIsComparisonCurrent(run)` (`cwForecastRules.shouldPublishComparison`) holds while the route
   is the confirmed one, the run's computation is both the latest launched and the one published,
   and no comparison was launched after it. Launching one launches no computation, so reconciling
@@ -934,10 +940,12 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
     it in explicit mode, so that repaints the normal table and the run button brings the date
     comparison back. The automatic date-B branches still in `ui.js` are unreachable. Closing the
     dates row with compare chosen computes again, and that publish compares providers.
-  - **Leaving compare.** Choosing any other provider calls `cwCancelComparisons()`, which takes
-    the next `comparisonId` and drops every `compare:*` claim. Without it, a comparison still
-    fetching while a route request holds the recomputation back (the change is only pending)
-    stays current and paints its table under the new provider.
+  - **Leaving compare.** Choosing any other provider, or closing the dates row, calls
+    `cwCancelComparisons()`, which takes the next `comparisonId` and drops every `compare:*`
+    claim. Without it, a comparison still fetching while a route request holds the recomputation
+    back (the change is only pending) stays current and paints its table under the new provider,
+    or the dates table with the row closed. Its claim drop has no test that fails alone: both
+    callers then go through `settingsChanged`, whose computation drops those claims too.
   - **Input.** Steps, temperature and wind units, keys, interval and (for dates) provider come
     from `run.snapshot`. Rain and distance units, and dates A and B, are still read from the page:
     they only change how it looks, or are what the comparison is asked for.
@@ -975,10 +983,12 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
     `compare` reads it by index. A new speed keeps `notified` and reads the baseline again.
   - **Disarm on confirm.** `cwCommitRoute` calls `cwDisarmWatchFor(fingerprint)`: a watch sent
     or stored for another route is disarmed through the queue, the same route keeps its own.
-    `watchFingerprint` is set only inside a queued save or disarm, before the runner call, so it
-    names the last watch sent even while an earlier answer is still on its way; set after the
-    answer, a late disarm nulled a newer save and the next route confirmed left the old one
-    armed. The start-up read is the first operation in the queue. A confirmation before it
+    `watchFingerprint` is set only inside a queued save or disarm. A save names its watch before
+    the runner call, so it names the last watch sent even while an earlier answer is still on its
+    way; set after the answer, a late disarm nulled a newer save and the next route confirmed left
+    the old one armed. A disarm clears it only once the runner has accepted: cleared before, a
+    disarm the runner refused left it null while the runner still held the old route, and the
+    next route confirmed disarmed nothing. The start-up read is the first operation in the queue. A confirmation before it
     answers (fingerprint still `undefined`) queues a disarm that decides at its turn, so a
     restored route keeps its stored watch and what it notified. If that read fails, the first
     confirmation disarms; a stored watch from before fingerprints counts as another route.
