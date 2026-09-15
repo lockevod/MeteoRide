@@ -1067,30 +1067,9 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
           alertsSeen.push(...json.alerts);
         }
         
-        // For OpenWeather: the response contains an array of hourly entries. Cache
-        // the entire payload under the primary key, but also cache per-hour payload
-        // entries so later lookups for a different step/time find a cached value.
-        if (prov === 'openweather' && Array.isArray(json.hourly) && json.hourly.length) {
-          try {
-            const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            // Cache the full payload under the original primary key too
-            setCache(keyPrim, json);
-            window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`);
-            // Iterate hourly list and store each hour under its own canonical key
-            for (let hi = 0; hi < json.hourly.length; hi++) {
-              const h = json.hourly[hi];
-              // openweather hourly entries may use 'dt' (seconds) or 'time' (ISO)
-              let ht = null;
-              if (h && h.dt) ht = new Date(Number(h.dt) * 1000);
-              else if (h && h.time) ht = new Date(h.time);
-              if (!ht || isNaN(ht.getTime())) continue;
-              const keyH = mk('openweather', ht.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, ht);
-              try { setCache(keyH, json); window.logDebug && window.logDebug(`setCache key=${keyH} provider=openweather (hourly)`); } catch (e) { /* ignore */ }
-            }
-          } catch (e) { /* ignore per-hour cache failures */ }
-        } else {
-          try { setCache(keyPrim, json); window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`); } catch(e) {}
-        }
+        // One write per answer. OpenWeather's key has no hour (makeCacheKey), so every step at
+        // this location reads this same answer.
+        try { setCache(keyPrim, json); window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`); } catch(e) {}
         results.push({ ...p, provider: prov, weather: json });
         logDebug(`Datos recibidos paso ${i + 1} (${prov})`);
         await new Promise(r => setTimeout(r, 70));

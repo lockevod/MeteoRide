@@ -194,7 +194,7 @@ protección que el código no da.
 |---|-------|----------|
 | **H1** (alta, preexistente) | `fetchWeatherForSteps` en `app.js`, que reseteaba, escribía y pintaba `weatherData` | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (lo emite `publish` en `app.js` y lo escucha `native.js`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`, que la fase 3 sustituye por `requestId` y `computationId`), acumula en local y solo la última publica tabla, avisos, alertas y `cw:forecast`, y suelta su reclamación del indicador (`forecast:<id>`); `mobile/tests/forecast-runs.test.mjs`. `compare.js` escribía `weatherData` sin número hasta la fase 4, que le da identidad propia (`comparisonId`). |
 | **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. **Corregido**: reconstruye las claves de los pasos pintados con `makeCacheKey` y distingue nada, completo, parcial ("n de total") y fallo al fijar; cuatro tests en `smoke.spec.mjs`. |
-| **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. |
+| **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. **Corregido**: la clave de OpenWeather es solo ubicación y unidades (`makeCacheKey`), una escritura por respuesta y la extracción elige la hora por `dt`; las claves antiguas se borran al arrancar. Con `route.gpx` y el stub de los tests, de 147 escrituras y 900 522 caracteres serializados a 3 y 18 378; tres tests en `smoke.spec.mjs`. |
 | **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. |
 | **H5** (media) | `utils.js:34-58` | Los avisos de proveedor usan un temporizador de 1,5 s que nunca se reinicia, así que un aviso nuevo puede desaparecer al instante. **Corregido en la fase 2**: cada cálculo anota en su propio registro (`cwRecorder`) y el aviso se decide al publicar con `decideNotice`; `mobile/tests/forecast-runs.test.mjs` y `mobile/tests/forecast-outcome.test.mjs`. |
 | **H6** (media, seguridad, código propio) | `functions/share.js:20-60` | El límite de tamaño compara `raw.length` (unidades UTF-16, no bytes) y lo hace **después** de leer el cuerpo entero en memoria. Con multibyte pasan ~2,6 MB. **Corregido**: el cuerpo se lee con tope de bytes antes de parsear (`readCapped`), texto y multipart; `mobile/tests/share.test.mjs`. |
@@ -362,7 +362,7 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijado de caché y repaso de documentación.
+en `AGENTS.md → Open work`. Última actualización: tarea 7 del seguimiento, caché de OpenWeather por ubicación (H3).
 
 ### Pendiente por fase del rediseño
 
@@ -374,7 +374,6 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
 
 ### Hallazgos de la revisión del 14/09 aún abiertos
 
-- **H3.** La caché no está indexada por ubicación y proveedor.
 - **H4.** Las peticiones a proveedores no tienen plazo: un proveedor que no responde retiene el
   cálculo con el indicador encendido.
 
@@ -383,6 +382,13 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
 - **Temperatura en °F.** Resuelto en la fase 7: Open-Meteo y AROME se piden en °F con
   `temperature_unit=fahrenheit`, como OpenWeather con `units=imperial`. Queda una foto preparada
   antes del cambio con °F elegido, que muestra °C bajo °F hasta que caduca (3 h).
+- **Caché de OpenWeather (H3).** Una entrada por ubicación y unidades, sin fecha ni hora. Quedan:
+  - La clave no distingue si la respuesta se pidió con avisos o sin ellos, igual que antes; la tabla
+    solo toma los avisos de una respuesta de red, y los busca aparte con `checkWeatherAlertsIndependent`.
+  - Las cifras (147 → 3 escrituras, 900 522 → 18 378 caracteres para `route.gpx`) son con la respuesta
+    sintética de los tests; no se ha medido una respuesta real de One Call ni tiempo, fluidez o batería.
+  - Las claves con la forma antigua (acaban en la `Z` de la hora) se borran al arrancar, así que una
+    respuesta de OpenWeather guardada por la versión anterior no se sirve sin conexión tras actualizar.
 - **Fichero roto al arrancar.** Si al arrancar la app se elige un fichero roto antes de que termine
   la restauración, no se restaura la última ruta; el usuario ve el aviso del fallo.
 - **Avisos que se pisan.** El aviso de una ruta que no se pudo abrir lo sustituye el aviso propio

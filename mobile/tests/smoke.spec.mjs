@@ -2157,11 +2157,15 @@ test('units changed while a computation fetches: only the new one publishes', as
 });
 
 /** OpenWeather answers in the units it was asked for: 21 in metric, 70 in imperial. While
- *  `control.held` is a promise, every answer waits for it. */
+ *  `control.held` is a promise, every answer waits for it. `control.asked` counts the forecast
+ *  requests (not the alerts-only ones); with `control.offline` they fail. */
 async function stubOpenWeather(page, control) {
   await page.route((url) => url.hostname === 'api.openweathermap.org', async (route) => {
+    const url = new URL(route.request().url());
+    if (!/hourly/.test(url.searchParams.get('exclude') || '')) control.asked = (control.asked || 0) + 1;
+    if (control.offline) return route.abort();
     if (control.held) await control.held;
-    const imperial = new URL(route.request().url()).searchParams.get('units') === 'imperial';
+    const imperial = url.searchParams.get('units') === 'imperial';
     const base = Math.floor(Date.now() / 3600000) * 3600;
     const hourly = Array.from({ length: 48 }, (_, i) => ({
       dt: base + i * 3600, temp: imperial ? 70 : 21, wind_speed: 3, wind_deg: 180, humidity: 60,
@@ -2253,6 +2257,107 @@ test('a forecast that publishes while a units change waits behind another route 
   await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
   await expect(routeName(page)).toHaveText('Ruta B');
   await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['70º'], unit: 'ºF', summary: '70ºF' });
+});
+
+/* ---------- OpenWeather in the cache (review 14/09, H3) ---------- */
+
+/** Every forecast cache write, key and serialized length, from the first script on. */
+const countWeatherWrites = (page) =>
+  page.addInitScript(() => {
+    window.__weatherWrites = [];
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (String(key).startsWith('cw_weather_')) window.__weatherWrites.push({ key: String(key), bytes: String(value).length });
+      return set.apply(this, arguments);
+    };
+  });
+const weatherWrites = (page) => page.evaluate(() => window.__weatherWrites);
+/** Moves the start field an hour later, with its change event. */
+const startAnHourLater = (page) =>
+  page.evaluate(() => {
+    const el = document.getElementById('datetimeRoute');
+    const d = new Date(new Date(el.value).getTime() + 3600000);
+    const pad = (n) => String(n).padStart(2, '0');
+    el.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+// One OpenWeather answer holds 48 hours for its location and does not depend on the hour asked.
+// It used to be written once under the step's key and again under a key for each of its hours.
+test('OpenWeather is cached once per location asked, another start reads it without asking, and new units ask again', async ({ page }) => {
+  const control = {};
+  await countWeatherWrites(page);
+  await goOffline(page);
+  await stubOpenWeather(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+
+  const asked = control.asked;
+  expect(asked).toBeGreaterThan(1);
+  const writes = await weatherWrites(page);
+  expect(writes.map((w) => w.key.startsWith('cw_weather_openweather_'))).toEqual(writes.map(() => true));
+  expect(writes.length, 'one write per location asked').toBe(asked);
+  expect(new Set(writes.map((w) => w.key)).size).toBe(asked);
+
+  // An hour later, same locations: the table is computed again from the cache alone.
+  const times = await shownTimes(page);
+  await startAnHourLater(page);
+  await expect.poll(() => shownTimes(page)).not.toEqual(times);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+  expect(control.asked, 'another hour asked the network').toBe(asked);
+  expect((await weatherWrites(page)).length).toBe(asked);
+
+  // ºF is another answer: asked again, never read from the ºC one.
+  await setTempUnits(page, 'F');
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['70º'], unit: 'ºF', summary: '70ºF' });
+  expect(control.asked).toBe(2 * asked);
+});
+
+test('without connection, the OpenWeather answer stored is served for the start it was computed for and for another hour', async ({ page }) => {
+  const control = {};
+  await goOffline(page);
+  await stubOpenWeather(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+  const asked = control.asked;
+
+  await ageTheCache(page, 100);
+  control.offline = true;
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true }));
+  await page.reload();
+  await mapReady(page);
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+  await expect(page.locator('.notice')).toContainText('1 h 40 min');
+
+  const times = await shownTimes(page);
+  await startAnHourLater(page);
+  await expect.poll(() => shownTimes(page)).not.toEqual(times);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+  expect(control.asked).toBe(asked);
+});
+
+test('OpenWeather entries filed by the hour are dropped at start-up; the ones filed by location and other providers are kept', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  const kept = [
+    'cw_weather_openmeteo_2026-09-15_C_kmh_41.479_2.316_2026-09-15T10:00:00.000Z',
+    'cw_weather_openweather_C_kmh_41.479_2.316',
+  ];
+  await page.evaluate((keys) => {
+    const entry = JSON.stringify({ data: {}, timestamp: Date.now() });
+    for (const k of [...keys, 'cw_weather_openweather_2026-09-15_C_kmh_41.479_2.316_2026-09-15T10:00:00.000Z']) localStorage.setItem(k, entry);
+  }, kept);
+  await page.reload();
+  await mapReady(page);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('cw_weather_')).sort())).toEqual(kept);
 });
 
 test('a file with a route and a track of two segments draws them all and follows the route', async ({ page }) => {

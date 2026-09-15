@@ -9,6 +9,13 @@
   // Preparing a route used to pin its cache entries under this key; it now keeps its own record in
   // IndexedDB, so the list an older version left behind is dropped once at start-up.
   try { localStorage.removeItem('cw_offline_pinned'); } catch (_) { /* storage blocked */ }
+  // OpenWeather answers used to be filed under the step's date and quarter hour, and again under
+  // each of their hours. Nothing reads those keys now (makeCacheKey), so they are dropped here.
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('cw_weather_openweather_') && k.endsWith('Z'))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (_) { /* storage blocked */ }
 
   // Forecast requests are watched so the app can say why a table came out empty. A
   // computation hands fetch its own recorder (`cwRecorder`) and the wrapper notes each
@@ -580,6 +587,9 @@
       const wUnit = String(windUnit || '').toString();
       const la = (typeof lat === 'number') ? lat : Number(lat);
       const lo = (typeof lon === 'number') ? lon : Number(lon);
+      // OpenWeather is asked by location and units only, and its one answer holds 48 hours: every
+      // step there shares it and the extraction picks its hour by `dt`.
+      if (prov === 'openweather') return `cw_weather_openweather_${tUnit}_${wUnit}_${la.toFixed(3)}_${lo.toFixed(3)}`;
   // Normalize timestamp to a canonical 15-minute-aligned ISO (no seconds/ms)
   const dt = (timeAt && (timeAt instanceof Date || timeAt.toISOString)) ? new Date(timeAt) : new Date(timeAt);
   // round down to nearest 15 minutes to match step granularity

@@ -557,6 +557,18 @@ an old forecast as if it were current is worse than showing nothing.
 `navigator.onLine` is only trusted when it says false, which is the case that matters —
 out of coverage, rather than behind a captive portal.
 
+**OpenWeather is filed by location, not by hour** (review 14/09, H3). Its request carries
+location, units and the alerts switch, never a time, and one answer holds 48 hourly entries and
+8 daily ones. So `makeCacheKey('openweather', …)` ignores date and time:
+`cw_weather_openweather_<temp>_<wind>_<lat>_<lon>`, and every step, start and comparison at that
+location reads the same answer, the extraction picking the hour by `dt`. The table used to write the
+answer under the step's quarter-hour key and again under a key for each hourly entry: for
+`route.gpx` with the test stub, 147 writes and 900 522 serialized characters for 3 requests; now 3
+writes and 18 378. Those copies only helped a step on the hour exactly. Keys in the old shape (they
+end in the ISO `Z`) are never read and are deleted once at start-up in `utils.js`. Both units stay in
+the key, so ºF never reads a ºC answer. The key does not say whether the answer came with alerts,
+as it did not before; the table only takes alerts from a network answer.
+
 A computation where no provider answered says so instead of leaving an empty table, and
 only the computation on screen may say anything. Each computation makes a recorder
 (`cw.utils.createRecorder()`) and hands it to every provider request as
@@ -1272,6 +1284,7 @@ a replay takes the ones in use ("Preparing and replaying").
     Open-Meteo fallback for an unusable AROME answer is filed as Open-Meteo, not under the AROME key
     built before asking. They used the local date of
     the ride's first step, so from 00:00 to 02:00 in Spain neither read the other's answers.
+    OpenWeather's key has no date or time at all ("The forecast cache without coverage").
 - **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
   name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
   and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline
