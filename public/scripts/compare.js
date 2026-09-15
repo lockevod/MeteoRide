@@ -135,13 +135,19 @@
     return { json, effProv };
   }
 
-  // fetchAnswer that never throws and, when a failed request left the step with nothing, notes the
-  // provider asked in `failed` with the recorder's failure status ('500', 'network', 'body'…), which
-  // is what the notice names. The run's requests go one after another, so the count is its own.
-  async function fetchAnswerNoting(failed, effProv, p, timeAt, apiKey, units, recorder, init) {
+  // fetchAnswer that never throws and, when a failed request left the step with nothing, notes under
+  // `row` (the provider whose row shows the gap) the recorder's failure status ('500', 'network',
+  // 'body'…) and, for OpenWeather, the table's reading of it (classifyProviderError: 401 the key, 429
+  // the quota). That is what the notice names. The run's requests go one after another, so the count
+  // is its own.
+  async function fetchAnswerNoting(failed, row, effProv, p, timeAt, apiKey, units, recorder, init) {
     const before = recorder.failed;
     const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init).catch(() => null);
-    if (!answer && recorder.failed > before) failed[effProv] = recorder.lastFailStatus;
+    if (!answer && recorder.failed > before) {
+      const status = recorder.lastFailStatus;
+      const code = effProv === 'openweather' && /^\d+$/.test(status) ? window.classifyProviderError(effProv, Number(status)) : null;
+      failed[row] = { status, code };
+    }
     return answer;
   }
 
@@ -152,10 +158,11 @@
 
   // A comparison on screen says what its own requests saw (spec §4.10): a table whose requests
   // failed and that came out empty says why, data read from the cache without connection says how
-  // old it is, and otherwise every provider that failed is named (`failedProviders`), with the
-  // missing OpenWeather key first when a date comparison asked another provider for lack of it. A step
-  // counts when any painted row has a temperature or a wind for it.
-  function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false } = {}) {
+  // old it is, and otherwise every provider that failed is named (`failedProviders`), after the
+  // missing OpenWeather key: a date comparison asked Open-Meteo for lack of it, and the providers
+  // comparison left OpenWeather out (`missingKeyOmitted`). A step counts when any painted row has a
+  // temperature or a wind for it.
+  function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false, missingKeyOmitted = false } = {}) {
     const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
     let usableSteps = 0;
     for (let i = 0; i < length; i++) {
@@ -171,6 +178,7 @@
       staleAgeMs: recorder.staleAgeMs,
       failedProviders,
       missingKey,
+      missingKeyOmitted,
     }, !!run.snapshot.settings.noticeAll, run);
   }
 
@@ -278,7 +286,7 @@
 
         try {
           const apiKey = (effProv === "openweather") ? apiKeyOWM : "";
-          const answer = await fetchAnswerNoting(failedProviders, effProv, p, timeAt, apiKey, units, recorder);
+          const answer = await fetchAnswerNoting(failedProviders, prov, effProv, p, timeAt, apiKey, units, recorder);
           if (answer) {
             const json = answer.json;
             effProv = answer.effProv;
@@ -376,7 +384,9 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
-    showComparisonNotice(recorder, Object.values(compareData), run, { failedProviders });
+    // Without an OpenWeather key its row is left out (getCompareProviders), and the table's key notice says so.
+    showComparisonNotice(recorder, Object.values(compareData), run,
+      { failedProviders, missingKey: !provs.includes('openweather'), missingKeyOmitted: true });
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -432,7 +442,7 @@
   // The provider the snapshot was computed with; 'compare' compares dates with Open-Meteo
   let provider = snapshot.settings.provider || 'openmeteo';
   if (provider === 'compare') provider = 'openmeteo';
-  // OpenWeather chosen without a key is asked of another provider and, as the table does, says so.
+  // As the table: OpenWeather chosen with no key of five characters is asked of Open-Meteo, and says so.
   const missingKey = provider === 'openweather' && (keys.openweather || '').trim().length < 5;
 
   // The two dates are what this comparison is asked for (full YYYY-MM-DDTHH:mm, parsed locally)
@@ -523,9 +533,11 @@
         // Base step copy with aligned time for indexing and display
         const baseForIndex = { ...p, time: timeAt };
         // Decide effective provider for this timestamp/location
-        let effProv = resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider;
-        // Ensure keys exist when required; fallback to OpenMeteo if missing
-        if (effProv === 'openweather' && !(keys.openweather || '').trim()) effProv = 'openmeteo';
+        // Without the key that is Open-Meteo, decided before the resolver: it reads the page's key field
+        // and would pick AROME-HD, or OpenWeather with a short key.
+        let effProv = missingKey ? 'openmeteo' : (resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider);
+        // A chain that reaches OpenWeather without a usable key asks Open-Meteo too, as the table does.
+        if (effProv === 'openweather' && (keys.openweather || '').trim().length < 5) effProv = 'openmeteo';
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
   const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
@@ -540,7 +552,7 @@
         try {
           const apiKeyOWM = keys.openweather || "";
           const apiKey = (effProv === 'openweather') ? apiKeyOWM : '';
-          const answer = await fetchAnswerNoting(failedProviders, effProv, p, timeAt, apiKey, units, recorder, { cache: 'no-store' });
+          const answer = await fetchAnswerNoting(failedProviders, effProv, effProv, p, timeAt, apiKey, units, recorder, { cache: 'no-store' });
           if (answer) {
             const json = answer.json;
             effProv = answer.effProv;

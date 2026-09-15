@@ -467,9 +467,8 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
   - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores. La tabla
     deja el modo de fechas al pintarse, así que pulsar una fila muestra ese proveedor; la fila de
     fechas sigue abierta.
-  - Nombra a cada proveedor que falla con su estado HTTP o como «no responde». Un 401, 403 o 429 de
-    OpenWeather sale como error HTTP con su estado, no como clave inválida o cuota, que la tabla sí
-    distingue.
+  - En comparar fechas con la cadena OpenWeather → AROME → Open-Meteo y una clave de menos de cinco
+    caracteres, el paso que llega a OpenWeather pide Open-Meteo, como la tabla. No tiene test.
   - Cuando AROME contesta algo inservible y falla el Open-Meteo que lo sustituye, el aviso nombra a
     AROME-HD.
   - Comparar sin conexión en la web se sigue lanzando y dice que no hay conexión (test de la fase 4).

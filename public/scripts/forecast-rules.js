@@ -450,17 +450,23 @@ var cwForecastRules = (function () {
     // OpenWeather is the only provider left that needs a key, so missingKey never fires for another one.
     const keyed = 'OpenWeather';
     const short = ['fallback_short', {}];
+    // The missing key, said once: the table and a date comparison asked Open-Meteo instead; the providers
+    // comparison only left OpenWeather out (`missingKeyOmitted`), so nothing fell back.
+    const keyParts = o.missingKey ? [['provider_key_missing', { prov: keyed }], ...(o.missingKeyOmitted ? [] : [short])] : [];
 
-    // A comparison names every provider whose request for a step failed (`failedProviders`, id → the
-    // recorder's failure status): an HTTP status, or anything else ('network', 'body') as not
-    // responding. Without connection the failure is not the provider's, so it is not named.
+    // A comparison names every provider whose row a failed request left with a gap (`failedProviders`,
+    // id → { status, code }): OpenWeather's key (`invalid_key`) and quota (`quota`) as the table names
+    // them, another HTTP status as such, and anything else ('network', 'body') as not responding.
+    // Without connection the failure is not the provider's, so it is not named.
     const failed = Object.entries(o.failedProviders || {});
     if (failed.length && !o.offline) {
       const names = { openmeteo: 'Open-Meteo', openweather: 'OpenWeather', aromehd: 'AROME-HD' };
-      const key = o.missingKey ? [['provider_key_missing', { prov: keyed }], short] : [];
-      return say('error', ...key, ...failed.map(([id, status]) => /^\d+$/.test(status)
-        ? ['provider_http_error', { prov: names[id] || id, status }]
-        : ['provider_not_responding', { prov: names[id] || id }]));
+      return say('error', ...keyParts, ...failed.map(([id, { status, code }]) => {
+        const prov = names[id] || id;
+        if (code === 'invalid_key') return ['provider_key_invalid', { prov }];
+        if (code === 'quota') return ['provider_quota_exceeded', { prov }];
+        return /^\d+$/.test(status) ? ['provider_http_error', { prov, status }] : ['provider_not_responding', { prov }];
+      }));
     }
     const named = (flag) => (ow[flag] ? 'OpenWeather' : null);
     const httpFrom = ow.httpError ? ow : om.httpError ? om : null;
@@ -472,7 +478,7 @@ var cwForecastRules = (function () {
       if (o.beyondHorizon) return say('warn', ['horizon_exceeded', { days: o.openMeteoMaxDays }]);
       if (o.usedFallbackHorizon) return say('warn', ['fallback_to_openmeteo', { days: o.horizonDays }]);
     }
-    if (o.missingKey) return say('error', ['provider_key_missing', { prov: keyed }], short);
+    if (o.missingKey) return say('error', ...keyParts);
     if (named('invalidKey') && fallbackError) return say('error', ['provider_key_invalid', { prov: named('invalidKey') }], short);
     if (named('quota') && fallbackError) return say('error', ['provider_quota_exceeded', { prov: named('quota') }], short);
     if (httpFrom && fallbackError) return say('error', ['provider_http_error', httpParams()], short);

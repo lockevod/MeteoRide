@@ -1200,17 +1200,25 @@ a replay takes the ones in use ("Preparing and replaying").
     When it paints it decides its notice with `decideNotice` (`cwShowForecastNotice`) on an
     outcome with `usableSteps` (steps with a temperature or wind in any painted row), the
     recorder's failures, offline flag and stale age, and `requestedProvider: 'compare'`. It also
-    names the providers that failed (`failedProviders`, id → status). `fetchAnswerNoting` compares
-    `recorder.failed` before and after `fetchAnswer` and, when the step got nothing, files the
-    recorder's `lastFailStatus` under the provider asked; the run's requests go one at a time, so
+    names the providers that failed (`failedProviders`, id → `{ status, code }`). `fetchAnswerNoting`
+    compares `recorder.failed` before and after `fetchAnswer` and, when the step got nothing, files
+    the recorder's `lastFailStatus` under the provider whose row shows the gap: in the providers
+    comparison that row, so an AROME row that asked Open-Meteo outside AROME's area is named AROME-HD;
+    in a date comparison, whose rows are dates, the provider asked. For OpenWeather it adds
+    `classifyProviderError`'s reading, as the table does: 401 is `provider_key_invalid`, 429
+    `provider_quota_exceeded`, and 403 stays an HTTP error. The run's requests go one at a time, so
     the difference is its own, and a failure the step recovered from (AROME's merge request) names
-    nobody. `decideNotice` makes a numeric status `provider_http_error` and anything else (`network`,
-    `body`, and a timeout once it records one) `provider_not_responding`, one part per provider,
-    after the empty-table and stale rules and never without connection. They show with detailed
-    notices off too: a failed provider leaves gaps or loses its row, where the table falls back. A
-    date comparison with OpenWeather chosen and a key under five characters says
-    `provider_key_missing` first, the table's rule; the providers comparison leaves OpenWeather out
-    without a key and says nothing about it. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
+    nobody; a test holds both. `decideNotice` makes any other numeric status `provider_http_error`
+    and anything else (`network`, `body`, and a timeout once it records one)
+    `provider_not_responding`, one part per provider, after the empty-table and stale rules and
+    never without connection. They show with detailed notices off too: a failed provider leaves gaps
+    or loses its row, where the table falls back. The missing OpenWeather key goes first, its parts
+    built once in `decideNotice`. A date comparison with OpenWeather chosen and a key under five
+    characters asks Open-Meteo for every step, decided before `resolveProviderForTimestamp`, which
+    reads the page's key field and would pick AROME-HD or OpenWeather; it then says
+    `provider_key_missing` and `fallback_short`, the table's rule. The providers comparison leaves
+    OpenWeather out without such a key (`getCompareProviders`) and says the key is missing without
+    `fallback_short` (`missingKeyOmitted`), since no row replaces it. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
     `publish`, a comparison with nothing to say leaves up the notice of a route that failed to
     open while the run's computation was the latest. A 200 whose body cannot be read counts as a
     failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).
