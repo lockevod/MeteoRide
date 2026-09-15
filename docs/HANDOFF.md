@@ -108,8 +108,8 @@ se ejecutan en el simulador) y firma de release de Android.
 
 ## 6. Verificado / no verificado
 
-Verificado aquí, al cerrar la fase 7: **435 tests** (223 de Playwright sobre el bundle real con la
-red cortada, respuestas de proveedor simuladas y el bridge nativo simulado; 212 de Node: reglas,
+Verificado aquí, al cerrar la fase 7: **438 tests** (224 de Playwright sobre el bundle real con la
+red cortada, respuestas de proveedor simuladas y el bridge nativo simulado; 214 de Node: reglas,
 coordinador de rutas, extracción, runner ensamblado con KV/notificaciones/fetch simulados, iconos,
 nombres de plugin y traducciones); Java
 compilado contra stubs; nombres de API de Capacitor 8.5.2 cotejados con las fuentes de
@@ -380,9 +380,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
 
 ### Límites aceptados (decididos, no se arreglan salvo que se pida)
 
-- **Temperatura en °F.** Open-Meteo y AROME devuelven siempre °C. Con °F elegido, la tabla
-  muestra valores en °C bajo la etiqueta °F. La conversión queda fuera de alcance (spec §2).
-  OpenWeather sí respeta la unidad.
+- **Temperatura en °F.** Resuelto en la fase 7: Open-Meteo y AROME se piden en °F con
+  `temperature_unit=fahrenheit`, como OpenWeather con `units=imperial`. Queda una foto preparada
+  antes del cambio con °F elegido, que muestra °C bajo °F hasta que caduca (3 h). MeteoBlue no se
+  extrae (spec §2).
 - **Fichero roto al arrancar.** Si al arrancar la app se elige un fichero roto antes de que termine
   la restauración, no se restaura la última ruta; el usuario ve el aviso del fallo.
 - **Avisos que se pisan.** El aviso de una ruta que no se pudo abrir lo sustituye el aviso propio

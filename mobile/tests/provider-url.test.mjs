@@ -55,3 +55,14 @@ test('openweather: ticked alerts are asked for, and so are they when a caller sa
     assert.ok(/exclude=minutely(&|$)/.test(url), `${alerts}: ${url}`);
   }
 });
+
+// Open-Meteo and AROME answered in °C whatever the selector said, so a forecast computed in °F
+// showed °C values under °F. They are asked for the unit chosen, as OpenWeather is.
+for (const prov of ['openmeteo', 'aromehd']) {
+  test(`${prov}: asks for the temperature in °F when °F is chosen, and in the default °C otherwise`, () => {
+    const s = harness();
+    const at = new Date('2026-09-24T08:00:00Z');
+    assert.ok(s.buildProviderUrl(prov, p, at, '', 'kmh', 'F').includes('&temperature_unit=fahrenheit'));
+    assert.ok(!s.buildProviderUrl(prov, p, at, '', 'kmh', 'C').includes('temperature_unit'));
+  });
+}

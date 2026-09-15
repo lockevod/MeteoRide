@@ -300,6 +300,8 @@ function classifyProviderError(prov, status, bodyText = "") {
 
 // Build URL per provider (add OpenWeather One Call 3.0)
 function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
+  // Open-Meteo answers in °C unless asked otherwise; like OpenWeather, it is asked for the unit chosen.
+  const omTemp = String(tempUnit || "").toLowerCase().startsWith("f") ? "&temperature_unit=fahrenheit" : "";
   if (prov === "aromehd") {
     // Open‑Meteo with AROME‑HD model; same hourly variables as standard OM
     // Note: models=meteofrance_arome_hd is the AROME high‑resolution variant.
@@ -319,7 +321,7 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
       // CHANGED: ask for a full hourly variable set (model may not fill everything)
       `&hourly=${hourlyVars}` +
       `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
-      `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto&models=arome_france_hd`;
+      `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto&models=arome_france_hd${omTemp}`;
   }
   if (prov === "meteoblue") {
     return `https://my.meteoblue.com/packages/basic-1h,clouds-1h?lat=${p.lat}&lon=${p.lon}&apikey=${apiKey}&time=${timeAt.toISOString()}&tz=auto`;
@@ -348,7 +350,7 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
   const day = (n) => new Date(tMs + n * 86400000).toISOString().slice(0, 10);
   return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=${hourlyVars}` +
     `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
-    `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto`;
+    `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto${omTemp}`;
 }
 
 

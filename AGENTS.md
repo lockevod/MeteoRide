@@ -906,9 +906,11 @@ selector: `mirrorSteps` copies `settings.units.temp` onto every step as `tempUni
 `renderWeatherTable` takes it from the first step that has one, for the row and the route
 summary. The two differ while a units change is computed and something repaints (language,
 detailed notices), and when a units change waits behind a route request and the older
-computation publishes; both used to show 21 ºC as 21 ºF. Nothing is converted (spec §2): an
-OpenWeather answer is in the units it was asked for, Open-Meteo and AROME always in °C, so
-an Open-Meteo forecast computed in °F still shows °C values under °F. Steps with no unit
+computation publishes; both used to show 21 ºC as 21 ºF. Nothing is converted: every provider
+is asked for the unit chosen (OpenWeather `units=imperial`, Open-Meteo and AROME
+`temperature_unit=fahrenheit`), and the cache key carries the unit, so °C and °F answers never
+mix. Until phase 7 Open-Meteo and AROME were always asked in °C and showed °C under °F; a record
+prepared before that still does until it expires. The ride alert's runner keeps its own °C request. Steps with no unit
 (the comparison's `cw.setWeatherData`) follow the selector as before. Wind needs none of
 this: it is kept in km/h and converted with the selected unit on every paint, so its label
 always matches.

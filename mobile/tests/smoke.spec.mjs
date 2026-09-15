@@ -5705,3 +5705,18 @@ test('the list of pinned cache keys left by an older version is removed at start
   expect(left[0]).toBeNull();
   expect(left[1]).not.toBeNull();
 });
+
+// Open-Meteo answered in °C whatever the selector said, so a forecast computed in °F showed
+// 21º under ºF. It is asked for the unit chosen and shows what the provider sent in that unit.
+test('with °F chosen, Open-Meteo is asked for °F and the table shows its values under ºF', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const f = new URL(route.request().url()).searchParams.get('temperature_unit') === 'fahrenheit';
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(f ? 70 : 21)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await setTempUnits(page, 'F');
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['70º'], unit: 'ºF', summary: '70ºF' });
+});
