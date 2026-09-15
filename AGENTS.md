@@ -160,9 +160,11 @@ What is still open, and why it was left:
 - The `postMessage` route importer accepts an empty origin (`isAllowedOrigin` in
   `ui.js`), meant for userscript contexts. A browser page always has an origin, so
   this is not reachable from the web, but it is a hole to remember if that listener
-  grows. The allowlist itself is pinned by a test that loads the app from `http://[::1]:4173`
-  (the test server over IPv6, a hostname the list does not name) and posts to itself, since the
-  browser sets the origin. Framing the app inside a foreign page does not work in the tests: the
+  grows. The allowlist itself is pinned by a test that loads the app from
+  `https://foreign.example`, a made-up host whose every request the test answers with
+  `route.fetch` from the test server, and posts to itself, since the browser sets the origin. It
+  used to load the app from `http://[::1]:4173`, which failed outright wherever IPv6 loopback does
+  not answer. Framing the app inside a foreign page does not work in the tests: the
   app's CSP keeps foreign frames out of the app, and a page on another hostname framing 127.0.0.1
   is blocked by Chromium's local network access checks (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`).
 
@@ -942,16 +944,41 @@ with `exception`. `ok: true` means the route was shown (its request confirmed), 
 saved: the import into recent routes runs after the answer and can still fail with
 `route_not_saved`.
 
+**Resent messages.** Senders resend until they hear back: `tools/userscripts/tamper_meteoride.user.js`
+posts at 1, 2 and 4 s, and since the answer waits for the route to be confirmed, a resend often
+lands after the route is shown. Each resend used to be a newer request, so it replaced a file the
+user had picked in between. The listener in `ui.js` remembers the last message that asked for a
+route as `{ origin, fingerprint, at, status }` (`cwForecastRules.fingerprint` of the text). A
+message with the same origin and the same fingerprint within 30 s of that one asks for nothing:
+its answer carries that request's status. Past 30 s, or with another text or origin, a message
+asks as usual. The window runs from the message that asked, not from the latest resend. The cost:
+an identical route deliberately sent again within 30 s is not shown again. The origin check runs
+before any of this. The userscript also stops its pending resends on the first answer for its own
+send (same `name` and `size`, from the tab it opened), whatever the status: a resend would get the
+same answer.
+
 A used `shared_id` link is spent: once its text arrives, `history.replaceState` takes
 `shared_id` out of the address, keeping the other parameters and the hash, so a reload does not
 ask the server again for a copy already deleted (and show `route_read_failed` over an empty page).
-A GET that fails (HTTP error, network, empty body) leaves it in place.
+A GET that fails (HTTP error, network) or brings an empty or whitespace-only body leaves it in
+place and deletes nothing: the body is checked before the DELETE and the address rewrite. It used
+to be checked after, so an empty answer deleted the server copy and took away the retry.
+
+**Downloads and the deadline.** A `?gpx_url=` or `shared_id` download runs under its request's
+30 s deadline; before phase 5 `loadFromParams` had none. A slow download fails the request with
+`route_read_failed`, and the fetch is not aborted. When its text comes after that, a `url` link is
+neither shown nor kept (it is kept only once confirmed), while a `shared_id` is still kept.
 
 **KML.** Keeping a route and opening it decide whether it is a KML the same way, `isKmlRoute` in
 `app.js`: the name ends in `.kml`, or a `<kml` element starts within the first 4096 characters.
 They used to disagree (the import looked anywhere in the text), so a KML with a long comment
 first and no `.kml` name was kept, failed to open, and became the recent route the next start-up
-failed to restore. A shared KML is kept as it arrived, under its own name (`Name.kml`) and with
+failed to restore. They also have to agree when the conversion comes out empty: opening then
+reads the text as it arrived, so a real GPX named `.kml` opens, and keeping counts a route if
+either the text or its conversion holds one (`cwImportIfRoute`). Keeping used to go by the
+conversion alone, so such a file was shown and silently left out of recent routes. A KML with
+nothing to follow still stays out, since neither holds a route.
+A shared KML is kept as it arrived, under its own name (`Name.kml`) and with
 its raw KML text. Before phase 5 it was kept as `Name.gpx` with the converted GPX text, so sharing
 again a KML an older version stored adds a second entry, and forecast caches and ride-watch
 fingerprints computed from the old text do not match the new one.
@@ -961,7 +988,11 @@ fingerprints computed from the old text do not match the new one.
 `takeSharedFromServiceWorker` reads and deletes in one `readwrite` transaction, settled on
 `oncomplete`, one read at a time; a call while a read runs makes that read go round once more.
 It runs at start-up, which covers `?shared` (where the worker sends the page), and on every
-message, from a listener attached before the worker is registered. Neither runs in the app
+message, from a listener attached before the worker is registered. When the address opens a link
+(`gpx_url`, `url` or `shared_id`), the start-up read only keeps what it finds among recent routes
+and asks for nothing: its request would come once IndexedDB answers, after the link's, and a route
+left in the slot by an earlier share replaced the link just opened. A round a message asks for
+meanwhile asks as usual. Neither runs in the app
 (`CW_NATIVE`), which has no service worker; reading there only created `cw_shared_db`. A
 transaction that cannot even start closes the database before resolving `null`. There used to be three
 readers, one of them reading and deleting in separate transactions, so a message could delete

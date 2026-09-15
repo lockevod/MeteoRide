@@ -407,6 +407,18 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
   - La posición del teléfono se aplica cuando termina el vaciado del buzón, no al arrancar.
   - Una descarga de `?gpx_url=` o `shared_id` empieza aunque su petición quede sustituida en la
     misma vuelta, porque la importación no puede depender de que la petición llegue a leer.
+  - Las descargas de `?gpx_url=` y `shared_id` cuentan ahora dentro del plazo de 30 s de su
+    petición; antes de la fase 5, `loadFromParams` no tenía plazo. Una descarga lenta falla con el
+    aviso de lectura y el `fetch` no se aborta. Si el texto llega después, un enlace `url` no se
+    muestra ni se guarda, y un `shared_id` sí se guarda.
+  - Una ruta enviada por `postMessage` con el mismo texto y desde el mismo origen en los 30 s
+    siguientes al mensaje que la pidió no se vuelve a pedir: su respuesta lleva el resultado de
+    aquella petición. Así un reenvío no sustituye un fichero elegido entre medias, pero reenviar a
+    propósito la misma ruta dentro de esa ventana no la vuelve a mostrar.
+  - Un `shared_id` cuyo cuerpo llega vacío o solo con espacios falla sin borrar la copia del
+    servidor y sin quitar `shared_id` de la dirección, así que recargar lo vuelve a intentar.
+  - Con un enlace en la dirección (`gpx_url`, `url` o `shared_id`), la lectura del hueco del
+    service worker al arrancar solo guarda su ruta entre las recientes y no la muestra.
 - **Comparar.**
   - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
   - Con comparar fechas abierto (el botón lo abre siempre en modo explícito), un ajuste que
@@ -498,6 +510,18 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
     espera (cae con `await`), el `shared_id` que se guarda aunque falle el DELETE y se agote el
     plazo, el origen no permitido de `postMessage` (cae con `allowed = true`) y el de la petición
     anterior al arranque (cae quitando `hasRouteRequests()` de la restauración).
+  - Tests de la segunda tanda de correcciones de la fase 5 que también pasan con el código anterior,
+    y la mutación que tumba a cada uno: el `shared_id` que falla por 404 o por red y conserva
+    `shared_id` y la copia del servidor (cae quitando `res.ok`); el `shared_id` cuyo texto llega
+    después de agotarse el plazo y aun así se guarda (cae importando solo al confirmar); el enlace
+    sustituido en la misma vuelta cuya descarga falla sin rechazo sin gestionar (cae quitando
+    `arrived.catch`), y el origen no permitido, que ahora sirve la app desde
+    `https://foreign.example` con `route.fetch` en vez de `[::1]` (cae con `allowed = true`).
+  - Dos protecciones sin test que las tumbe: `tx.onabort = () => done(null)` en la lectura del hueco
+    del service worker (`gpx-share.js`), y `if (!arrived) centreOnUser()` en `native.js`, que queda
+    tapada por las comprobaciones del propio `centreOnUser`.
+  - El script de usuario (`tools/userscripts/tamper_meteoride.user.js`) deja de reenviar con la
+    primera respuesta a su envío. No tiene tests: se comprobó solo leyendo el código.
   - La etiqueta `source` de cada entrada solo se ve envolviendo `cw.requestRoute`; la comprueban
     los tests de `shared_id`, no los del resto de entradas.
 
