@@ -1171,8 +1171,10 @@ a replay takes the ones in use ("Preparing and replaying").
     `publish` and the `_pendingCompareRestore` flag are gone. A setting that computes again goes
     through `cw.settingsChanged()`, also while compare-by-dates is open: the toggle always opens
     it in explicit mode, so that repaints the normal table and the run button brings the date
-    comparison back. The automatic date-B branches still in `ui.js` are unreachable. Closing the
-    dates row with compare chosen computes again, and that publish compares providers.
+    comparison back. The unreachable automatic date-B branches (relaunching on date B or a control
+    change) are gone from `ui.js` along with the `explicitCompareActive` flag that gated them;
+    date B is rounded on change and nothing else. Closing the dates row with compare chosen
+    computes again, and that publish compares providers.
   - **Leaving compare.** Choosing any other provider, or closing the dates row, calls
     `cwCancelComparisons()`, which takes the next `comparisonId` and drops every `compare:*`
     claim. Without it, a comparison still fetching while a route request holds the recomputation

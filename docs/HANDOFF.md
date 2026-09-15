@@ -457,10 +457,6 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
   - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
   - Con comparar fechas abierto (el botón lo abre siempre en modo explícito), un ajuste que
     recalcula pinta la tabla normal encima; la de fechas vuelve con el botón de ejecutar.
-  - `ui.js` conserva las ramas anteriores del modo automático de comparar fechas (relanzar al
-    cambiar la fecha B o un control cuando `explicitCompareActive` es falso). No se alcanzan,
-    porque el botón siempre abre el modo explícito; el relanzamiento automático desde `publish` ya
-    se ha quitado.
   - En las ventanas de cambio de hora, la hora se elige con el único `utc_offset_seconds` de la
     respuesta de Open-Meteo, igual que en la tabla. No se ha comprobado cuál de las dos horas
     posibles es la correcta.

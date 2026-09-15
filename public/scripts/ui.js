@@ -667,10 +667,6 @@
     }
   }
 
-  // Explicit compare-by-dates mode flag: when true and compare UI is visible,
-  // date changes do NOT auto-recalculate; user must click the "Run compare" button.
-  let explicitCompareActive = false;
-
   // Bind UI events
   function bindUIEvents() {
     const toggleConfigEl = document.getElementById("toggleConfig");
@@ -753,28 +749,12 @@
     if (dtEl2) {
       dtEl2.addEventListener("change", () => {
         if (!dtEl2.value) return;
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const visible = row2 && getComputedStyle(row2).display !== 'none';
         // Round to next quarter like A
         const [Y, M, D, H, Min] = dtEl2.value.split(/[-:T]/).map(Number);
         const localDate = new Date(Y, M - 1, D, H, Min, 0, 0);
         const rounded = window.roundToNextQuarterISO(localDate);
         dtEl2.value = rounded;
-        if (visible && window.cw?.runCompareDatesMode) {
-          if (!explicitCompareActive) {
-            window.cw.runCompareDatesMode();
-          }
-        }
-      });
-      // Also react on input (useful on some UIs) when value is complete
-      dtEl2.addEventListener("input", () => {
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const visible = row2 && getComputedStyle(row2).display !== 'none';
-        if (!visible || explicitCompareActive) return;
-        const v = dtEl2.value || "";
-        if (v.length >= 16 && window.cw?.runCompareDatesMode) {
-          window.cw.runCompareDatesMode();
-        }
+        // Compare-by-dates always runs explicitly, via the Run button below.
       });
     }
 
@@ -904,8 +884,6 @@
             }
             dt2.focus();
           }
-          // Enter explicit compare mode by default; user can click the run button to compute
-          explicitCompareActive = true;
           if (compareNowBtn) {
             compareNowBtn.style.display = '';
             // Ensure i18n title
@@ -932,8 +910,7 @@
             toggleCompBtn.title = window.t('compare_dates_btn_title');
           }
           if (compareNowBtn) compareNowBtn.style.display = 'none';
-          explicitCompareActive = false;
-          
+
           // A date comparison still fetching never paints once the row is closed, even while a
           // route request holds the recomputation below back.
           window.cwCancelComparisons?.();
@@ -970,7 +947,6 @@
           return;
         }
         if (window.cw?.runCompareDatesMode) {
-          // explicitCompareActive doesn't block the user clicking Run; here this is the Run button handler
           window.cw.runCompareDatesMode();
         }
       });
