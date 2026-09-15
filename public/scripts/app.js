@@ -516,6 +516,10 @@ let confirmedRoute = null;        // { requestId, name, fingerprint, geojson, te
 let lastComputationId = 0;
 let runningComputationId = null;
 let publishedSnapshot = null;
+// The settings the last launch read, or a change refused since. A change over a replay without
+// coverage is compared with these, not with the replayed record's: a setting changed after preparing,
+// or a change refused before, would otherwise make every later start look like a change of settings.
+let launchedSettings = null;
 // The latest computation when a route last failed to open and said so. That computation
 // publishing with nothing to say leaves the failure up instead of clearing it.
 let routeFailureComputationId = null;
@@ -543,7 +547,8 @@ window.cwLaunchComputation = function () {
   if (replayShown) {
     let latest = null;
     try { latest = readForecastSettings(); } catch (_) { /* the launch below says so */ }
-    if (latest && !sameButStart(shown.settings, latest)) {
+    if (latest && launchedSettings && !sameButStart(launchedSettings, latest)) {
+      launchedSettings = latest;
       setNotice(t("offline_cannot_recalculate"), "warn");
       return lastComputationId;
     }
@@ -558,6 +563,7 @@ window.cwLaunchComputation = function () {
   try {
     // Read once: the steps and the requests of this computation follow the same settings.
     const settings = readForecastSettings();
+    launchedSettings = settings;
     const ids = { requestId: confirmedRoute.requestId, computationId: cid };
     // Without coverage, a prepared snapshot of this route within three hours of the start is put
     // back instead, and nothing is asked for; with a replay already on screen, whatever the start
@@ -682,6 +688,8 @@ window.cwHasCurrentForecast = () => !!confirmedRoute && (
   (!!publishedSnapshot && publishedSnapshot.computationId === lastComputationId
     && publishedSnapshot.requestId === confirmedRoute.requestId)
   || runningComputationId === lastComputationId);
+// The latest computation launched is still running (coming back to the app leaves it be, native.js).
+window.cwIsComputing = () => runningComputationId !== null && runningComputationId === lastComputationId;
 // The start time rule (spec §4.8): the time chosen while it is still ahead, otherwise now
 // rounded up to the next quarter hour, and an empty or unreadable field counts as passed.
 // Whatever it gives is written back into the field. Returns the start in ms.

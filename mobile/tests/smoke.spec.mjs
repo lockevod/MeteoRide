@@ -294,7 +294,12 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
           // and written through on every set: a reload right after a save must not
           // lose it, which is exactly what the code under test relies on.
           Preferences: {
-            get: async ({ key }) => ({ value: (window.__prefsRead() || {})[key] ?? null }),
+            // Read when asked, as native storage is; a test can hold the answer with `__prefsHeld`.
+            get: async ({ key }) => {
+              const value = (window.__prefsRead() || {})[key] ?? null;
+              if (window.__prefsHeld) await window.__prefsHeld;
+              return { value };
+            },
             set: async ({ key, value }) => {
               const all = window.__prefsRead() || {};
               all[key] = value;
@@ -1480,6 +1485,57 @@ test('a start moved by hand beyond the margin never deletes the prepared route: 
   await chooseStart(page, localAt(T0 + 3600000));
   await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('13º');   // 09:00
   expect(await shownOrigin(page)).toBe('prepared');
+});
+
+// A change is refused over a replay only when it differs from the settings the last launch read: not
+// from those the record was prepared with, which a setting changed since, or a change refused before,
+// would make every later start look like a change of settings.
+test('with a replayed forecast and no coverage, a speed changed after preparing still lets a new start move the replay', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await routeWithForecast(page, control);
+  await setSpeed(page, 20);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.speed)).toBe(20);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  // Changed with coverage, after preparing: computed live as usual.
+  await setSpeed(page, 22);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.speed)).toBe(22);
+
+  control.offline = true;
+  await noLongerOnline(page);
+  await page.clock.fastForward('45:00');
+  await resume(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+
+  await chooseStart(page, localAt(T0 + 2 * 3600000));
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');   // 10:00
+  expect(await shownOrigin(page)).toBe('prepared');
+  await expect(page.locator('.notice')).not.toContainText(cannotRecalculate);
+});
+
+test('with a replayed forecast and no coverage, a change refused before still lets a new start move the replay', async ({ page }) => {
+  await replayOnScreen(page, { now: T0 });
+  await setTempUnits(page, 'F');
+  await expect(page.locator('.notice')).toContainText(cannotRecalculate);
+
+  await chooseStart(page, localAt(T0 + 2 * 3600000));
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');
+  expect(await shownOrigin(page)).toBe('prepared');
+});
+
+test('with a replayed forecast and no coverage, choosing compare is nothing to compute: a new start still moves the replay', async ({ page }) => {
+  await recordNotices(page);
+  await replayOnScreen(page, { now: T0 });
+  await selectProvider(page, 'compare');
+  await expect(page.locator('.notice')).toContainText(/Comparing providers needs coverage|Comparar proveedores necesita cobertura/);
+
+  // With compare chosen the normal table is left as it is until a comparison paints over it, so the
+  // snapshot is what shows the replay moved.
+  await chooseStart(page, localAt(T0 + 2 * 3600000));
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.start)).toBe(T0 + 2 * 3600000);
+  expect(await shownOrigin(page)).toBe('prepared');
+  expect(await page.evaluate(() => window.__notices.join(' | '))).not.toMatch(cannotRecalculate);
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both
@@ -3858,6 +3914,56 @@ test('coming back with the start still ahead computes nothing until the forecast
   await expect(startField(page)).toHaveValue('2026-09-20T12:00');
 });
 
+// Computing again without coverage would read the cache under keys the new start has moved, and
+// replace a table with data by an empty one.
+test('coming back without coverage and nothing prepared, after the start has passed, keeps the table and says it cannot compute', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await startClock(page, Date.parse('2026-09-20T08:00:00'));
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const temps = await shownTemperatures(page);
+
+  control.offline = true;
+  await noLongerOnline(page);
+  await page.clock.fastForward('20:00');
+  await resume(page);
+
+  await expect(startField(page)).toHaveValue('2026-09-20T08:30');
+  await page.waitForTimeout(800);
+  expect(await shownTemperatures(page)).toEqual(temps);
+  await expect(page.locator('.notice')).toContainText(/cannot be computed again|no se puede recalcular/);
+});
+
+test('coming back while the latest forecast is still being computed, with the start unchanged, launches nothing more', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await installNativeBridge(page);
+  await stubAround(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await chooseStart(page, localAt(T0 + 4 * 3600000));
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  const held = heldPromise();
+  control.held = held.promise;
+  await forgetForecasts(page);
+  await countLaunches(page);
+  await setSpeed(page, 13);
+  await expect.poll(async () => (await page.evaluate(() => window.__launches)).launch).toBe(1);
+  // The forecast on screen is old enough to be computed again, but its replacement is on its way.
+  await page.clock.fastForward('35:00');
+  await resume(page);
+  await page.waitForTimeout(500);
+  expect((await page.evaluate(() => window.__launches)).launch, 'a computation still running was launched again').toBe(1);
+  held.release();
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.speed)).toBe(13);
+});
+
 test('a booby-trapped map tile cannot run script', async ({ page }) => {
   // Tiles are the one new path from the network into the DOM: fetched, stored, and
   // rendered through an object URL. An <img> does not execute script in an SVG, and
@@ -3940,6 +4046,24 @@ test('the web view keeps priority while it still has the settings', async ({ pag
   await mapReady(page);
 
   await expect.poll(() => page.evaluate(() => document.getElementById('apiKeyOW').value)).toBe('CURRENT-KEY');
+});
+
+test('settings restored from device storage after a forecast was computed compute it again with them', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 18 });
+  // The web view came up empty and the native copy answers only after the route has its forecast.
+  await page.addInitScript(() => {
+    sessionStorage.setItem('__prefs', JSON.stringify({ cwSettings: JSON.stringify({ cyclingSpeed: '20' }) }));
+    window.__prefsHeld = new Promise((r) => { window.__releasePrefs = r; });
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.speed)).toBe(12);
+
+  await page.evaluate(() => window.__releasePrefs());
+  await expect.poll(() => page.evaluate(() => document.getElementById('cyclingSpeed').value)).toBe('20');
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.speed)).toBe(20);
 });
 
 /* ---------- opening where the phone is ---------- */

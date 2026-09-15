@@ -255,6 +255,9 @@
         window.loadSettings();
         if (window.applyTranslations) window.applyTranslations();
         if (window.updateProviderOptions) window.updateProviderOptions();
+        // A forecast already computed with the settings read before is computed again with these,
+        // so the table matches the fields. With no route yet this only notes the change.
+        if (window.cw && window.cw.settingsChanged) window.cw.settingsChanged();
       } catch (e) { log('could not re-apply the settings', e); }
     }
   }
@@ -266,15 +269,33 @@
   // An app is resumed, not reloaded. Come back hours later and the table would still be the
   // one computed for a departure that has passed. The start rule runs again (a time chosen
   // ahead stays), and the forecast is computed again when that moved the start or the
-  // snapshot on screen is more than half an hour old. A prepared route whose start is now more
-  // than three hours away is dropped first.
+  // snapshot on screen is more than half an hour old. A prepared route that can no longer stand
+  // in is dropped first (expireIfPast).
   const RESUMED_STALE_MS = 30 * 60 * 1000;
 
   function refreshOnResume() {
     const moved = !!(window.cwApplyStartRule && window.cwApplyStartRule());
     expireIfPast(preparedRecord).then((dropped) => { if (dropped) notifyExpired(); });
     const shown = window.cw.currentSnapshot ? window.cw.currentSnapshot() : null;
-    if (moved || (shown && Date.now() - shown.createdAt > RESUMED_STALE_MS)) window.cw.startForecast();
+    if (!moved && !(shown && Date.now() - shown.createdAt > RESUMED_STALE_MS)) return;
+    // Old, but its replacement for the same start is still on its way: launching again gains nothing.
+    if (!moved && window.cwIsComputing && window.cwIsComputing()) return;
+    // Without coverage only a prepared snapshot of this route can stand in. Without a usable one,
+    // computing again would read the cache under keys the new start has moved and put an empty table
+    // over one with data: the table stays, and the user is told.
+    if (offline() && !preparedStandsIn()) {
+      if (shown) notify('offline_cannot_recalculate', 'Without coverage the forecast cannot be computed again: the saved one stays.');
+      return;
+    }
+    window.cw.startForecast();
+  }
+
+  // The prepared record can replay the confirmed route at the start now in the field.
+  function preparedStandsIn() {
+    const route = window.cwConfirmedRouteText ? window.cwConfirmedRouteText() : null;
+    const field = document.getElementById('datetimeRoute');
+    const startMs = field ? new Date(field.value).getTime() : NaN;
+    return !!route && cwForecastRules.usablePrepared(preparedRecord, { fingerprint: route.fingerprint, startMs });
   }
 
   /* ---------- reopening where you left off ---------- */
