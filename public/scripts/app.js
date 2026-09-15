@@ -628,6 +628,10 @@ function replay(record, ids, settings) {
   snapshot.requestId = ids.requestId;
   snapshot.computationId = ids.computationId;
   snapshot.settings = { ...snapshot.settings, keys: settings.keys, alertsKey: settings.alertsKey };
+  // Official warnings follow the setting in use now, as a live computation would: none when they are off.
+  if (!settings.alerts) snapshot.alerts = [];
+  // The outcome is the stored one, with when and for what start it was prepared; usable steps are
+  // not counted again for the new start.
   snapshot.outcome = { ...stored.outcome, preparedAt: stored.createdAt, preparedFor: stored.settings.start };
   const published = publish(snapshot);
   if (published && !inRange) setNotice(t("prepared_out_of_range"), "warn");
@@ -646,9 +650,11 @@ window.cwLaunchComparison = function (kind) {
   // A computation still running replaces that snapshot; its publish launches the comparison.
   if (!snapshot || snapshot.computationId !== lastComputationId) return null;
   // Comparing asks every provider again: never over a replayed snapshot, nor without coverage in the
-  // app, where the forecast on screen stays instead (spec §4.6).
+  // app, where the forecast on screen stays instead (spec §4.6). Only a missing connection is said: a
+  // replay with coverage is there because every provider failed, and its own notice (how old, for
+  // what start) stays up.
   if (snapshot.origin === "prepared" || (window.CW_NATIVE && window.cw.utils.isOffline())) {
-    setNotice(t("compare_needs_coverage"), "warn");
+    if (window.cw.utils.isOffline()) setNotice(t("compare_needs_coverage"), "warn");
     return null;
   }
   const comparisonId = ++lastComparisonId;

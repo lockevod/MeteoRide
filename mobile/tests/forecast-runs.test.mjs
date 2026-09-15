@@ -704,6 +704,40 @@ test('a computation that gets nothing replays a usable prepared snapshot of the 
   }
 });
 
+test('a computation with a usable step publishes itself, even with a usable prepared snapshot of the route', async () => {
+  const h = harness();
+  const start = aheadStart();
+  h.s.values.datetimeRoute = localIso(start);
+  h.s.cwPreparedRecord = () => preparedFor(start);
+  const a = h.run(41, 1);
+  h.answer(0, ok(around(start))); await a;
+  const published = h.s.published();
+  assert.equal(published.length, 1);
+  assert.equal(published[0].origin, 'live');
+  assert.equal(published[0].outcome.usableSteps, 1);
+  assert.equal(published[0].outcome.preparedAt, undefined);
+  assert.deepEqual(h.s.notices, []);
+});
+
+test('a replay shows the stored official warnings only while official warnings are shown now', async () => {
+  for (const shown of [true, false]) {
+    const h = harness();
+    const start = aheadStart();
+    h.s.values.datetimeRoute = localIso(start);
+    const record = preparedFor(start);
+    record.snapshot.alerts = [{ sender_name: 'AEMET', event: 'Viento', start: start / 1000 - 3600, end: start / 1000 + 3600 }];
+    h.s.cwPreparedRecord = () => record;
+    h.s.elements.showWeatherAlerts = { checked: shown };
+    h.s.offline = true;
+    await h.run(41, 1);
+    const [snapshot] = h.s.published();
+    assert.equal(snapshot.origin, 'prepared', `shown: ${shown}`);
+    assert.deepEqual(plain(snapshot.alerts).map((x) => x.event), shown ? ['Viento'] : [], `shown: ${shown}`);
+    assert.deepEqual(plain(h.s.shownAlerts), shown ? [['Viento']] : [], `shown: ${shown}`);
+    assert.equal(record.snapshot.alerts.length, 1, 'the stored record changed');
+  }
+});
+
 test('a computation whose provider never answers replays nothing, however long it waits', async () => {
   const h = harness();
   const start = aheadStart();

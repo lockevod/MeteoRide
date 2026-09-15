@@ -758,14 +758,14 @@
       }
       fresh.channelId = channelReady ? WATCH_CHANNEL : '';
       // Read after every save and disarm already queued: arming the same ride again keeps
-      // what was notified, and the baseline when the points are the same. A read that fails
-      // arms afresh.
+      // what was notified, and the baseline when the points are the same. A replay moved to
+      // another start is still the same ride. A read that fails arms afresh.
       const stored = await queueWatch(() => runnerCall('loadWatch', {}).catch((e) => {
         log('could not read the stored watch', e);
         return null;
       }));
       if (!current()) return;
-      const watch = window.cwWatchRules.reuse(stored, fresh);
+      const watch = window.cwWatchRules.reuse(stored, fresh, snapshot.origin === 'prepared');
       if (!Array.isArray(watch.baseline)) {
         await seedBaseline(watch);
         if (!current()) return;

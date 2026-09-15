@@ -292,12 +292,16 @@ var cwWatchRules = (function () {
   /**
    * The watch to store when the app arms `fresh` while `stored` is what the runner holds.
    * The same ride (same route fingerprint, same start) keeps the warnings already
-   * notified, so arming it again does not announce them twice. The baseline is kept only
-   * over identical points, because compare() reads it by index. Pure: returns a new record.
+   * notified, so arming it again does not announce them twice. `moved` says `fresh` comes
+   * from a prepared snapshot moved to another start (spec §4.6): it is still that ride, so
+   * what was notified stays whatever the start. The baseline is kept only over identical
+   * points, because compare() reads it by index. Pure: returns a new record; nothing of
+   * `moved` is stored.
    */
-  function reuse(stored, fresh) {
+  function reuse(stored, fresh, moved) {
     const next = Object.assign({}, fresh, { notified: [], baseline: null });
-    if (!stored || !fresh.fingerprint || stored.fingerprint !== fresh.fingerprint || stored.start !== fresh.start) {
+    if (!stored || !fresh.fingerprint || stored.fingerprint !== fresh.fingerprint
+        || (stored.start !== fresh.start && !moved)) {
       return next;
     }
     next.notified = (stored.notified || []).slice();

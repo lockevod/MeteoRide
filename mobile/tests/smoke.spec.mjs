@@ -1197,6 +1197,61 @@ test('with compare chosen and no coverage, the replayed forecast stays with a no
   expect(await compareShown(page)).toBe(false);
 });
 
+test('with coverage, every provider failing and compare chosen, the replay keeps its age notice and nothing is compared', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await recordNotices(page);
+  await routeWithForecast(page, control);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  control.fail = true;
+  await forgetForecasts(page);
+  await selectProvider(page, 'compare');
+  await watchComparisons(page);
+  await page.clock.fastForward('45:00');
+  await resume(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  await expect(page.locator('.notice')).toContainText(/saved 45 min ago|hace 45 min/);
+  await page.waitForTimeout(800);
+  await expect(page.locator('.notice')).toContainText(/saved 45 min ago|hace 45 min/);
+  expect(await comparisonsLaunched(page)).toBe(0);
+  const since = await page.evaluate(() => window.__notices.findLastIndex((n) => /saved 45 min ago|hace 45 min/.test(n)));
+  expect(await page.evaluate((i) => window.__notices.slice(i).join(' | '), since))
+    .not.toMatch(/Comparing providers needs coverage|Comparar proveedores necesita cobertura/);
+});
+
+// Moving a replay changes the hours of the watched points: what was already notified stays, the
+// baseline is read again (spec §4.6).
+test('a replay moved to a new start keeps what the ride alert already notified, and leaves its baseline to be read again', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await installNativeBridge(page);
+  await stubAround(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  const before = await lastStored(page);
+  expect(Array.isArray(before.baseline)).toBe(true);
+  await markStoredWatch(page);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  await noLongerOnline(page);
+  control.offline = true;
+  await page.clock.fastForward('45:00');
+  await resume(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(2);
+  const watch = await lastStored(page);
+  const firstStep = await page.evaluate(() => new Date(window.cw.currentSnapshot().steps[0].time).getTime());
+  expect(watch.start).toBe(firstStep);
+  expect(watch.start).toBeGreaterThan(before.start);
+  expect(watch.notified).toEqual(['AEMET_Viento_1_2']);
+  expect(watch.baseline).toBeNull();
+});
+
 /* ---------- opening the app on a prepared route (spec §4.7, §4.9.3) ---------- */
 
 const expiredNotice = /prepared route no longer fits|ruta preparada ya no sirve/;

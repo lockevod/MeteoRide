@@ -331,6 +331,20 @@ test('reuse: another route, another start, nothing stored or no fingerprint keep
     record({ fingerprint: undefined }), 'a record from before fingerprints');
 });
 
+test('reuse: a replay moved to another start keeps what was notified, and the baseline only over the same points', () => {
+  const stored = storedRecord();
+  const later = 45 * 60;
+  const moved = record({ start: t0 * 1000 + later * 1000, points: points.map((p) => ({ ...p, t: p.t + later })) });
+  same(rules.reuse(stored, moved, true), { ...moved, notified: stored.notified, baseline: null });
+  // Put back at the same start, the points are the same and so is the baseline.
+  same(rules.reuse(stored, record(), true), { ...record(), notified: stored.notified, baseline: stored.baseline });
+  // Another route is another route, moved or not.
+  same(rules.reuse(storedRecord({ fingerprint: '5120:ffffffff' }), moved, true), moved);
+  // A computation for another start still starts afresh.
+  same(rules.reuse(stored, moved), moved);
+  same(rules.reuse(stored, moved, false), moved);
+});
+
 test('reuse changes neither record', () => {
   const stored = storedRecord();
   const fresh = record();
