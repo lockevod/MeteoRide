@@ -34,6 +34,7 @@ const code = [
   app.match(/const PRECIP_MIN\s*=[^;]*;/)[0],
   between(app, 'function fallbackWmoFromBasics(', '\n// Presentation helper'),
   between(app, 'function reconcileAromeVsOmCode(', '\n}\n') + '\n}\n',
+  between(app, 'function aromeCodeAndDay(', '\n}\n') + '\n}\n',
   between(utils, 'function safeNum(', '\n  function normalUnit('),
   between(utils, 'function findClosestIndex(', '\n  function findClosestFutureIndex('),
   between(utils, 'function windToUnits(', '\n  // NEW: pick which wind'),

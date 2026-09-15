@@ -326,6 +326,21 @@ function reconcileAromeVsOmCode(omCode, precip, prob, cloud) {
   return code;
 }
 
+// An AROME step as the table and the comparison show it: day or night from the sun when the answer
+// says nothing, and the weather code synthesised from rain and cloud when missing, or else
+// reconciled with them.
+function aromeCodeAndDay(step) {
+  if (step.isDaylight == null) {
+    try {
+      const pos = SunCalc.getPosition(new Date(step.time), step.lat, step.lon);
+      step.isDaylight = pos.altitude > 0 ? 1 : 0;
+    } catch { /* ignore */ }
+  }
+  step.weatherCode = step.weatherCode == null
+    ? fallbackWmoFromBasics(step.precipitation, step.cloudCover)
+    : reconcileAromeVsOmCode(step.weatherCode, step.precipitation, step.precipProb, step.cloudCover);
+}
+
 
 // The steps of a route at the speed, interval and start of the settings a computation read
 // (readForecastSettings), or null when it cannot be segmented (logged, and a start out of
@@ -1354,24 +1369,7 @@ function processWeatherData() {
 
       // NEW: AROME fallbacks and selective reconciliation
       if (prov === "aromehd") {
-        if (step.isDaylight == null) {
-          try {
-            const pos = SunCalc.getPosition(new Date(step.time), step.lat, step.lon);
-            step.isDaylight = pos.altitude > 0 ? 1 : 0;
-          } catch { /* ignore */ }
-        }
-        // If still missing, synthesize
-        if (step.weatherCode == null) {
-          step.weatherCode = fallbackWmoFromBasics(step.precipitation, step.cloudCover);
-        } else {
-          // Reconcile AROME vs Open-Meteo: prefer forward index values; then adjust
-          step.weatherCode = reconcileAromeVsOmCode(
-            step.weatherCode,
-            step.precipitation,
-            step.precipProb,
-            step.cloudCover
-          );
-        }
+        aromeCodeAndDay(step);
 
         // Policy: prefer AROME precipitation as authoritative for icon decisions.
         // If AROME reports precipitation == 0 for this (future-aligned) step, don't show probability
@@ -3274,6 +3272,7 @@ try {
   window.cw.windToUnits = windToUnits;
   window.cw.safeNum = safeNum;
   window.cw.computeLuminance = computeLuminance;
+  window.cw.aromeCodeAndDay = aromeCodeAndDay;
   // Icons per provider
   window.cw.icons = {
     om: getWeatherIconClassOpenMeteo,

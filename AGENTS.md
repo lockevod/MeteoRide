@@ -1205,10 +1205,18 @@ a replay takes the ones in use ("Preparing and replaying").
     failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).
   - **Hours.** `extractStepMetrics` reads Open-Meteo and AROME with `cwForecastRules.extractStep`,
     the table's own function, for both comparisons: the hour by the answer's `utc_offset_seconds`,
-    the quarter of `minutely_15` while the step falls within it (the first 5 h; the value per
-    quarter, as the table shows it), and uv and probability from `hourly` when the quarter has
-    none. It keeps its own unit conversion, `_derivedCat` and the precipitation-probability rule.
-    OpenWeather is still read by hand there. The comparison tables are unchanged (spec §2).
+    and the quarter of `minutely_15` whenever the answer carries one for the step, which it does
+    when it was requested within 5 h (`buildProviderUrl` asks for quarters only then, but the
+    answer then covers its whole date range, so a cached one keeps them). The value is per quarter,
+    as the table shows it; uv, probability and weather code come from `hourly` when the quarter
+    has none (AROME HD sends all three null there). The same unit conversion as the table
+    (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from
+    the sun when missing, the code synthesised or reconciled with rain and cloud. OpenWeather is
+    still read by hand there. The comparison tables are unchanged (spec §2).
+  - **AROME answers.** Both comparisons get them through `fetchAnswer`, as the table does: the
+    standard Open-Meteo answer merged in with `cwForecastRules.mergeAromeWithStandard`, and
+    Open-Meteo instead when AROME's answer is unusable, before caching. Compare-by-dates used to
+    cache AROME unmerged under the key the table reads.
 - **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
   name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
   and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline

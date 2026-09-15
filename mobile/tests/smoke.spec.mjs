@@ -5619,6 +5619,80 @@ test('within five hours the comparison and the date comparison read Open-Meteo q
   await expect.poll(() => page.evaluate(`(${read})(window.cw.weatherDataA ?? [])`)).toEqual(table);
 });
 
+/** AROME HD as the live API answers: quarter hours like forecastWithQuarters, but weather code,
+ *  probability, uv and cloud cover null in both `hourly` and `minutely_15`. The standard answer
+ *  (forecastWithQuarters) fills the hourly ones: code 1, 5 %, uv 3, 20 % cloud. */
+function aromeWithNulls() {
+  const body = forecastWithQuarters();
+  for (const series of [body.hourly, body.minutely_15]) {
+    for (const k of ['weathercode', 'precipitation_probability', 'uv_index', 'cloud_cover']) series[k] = series[k].map(() => null);
+  }
+  return body;
+}
+const isArome = (url) => url.searchParams.get('models') === 'arome_france_hd';
+const readRows = (rows) => rows.map((s) => [s.temp, s.windSpeed, s.windGust, s.humidity, s.precipitation, s.precipProb, s.uvindex, s.cloudCover, s.weatherCode, s.isDaylight]);
+
+// Within five hours compare read AROME's null quarter code and drew clear sky over 0.4 mm of rain,
+// while the table took the hour's code and reconciled it with the rain. Both read it as the table does.
+test('within five hours the AROME row of the comparison reads and reconciles the weather code as the AROME table does', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const body = isArome(new URL(route.request().url())) ? aromeWithNulls() : forecastWithQuarters();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectProvider(page, 'aromehd');
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const table = await page.evaluate(`(${readRows})(window.weatherData)`);
+  // The quarter's 14º and 0.4 mm, uv and probability from the standard hour, and its code 1
+  // reconciled with the rain into light rain.
+  expect(table[0]).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 0.4, 5, 3, 20, 61, 1]);
+
+  // The comparison asks for itself instead of reading the table's cached answers.
+  await forgetForecasts(page);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await expect.poll(() => page.evaluate(`(${readRows})(window.cw.compareProviderData?.aromehd ?? [])`)).toEqual(table);
+});
+
+// Compare-by-dates stored AROME's answer without the standard model's variables, under the key the
+// table reads, so the next table computed from it lost its probability, uv and cloud cover.
+test('a date comparison with AROME stores the answer filled from standard Open-Meteo, and the table computed after reads it', async ({ page }) => {
+  const control = { aromeAsked: 0 };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const arome = isArome(new URL(route.request().url()));
+    if (arome) control.aromeAsked++;
+    const body = arome ? aromeWithNulls() : forecastWithQuarters();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectProvider(page, 'aromehd');
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  await openCompareDates(page);
+  await forgetForecasts(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+  expect((await page.evaluate(() => window.cw.weatherDataA)).map((s) => s.uvindex)).not.toContain(null);
+
+  // A setting that recomputes: the table reads the answers the date comparison stored.
+  const asked = control.aromeAsked;
+  await page.evaluate(() => {
+    window.__published = 0;
+    document.addEventListener('cw:forecast', () => { window.__published++; });
+  });
+  await selectProvider(page, 'aromehd');
+  await expect.poll(() => page.evaluate(() => window.__published)).toBe(1);
+  expect(control.aromeAsked, 'the table asked AROME again instead of reading the cache').toBe(asked);
+  const table = await page.evaluate(`(${readRows})(window.weatherData)`);
+  expect(table[0]).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 0.4, 5, 3, 20, 61, 1]);
+});
+
 /* ---------- starting language ---------- */
 
 const chosenLanguage = (page) => page.evaluate(() => document.getElementById('language').value);

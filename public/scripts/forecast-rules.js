@@ -39,9 +39,10 @@ var cwForecastRules = (function () {
     return best;
   }
 
-  // uv_index and precipitation_probability are often null in minutely_15 while hourly
-  // has them (AROME merges them in from Open-Meteo), so those two fall back to hourly.
-  const HOURLY_FALLBACK = { uv_index: true, precipitation_probability: true };
+  // uv_index, precipitation_probability and weathercode are often null in minutely_15 while
+  // hourly has them (AROME HD sends all three null there and merges them in from Open-Meteo),
+  // so those fall back to hourly.
+  const HOURLY_FALLBACK = { uv_index: true, precipitation_probability: true, weathercode: true };
 
   const QUARTER_MS = 15 * 60000;
 

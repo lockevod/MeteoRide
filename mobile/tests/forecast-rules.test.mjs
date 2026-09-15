@@ -41,6 +41,16 @@ test('Open-Meteo: uv and rain probability fall back to hourly when the quarter h
   assert.equal(r.weatherCode, 2);          // other variables stay on the quarter
 });
 
+// AROME HD sends minutely_15.weathercode as nulls; the hour, filled from standard Open-Meteo, has one.
+test('Open-Meteo: a quarter with no weather code takes the hour\'s', () => {
+  const w = openMeteo();
+  w.minutely_15.weathercode = w.minutely_15.weathercode.map(() => null);
+  const r = rules.extractStep(w, { provider: 'aromehd', time: at('2026-09-20T09:30:00Z') });
+  assert.equal(r.source, 'minutely_15');
+  assert.equal(r.temp, 114);               // the rest still on the quarter
+  assert.equal(r.weatherCode, [0, 1, 3, 61, 80][11 % 5]); // tie → 11:00 → slot 11
+});
+
 test('OpenWeather: wind comes back in km/h whether the request was metric or imperial', () => {
   const t = at('2026-09-20T14:10:00Z');
   const metric = rules.extractStep(openWeather('metric'), { provider: 'openweather', time: t, payloadUnits: 'metric' });

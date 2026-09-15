@@ -110,6 +110,29 @@
     return !temp.some(v => v != null && !Number.isNaN(Number(v)));
   }
 
+  // A provider's answer for one step, got as the table gets it: AROME filled in from standard
+  // Open-Meteo (cwForecastRules.mergeAromeWithStandard) and replaced by Open-Meteo when unusable.
+  // Null when the provider does not answer 200; `effProv` is the provider the answer comes from.
+  async function fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init = {}) {
+    const ask = (prov, key) =>
+      fetch(window.cw.buildProviderUrl(prov, p, timeAt, key, units.wind, units.temp), { ...init, cwRecorder: recorder });
+    const res = await ask(effProv, apiKey);
+    if (!res.ok) return null;
+    let json = await window.cw.utils.readJson(res, recorder);
+    if (effProv === "aromehd") {
+      try {
+        const std = await ask("openmeteo", "");
+        if (std.ok) cwForecastRules.mergeAromeWithStandard(json, await window.cw.utils.readJson(std, recorder));
+      } catch {}
+      if (aromeResponseLooksInvalid(json)) {
+        const r3 = await ask("openmeteo", "");
+        if (r3.ok) json = await window.cw.utils.readJson(r3, recorder);
+        effProv = "openmeteo";
+      }
+    }
+    return { json, effProv };
+  }
+
   // A comparison's steps: the published snapshot's, in the shape the table and markers read.
   function snapshotSteps(snapshot) {
     return (snapshot.steps || []).map((s) => ({ lat: s.lat, lon: s.lon, time: new Date(s.time), distanceM: s.distanceM }));
@@ -244,112 +267,10 @@
 
         try {
           const apiKey = (effProv === "openweather") ? apiKeyOWM : "";
-          const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
-          const res = await fetch(url, { cwRecorder: recorder });
-          if (res.ok) {
-            let json = await window.cw.utils.readJson(res, recorder);
-            if (effProv === "aromehd") {
-              // Backfill + validate coverage
-              try {
-                const urlStd = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
-                const r2 = await fetch(urlStd, { cwRecorder: recorder });
-                if (r2.ok) {
-                  const std = await window.cw.utils.readJson(r2, recorder);
-                  const stdH = std?.hourly || {};
-                  const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
-                  json.hourly = json.hourly || {};
-                  try {
-                    const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
-                    const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
-                    let stdIndexByTime = null;
-                    if (aromeTimes && stdTimes) {
-                      stdIndexByTime = Object.create(null);
-                      for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
-                    }
-                    mergeKeys.forEach(k => {
-                      const aVal = json.hourly[k];
-                      // Determine std value and accept common variants (uv_index vs uvindex vs uvi)
-                      let sVal = stdH[k];
-                      if (!Array.isArray(sVal)) {
-                        if (k === 'uv_index') {
-                          sVal = stdH['uv_index'] || stdH['uvindex'] || stdH['uvi'] || stdH['uv'] || null;
-                          // If still not an array but we have a scalar current.uvi, broadcast it across hourly times
-                          if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object' && (std.current.uvi != null)) {
-                            try {
-                              const v = Number(std.current.uvi);
-                              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
-                            } catch (_) { /* ignore */ }
-                          }
-                        } else if (k === 'cloud_cover') {
-                          sVal = stdH['cloud_cover'] || stdH['cloudcover'] || null;
-                        } else if (k === 'precipitation_probability') {
-                          sVal = stdH['precipitation_probability'] || stdH['pop'] || null;
-                        }
-                      }
-                      if (!Array.isArray(aVal) && Array.isArray(sVal)) {
-                        json.hourly[k] = sVal.slice();
-                      } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
-                        const merged = aVal.slice();
-                        if (stdIndexByTime) {
-                          for (let i = 0; i < aromeTimes.length; i++) {
-                            if (merged[i] == null) {
-                              const t = String(aromeTimes[i]);
-                              const si = stdIndexByTime[t];
-                              if (si != null && sVal[si] != null) merged[i] = sVal[si];
-                            }
-                          }
-                        } else {
-                          for (let mi = 0; mi < sVal.length; mi++) {
-                            if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
-                          }
-                        }
-                        json.hourly[k] = merged;
-                      }
-                    });
-                    // Debug: log uv_index merge activity when debugging enabled
-                    try {
-                      if (window.cw && window.cw.DEBUG_MERGE) {
-                        const beforeKeys = Object.keys(stdH || {});
-                        console.debug('[merge][compare] aromeTimes=', Array.isArray(aromeTimes) ? aromeTimes.length : null, 'stdTimes=', Array.isArray(stdTimes) ? stdTimes.length : null, 'stdKeys=', beforeKeys);
-                        if (Array.isArray(json.hourly.uv_index)) console.debug('[merge][compare] json.hourly.uv_index sample=', json.hourly.uv_index.slice(0,5));
-                        else console.debug('[merge][compare] json.hourly.uv_index missing after merge');
-                      }
-                    } catch(_) {}
-                    // Special handling: ensure precipitation_probability is normalized
-                    try {
-                      if (!Array.isArray(json.hourly.precipitation_probability)) {
-                        const candNames = ['precipitation_probability','precipitationProbability','precip_prob','pop','probability_of_precipitation'];
-                        for (const n of candNames) {
-                          if (Array.isArray(stdH[n])) {
-                            // Normalize: if values are 0..1 assume fraction and convert to percent
-                            const arr = stdH[n].slice();
-                            const nums = arr.filter(v => v != null && !Number.isNaN(Number(v))).map(Number);
-                            const max = nums.length ? Math.max(...nums) : null;
-                            const normalized = (max != null && max <= 1) ? arr.map(v => v == null ? null : Number(v) * 100) : arr;
-                            json.hourly.precipitation_probability = normalized;
-                            break;
-                          }
-                        }
-                      }
-                    } catch (_) {}
-                    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                    if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
-                      json.minutely_15 = std.minutely_15;
-                    }
-                  } catch (mergeErr) {
-                    mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-                    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                  }
-                }
-              } catch {}
-              // If AROME payload invalid, refetch with Open‑Meteo
-              if (aromeResponseLooksInvalid(json)) {
-                const url2 = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
-                const r3 = await fetch(url2, { cwRecorder: recorder });
-                if (r3.ok) json = await window.cw.utils.readJson(r3, recorder);
-                effProv = "openmeteo";
-              }
-            }
+          const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder);
+          if (answer) {
+            const json = answer.json;
+            effProv = answer.effProv;
             if (!current()) return;
             window.cw.setCache && window.cw.setCache(key, json);
             const s = extractStepMetrics(effProv, json, p, units);
@@ -604,10 +525,10 @@
         try {
           const apiKeyOWM = keys.openweather || "";
           const apiKey = (effProv === 'openweather') ? apiKeyOWM : '';
-          const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
-          const res = await fetch(url, { cache: 'no-store', cwRecorder: recorder });
-          if (res.ok) {
-            const json = await window.cw.utils.readJson(res, recorder);
+          const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, { cache: 'no-store' });
+          if (answer) {
+            const json = answer.json;
+            effProv = answer.effProv;
             if (!current()) return null;
             window.cw.setCache && window.cw.setCache(key, json);
             const s = extractStepMetrics(effProv, json, baseForIndex, units);
@@ -1022,9 +943,8 @@
           step.uvindex = safeNum(r.uvIndex);
           step.isDaylight = r.isDay;
           step.cloudCover = safeNum(r.cloudCover);
+          if (prov === "aromehd") window.cw.aromeCodeAndDay(step);
         }
-        // Derive category for models without robust weathercode (e.g., AROME‑HD)
-        step._derivedCat = deriveCategoryFromParams(step);
       } else if (prov === "openweather") {
         const timeMs = (step.time instanceof Date ? step.time : new Date(step.time)).getTime();
         const closestByDt = (arr) => {
@@ -1086,62 +1006,6 @@
     } catch {
       return step;
     }
-  }
-
-  // Decide a category when weathercode is missing/misleading (AROME‑HD)
-  function deriveCategoryFromParams(step) {
-    const t = Number(step?.temp);
-    const p = Number(step?.precipitation || 0);     // mm/h
-    const cc = Number(step?.cloudCover);            // 0..100
-    const day = step?.isDaylight === 1;
-    const hasSnow = Number.isFinite(t) && t <= 0 && p > 0;
-    // Strong buckets first
-    if (hasSnow) {
-      if (p >= 2.5) return "snow_heavy";
-      if (p >= 0.5) return "snow";
-      return "snow_light";
-    }
-    if (p > 0) {
-      if (p >= 5) return "rain_heavy";
-      if (p >= 0.7) return "rain";
-      // light precip or showery
-      return (cc >= 50) ? "showers" : "rain_light";
-    }
-    // No precip: decide on cloud cover
-    if (Number.isFinite(cc)) {
-      if (cc >= 90) return "overcast";
-      if (cc >= 40) return "partlycloudy";
-      return "clearsky";
-    }
-    return "default";
-  }
-
-  // Minimal mapper from category -> weather-icons class (day/night aware)
-  function categoryToIconClass(cat, isDay) {
-    const dn = isDay === 1 ? "day" : "night";
-    const M = {
-      clearsky:      { day: "wi-day-sunny",           night: "wi-night-clear" },
-      partlycloudy:  { day: "wi-day-sunny-overcast",  night: "wi-night-alt-partly-cloudy" },
-      overcast:      { day: "wi-day-cloudy",          night: "wi-night-alt-cloudy" },
-      drizzle:       { day: "wi-sprinkle",            night: "wi-sprinkle" },
-      rain_light:    { day: "wi-day-showers",         night: "wi-night-alt-showers" },
-      rain:          { day: "wi-rain",                night: "wi-night-alt-rain" },
-      rain_heavy:    { day: "wi-rain",                night: "wi-night-alt-rain" },
-      showers:       { day: "wi-showers",             night: "wi-night-alt-showers" },
-      freezing_drizzle:{day:"wi-sleet",               night: "wi-night-alt-sleet" },
-      freezing_rain: { day: "wi-rain-mix",            night: "wi-night-alt-rain-mix" },
-      sleet:         { day: "wi-sleet",               night: "wi-night-alt-sleet" },
-      hail:          { day: "wi-day-hail",            night: "wi-night-alt-hail" },
-      snow_light:    { day: "wi-day-snow",            night: "wi-night-alt-snow" },
-      snow:          { day: "wi-day-snow",            night: "wi-night-alt-snow" },
-      snow_heavy:    { day: "wi-snow-wind",           night: "wi-night-alt-snow" },
-      snow_showers:  { day: "wi-day-snow",            night: "wi-night-alt-snow" },
-      fog:           { day: "wi-day-fog",             night: "wi-night-fog" },
-      thunderstorm:  { day: "wi-day-thunderstorm",    night: "wi-night-alt-thunderstorm" },
-      thunder_hail:  { day: "wi-storm-showers",       night: "wi-night-alt-storm-showers" },
-      default:       { day: "wi-na",                  night: "wi-na" }
-    };
-    return (M[cat] || M.default)[dn];
   }
 
   function buildCompareCell(step) {
@@ -1361,7 +1225,7 @@
       } catch(_) {}
       try {
         // Build a compact, label-free summary: icon + numeric-only values
-    const ic = summary?.iconClass || (window.categoryToIconClass ? window.categoryToIconClass('default', 1) : 'wi-cloud');
+    const ic = summary?.iconClass || 'wi-cloud';
   // Fixed-size icon container so the following summary text is consistently aligned
   const iconHtml = `<div style="width:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:8px"><i class="wi ${ic}" style="font-size:22px;line-height:1;color:#29519b"></i></div>`;
         // Build stacked values like other rows (combined-top / combined-bottom)
