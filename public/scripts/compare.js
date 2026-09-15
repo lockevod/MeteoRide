@@ -122,6 +122,27 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
+  // A comparison on screen says what its own requests saw (spec §4.10): a table whose requests
+  // failed and that came out empty says why, and data read from the cache without connection says
+  // how old it is. Per-provider notices do not apply: every provider already has a row, empty
+  // when it gave nothing. A step counts when any painted row has a temperature or a wind for it.
+  function showComparisonNotice(recorder, rows, snapshot) {
+    const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
+    let usableSteps = 0;
+    for (let i = 0; i < length; i++) {
+      if (rows.some((r) => r && r[i] && (r[i].temp != null || r[i].windSpeed != null))) usableSteps++;
+    }
+    if (!window.cwShowForecastNotice) return;
+    window.cwShowForecastNotice({
+      requestedProvider: 'compare',
+      usableSteps,
+      transportFailures: recorder.failed,
+      lastFailStatus: recorder.lastFailStatus,
+      offline: recorder.offline,
+      staleAgeMs: recorder.staleAgeMs,
+    }, !!snapshot.settings.noticeAll);
+  }
+
   async function runCompareMode() {
     if (!isReady()) return;
     const apiSel = document.getElementById("apiSource");
@@ -131,6 +152,8 @@
     const run = window.cwLaunchComparison && window.cwLaunchComparison("providers");
     if (!run) return;
     const current = () => window.cwIsComparisonCurrent(run);
+    // What this comparison's requests and cache reads saw; its notice is decided from it.
+    const recorder = window.cw.utils.createRecorder();
 
     try {
     const snapshot = run.snapshot;
@@ -208,7 +231,7 @@
         // Cache key (use effective provider for data source)
   const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
   const key = mk(effProv, dateStr, units.temp, units.wind, p.lat, p.lon, timeAt);
-  const cached = window.cw.getCache && window.cw.getCache(key);
+  const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, p, units.wind);
           // Preserve which provider actually supplied the data (effective provider)
@@ -225,14 +248,14 @@
         try {
           const apiKey = (effProv === "meteoblue") ? apiKeyMB : (effProv === "openweather") ? apiKeyOWM : "";
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
-          const res = await fetch(url);
+          const res = await fetch(url, { cwRecorder: recorder });
           if (res.ok) {
             let json = await res.json();
             if (effProv === "aromehd") {
               // Backfill + validate coverage
               try {
                 const urlStd = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
-                const r2 = await fetch(urlStd);
+                const r2 = await fetch(urlStd, { cwRecorder: recorder });
                 if (r2.ok) {
                   const std = await r2.json();
                   const stdH = std?.hourly || {};
@@ -325,7 +348,7 @@
               // If AROME payload invalid, refetch with Open‑Meteo
               if (aromeResponseLooksInvalid(json)) {
                 const url2 = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
-                const r3 = await fetch(url2);
+                const r3 = await fetch(url2, { cwRecorder: recorder });
                 if (r3.ok) json = await r3.json();
                 effProv = "openmeteo";
               }
@@ -423,6 +446,7 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
+    showComparisonNotice(recorder, Object.values(compareData), snapshot);
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -444,6 +468,8 @@
     const run = window.cwLaunchComparison && window.cwLaunchComparison("dates");
     if (!run) return;
     const current = () => window.cwIsComparisonCurrent(run);
+    // What this comparison's requests and cache reads saw; its notice is decided from it.
+    const recorder = window.cw.utils.createRecorder();
 
     try {
     // Helper: parse "YYYY-MM-DDTHH:mm" (or with space) as local time reliably
@@ -576,7 +602,7 @@
   const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
   const dateStr2 = localDateOf(steps[0].time);
   const key = mk2(effProv, dateStr2, units.temp, units.wind, p.lat, p.lon, timeAt);
-  const cached = window.cw.getCache && window.cw.getCache(key);
+  const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, baseForIndex, units.wind);
           s.provider = effProv;
@@ -588,7 +614,7 @@
           const apiKeyOWM = keys.openweather || "";
           const apiKey = (effProv === 'meteoblue') ? apiKeyMB : (effProv === 'openweather' ? apiKeyOWM : '');
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
-          const res = await fetch(url, { cache: 'no-store' });
+          const res = await fetch(url, { cache: 'no-store', cwRecorder: recorder });
           if (res.ok) {
             const json = await res.json();
             if (!current()) return null;
@@ -627,6 +653,7 @@
       // Store data for row selection
       window.cw.weatherDataA = dataA;
       window.cw.weatherDataB = dataB;
+      showComparisonNotice(recorder, [dataA, dataB], snapshot);
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -985,13 +1012,15 @@
     const step = { ...baseStep, provider: prov, weather: raw };
     const safeNum = window.cw.safeNum || ((v)=>Number.isFinite(Number(v))?Number(v):null);
     const windToUnits = window.cw.windToUnits || ((v)=>v);
-    const findClosestIndex = window.cw.findClosestIndex || (()=>-1);
+    // Open-Meteo and AROME send wall-clock hours in the route's zone with its offset beside them.
+    // Read in the phone's zone they picked another hour than the table (cwForecastRules) does.
+    const nearestHour = (times) => cwForecastRules.nearestIndex(times, new Date(step.time).getTime(), raw && raw.utc_offset_seconds);
     try {
       if (!raw) return blankStep(prov, baseStep);
 
       if (prov === "openmeteo" || prov === "aromehd") {
         const H = raw.hourly || {};
-        const idx = Array.isArray(H.time) ? findClosestIndex(H.time, step.time) : -1;
+        const idx = Array.isArray(H.time) ? nearestHour(H.time) : -1;
         if (idx >= 0) {
           step.temp = safeNum(H.temperature_2m?.[idx]);
           step.windSpeed = safeNum(windToUnits(H.wind_speed_10m?.[idx], windUnit));
@@ -1014,9 +1043,8 @@
             if (H.uv_index.length > idx) uvVal = H.uv_index[idx];
             else {
               try {
-                const finder = (window.cw && window.cw.findClosestIndex) || window.findClosestIndex;
-                if (typeof finder === 'function' && Array.isArray(H.time)) {
-                  const alt = finder(H.time, step.time);
+                if (Array.isArray(H.time)) {
+                  const alt = nearestHour(H.time);
                   if (alt != null && alt >= 0 && H.uv_index.length > alt) uvVal = H.uv_index[alt];
                 }
               } catch (_) {}

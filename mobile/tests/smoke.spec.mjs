@@ -3084,6 +3084,103 @@ test('the run button compares dates for the forecast on screen, and does nothing
   await expect.poll(() => datesShown(page)).toBe(true);
 });
 
+/* ---------- what a comparison says, and which hour it reads ---------- */
+
+test('a comparison whose requests all fail without connection says there is no connection', async ({ page }) => {
+  await recordNotices(page);
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await forgetForecasts(page);
+
+  // From here the phone has no connection and every request fails.
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => route.abort());
+  await page.evaluate(() => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }));
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toContain('No connection, and no saved forecast');
+});
+
+test('a replaced comparison whose requests failed leaves no notice over the comparison that replaced it', async ({ page }) => {
+  await recordNotices(page);
+  // While `failing`, every request fails, and the one numbered `holdAt` only once `gate` opens.
+  const control = { failing: false, n: 0, holdAt: 0, gate: null };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    if (!control.failing) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+    }
+    control.n++;
+    if (control.n === control.holdAt) await control.gate;
+    return route.abort();
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await forgetForecasts(page);
+  await watchComparisons(page);
+
+  // The first comparison asks Open-Meteo and AROME for every step; its last request waits.
+  const steps = await page.evaluate(() => window.cw.currentSnapshot().steps.length);
+  const gate = heldPromise();
+  Object.assign(control, { failing: true, n: 0, holdAt: steps * 2, gate: gate.promise });
+  await selectProvider(page, 'compare');
+  await expect.poll(() => control.n).toBe(steps * 2);
+
+  control.failing = false;
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
+  gate.release();
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.__baselines.length)).toBe(1);
+  expect((await page.evaluate(() => window.__notices)).filter((n) => /not responding|No connection/.test(n))).toEqual([]);
+});
+
+/** Open-Meteo as it answers for a place `offsetSeconds` from UTC with timezone=auto: wall-clock
+ *  hours with no zone, and a different temperature every hour. */
+function forecastInZone(offsetSeconds) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const first = Math.floor(Date.now() / 3600000) * 3600000 - 24 * 3600000;
+  const time = [];
+  const temperature = [];
+  for (let i = 0; i < 96; i++) {
+    const wall = new Date(first + i * 3600000 + offsetSeconds * 1000);
+    time.push(`${wall.getUTCFullYear()}-${pad(wall.getUTCMonth() + 1)}-${pad(wall.getUTCDate())}T${pad(wall.getUTCHours())}:00`);
+    temperature.push(i % 40);
+  }
+  const fill = (v) => time.map(() => v);
+  return {
+    utc_offset_seconds: offsetSeconds,
+    hourly: {
+      time, temperature_2m: temperature, precipitation: fill(0), precipitation_probability: fill(5),
+      relative_humidity_2m: fill(60), wind_speed_10m: fill(12), wind_gusts_10m: fill(20), winddirection_10m: fill(180),
+      weathercode: fill(1), uv_index: fill(3), is_day: fill(1), cloud_cover: fill(20),
+    },
+  };
+}
+
+test.describe('with the phone in New York and the route in Spain', () => {
+  test.use({ timezoneId: 'America/New_York' });
+
+  test('the comparison reads the hour the rider is there, the same as the table', async ({ page }) => {
+    await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastInZone(2 * 3600)) }));
+    await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+    await page.goto('/index.html');
+    await mapReady(page);
+    await page.locator('#gpxFile').setInputFiles(FIXTURE);
+    await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+    const table = await page.evaluate(() => window.weatherData.map((s) => s.temp));
+
+    await selectProvider(page, 'compare');
+    await expect.poll(() => compareShown(page)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.cw.compareProviderData?.openmeteo?.map((s) => s.temp) ?? null)).toEqual(table);
+  });
+});
+
 /* ---------- starting language ---------- */
 
 const chosenLanguage = (page) => page.evaluate(() => document.getElementById('language').value);

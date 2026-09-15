@@ -1227,6 +1227,8 @@ function showNotice(outcome, noticeAll, keepFailure = false) {
   if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
   else if (!keepFailure) clearNotice();
 }
+// A comparison of the published snapshot decides and shows its notice the same way (compare.js).
+window.cwShowForecastNotice = (outcome, noticeAll) => showNotice(outcome, noticeAll);
 
 // Paints the published snapshot again for a setting that only changes how it looks
 // (language, detailed notices): the table from the answers it holds, and its notice
