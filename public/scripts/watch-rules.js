@@ -289,9 +289,29 @@ var cwWatchRules = (function () {
     return { notification: compose(changes, fresh, watch), watch: next };
   }
 
+  /**
+   * The watch to store when the app arms `fresh` while `stored` is what the runner holds.
+   * The same ride (same route fingerprint, same start) keeps the warnings already
+   * notified, so arming it again does not announce them twice. The baseline is kept only
+   * over identical points, because compare() reads it by index. Pure: returns a new record.
+   */
+  function reuse(stored, fresh) {
+    const next = Object.assign({}, fresh, { notified: [], baseline: null });
+    if (!stored || !fresh.fingerprint || stored.fingerprint !== fresh.fingerprint || stored.start !== fresh.start) {
+      return next;
+    }
+    next.notified = (stored.notified || []).slice();
+    const a = stored.points || [];
+    const b = fresh.points || [];
+    const samePoints = a.length === b.length
+      && a.every((p, i) => p.lat === b[i].lat && p.lon === b[i].lon && p.t === b[i].t);
+    if (samePoints && Array.isArray(stored.baseline)) next.baseline = stored.baseline;
+    return next;
+  }
+
   return {
     RAIN_MM, WIND_KMH, GUST_KMH, MAX_POINTS,
     rainLevel, windLevel, sample, alertPoints, forecastUrl, alertsUrl,
-    readForecast, readAlerts, compare, newAlerts, compose, evaluate, expired,
+    readForecast, readAlerts, compare, newAlerts, compose, evaluate, expired, reuse,
   };
 })();

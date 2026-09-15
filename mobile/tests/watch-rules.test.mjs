@@ -287,3 +287,57 @@ test('a percent sign in an official warning or a file name cannot become a forma
   assert.equal(out.notification.body.includes('%'), false);
   assert.match(out.notification.body, /80\uFF05 chance/);
 });
+
+/* ---------- arming the same ride again ---------- */
+
+// What the app built from a snapshot, and what the runner had stored from an earlier arm.
+const record = (extra = {}) => ({
+  name: 'route.gpx', fingerprint: '5120:1a2b3c4d', start: t0 * 1000,
+  points: points.map((p) => ({ ...p })), baseline: null, notified: [], ...extra,
+});
+const storedRecord = (extra = {}) => record({
+  notified: ['AEMET_Viento_1_2'],
+  baseline: [{ rain: 1, wind: 20, gust: 30 }, { rain: 2, wind: 20, gust: 30 }, { rain: 3, wind: 20, gust: 30 }],
+  ...extra,
+});
+
+test('reuse: the same ride over the same points keeps what was notified and the baseline', () => {
+  const stored = storedRecord();
+  const fresh = record();
+  same(rules.reuse(stored, fresh), { ...fresh, notified: stored.notified, baseline: stored.baseline });
+});
+
+test('reuse: the same ride with a point elsewhere in time or space keeps what was notified, not the baseline', () => {
+  const stored = storedRecord();
+  const moved = record();
+  moved.points[1].t += 15 * 60;
+  same(rules.reuse(stored, moved), { ...moved, notified: stored.notified, baseline: null });
+  // Fewer points (a faster speed) cannot line up by index either.
+  const fewer = record({ points: points.slice(0, 2).map((p) => ({ ...p })) });
+  same(rules.reuse(stored, fewer), { ...fewer, notified: stored.notified, baseline: null });
+  const shifted = record();
+  shifted.points[2].lon += 0.01;
+  same(rules.reuse(stored, shifted), { ...shifted, notified: stored.notified, baseline: null });
+});
+
+test('reuse: another route, another start, nothing stored or no fingerprint keeps nothing', () => {
+  const fresh = record();
+  same(rules.reuse(storedRecord({ fingerprint: '5120:ffffffff' }), fresh), fresh, 'another route');
+  same(rules.reuse(storedRecord({ start: fresh.start + 60000 }), fresh), fresh, 'another start');
+  same(rules.reuse(null, fresh), fresh, 'nothing stored');
+  same(rules.reuse(undefined, fresh), fresh, 'nothing stored');
+  same(rules.reuse(storedRecord({ fingerprint: '' }), record({ fingerprint: '' })), record({ fingerprint: '' }), 'no fingerprint');
+  same(rules.reuse(storedRecord({ fingerprint: undefined }), record({ fingerprint: undefined })),
+    record({ fingerprint: undefined }), 'a record from before fingerprints');
+});
+
+test('reuse changes neither record', () => {
+  const stored = storedRecord();
+  const fresh = record();
+  const before = JSON.stringify([stored, fresh]);
+  const out = rules.reuse(stored, fresh);
+  assert.equal(JSON.stringify([stored, fresh]), before);
+  assert.notEqual(out, fresh);
+  out.notified.push('later');
+  assert.deepEqual(JSON.parse(JSON.stringify(stored.notified)), ['AEMET_Viento_1_2'], 'the result shares its list with what was stored');
+});
