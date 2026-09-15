@@ -419,6 +419,17 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
     servidor y sin quitar `shared_id` de la dirección, así que recargar lo vuelve a intentar.
   - Con un enlace en la dirección (`gpx_url`, `url` o `shared_id`), la lectura del hueco del
     service worker al arrancar solo guarda su ruta entre las recientes y no la muestra.
+  - **Ruta compartida durante la lectura de solo-guardar al arrancar.** La página abre con un
+    enlace y la lectura del hueco al arrancar es de solo-guardar. Si el service worker escribe una
+    ruta S nueva y avisa por mensaje antes de que esa lectura llegue a leer la transacción, S se
+    lee en modo solo-guardar: entra en recientes pero no se muestra, aunque su mensaje sí lo pedía.
+    La ventana es de milisegundos, solo al arrancar.
+  - **Un hueco desfasado gana a un envío del script de usuario.** Una ruta desfasada en el hueco
+    del service worker puede ganarle a un envío del script de usuario cuando IndexedDB contesta
+    después del `postMessage`. El deduplicado de 30 s reutiliza entonces el resultado
+    `superseded` para los reenvíos y el script deja de reenviar, así que la ruta desfasada se
+    queda en pantalla. Antes, el reenvío a los 4 s la recuperaba. Hace falta un hueco desfasado,
+    algo raro en escritorio.
 - **Comparar.**
   - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
   - Con comparar fechas abierto (el botón lo abre siempre en modo explícito), un ajuste que
@@ -505,14 +516,19 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
     fallar una mutación. En el de cuatro compartidas, «la puerta de IndexedDB abierta en orden
     inverso» no puede abrirse de verdad fuera de orden, porque cada escritura espera a la anterior.
   - Tests de la primera tanda de correcciones de la fase 5 que también pasan con el código anterior,
-    porque fijan un comportamiento que ya existía y cada uno cae con una mutación: los tres de
-    `shared_id` que falla (404, red, cuerpo vacío; cae quitando `res.ok`), el DELETE que no se
-    espera (cae con `await`), el `shared_id` que se guarda aunque falle el DELETE y se agote el
-    plazo, el origen no permitido de `postMessage` (cae con `allowed = true`) y el de la petición
-    anterior al arranque (cae quitando `hasRouteRequests()` de la restauración).
+    porque fijan un comportamiento que ya existía y cada uno cae con una mutación: de los tres de
+    `shared_id` que falla, solo el de 404 cae quitando `res.ok`; el de red cae igual sin tocar
+    `res.ok`, porque ahí `fetch` rechaza él solo antes de que el código llegue a mirarlo, y el de
+    cuerpo vacío cae quitando el `if (!text.trim())` de `loadSharedIdIfPresent`, que es lo que de
+    verdad lo sostiene (su respuesta es 200, así que `res.ok` ya vale true y no pinta nada); el
+    DELETE que no se espera (cae con `await`), el `shared_id` que se guarda aunque falle el DELETE
+    y se agote el plazo, el origen no permitido de `postMessage` (cae con `allowed = true`) y el de
+    la petición anterior al arranque (cae quitando `hasRouteRequests()` de la restauración).
   - Tests de la segunda tanda de correcciones de la fase 5 que también pasan con el código anterior,
-    y la mutación que tumba a cada uno: el `shared_id` que falla por 404 o por red y conserva
-    `shared_id` y la copia del servidor (cae quitando `res.ok`); el `shared_id` cuyo texto llega
+    y la mutación que tumba a cada uno: el `shared_id` que falla por 404 y conserva `shared_id` y
+    la copia del servidor cae quitando `res.ok`; el mismo test por red conserva lo mismo pero no
+    cae con esa mutación, porque `fetch` ya rechaza por su cuenta sin pasar por `res.ok`; el
+    `shared_id` cuyo texto llega
     después de agotarse el plazo y aun así se guarda (cae importando solo al confirmar); el enlace
     sustituido en la misma vuelta cuya descarga falla sin rechazo sin gestionar (cae quitando
     `arrived.catch`), y el origen no permitido, que ahora sirve la app desde
@@ -524,6 +540,12 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
     primera respuesta a su envío. No tiene tests: se comprobó solo leyendo el código.
   - La etiqueta `source` de cada entrada solo se ve envolviendo `cw.requestRoute`; la comprueban
     los tests de `shared_id`, no los del resto de entradas.
+  - El reinicio de `keepOnly = false` en `takeSharedFromServiceWorker` (gpx-share.js ~228-233) no
+    tiene test: nada comprueba que una segunda vuelta del lector, disparada mientras la primera
+    seguía en modo solo-guardar, deje de guardarlo y vuelva a mostrar lo que encuentre.
+  - La parte del test de deduplicado de `postMessage` que reenvía desde otro origen permitido
+    solo comprueba que no se pide otra ruta, no el acuse: la respuesta va a un origen que esta
+    página no es y se pierde, así que no se puede observar.
 
 ### Sin comprobar en dispositivo
 

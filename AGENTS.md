@@ -989,7 +989,9 @@ fingerprints computed from the old text do not match the new one.
 `oncomplete`, one read at a time; a call while a read runs makes that read go round once more.
 It runs at start-up, which covers `?shared` (where the worker sends the page), and on every
 message, from a listener attached before the worker is registered. When the address opens a link
-(`gpx_url`, `url` or `shared_id`), the start-up read only keeps what it finds among recent routes
+(`gpx_url`, `url` or `shared_id` with a non-empty value — an empty `?shared_id=` opens nothing, so
+it must not trip keep-only either, or a route left in the slot is only kept and the screen stays
+empty), the start-up read only keeps what it finds among recent routes
 and asks for nothing: its request would come once IndexedDB answers, after the link's, and a route
 left in the slot by an earlier share replaced the link just opened. A round a message asks for
 meanwhile asks as usual. Neither runs in the app

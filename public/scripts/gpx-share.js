@@ -337,7 +337,7 @@
     // Whatever the service worker stored while no page was reading, only kept when the address
     // opens a link, which is the route the user asked for. The app has no service worker, and
     // reading would only create its database there.
-    const opensLink = !!getParams().gpxUrl || new URLSearchParams(window.location.search).has('shared_id');
+    const opensLink = !!getParams().gpxUrl || !!new URLSearchParams(window.location.search).get('shared_id');
     if (!window.CW_NATIVE) takeSharedFromServiceWorker(opensLink);
 
     // ?gpx_url= / ?url= — the documented way to open a hosted route.

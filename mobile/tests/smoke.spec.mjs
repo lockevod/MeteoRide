@@ -2458,6 +2458,21 @@ for (const [what, address] of [['?gpx_url=', '/index.html?gpx_url=/hosted.gpx&na
   });
 }
 
+// ?shared_id= with nothing after the "=" asks the server for no route: loadSharedIdIfPresent
+// bails out on an empty value. The start-up slot read must agree, or a route left in the slot
+// is only kept among recent routes and the screen stays empty despite the link in the address.
+test('a route left in the service worker slot is shown when shared_id in the address is empty', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/help.html');
+  await writeSlot(page, routeAt('Antigua', 40.42), 'old.gpx');
+  await page.goto('/index.html?shared_id=');
+  await mapReady(page);
+
+  await expect(routeName(page)).toHaveText('Antigua');
+  await expect.poll(() => storedNames(page)).toEqual(['old.gpx']);
+  expect(await slotName(page)).toBe(null);
+});
+
 // The start-up read of the service worker's slot also ran in the app, which has no service
 // worker, and created the slot's database there for nothing.
 test('the app never opens the service worker slot', async ({ page }) => {
