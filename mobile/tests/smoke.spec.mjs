@@ -2023,26 +2023,30 @@ test('a route still arriving when the recent routes turn up is not replaced by t
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
 });
 
-// Nothing is on screen until a request confirms, so the restore asks the coordinator whether
-// anyone has asked for a route yet, rather than looking at lastGPXFile.
-test('a file picked and still being read when the app restores the last route is not replaced', async ({ page }) => {
+// Boot asks for the last route before anything else in the app does, but a request can exist
+// before boot: the sessionStorage handoff asks while app.js loads. Nothing is on screen until a
+// request confirms, so the restore asks the coordinator whether anyone has asked for a route
+// yet, rather than looking at lastGPXFile.
+test('a route asked for before the app boots is not replaced by the restore of the last route', async ({ page }) => {
   await seedRecentRoute(page);
-  // The drain at boot takes a second, and the restore runs straight after it.
-  await installNativeBridge(page, { delayMs: 1000 });
+  await holdRecentRead(page);
+  // Registered before native.js loads, so this listener runs before boot.
   await page.addInitScript(() => {
-    window.__drained = false;
-    const share = window.Capacitor.Plugins.MeteoRideShare;
-    const consume = share.consumePending;
-    share.consumePending = async () => { const r = await consume(); window.__drained = true; return r; };
+    document.addEventListener('DOMContentLoaded', () => {
+      let open;
+      const held = new Promise((resolve) => { open = resolve; });
+      window.__reads = { pick: open };
+      window.__status = {};
+      window.cw.requestRoute({ source: 'file', read: () => held }).then((s) => { window.__status.pick = s; });
+    });
   });
   await page.reload();
   await mapReady(page);
 
-  expect(await page.evaluate(() => window.__drained), 'picked before the restore').toBe(false);
-  await requestHeld(page, 'pick');
-  await expect.poll(() => page.evaluate(() => window.__drained)).toBe(true);
-  // Time for a restore to find the recent route and read it.
+  // Time for a restore to find the recent route and start reading it.
   await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.__recentReads), 'the restore read a recent route').toBe(0);
+  await page.evaluate(() => window.__openRecentRead());
   await openRead(page, 'pick', routeAt('Elegida', 40.42), 'picked.gpx');
   await expect.poll(() => requestStatus(page, 'pick')).toBe('committed');
   await page.waitForTimeout(300);
@@ -2135,6 +2139,7 @@ test('a route the inbox hands over after the restore has started wins, even when
   await page.reload();
   await mapReady(page);
   await expect.poll(() => page.evaluate(() => window.__recentReads), 'the restore is reading while the inbox drains').toBe(1);
+  expect(await page.evaluate(() => window.__delivered), 'the inbox handed over its route before the restore read').toEqual([]);
 
   await expect(routeName(page)).toHaveText('Compartida');
   await page.evaluate(() => window.__openRecentRead());
@@ -2149,11 +2154,17 @@ test('a shared route read before a recent route is tapped, and imported after it
   await seedRecentRoute(page);
   await holdImports(page, 1);
   await page.evaluate(async (text) => {
+    // Masnou is already on screen from seeding, so what each request ended as is what shows the
+    // tap won.
+    window.__ended = {};
+    const request = window.cw.requestRoute;
+    window.cw.requestRoute = (args) => request(args).then((s) => { window.__ended[args.source] = s; return s; });
     window.__enqueue({ name: 'shared.gpx', gpx: text });
     await window.cwConsumePendingShare();
     window.loadRecentRoute(window.getRecentRoutes()[0]);
   }, routeAt('Compartida', 40.42));
 
+  await expect.poll(() => page.evaluate(() => window.__ended)).toEqual({ 'share-native': 'superseded', recent: 'committed' });
   await expect(routeName(page)).toContainText('Masnou');
   await page.evaluate(() => window.__openImport[0]());
   await expect.poll(() => storedNames(page)).toEqual(['route.gpx', 'shared.gpx']);
@@ -2318,6 +2329,24 @@ test('a route handed over in sessionStorage is shown, kept among recent routes a
   await expect.poll(() => storedNames(page)).toEqual(['handed.gpx']);
   expect(await page.evaluate(() => [sessionStorage.getItem('cw_gpx_text'), sessionStorage.getItem('cw_gpx_name')]))
     .toEqual([null, null]);
+});
+
+// A throw after the inbox had handed over a route used to report that nothing arrived, so the
+// map went to the phone's position over the shared route.
+test('an inbox that fails after handing over a route still reports that one arrived', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(await page.evaluate((text) => {
+    window.__enqueue({ name: 'shared.gpx', gpx: text });
+    const share = window.Capacitor.Plugins.MeteoRideShare;
+    const consume = share.consumePending;
+    let calls = 0;
+    share.consumePending = async () => { if (calls++ > 0) throw new Error('inbox broke'); return consume(); };
+    return window.cwConsumePendingShare();
+  }, routeAt('Compartida', 40.42))).toBe(true);
+  await expect(routeName(page)).toHaveText('Compartida');
 });
 
 /** Answers GETs of `pathname` with `body` only once the test calls the function this returns;

@@ -52,8 +52,8 @@
       return false;
     }
     consuming = true;
+    let got = false;
     try {
-      let got = false;
       do {
         askedAgain = false;
         // Several files can pile up while the app was closed.
@@ -68,7 +68,8 @@
       return got;
     } catch (e) {
       log('consumePending failed', e);
-      return false;
+      // Routes handed over before the throw are on their way in all the same.
+      return got;
     } finally {
       consuming = false;
     }
@@ -285,7 +286,9 @@
   // with it, and it is the better behaviour with coverage too.
   async function restoreLastRoute() {
     // A route is on screen, or one was asked for and is still being read or parsed: the
-    // restore would be a later request and replace it. lastGPXFile is set only on confirming.
+    // restore would be a later request and replace it. Boot runs this before anything else in
+    // the app asks, but the sessionStorage handoff (initGpxShare) asks while app.js loads,
+    // before boot. lastGPXFile is set only on confirming.
     if (window.lastGPXFile || window.cw.hasRouteRequests()) return;
 
     // A route arriving by URL or by share wins; do not fight it.
