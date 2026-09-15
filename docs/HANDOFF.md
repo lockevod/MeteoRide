@@ -457,9 +457,15 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
   - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
   - Con comparar fechas abierto (el botón lo abre siempre en modo explícito), un ajuste que
     recalcula pinta la tabla normal encima; la de fechas vuelve con el botón de ejecutar.
-  - En las ventanas de cambio de hora, la hora se elige con el único `utc_offset_seconds` de la
-    respuesta de Open-Meteo, igual que en la tabla. No se ha comprobado cuál de las dos horas
-    posibles es la correcta.
+  - **Cambio de hora: comprobado, no es un límite.** Open-Meteo y AROME con `timezone=auto` no
+    etiquetan en hora local. Cada respuesta lleva un único `utc_offset_seconds`, el vigente en el
+    sitio al hacer la petición, y cada etiqueta es el instante UTC más ese desfase, sin hora repetida
+    ni saltada. Comprobado el 15/09/2026 contra la misma petición con `timeformat=unixtime`, horas y
+    cuartos: Madrid (25–27/10/2025, API histórica), Auckland (26–28/09/2026), Santiago (5–7/09/2026)
+    y París con AROME HD, cero discrepancias. La tabla y comparar ya eligen la entrada del instante
+    correcto a los dos lados del cambio, y la ventana de la lluvia también. Lo fija «across a
+    daylight-saving change each step reads the entry of its own UTC instant» en
+    `mobile/tests/forecast-rules-tz.test.mjs`, con una respuesta real recortada.
   - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores. La tabla
     deja el modo de fechas al pintarse, así que pulsar una fila muestra ese proveedor; la fila de
     fechas sigue abierta.
@@ -511,6 +517,13 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
       armar no tiene test que falle, pero tampoco es inocua: con un desarmado rechazado y el armado
       descartado porque se confirma otra vez la misma ruta, la huella nombra esa ruta mientras el
       runner conserva la anterior, y no se vuelve a desarmar (reproducido fuera del navegador).
+  - **Hora de la lluvia en zonas de media hora o 45 minutos (abierto, decisión del autor).** El
+    aviso pide `timezone=UTC` y lee la lluvia de la hora UTC; la tabla y comparar, de la hora en el
+    desfase fijo de la respuesta. En zonas de desfase entero es la misma hora. En las de media hora
+    o 45 minutos (India, Nepal, Terranova, parte de Australia) la hora del aviso va 30 o 45 minutos
+    desplazada respecto a la de la tabla. No tiene que ver con el cambio de hora. Igualarlas exige
+    decidir si la tabla pasa a horas UTC (en India mostraría la lluvia de 10:30 a 11:30) o si el aviso
+    pasa a la hora local.
 - **Hora y uso sin cobertura (fase 6).**
   - **Hora de salida.**
     - Un campo de hora vacío o ilegible cuenta como una hora pasada: el cálculo usa ahora

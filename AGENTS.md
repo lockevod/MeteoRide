@@ -825,6 +825,21 @@ Four things changed on purpose when the extraction moved, each in its own commit
   track or a MultiLineString now gets a forecast along the right line, or logs
   `track_too_short`, instead of producing NaN steps.
 
+**Daylight-saving changes need no fix; do not "correct" them.** Open-Meteo's `timezone=auto`
+labels are not local wall-clock time. An answer carries one `utc_offset_seconds`, the location's
+offset when the request is made (a January date asked in September still says +2 for Madrid), and
+every hourly and `minutely_15` label is the UTC instant plus that offset, with no repeated or missing
+hour across a change. So `parseProviderTime(label, utc_offset_seconds)` is exact on both sides of a
+change, and the precipitation hour H is floored in that same fixed offset. Checked on 2026-09-15
+against the same requests with `timeformat=unixtime`: Madrid 25–27 Oct 2025, Auckland 26–28 Sep 2026,
+Santiago 5–7 Sep 2026 and Paris with AROME HD, zero mismatches. Reading a label in the real local
+offset of its date picks the wrong entry after the change; asking in UTC would pick the same entries
+and only cost a cache-key and prepared-record version. `forecast-rules-tz.test.mjs` pins it on a
+trimmed real Madrid answer (`fixtures/open-meteo-madrid-dst.json`). The AROME merge matches the two
+answers by label, which holds because both callers fetch the standard answer right after AROME's,
+never from cache, so both carry the same offset. What does differ is the ride watch in half-hour
+and 45-minute zones: it floors rain in UTC and the table in the answer's offset (HANDOFF §10).
+
 Open-Meteo and AROME are asked with `start_date`/`end_date`, one UTC day either side of the
 step, instead of `start=`/`end=` (`buildProviderUrl`, `app.js:315-322` for AROME,
 `app.js:345-350` for standard Open-Meteo): with `timezone=auto`, `start=` is silently
