@@ -647,3 +647,95 @@ test('a replaced computation writes nothing to the cache when its AROME standard
   await a;
   assert.deepEqual(writes, ['openmeteo:42']);
 });
+
+/* ---------- a prepared snapshot instead of nothing (spec §4.9.1) ---------- */
+
+/** Open-Meteo around `ms` with offset 0: thirteen hours, the temperature is the hour's index. */
+const around = (ms) => {
+  const first = Math.floor(ms / 3600000) * 3600000 - 6 * 3600000;
+  const time = Array.from({ length: 13 }, (_, i) => new Date(first + i * 3600000).toISOString().slice(0, 16));
+  return { utc_offset_seconds: 0, hourly: { time, temperature_2m: time.map((_, i) => i), wind_speed_10m: time.map(() => 10) } };
+};
+/** A record as native.js stores it, prepared for `start`, of the route the harness confirms as request 1. */
+const preparedFor = (start, fingerprint = 'fp1') => ({
+  version: 1,
+  gpx: { text: '<gpx/>', name: 'r1.gpx' },
+  snapshot: {
+    version: 1, route: { name: 'r1.gpx', fingerprint }, origin: 'live', createdAt: start - 3600000, alerts: [],
+    settings: { start, speed: 12, interval: 60, provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true, lang: 'en' },
+    steps: [{ lat: 41, lon: 2, time: new Date(start), distanceM: 0, provider: 'openmeteo', payloadUnits: null, payload: around(start) }],
+    outcome: { requestedProvider: 'openmeteo', usableSteps: 1, transportFailures: 0 },
+  },
+});
+const aheadStart = () => Math.ceil((Date.now() + 2 * 3600000) / 900000) * 900000;
+
+test('a computation that gets nothing replays a usable prepared snapshot of the route instead of publishing the empty one', async () => {
+  const h = harness();
+  const start = aheadStart();
+  h.s.values.datetimeRoute = localIso(start + 45 * 60000);
+  const record = preparedFor(start);
+  h.s.cwPreparedRecord = () => record;
+  const a = h.run(41, 1);
+  h.answer(0, failed(503)); await a;
+  const published = h.s.published();
+  assert.equal(published.length, 1);
+  const [snapshot] = published;
+  assert.equal(snapshot.origin, 'prepared');
+  assert.deepEqual([snapshot.requestId, snapshot.computationId], [1, 1]);
+  assert.equal(snapshot.settings.start, start + 45 * 60000);
+  assert.equal(new Date(snapshot.steps[0].time).getTime(), start + 45 * 60000);
+  assert.equal(snapshot.createdAt, record.snapshot.createdAt);
+  assert.equal(snapshot.outcome.preparedAt, record.snapshot.createdAt);
+  assert.equal(snapshot.outcome.preparedFor, start);
+  assert.equal(snapshot.settings.alertsKey, 'a-valid-looking-key', 'the key in use now');
+  assert.equal(record.snapshot.origin, 'live', 'the stored record changed');
+  assert.deepEqual(h.s.notices, [['prepared_replayed', 'warn']]);
+  assert.deepEqual([...h.s.claims], []);
+  assert.equal(h.s.cwHasCurrentForecast(), true, 'a replay is the current forecast: a request ending does not compute it again');
+
+  // Another route's record, or one prepared for more than three hours away, stays out.
+  for (const other of [preparedFor(start, 'fp-other'), preparedFor(start - 4 * 3600000)]) {
+    const g = harness();
+    g.s.values.datetimeRoute = localIso(start);
+    g.s.cwPreparedRecord = () => other;
+    const b = g.run(41, 1);
+    g.answer(0, failed(503)); await b;
+    assert.equal(g.s.published()[0].origin, 'live');
+  }
+});
+
+test('a computation whose provider never answers replays nothing, however long it waits', async () => {
+  const h = harness();
+  const start = aheadStart();
+  h.s.values.datetimeRoute = localIso(start);
+  h.s.cwPreparedRecord = () => preparedFor(start);
+  h.run(41, 1);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(h.pending.length, 1);
+  assert.deepEqual(h.s.published(), []);
+  assert.deepEqual([...h.s.claims], ['forecast:1']);
+});
+
+test('without coverage, a usable prepared snapshot is replayed at once and nothing is asked for', async () => {
+  const h = harness();
+  const start = aheadStart();
+  h.s.values.datetimeRoute = localIso(start);
+  h.s.cwPreparedRecord = () => preparedFor(start);
+  h.s.offline = true;
+  await h.run(41, 1);
+  assert.equal(h.pending.length, 0);
+  assert.equal(h.s.published()[0].origin, 'prepared');
+  assert.deepEqual([...h.s.claims], []);
+});
+
+test('a replay that is no longer the current computation publishes nothing', async () => {
+  const h = harness();
+  const start = aheadStart();
+  h.s.values.datetimeRoute = localIso(start);
+  const a = h.run(41, 1);
+  const b = h.run(41, 1);
+  assert.equal(h.s.replay(preparedFor(start), { requestId: 1, computationId: 1 }, { start, keys: {}, alertsKey: '' }), false);
+  assert.deepEqual(h.s.published(), []);
+  h.answer(0, ok(openMeteo())); h.answer(1, ok(openMeteo()));
+  await a; await b;
+});

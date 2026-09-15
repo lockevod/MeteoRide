@@ -127,6 +127,7 @@
       prepare_offline_partial: "Ruta preparada solo en parte: hay previsión para {n} de {total} puntos con cualquier salida hasta 3 h antes o después. Vuelve a calcularla con cobertura.",
       prepare_offline_failed: "No se ha podido guardar la ruta preparada.",
       prepare_offline_replaced: "Sustituye a la ruta preparada antes.",
+      compare_needs_coverage: "Comparar proveedores necesita cobertura.",
       prepared_replayed: "Previsión guardada hace {age} para salir a las {at}, recolocada a la hora de salida.",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
@@ -246,6 +247,7 @@
       prepare_offline_partial: "Route only partly saved: forecast for {n} of {total} points with any start up to 3 h earlier or later. Run it again while you have coverage.",
       prepare_offline_failed: "Could not save the prepared route.",
       prepare_offline_replaced: "It replaces the route prepared before.",
+      compare_needs_coverage: "Comparing providers needs coverage.",
       prepared_replayed: "Forecast saved {age} ago for a {at} start, moved to this start time.",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string

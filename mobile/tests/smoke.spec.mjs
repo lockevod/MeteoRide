@@ -938,6 +938,7 @@ async function stubAround(page, control = {}) {
     if (url.searchParams.get('timeformat') === 'unixtime') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(watchForecast(url)) });
     }
+    control.asked = (control.asked || 0) + 1;
     if (control.held) await control.held;
     if (control.fail) return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
     const body = forecastAround(control.now ?? Date.now(), control.hours ? control.hours(url) : 72);
@@ -1077,6 +1078,93 @@ test('preparing another route replaces the one prepared before and says so; the 
   await prepare(page);
   await expect(page.locator('.notice')).toContainText(preparedNotice);
   await expect(page.locator('.notice')).not.toContainText(replacedNotice);
+});
+
+/* ---------- replaying a prepared forecast (spec §4.9.3) ---------- */
+
+const noLongerOnline = (page) =>
+  page.evaluate(() => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }));
+const shownOrigin = (page) => page.evaluate(() => window.cw.currentSnapshot()?.origin ?? null);
+const localAt = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+const resume = (page) => page.evaluate(() => window.__appListeners.appStateChange({ isActive: true }));
+const T0 = Date.parse('2026-09-20T08:00:00');   // local time, in the browser as in Node
+
+test('coming back without coverage 45 minutes later replays the prepared forecast at the new start, and nothing replaces it', async ({ page }) => {
+  const control = { now: T0 };
+  const sec = Math.floor(T0 / 1000);
+  await page.clock.install({ time: T0 });
+  await installNativeBridge(page);
+  await stubAround(page, control);
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ alerts: [
+      { sender_name: 'AEMET', event: 'Aviso que acaba pronto', start: sec - 3600, end: sec + 30 * 60, description: 'x' },
+      { sender_name: 'AEMET', event: 'Aviso de toda la mañana', start: sec - 3600, end: sec + 4 * 3600, description: 'x' },
+    ] }),
+  }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const alerts = page.locator('#weather-alerts-container');
+  await expect(alerts).toContainText('Aviso que acaba pronto');
+  expect((await shownTemperatures(page))[0]).toBe('12º');   // 08:00, twelve hours into the answer
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  // Out of coverage, three quarters of an hour later.
+  await noLongerOnline(page);
+  const asked = control.asked;
+  await page.clock.fastForward('45:00');
+  await countLaunches(page);
+  await resume(page);
+
+  await expect(startField(page)).toHaveValue(localAt(T0 + 45 * 60000));
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  expect((await shownTemperatures(page))[0]).toBe('13º');   // 08:45 reads 09:00
+  await expect(alerts).toContainText('Aviso de toda la mañana');
+  await expect(alerts).not.toContainText('Aviso que acaba pronto');
+  await expect(page.locator('.notice')).toContainText(/saved 45 min ago for a 08:00 start|hace 45 min para salir a las 08:00/);
+  await page.waitForTimeout(1500);
+  expect(await shownOrigin(page)).toBe('prepared');
+  expect((await page.evaluate(() => window.__launches)).launch).toBe(1);
+  expect(control.asked, 'a provider was asked without coverage').toBe(asked);
+});
+
+test('with coverage but every provider failing, the prepared forecast is replayed', async ({ page }) => {
+  const control = { now: T0 };
+  await page.clock.install({ time: T0 });
+  await routeWithForecast(page, control);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  control.fail = true;
+  await forgetForecasts(page);
+  await page.clock.fastForward('45:00');
+  await resume(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  expect((await shownTemperatures(page))[0]).toBe('13º');
+  await expect(page.locator('.notice')).toContainText(/saved 45 min ago|hace 45 min/);
+});
+
+test('with compare chosen and no coverage, the replayed forecast stays with a notice and nothing is compared', async ({ page }) => {
+  const control = { now: T0 };
+  await page.clock.install({ time: T0 });
+  await routeWithForecast(page, control);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  await noLongerOnline(page);
+  await watchComparisons(page);
+  await selectProvider(page, 'compare');
+  await page.clock.fastForward('45:00');
+  await resume(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  await expect(page.locator('.notice')).toContainText(/Comparing providers needs coverage|Comparar proveedores necesita cobertura/);
+  await page.waitForTimeout(800);
+  expect(await comparisonsLaunched(page)).toBe(0);
+  expect(await compareShown(page)).toBe(false);
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both

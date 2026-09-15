@@ -197,6 +197,7 @@ var cwForecastRules = (function () {
   const HOUR_MS = 3600000;
   // How far the real start may be from the one a snapshot was prepared for (spec §3).
   const PREPARED_MARGIN_MS = 3 * HOUR_MS;
+  // How a replay, and the coverage of preparing, read a stored answer (spec §4.4).
   const REPLAY = { maxGapMs: HOUR_MS, allowDaily: false };
 
   /**
@@ -532,7 +533,7 @@ var cwForecastRules = (function () {
 
   return {
     parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
-    effectiveStart, retime, preparedCoverage, usablePrepared,
+    effectiveStart, retime, preparedCoverage, usablePrepared, REPLAY,
     usableSteps, decideNotice, alertId, alertsInWindow,
     fingerprint, shouldPublish, shouldPublishComparison, uniqueRouteName,
   };

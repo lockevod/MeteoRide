@@ -545,10 +545,17 @@ window.cwLaunchComputation = function () {
   try {
     // Read once: the steps and the requests of this computation follow the same settings.
     const settings = readForecastSettings();
+    const ids = { requestId: confirmedRoute.requestId, computationId: cid };
+    // Without coverage, a prepared snapshot of this route within three hours of the start is put
+    // back instead, and nothing is asked for (app only: only native.js prepares).
+    const prepared = window.cw.utils.isOffline() ? usablePreparedRecord(settings) : null;
+    if (prepared) {
+      replay(prepared, ids, settings);
+      return cid;
+    }
     const segmented = segmentRouteByTime(confirmedRoute.geojson, settings);
     if (segmented) {
-      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, settings,
-        { requestId: confirmedRoute.requestId, computationId: cid });
+      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, settings, ids);
       return cid;
     }
   } catch (err) {
@@ -570,6 +577,30 @@ window.cwConfirmedRouteText = () => (confirmedRoute
   ? { name: confirmedRoute.name, text: confirmedRoute.text, fingerprint: confirmedRoute.fingerprint }
   : null);
 
+// The prepared record (native.js) that can stand in for the confirmed route at this start: the
+// same route, prepared for a start at most three hours away. Always null on the website.
+function usablePreparedRecord(settings) {
+  const record = window.cwPreparedRecord ? window.cwPreparedRecord() : null;
+  return cwForecastRules.usablePrepared(record, { fingerprint: confirmedRoute.fingerprint, startMs: settings.start })
+    ? record : null;
+}
+
+// Puts a prepared snapshot back on screen, moved to this computation's start (spec §4.9.3). It is a
+// computation like any other: it carries the identities it was launched with and publishes only
+// while they are current. The answers are the stored ones; the keys are the ones in use now, since
+// the record holds none. Returns whether it published.
+function replay(record, ids, settings) {
+  const stored = record.snapshot;
+  const snapshot = cwForecastRules.retime(stored, settings.start - stored.settings.start);
+  snapshot.requestId = ids.requestId;
+  snapshot.computationId = ids.computationId;
+  snapshot.settings = { ...snapshot.settings, keys: settings.keys, alertsKey: settings.alertsKey };
+  snapshot.outcome = { ...stored.outcome, preparedAt: stored.createdAt, preparedFor: stored.settings.start };
+  const published = publish(snapshot);
+  if (runningComputationId === ids.computationId) runningComputationId = null;
+  return published;
+}
+
 // Comparisons (compare.js) compare the snapshot on screen and take their own number when
 // launched. One paints only while that snapshot is still the published one, of the confirmed
 // route and of the latest computation, and no comparison was launched after it. Launching one
@@ -580,6 +611,12 @@ window.cwLaunchComparison = function (kind) {
   const snapshot = window.cw.currentSnapshot();
   // A computation still running replaces that snapshot; its publish launches the comparison.
   if (!snapshot || snapshot.computationId !== lastComputationId) return null;
+  // Comparing asks every provider again: never over a replayed snapshot, nor without coverage in the
+  // app, where the forecast on screen stays instead (spec §4.6).
+  if (snapshot.origin === "prepared" || (window.CW_NATIVE && window.cw.utils.isOffline())) {
+    setNotice(t("compare_needs_coverage"), "warn");
+    return null;
+  }
   const comparisonId = ++lastComparisonId;
   window.cw.releaseLoadingPrefix("compare:");
   window.cw.claimLoading("compare:" + comparisonId);
@@ -1126,7 +1163,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     payloadUnits: r.provider === "openweather" ? owUnits : null,
     payload: r.weather,
   }));
-  publish({
+  const snapshot = {
     version: 1,
     requestId: ids.requestId,
     computationId: ids.computationId,
@@ -1166,7 +1203,12 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     },
     origin: "live",
     createdAt: Date.now(),
-  });
+  };
+  // Nothing usable for any step, with a prepared snapshot of this route within three hours of the
+  // start: that is shown instead of an empty table (spec §4.9.1).
+  const prepared = snapshot.outcome.usableSteps === 0 ? usablePreparedRecord(settings) : null;
+  if (prepared) replay(prepared, ids, settings);
+  else publish(snapshot);
   } catch (err) {
     // Let go first, so a notice that throws cannot keep the indicator on.
     const current = isCurrent();
@@ -1217,13 +1259,15 @@ function publish(snapshot) {
   weatherData = mirrorSteps(snapshot);
   processWeatherData();
   showOfficialAlerts(snapshot);
-  showNotice(snapshot.outcome, snapshot.settings.noticeAll, routeFailureComputationId === snapshot.computationId);
+  showNotice(snapshot.outcome, snapshot.settings.noticeAll, routeFailureComputationId === snapshot.computationId,
+    snapshot.origin);
   try {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
   window.cw.releaseLoading("forecast:" + snapshot.computationId);
-  // With compare chosen, the providers comparison of this snapshot starts here.
-  if (snapshot.origin === "live" && document.getElementById("apiSource")?.value === "compare") {
+  // With compare chosen, the providers comparison of this snapshot starts here; over a replayed one,
+  // or without coverage in the app, cwLaunchComparison says it needs coverage instead.
+  if (document.getElementById("apiSource")?.value === "compare") {
     window.cw.runCompareMode?.();
   }
   return true;
@@ -1237,6 +1281,7 @@ function mirrorSteps(snapshot) {
     lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
     provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
     tempUnit: snapshot.settings.units.temp,
+    replay: snapshot.origin === "prepared",   // read in replay mode (processWeatherData)
   }));
 }
 
@@ -1244,8 +1289,10 @@ function mirrorSteps(snapshot) {
 // of its own to say, the computation leaves that notice up; a notice of its own replaces it.
 // Once replaced or cleared, the failure is forgotten: a later comparison of the same
 // computation with nothing to say clears whatever notice is up then.
-function showNotice(outcome, noticeAll, keepFailure = false) {
-  const notice = cwForecastRules.decideNotice(outcome, { noticeAll });
+function showNotice(outcome, noticeAll, keepFailure = false, origin = "live") {
+  const notice = cwForecastRules.decideNotice(outcome, {
+    noticeAll, origin, preparedAt: outcome?.preparedAt, preparedFor: outcome?.preparedFor, now: Date.now(),
+  });
   if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
   else if (keepFailure) return;
   else clearNotice();
@@ -1267,7 +1314,7 @@ window.cwRepaintPublished = function () {
   // A failure still recorded was said over this snapshot, or over the computation that is
   // replacing it (every publish after it forgets it), so the repaint leaves it up too.
   showNotice(publishedSnapshot.outcome, !!document.getElementById("noticeAll")?.checked,
-    routeFailureComputationId !== null);
+    routeFailureComputationId !== null, publishedSnapshot.origin);
   return true;
 };
 
@@ -1298,7 +1345,9 @@ function processWeatherData() {
     if (prov === "openmeteo" || prov === "aromehd") {
       // Ensure we have at least hourly data shape to work with
       if (!w.hourly || !w.hourly.time) return;
-      extracted = cwForecastRules.extractStep(w, { provider: prov, time: step.time });
+      // A replayed step reads only an hour close enough to it (spec §4.4); otherwise it has no data.
+      extracted = cwForecastRules.extractStep(w,
+        { provider: prov, time: step.time, ...(step.replay ? cwForecastRules.REPLAY : {}) });
       step.__useMinutely = !!(extracted && extracted.useMinutely);
       if (step.__useMinutely) step.__minutelyIndex = extracted.minutelyIndex;
     }
@@ -1313,7 +1362,8 @@ function processWeatherData() {
       // The units the answer was requested in travel with the step; the current setting
       // is only a guess for a step that does not carry them.
       const payloadUnits = step.payloadUnits || ((String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric");
-      const r = cwForecastRules.extractStep(w, { provider: prov, time: step.time, payloadUnits });
+      const r = cwForecastRules.extractStep(w,
+        { provider: prov, time: step.time, payloadUnits, ...(step.replay ? cwForecastRules.REPLAY : {}) });
       if (r) {
         step.temp = safeNum(r.temp);
         step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
