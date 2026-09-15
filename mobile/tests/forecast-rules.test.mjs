@@ -137,3 +137,129 @@ test('Open-Meteo: the first quarter of minutely_15 is read like any other', () =
   assert.equal(r.weatherCode, 2);
   assert.equal(r.isDay, 1);
 });
+
+/* ---------- replaying a prepared snapshot (spec §4.4, §4.9) ---------- */
+
+const H = 3600000;
+const REPLAY = { maxGapMs: H, allowDaily: false };
+const tempAt = (payload, time, over = {}) =>
+  rules.extractStep(payload, { provider: 'openmeteo', time: typeof time === 'string' ? Date.parse(time) : time, ...REPLAY, ...over })?.temp ?? null;
+
+test('replay: further than the gap from the nearest hourly entry has no data; live reads it anyway', () => {
+  // The last hourly slot is 21 Sept 23:00 local (21:00Z).
+  assert.equal(tempAt(openMeteo(), '2026-09-21T22:00:00Z'), 57);          // exactly the gap
+  assert.equal(tempAt(openMeteo(), '2026-09-21T22:01:00Z'), null);        // past it
+  assert.equal(rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-21T22:01:00Z') }).temp, 57);
+});
+
+test('replay: minutely_15 is read only within fifteen minutes of a quarter, otherwise the hour or nothing', () => {
+  // The quarters run 08:00–13:45 local. 07:50 is ten minutes from the first one: live reads the
+  // hour (outside the range), replay reads the quarter.
+  const near = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T05:50:00Z'), ...REPLAY });
+  assert.equal(near.source, 'minutely_15');
+  assert.equal(near.temp, 100);
+  assert.equal(rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T05:50:00Z') }).source, 'hourly');
+  // 07:40 is twenty minutes away: the hour, 08:00 → slot 8.
+  const far = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T05:40:00Z'), ...REPLAY });
+  assert.equal(far.source, 'hourly');
+  assert.equal(far.temp, 18);
+  // Far from both: nothing.
+  assert.equal(tempAt(openMeteo(), '2026-09-23T12:00:00Z'), null);
+});
+
+test('replay: OpenWeather never falls back to daily, and reads the same canonical values in metric and imperial', () => {
+  const w = openWeather('metric');
+  w.hourly = [];
+  const t = at('2026-09-22T11:00:00Z');
+  assert.equal(rules.extractStep(w, { provider: 'openweather', time: t, payloadUnits: 'metric' }).source, 'daily');
+  assert.equal(rules.extractStep(w, { provider: 'openweather', time: t, payloadUnits: 'metric', ...REPLAY }), null);
+  // Beyond the hourly range, where live reads daily.
+  assert.equal(rules.extractStep(openWeather('metric'),
+    { provider: 'openweather', time: at('2026-09-22T03:00:00Z'), payloadUnits: 'metric', ...REPLAY }), null);
+  // The gap is the one asked for: 50 minutes past the last hourly entry is data within an hour
+  // (live's own limit), and nothing within half an hour.
+  const pastLast = at('2026-09-21T21:50:00Z');
+  assert.equal(rules.extractStep(openWeather('metric'), { provider: 'openweather', time: pastLast, payloadUnits: 'metric', ...REPLAY }).temp, 57);
+  assert.equal(rules.extractStep(openWeather('metric'),
+    { provider: 'openweather', time: pastLast, payloadUnits: 'metric', maxGapMs: H / 2, allowDaily: false }), null);
+
+  const t2 = at('2026-09-20T14:10:00Z');
+  const metric = rules.extractStep(openWeather('metric'), { provider: 'openweather', time: t2, payloadUnits: 'metric', ...REPLAY });
+  const imperial = rules.extractStep(openWeather('imperial'), { provider: 'openweather', time: t2, payloadUnits: 'imperial', ...REPLAY });
+  assert.equal(metric.temp, imperial.temp);
+  assert.ok(Math.abs(metric.wind - 21) < 1e-9 && Math.abs(imperial.wind - 21) < 1e-9, `${metric.wind} / ${imperial.wind}`);
+  assert.ok(Math.abs(metric.gust - imperial.gust) < 1e-9);
+});
+
+const snapshotAt = (iso, payload = openMeteo({ minutely: false })) => ({
+  version: 1, route: { name: 'r.gpx', fingerprint: 'fp' }, origin: 'live', createdAt: 1,
+  settings: { start: Date.parse(iso), speed: 12, interval: 15 },
+  steps: [{ lat: 41.4, lon: 2.2, time: new Date(iso), distanceM: 0, provider: 'openmeteo', payloadUnits: null, payload }],
+  outcome: {}, alerts: [],
+});
+
+test('retime moves every step and the start, and the values follow the hour the step lands on', () => {
+  const base = snapshotAt('2026-09-20T09:00:00Z');          // 11:00 local → slot 11
+  const value = (diff) => { const s = rules.retime(base, diff).steps[0]; return tempAt(s.payload, new Date(s.time).getTime()); };
+  assert.equal(value(0), 21);
+  assert.equal(value(45 * 60000), 22);                       // 11:45 → 12:00
+  assert.equal(value(-H), 20);                               // 10:00
+  assert.equal(value(3 * H), 24);                            // 14:00
+
+  const moved = rules.retime(base, 3 * H);
+  assert.equal(moved.origin, 'prepared');
+  assert.equal(moved.settings.start, base.settings.start + 3 * H);
+  assert.equal(new Date(moved.steps[0].time).getTime(), Date.parse('2026-09-20T12:00:00Z'));
+  assert.equal(base.origin, 'live', 'the input changed');
+  assert.equal(base.settings.start, Date.parse('2026-09-20T09:00:00Z'), 'the input start changed');
+  assert.equal(base.steps[0].time.getTime(), Date.parse('2026-09-20T09:00:00Z'), 'the input step changed');
+
+  // Near the end of the answer: three hours later still lands within an hour of the last slot,
+  // a minute more does not.
+  const late = snapshotAt('2026-09-21T19:00:00Z');
+  const lateValue = (diff) => { const s = rules.retime(late, diff).steps[0]; return tempAt(s.payload, new Date(s.time).getTime()); };
+  assert.equal(lateValue(3 * H), 57);
+  assert.equal(lateValue(3 * H + 60000), null);
+});
+
+test('preparedCoverage counts the steps with data at every start from three hours before to three after', () => {
+  same(rules.preparedCoverage(snapshotAt('2026-09-20T09:00:00Z')), { covered: 1, total: 1 });
+
+  // A hole in the middle of the answer: 13:00–16:00 local are missing.
+  const holed = openMeteo({ minutely: false });
+  const keep = (_, i) => i < 13 || i > 16;
+  for (const k of Object.keys(holed.hourly)) holed.hourly[k] = holed.hourly[k].filter(keep);
+  assert.equal(tempAt(holed, '2026-09-20T09:00:00Z'), 21, 'the step itself still has data');
+  same(rules.preparedCoverage(snapshotAt('2026-09-20T09:00:00Z', holed)), { covered: 0, total: 1 });
+
+  // Only the earlier starts fall off the answer: 01:30 local minus three hours is an hour and a
+  // half before its first slot, while three hours later reads 04:30 → slot 4.
+  const early = snapshotAt('2026-09-19T23:30:00Z');
+  assert.equal(tempAt(early.steps[0].payload, Date.parse('2026-09-19T23:30:00Z') + 3 * H), 14);
+  same(rules.preparedCoverage(early), { covered: 0, total: 1 });
+
+  // A step whose request failed is never covered.
+  const twoSteps = snapshotAt('2026-09-20T09:00:00Z');
+  twoSteps.steps.push({ ...twoSteps.steps[0], payload: null });
+  same(rules.preparedCoverage(twoSteps), { covered: 1, total: 2 });
+});
+
+test('usablePrepared: the same route, and a start at most three hours from the prepared one', () => {
+  const start = Date.parse('2026-09-20T09:00:00Z');
+  const record = { version: 1, snapshot: snapshotAt('2026-09-20T09:00:00Z') };
+  assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start }), true);
+  assert.equal(rules.usablePrepared(record, { fingerprint: 'other', startMs: start }), false);
+  assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start + 3 * H }), true);
+  assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start - 3 * H }), true);
+  assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start + 3 * H + 60000 }), false);
+  assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start - 3 * H - 60000 }), false);
+  assert.equal(rules.usablePrepared(null, { fingerprint: 'fp', startMs: start }), false);
+});
+
+test('effectiveStart is now rounded up when the chosen time has passed, and the chosen time when it is ahead', () => {
+  const roundUp = (ms) => Math.ceil(ms / 900000) * 900000;
+  const now = Date.parse('2026-09-20T08:07:00Z');
+  assert.equal(rules.effectiveStart(now, Date.parse('2026-09-20T07:00:00Z'), roundUp), Date.parse('2026-09-20T08:15:00Z'));
+  assert.equal(rules.effectiveStart(now, Date.parse('2026-09-20T12:00:00Z'), roundUp), Date.parse('2026-09-20T12:00:00Z'));
+  assert.equal(rules.effectiveStart(now, NaN, roundUp), Date.parse('2026-09-20T08:15:00Z'));
+});

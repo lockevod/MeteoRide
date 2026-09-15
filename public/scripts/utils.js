@@ -127,6 +127,7 @@
       prepare_offline_empty: "Carga una ruta y espera a que salga la previsión antes de prepararla.",
       prepare_offline_partial: "Ruta preparada solo en parte: hay previsión guardada para {n} de {total} puntos. Vuelve a calcularla con cobertura.",
       prepare_offline_failed: "No se ha podido proteger la previsión: el almacenamiento está lleno.",
+      prepared_replayed: "Previsión guardada hace {age} para salir a las {at}, recolocada a la hora de salida.",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
@@ -245,6 +246,7 @@
       prepare_offline_empty: "Load a route and let the forecast appear before saving it.",
       prepare_offline_partial: "Route only partly saved: forecast stored for {n} of {total} points. Run it again while you have coverage.",
       prepare_offline_failed: "Could not protect the stored forecast: storage is full.",
+      prepared_replayed: "Forecast saved {age} ago for a {at} start, moved to this start time.",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
   title: "MeteoRide — Forecast for your ride",

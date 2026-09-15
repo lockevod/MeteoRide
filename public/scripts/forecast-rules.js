@@ -43,10 +43,16 @@ var cwForecastRules = (function () {
   // has them (AROME merges them in from Open-Meteo), so those two fall back to hourly.
   const HOURLY_FALLBACK = { uv_index: true, precipitation_probability: true };
 
-  function extractOpenMeteo(w, timeMs) {
+  const QUARTER_MS = 15 * 60000;
+
+  // `maxGapMs` (replay): the nearest hourly entry must be at most that far, and a quarter is
+  // read only within fifteen minutes; otherwise there is no data. Without it, as live.
+  function extractOpenMeteo(w, timeMs, maxGapMs) {
     const hourly = w.hourly;
     const offset = w.utc_offset_seconds;
     const idx = nearestIndex(hourly.time, timeMs, offset);
+    const gap = (times, i) => Math.abs(parseProviderTime(times[i], offset) - timeMs);
+    if (maxGapMs != null && (idx === -1 || gap(hourly.time, idx) > maxGapMs)) return null;
 
     let useMinutely = false;
     let minutelyIndex;
@@ -55,7 +61,8 @@ var cwForecastRules = (function () {
       const mi = nearestIndex(m.time, timeMs, offset);
       const first = parseProviderTime(m.time[0], offset);
       const last = parseProviderTime(m.time[m.time.length - 1], offset);
-      if (timeMs >= first && timeMs <= last && mi !== -1) {
+      const inRange = maxGapMs != null ? mi !== -1 && gap(m.time, mi) <= QUARTER_MS : timeMs >= first && timeMs <= last;
+      if (inRange && mi !== -1) {
         useMinutely = true;
         minutelyIndex = mi;
       }
@@ -95,7 +102,7 @@ var cwForecastRules = (function () {
     };
   }
 
-  function extractOpenWeather(w, timeMs, payloadUnits) {
+  function extractOpenWeather(w, timeMs, payloadUnits, maxGapMs, allowDaily) {
     // `maxDiff` matters for hourly only: beyond an hour from the closest slot the data
     // is stale enough to prefer daily (or nothing) over reading a distant hour as if it
     // were now. Daily entries are a day apart by nature, so they keep no such cap.
@@ -120,8 +127,8 @@ var cwForecastRules = (function () {
       return arr.findIndex((e) => e && localDateOf(Number(e.dt) * 1000, offsetSeconds) === stepDate);
     };
     const useHourly = Array.isArray(w.hourly) && w.hourly.length > 0;
-    const hi = useHourly ? closestByDt(w.hourly, 3600000) : -1;
-    const di = (!useHourly || hi === -1)
+    const hi = useHourly ? closestByDt(w.hourly, maxGapMs != null ? maxGapMs : 3600000) : -1;
+    const di = allowDaily && (!useHourly || hi === -1)
       ? (typeof w.timezone_offset === 'number' ? closestByLocalDate(w.daily, w.timezone_offset) : closestByDt(w.daily))
       : -1;
     const hourly = (useHourly && hi !== -1) ? w.hourly[hi] : null;
@@ -169,16 +176,75 @@ var cwForecastRules = (function () {
    * The values a provider answer holds for one step, or null when it holds none.
    * `payloadUnits` is the unit system the request asked for ('metric' | 'imperial');
    * only OpenWeather needs it.
+   *
+   * Live, it is called with neither of the last two. Replaying a prepared snapshot passes
+   * `maxGapMs` (an hourly entry further than that is no data; a quarter of minutely_15 counts
+   * only within fifteen minutes) and `allowDaily: false` (OpenWeather never reads a day).
    */
-  function extractStep(payload, { provider, time, payloadUnits } = {}) {
+  function extractStep(payload, { provider, time, payloadUnits, maxGapMs, allowDaily = true } = {}) {
     if (!payload) return null;
     const timeMs = parseProviderTime(time);
     if (provider === 'openmeteo' || provider === 'aromehd') {
       if (!payload.hourly || !payload.hourly.time) return null;
-      return extractOpenMeteo(payload, timeMs);
+      return extractOpenMeteo(payload, timeMs, maxGapMs);
     }
-    if (provider === 'openweather') return extractOpenWeather(payload, timeMs, payloadUnits);
+    if (provider === 'openweather') return extractOpenWeather(payload, timeMs, payloadUnits, maxGapMs, allowDaily);
     return null;
+  }
+
+  /* ---------- the start time and a prepared snapshot ---------- */
+
+  const HOUR_MS = 3600000;
+  // How far the real start may be from the one a snapshot was prepared for (spec §3).
+  const PREPARED_MARGIN_MS = 3 * HOUR_MS;
+  const REPLAY = { maxGapMs: HOUR_MS, allowDaily: false };
+
+  /**
+   * The start a computation uses: the time chosen, or now rounded up when that has passed or
+   * is not a time. `roundUp` is passed in (local quarter hours) so this stays free of a clock
+   * and a zone.
+   */
+  function effectiveStart(nowMs, fieldMs, roundUp) {
+    const earliest = roundUp(nowMs);
+    return Number.isFinite(fieldMs) ? Math.max(earliest, fieldMs) : earliest;
+  }
+
+  /** A copy of a snapshot moved by `diffMs`: every step's time and the start. Answers are kept. */
+  function retime(snapshot, diffMs) {
+    return {
+      ...snapshot,
+      settings: { ...snapshot.settings, start: snapshot.settings.start + diffMs },
+      steps: snapshot.steps.map((s) => ({ ...s, time: new Date(parseProviderTime(s.time) + diffMs) })),
+      origin: 'prepared',
+    };
+  }
+
+  const hasData = (r) => !!r && (Number.isFinite(r.temp) || Number.isFinite(r.wind));
+
+  /**
+   * How many steps of a snapshot a replay can show whatever the start within the margin: a step
+   * is covered when every start from three hours before to three after, in quarter hours, still
+   * reads a temperature or a wind in replay mode.
+   */
+  function preparedCoverage(snapshot) {
+    const steps = (snapshot && snapshot.steps) || [];
+    let covered = 0;
+    for (const s of steps) {
+      let ok = true;
+      for (let d = -PREPARED_MARGIN_MS; ok && d <= PREPARED_MARGIN_MS; d += QUARTER_MS) {
+        ok = hasData(extractStep(s.payload,
+          { provider: s.provider, time: parseProviderTime(s.time) + d, payloadUnits: s.payloadUnits, ...REPLAY }));
+      }
+      if (ok) covered++;
+    }
+    return { covered, total: steps.length };
+  }
+
+  /** A prepared record can stand in for the route confirmed: same route, start within the margin. */
+  function usablePrepared(record, { fingerprint, startMs } = {}) {
+    const snap = record && record.snapshot;
+    return !!(snap && snap.route && snap.settings && snap.route.fingerprint === fingerprint
+      && Math.abs(startMs - snap.settings.start) <= PREPARED_MARGIN_MS);
   }
 
   /**
@@ -327,11 +393,13 @@ var cwForecastRules = (function () {
    * The notice a published computation deserves, or null for none. Returns
    * `{ parts: [[i18nKey, params], ...], type }`; the page joins the translated parts.
    *
-   * Order: an empty table whose requests failed says why; otherwise data read from the
-   * cache without connection says how old it is; otherwise the provider policy that
-   * used to live at the end of fetchWeatherForSteps, quiet or detailed (`noticeAll`).
+   * Order: an empty table whose requests failed says why; otherwise a replayed prepared
+   * snapshot says how old it is (`now − preparedAt`) and for what start it was prepared
+   * (`preparedFor`, as local HH:MM); otherwise data read from the cache without connection
+   * says how old it is; otherwise the provider policy that used to live at the end of
+   * fetchWeatherForSteps, quiet or detailed (`noticeAll`).
    */
-  function decideNotice(outcome, { noticeAll } = {}) {
+  function decideNotice(outcome, { noticeAll, origin, preparedAt, preparedFor, now } = {}) {
     const o = outcome || {};
     const pv = o.providers || {};
     const mb = pv.meteoblue || {};
@@ -343,6 +411,11 @@ var cwForecastRules = (function () {
       if (o.offline) return say('warn', ['offline_no_data', {}]);
       if (o.lastFailStatus === '401' || o.lastFailStatus === '403') return say('warn', ['provider_rejected', {}]);
       return say('warn', ['provider_unreachable', {}]);
+    }
+    if (origin === 'prepared') {
+      const d = new Date(preparedFor);
+      const at = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      return say('warn', ['prepared_replayed', { age: formatAge(Math.max(0, now - preparedAt)), at }]);
     }
     if (o.staleAgeMs > 0) return say('warn', ['offline_stale_forecast', { age: formatAge(o.staleAgeMs) }]);
 
@@ -459,6 +532,7 @@ var cwForecastRules = (function () {
 
   return {
     parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
+    effectiveStart, retime, preparedCoverage, usablePrepared,
     usableSteps, decideNotice, alertId, alertsInWindow,
     fingerprint, shouldPublish, shouldPublishComparison, uniqueRouteName,
   };

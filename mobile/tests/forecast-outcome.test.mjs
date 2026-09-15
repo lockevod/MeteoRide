@@ -130,3 +130,18 @@ test('alertsInWindow keeps the warnings that overlap the window, once each', () 
     ['edge-start', 'inside', 'edge-end', 'open-ended']);
   assert.equal(rules.alertId(a('Wind', 1, 2)), 'AEMET_Wind_1_2');
 });
+
+test('a replayed prepared snapshot says how old its data is and for what start it was prepared', () => {
+  const now = Date.parse('2026-09-20T10:00:00Z');
+  const prepared = { origin: 'prepared', preparedAt: now - 100 * 60000, preparedFor: Date.parse('2026-09-20T08:00:00Z'), now };
+  assert.deepEqual(plain(rules.decideNotice(outcome(), prepared)),
+    { parts: [['prepared_replayed', { age: '1 h 40 min', at: '10:00' }]], type: 'warn' });
+  // Before stale data and the provider policy.
+  assert.equal(plain(rules.decideNotice(outcome({ staleAgeMs: 60000, usedFallbackError: true }), prepared)).parts[0][0],
+    'prepared_replayed');
+  // An empty table whose requests failed still says why first.
+  assert.equal(plain(rules.decideNotice(outcome({ usableSteps: 0, transportFailures: 1, offline: true }), prepared)).parts[0][0],
+    'offline_no_data');
+  // A live snapshot says nothing of the kind.
+  assert.equal(rules.decideNotice(outcome(), { ...prepared, origin: 'live' }), null);
+});
