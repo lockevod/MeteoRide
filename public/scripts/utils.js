@@ -23,16 +23,61 @@
   // into a notice over another. A request without a recorder is not watched at all.
   const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org'];
 
-  function createRecorder() {
-    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false };
+  // The author's deadline (review 14/09, H4), set after measuring: Open-Meteo and AROME start answering in
+  // about 0.3 s, and what is slow with poor coverage is the download. So a watched request is given up
+  // after 15 s without the server starting to answer, or 15 s in a row without any data while its body
+  // is read; a slow download that keeps arriving is never cut.
+  const PROVIDER_SILENCE_MS = 15000;
+  // Watched answers: the provider each came from and the controller that cuts it.
+  const watched = new WeakMap();
+
+  // `signal` is the computation's or the comparison's: aborted when a newer one replaces it, which
+  // aborts its requests and is nobody's failure. `timedOut` lists the providers given up on: later
+  // requests of the same computation to them are not made.
+  function createRecorder(signal) {
+    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], signal };
   }
 
-  // A body that cannot be read is a failed answer, not a success with no data.
+  // Whether a failure happened without connection is noted as it happens: by the time the
+  // computation publishes, the connection may be back.
+  function noteFailure(recorder, status) {
+    recorder.failed++;
+    recorder.lastFailStatus = status;
+    if (isOffline()) recorder.offline = true;
+  }
+
+  function noteTimeout(recorder, prov) {
+    noteFailure(recorder, 'timeout');
+    if (!recorder.timedOut.includes(prov)) recorder.timedOut.push(prov);
+  }
+
+  const timeoutError = (prov) => Object.assign(new Error(`${prov} is not responding`), { name: 'TimeoutError' });
+
+  // Every body read of a watched answer: chunk by chunk, so the silence can be timed. Anything else
+  // is read as it always was.
+  async function readText(response) {
+    const w = watched.get(response);
+    if (!w || !response.body) return response.text();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    for (;;) {
+      let timer;
+      const silence = new Promise((resolve) => { timer = setTimeout(resolve, PROVIDER_SILENCE_MS, null); });
+      const chunk = await Promise.race([reader.read(), silence]).finally(() => clearTimeout(timer));
+      if (!chunk) { w.cut.abort(); throw timeoutError(w.prov); }
+      if (chunk.done) return text + decoder.decode();
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+  }
+
+  // A body that cannot be read is a failed answer, not a success with no data; one that goes silent
+  // is a provider not responding; one aborted because a newer computation replaced this one is neither.
   function readJson(response, recorder) {
-    return response.json().catch((err) => {
-      recorder.failed++;
-      recorder.lastFailStatus = 'body';
-      if (isOffline()) recorder.offline = true;
+    return readText(response).then(JSON.parse).catch((err) => {
+      if (recorder.signal && recorder.signal.aborted) throw err;
+      if (err.name === 'TimeoutError') noteTimeout(recorder, watched.get(response).prov);
+      else noteFailure(recorder, 'body');
       throw err;
     });
   }
@@ -40,6 +85,13 @@
   function isProviderUrl(url) {
     try { return PROVIDER_HOSTS.includes(new URL(String(url), location.href).hostname); }
     catch (_) { return false; }
+  }
+
+  // Given up on per provider, not per host: AROME and Open-Meteo share one.
+  function providerOf(url) {
+    const u = new URL(String(url), location.href);
+    if (u.hostname === 'api.openweathermap.org') return 'openweather';
+    return u.searchParams.get('models') === 'arome_france_hd' ? 'aromehd' : 'openmeteo';
   }
 
   function watchProviderRequests() {
@@ -52,20 +104,34 @@
       const url = typeof input === 'string' ? input : (input && input.url) || '';
       const recorder = init && init.cwRecorder;
       if (!recorder || !isProviderUrl(url)) return original(input, init);
-      // Whether a failure happened without connection is noted as it happens: by the
-      // time the computation publishes, the connection may be back.
-      const failed = (status) => {
-        recorder.failed++;
-        recorder.lastFailStatus = status;
-        if (isOffline()) recorder.offline = true;
-      };
-      return original(input, init).then(
+      const prov = providerOf(url);
+      // Given up on earlier in this computation: not asked again, and the step goes the way a
+      // network error takes it.
+      if (recorder.timedOut.includes(prov)) {
+        noteFailure(recorder, 'timeout');
+        return Promise.reject(timeoutError(prov));
+      }
+      const cut = new AbortController();
+      if (recorder.signal) {
+        if (recorder.signal.aborted) cut.abort();
+        else recorder.signal.addEventListener('abort', () => cut.abort(), { once: true });
+      }
+      let silent = false;
+      const timer = setTimeout(() => { silent = true; cut.abort(); }, PROVIDER_SILENCE_MS);
+      return original(input, { ...init, signal: cut.signal }).then(
         (res) => {
+          clearTimeout(timer);
+          watched.set(res, { prov, cut });
           if (res.ok) recorder.ok++;
-          else failed(String(res.status));
+          else noteFailure(recorder, String(res.status));
           return res;
         },
-        (err) => { failed('network'); throw err; }
+        (err) => {
+          clearTimeout(timer);
+          if (silent) { noteTimeout(recorder, prov); throw timeoutError(prov); }
+          if (!(recorder.signal && recorder.signal.aborted)) noteFailure(recorder, 'network');
+          throw err;
+        }
       );
     };
   }
@@ -942,6 +1008,7 @@
        setCache,
        createRecorder,
        readJson,
+       readText,
        staleMaxAge,
        isOffline,
        validateDateRange,

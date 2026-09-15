@@ -588,6 +588,31 @@ recovered is a working computation and says nothing. This replaces two timers (1
 400 ms) shared by every request, which let a replaced computation put its notice over the
 next one (H5 in the review).
 
+**Deadlines and aborts** (review 14/09, H4). The wrapper gives every request it watches two deadlines,
+the author's decision after measuring: Open-Meteo and AROME start answering in about 0.3 s, and on poor
+coverage what is slow is the download (22 KB take ~2.6 s at 50 kbps, ~30 s at 16 kbps). So a request is
+given up after **15 s without the server starting to answer**, or **15 s in a row without any data while
+its body is read**; a slow download that keeps arriving is never cut. The body is read chunk by chunk
+with `getReader()` in `cw.utils.readText`, which `readJson` goes through and which stays the one place a
+watched body is read (the table's error snippet uses it too). A request given up notes `timeout` and its
+provider in `recorder.timedOut`, and the step goes the way a network error takes it: no data in the
+table (its `catch`), a named gap in a comparison. Later requests of the same computation or comparison to
+that provider are not made: the wrapper rejects them at once, noted as `timeout`, so a provider that never
+answers costs 15 s once per computation, not once per step, and a new computation asks again. The
+provider is told by the URL (`openweather`; `aromehd` for `models=arome_france_hd`; otherwise
+`openmeteo`), so AROME and Open-Meteo count apart although they share a host. The table's outcome names
+the providers given up (`failedProviders`, `{ status: 'timeout' }`): `decideNotice` says
+`provider_unreachable` over an empty table and `provider_not_responding` over a partial one, as a
+comparison does, in place of that computation's fallback notices. Each recorder carries the signal of
+its computation (`cwLaunchComputation`) or comparison (`run.signal` from `cwLaunchComparison`).
+Launching a computation aborts the requests of the computation and comparison it replaces; launching or
+cancelling a comparison aborts the earlier comparison's. An aborted request or body notes nothing: being
+replaced is no provider's failure. The official-warnings lookup has a recorder of its own, so it is timed,
+given up and aborted the same way and never reaches the notice. A request without a recorder (the ride
+watch's baseline, the API-key test) has no deadline. In the Playwright suite a test that holds a provider
+while it fast-forwards past 15 s gives that request up, so pass long spans before holding;
+`streamProvider` answers inside the page to send a body in pieces on the page's clock.
+
 The stale reading above is for routes that were never prepared. A prepared route does not depend
 on the cache at all.
 
@@ -624,7 +649,8 @@ memory as it was. `usablePrepared` never takes two missing fingerprints for the 
 `navigator.onLine` is false and the record belongs to the confirmed route (same fingerprint), with its
 start at most three hours from the one in use (`cwForecastRules.usablePrepared`). A computation that
 ends current with no usable step (every provider failing while there is coverage, say) replays it
-too, instead of publishing an empty table; a provider that never answers holds that back (H4).
+too, instead of publishing an empty table; a provider that never answers holds that back for its 15 s
+deadline ("Deadlines and aborts" above).
 `replay()` is a computation: it runs under the identities it was launched with and publishes only
 while they are current, so reconciling never launches another one after it. It moves every step and
 the start by the difference (`retime`), keeps the stored answers, sets the keys in use now, and
@@ -1183,10 +1209,10 @@ a replay takes the ones in use ("Preparing and replaying").
 - **Comparisons.** `cwLaunchComparison(kind)` returns a run `{ requestId, computationId,
   comparisonId, snapshot }`, or null with no current snapshot or while a computation of the
   route is still running (its publish launches the comparison instead). It takes the next
-  `comparisonId`, drops earlier comparisons' claims and claims `compare:<id>`. That drop matters
-  while an earlier run's provider has not answered: provider requests have no deadline, so without
-  it the indicator stays on after the newer comparison painted, until that request comes back, or
-  for good when it never does. A test holds the never-answering case.
+  `comparisonId`, aborts the earlier comparison's requests, drops earlier comparisons' claims and
+  claims `compare:<id>`. That drop matters while an earlier run's provider has not answered: without
+  it the indicator stays on after the newer comparison painted, until that run ends. A test holds the
+  never-answering case, and that its request is aborted.
   `cwIsComparisonCurrent(run)` (`cwForecastRules.shouldPublishComparison`) holds while the route
   is the confirmed one, the run's computation is both the latest launched and the one published,
   and no comparison was launched after it. Launching one launches no computation, so reconciling
@@ -1238,7 +1264,7 @@ a replay takes the ones in use ("Preparing and replaying").
     `provider_quota_exceeded`, and 403 stays an HTTP error. The run's requests go one at a time, so
     the difference is its own, and a failure the step recovered from (AROME's merge request) names
     nobody; a test holds both. `decideNotice` makes any other numeric status `provider_http_error`
-    and anything else (`network`, `body`, and a timeout once it records one)
+    and anything else (`network`, `body`, `timeout`)
     `provider_not_responding`, one part per provider, after the empty-table and stale rules and
     never without connection. They show with detailed notices off too: a failed provider leaves gaps
     or loses its row, where the table falls back. The missing OpenWeather key goes first, its parts
@@ -1417,11 +1443,10 @@ code does and what makes the race reproducible.
   recovery is gone along with the duplicates it used to cost. Phase 5 did not change it: its
   durable import starts once a route reaches JavaScript, and the native inboxes are out of its
   scope (`docs/HANDOFF.md` §10).
-- Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
-  H2 (offline preparation), H1 (overlapping forecasts) and H5 (notices by time window, for the
-  computation in phase 2 and the comparisons in phase 4) are fixed; H3 and H4 are open. H4
-  should build on the computation identities rather than add timers.
-  `docs/HANDOFF.md` §9 has the table and the order being followed.
+- The six findings in `docs/REVIEW-2026-09-14.md` are fixed: H6 (the `/share` size limit),
+  H2 (offline preparation), H1 (overlapping forecasts), H5 (notices by time window, for the
+  computation in phase 2 and the comparisons in phase 4), H3 (OpenWeather cached per location) and
+  H4 (provider deadlines and aborts). `docs/HANDOFF.md` §9 has the table and §10 what remains.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line

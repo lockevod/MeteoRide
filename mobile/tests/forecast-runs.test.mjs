@@ -37,7 +37,7 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
   const pending = [];
   const quiet = { log() {}, debug() {}, warn() {}, error: console.error };
   const s = {
-    console: quiet, Date, Promise, setTimeout, clearTimeout, structuredClone,
+    console: quiet, Date, Promise, setTimeout, clearTimeout, structuredClone, AbortController,
     apiSource: provider, weatherData: [], offline: false,
     MS_PER_DAY: 86400000, MS_PER_HOUR: 3600000, OPENMETEO_MAX_DAYS: 14,
     OPENWEATHER_MAX_DAYS: 4, OPENWEATHER_MAX_HOURS: 1, AROMEHD_MAX_HOURS: 48, isAromeHdCovered: () => false,
@@ -72,8 +72,13 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     processWeatherData: () => { s.renders.push(s.weatherData.map((x) => x.lat)); },
     cw: {
       utils: {
-        createRecorder: () => ({ ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false }),
+        createRecorder: (signal) => ({ ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], signal }),
         isOffline: () => s.offline,
+        // As utils.js reads a body, without its deadline (the browser suite holds that).
+        readJson: (res, rec) => res.json().catch((err) => {
+          rec.failed++; rec.lastFailStatus = 'body'; if (s.offline) rec.offline = true; throw err;
+        }),
+        readText: (res) => res.text(),
       },
       claimLoading: (owner) => s.claims.add(owner),
       releaseLoading: (owner) => { s.released.push(owner); s.claims.delete(owner); },
@@ -759,16 +764,24 @@ test('a replay shows the stored official warnings only while official warnings a
   }
 });
 
-test('a computation whose provider never answers replays nothing, however long it waits', async () => {
+test('a computation whose provider does not answer replays nothing while it waits, and replays once the request is given up', async () => {
   const h = harness();
   const start = aheadStart();
   h.s.values.datetimeRoute = localIso(start);
   h.s.cwPreparedRecord = () => preparedFor(start);
-  h.run(41, 1);
+  const a = h.run(41, 1);
   await new Promise((r) => setTimeout(r, 200));
   assert.equal(h.pending.length, 1);
   assert.deepEqual(h.s.published(), []);
   assert.deepEqual([...h.s.claims], ['forecast:1']);
+
+  // Given up the way the fetch wrapper does after 15 s (utils.js; the browser suite holds the deadline).
+  const rec = h.pending[0].init.cwRecorder;
+  rec.failed++; rec.lastFailStatus = 'timeout'; rec.timedOut.push('openmeteo');
+  h.pending[0].reject(Object.assign(new Error('openmeteo is not responding'), { name: 'TimeoutError' }));
+  await a;
+  assert.equal(h.s.published()[0].origin, 'prepared');
+  assert.deepEqual([...h.s.claims], []);
 });
 
 test('without coverage, a usable prepared snapshot is replayed at once and nothing is asked for', async () => {

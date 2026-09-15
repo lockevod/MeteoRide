@@ -478,6 +478,9 @@ let confirmedRoute = null;        // { requestId, name, fingerprint, geojson, te
 let lastComputationId = 0;
 let runningComputationId = null;
 let publishedSnapshot = null;
+// Aborted when a newer computation, or comparison, replaces the one running (H4).
+let computationAbort = null;
+let comparisonAbort = null;
 // The settings the last launch read, or a change refused since. A change over a replay without
 // coverage is compared with these, not with the replayed record's: a setting changed after preparing,
 // or a change refused before, would otherwise make every later start look like a change of settings.
@@ -518,6 +521,11 @@ window.cwLaunchComputation = function () {
     }
   }
   const cid = ++lastComputationId;
+  // The computation and any comparison this one replaces stop asking: their requests are aborted, and
+  // that is no provider's failure (utils.js).
+  if (computationAbort) computationAbort.abort();
+  if (comparisonAbort) comparisonAbort.abort();
+  computationAbort = new AbortController();
   window.cw.releaseLoadingPrefix("forecast:");
   // A comparison of the snapshot this computation replaces will not paint, so it lets go too.
   window.cw.releaseLoadingPrefix("compare:");
@@ -540,7 +548,7 @@ window.cwLaunchComputation = function () {
     }
     const segmented = segmentRouteByTime(confirmedRoute.geojson, settings);
     if (segmented) {
-      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, settings, ids);
+      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, settings, ids, computationAbort.signal);
       return cid;
     }
   } catch (err) {
@@ -644,9 +652,12 @@ window.cwLaunchComparison = function (kind) {
     return null;
   }
   const comparisonId = ++lastComparisonId;
+  if (comparisonAbort) comparisonAbort.abort();
+  comparisonAbort = new AbortController();
   window.cw.releaseLoadingPrefix("compare:");
   window.cw.claimLoading("compare:" + comparisonId);
-  return { kind, requestId: snapshot.requestId, computationId: snapshot.computationId, comparisonId, snapshot };
+  return { kind, requestId: snapshot.requestId, computationId: snapshot.computationId, comparisonId, snapshot,
+    signal: comparisonAbort.signal };
 };
 
 window.cwIsComparisonCurrent = (run) => cwForecastRules.shouldPublishComparison(run, {
@@ -659,6 +670,7 @@ window.cwIsComparisonCurrent = (run) => cwForecastRules.shouldPublishComparison(
 // Leaving compare mode: no comparison still running paints, and none keeps the indicator on.
 window.cwCancelComparisons = function () {
   ++lastComparisonId;
+  if (comparisonAbort) comparisonAbort.abort();
   window.cw.releaseLoadingPrefix("compare:");
 };
 
@@ -718,7 +730,7 @@ window.cw.currentSnapshot = () =>
   (publishedSnapshot && confirmedRoute && publishedSnapshot.requestId === confirmedRoute.requestId
     ? publishedSnapshot : null);
 
-async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
+async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
   // Still the latest computation launched, of the route last confirmed. Checked after
   // every wait: a computation that is not stops without writing or asking for anything.
   const isCurrent = () => cwForecastRules.shouldPublish(ids, publishState());
@@ -729,18 +741,13 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     : { name: "", fingerprint: "" };
   const results = [];
   // What this computation's requests and cache reads saw; the notice is decided from it.
-  const recorder = window.cw.utils.createRecorder();
+  const recorder = window.cw.utils.createRecorder(signal);
   // Official warnings found along the way. They belong to this computation and are shown
   // only if it is published.
   const alertsSeen = [];
 
-  // A body that cannot be read is a failed answer, not a success with no data.
-  const readJson = (response) => response.json().catch((err) => {
-    recorder.failed++;
-    recorder.lastFailStatus = 'body';
-    if (window.cw.utils.isOffline()) recorder.offline = true;
-    throw err;
-  });
+  // A body that cannot be read, or goes silent for 15 s, is a failed answer (utils.js).
+  const readJson = (response) => window.cw.utils.readJson(response, recorder);
 
   let apiKeyFinal = "";
   if (settings.provider === "openweather") {
@@ -969,7 +976,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
           ok = true;
         } else {
           // existing error handling left unchanged
-          const bodyText = await res.text().catch(() => "");
+          const bodyText = await window.cw.utils.readText(res).catch(() => "");
           // Additional diagnostic for OpenWeather: include small snippet of body when error
           if (prov === "openweather") {
             try {
@@ -1082,7 +1089,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
 
   // Check for weather alerts independently if we have OpenWeather API key
   if (!isCurrent()) return;
-  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, isCurrent);
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, isCurrent, signal);
   if (!isCurrent()) return;
 
   const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
@@ -1123,6 +1130,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       usedFallbackHorizon,
       horizonDays: horizonDaysUsed,
       missingKey: missingKeyFallback && providerNeedsKey,
+      // Providers given up on for not answering in time: the table names them, as a comparison does.
+      failedProviders: Object.fromEntries(recorder.timedOut.map((id) => [id, { status: "timeout" }])),
       providers: {
         openweather: { invalidKey: invalidKeyOnceOWM, quota: quotaOnceOWM, httpError: httpErrOnceOWM, httpStatus: lastHttpStatusOWM },
         openmeteo: { httpError: httpErrOnceOM, httpStatus: lastHttpStatusOM },
@@ -3473,7 +3482,10 @@ window.debugAlertPosition = function() {
 // Check for weather alerts independently of main provider
 // Only a computation looks them up: the warnings found go into its `sink`, with the
 // settings it read, and are shown only if it publishes. Nothing here touches the page.
-async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent) {
+async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent, signal) {
+  // Its own recorder: its requests are timed, given up on and aborted like the computation's, and never
+  // reach the notice.
+  const recorder = window.cw.utils.createRecorder(signal);
   // Only check if alerts are enabled and we have OpenWeather API key
   if (!settings.alerts) return;
 
@@ -3521,10 +3533,10 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
       }
       
       try {
-        const response = await fetch(alertsUrl);
+        const response = await fetch(alertsUrl, { cwRecorder: recorder });
         if (isCurrent && !isCurrent()) return;
         if (response.ok) {
-          const data = await response.json();
+          const data = await window.cw.utils.readJson(response, recorder);
           if (isCurrent && !isCurrent()) return;
           if (data.alerts && Array.isArray(data.alerts)) {
             sink.push(...data.alerts);

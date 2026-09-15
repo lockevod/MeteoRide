@@ -935,7 +935,8 @@ function forecastAround(now, hours = 72) {
 
 /** Nothing reachable but Open-Meteo, which answers forecastAround(control.now or the real clock).
  *  `control.hours(url)` can cut an answer short; `control.fail` answers every forecast with a 500;
- *  `control.held`, a promise, holds every forecast until it resolves. */
+ *  `control.held`, a promise, holds every forecast until it resolves; with `control.hangAfter` set, every
+ *  forecast asked for after that many never gets an answer. */
 async function stubAround(page, control = {}) {
   await goOffline(page);
   await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
@@ -944,6 +945,7 @@ async function stubAround(page, control = {}) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(watchForecast(url)) });
     }
     control.asked = (control.asked || 0) + 1;
+    if (control.hangAfter != null && control.asked > control.hangAfter) return new Promise(() => {});
     if (control.offline) return route.abort();
     if (control.held) await control.held;
     if (control.fail) return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
@@ -4031,7 +4033,7 @@ test('a provider request carrying a recorder notes its outcome there', async ({ 
     await fetch(base + 'key');   // no recorder: noted nowhere
     return rec;
   });
-  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0, offline: false });
+  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0, offline: false, timedOut: [] });
 });
 
 // Whether a failure happened without connection is noted when it happens: by the time
@@ -4451,6 +4453,9 @@ test('coming back while the latest forecast is still being computed, with the st
   await chooseStart(page, localAt(T0 + 4 * 3600000));
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  // The forecast on screen is old enough to be computed again. Passed before holding the provider: 15 s
+  // without an answer would give the request up and end the computation.
+  await page.clock.fastForward('35:00');
 
   const held = heldPromise();
   control.held = held.promise;
@@ -4458,8 +4463,7 @@ test('coming back while the latest forecast is still being computed, with the st
   await countLaunches(page);
   await setSpeed(page, 13);
   await expect.poll(async () => (await page.evaluate(() => window.__launches)).launch).toBe(1);
-  // The forecast on screen is old enough to be computed again, but its replacement is on its way.
-  await page.clock.fastForward('35:00');
+  // Its replacement is on its way.
   await resume(page);
   await page.waitForTimeout(500);
   expect((await page.evaluate(() => window.__launches)).launch, 'a computation still running was launched again').toBe(1);
@@ -5300,6 +5304,10 @@ test('a comparison whose provider never answers lets go of the indicator once th
   // The first comparison's provider never answers while the checks below run.
   const never = heldPromise();
   Object.assign(control, { held: never.promise, arome: 0 });
+  const aborted = [];
+  page.on('requestfailed', (r) => {
+    if (new URL(r.url()).searchParams.get('models') === 'arome_france_hd') aborted.push(r.failure()?.errorText);
+  });
   await page.evaluate(() => { window.cw.runCompareMode(); });
   await expect.poll(() => control.arome).toBe(1);
   await expect.poll(() => overlayVisibility(page)).toBe('visible');
@@ -5308,6 +5316,8 @@ test('a comparison whose provider never answers lets go of the indicator once th
   await page.evaluate(() => { window.cw.runCompareMode(); });
   await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+  // And the replaced comparison's request is aborted, long before any deadline.
+  await expect.poll(() => aborted.length, 'the replaced comparison kept its request open').toBe(1);
   never.release();
 });
 
@@ -6326,4 +6336,171 @@ test('with °F chosen, Open-Meteo is asked for °F and the table shows its value
   await setTempUnits(page, 'F');
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['70º'], unit: 'ºF', summary: '70ºF' });
+});
+
+/* ---------- provider deadlines (review 14/09, H4) ---------- */
+
+// The author's decision: 15 s without the server starting to answer, or 15 s in a row without any data
+// while the body is read, and the provider is not responding. Later points of that computation do not
+// ask it again; a replaced computation or comparison aborts its requests and that is nobody's failure.
+
+const notResponding = /is not responding|no responde/;
+const shownSnapshot = (page) => page.evaluate(() => {
+  const s = window.cw.currentSnapshot();
+  return s && { usable: s.outcome.usableSteps, steps: s.steps.length, speed: s.settings.speed, origin: s.origin };
+});
+
+test('a provider that stops answering is given up after 15 s: the computation publishes, asks it no more, says so, and the next one completes', async ({ page }) => {
+  const control = { now: T0, hangAfter: 1 };
+  await startClock(page);
+  await recordNotices(page);
+  await stubAround(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(() => control.asked).toBe(2);
+  await page.waitForTimeout(500);
+  expect(await shownSnapshot(page), 'published before the provider was given up').toBeNull();
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(1);
+  expect((await shownSnapshot(page)).steps).toBeGreaterThan(2);
+  await expect(page.locator('.notice')).toContainText(/Open-Meteo (is not responding|no responde)/);
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+  await page.waitForTimeout(500);
+  expect(control.asked, 'a provider given up was asked again in the same computation').toBe(2);
+
+  // A new computation tries again, and with the provider answering it completes.
+  control.hangAfter = null;
+  await forgetForecasts(page);
+  await setSpeed(page, 13);
+  await expect.poll(async () => (await shownSnapshot(page))?.speed).toBe(13);
+  const done = await shownSnapshot(page);
+  expect(done.usable).toBe(done.steps);
+  expect(control.asked).toBeGreaterThan(2);
+  await expect(page.locator('.notice')).not.toContainText(notResponding);
+});
+
+test('a provider that never answers no longer holds back the replay: after 15 s the prepared forecast is shown', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await routeWithForecast(page, control);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  control.hangAfter = control.asked;
+  await forgetForecasts(page);
+  await page.clock.fastForward('45:00');
+  await resume(page);
+  await expect.poll(() => control.asked).toBe(control.hangAfter + 1);
+  await page.waitForTimeout(500);
+  expect(await shownOrigin(page)).toBe('live');
+
+  await page.clock.fastForward('00:16');
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  expect((await shownTemperatures(page))[0]).toBe('13º');
+  await expect(page.locator('.notice')).toContainText(/saved 45 min ago|hace 45 min/);
+  expect(control.asked, 'a provider given up was asked again in the same computation').toBe(control.hangAfter + 1);
+});
+
+test('a computation replaced while its provider hangs aborts the request, and nothing says the provider failed', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await recordNotices(page);
+  await stubAround(page, control);
+  const aborted = [];
+  page.on('requestfailed', (r) => { if (new URL(r.url()).hostname === 'api.open-meteo.com') aborted.push(r.failure()?.errorText); });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  control.hangAfter = control.asked;
+  await forgetForecasts(page);
+  await setSpeed(page, 13);
+  await expect.poll(() => control.asked).toBe(control.hangAfter + 1);
+
+  control.hangAfter = null;
+  await setSpeed(page, 14);
+  await expect.poll(() => aborted.length, 'the replaced computation kept its request open').toBe(1);
+  await expect.poll(async () => (await shownSnapshot(page))?.speed).toBe(14);
+  await page.clock.fastForward('00:16');
+  await page.waitForTimeout(500);
+  expect((await shownSnapshot(page)).speed).toBe(14);
+  expect((await page.evaluate(() => window.__notices)).filter((n) => notResponding.test(n))).toEqual([]);
+});
+
+/** Open-Meteo answered inside the page, so a body can arrive in pieces on the page's own clock. The
+ *  first `slow` forecasts send their headers at once and then `pieces` pieces of the body, one every
+ *  `everyMs`, stopping after `stopAfter` pieces if given; the rest arrive whole. The body is
+ *  forecastAround(now). `window.__asked` and `window.__sent` count forecasts and pieces sent. */
+async function streamProvider(page, { now, slow = 1, pieces, everyMs, stopAfter = pieces }) {
+  await goOffline(page);
+  const body = JSON.stringify(forecastAround(now));
+  await page.addInitScript(({ body, slow, pieces, everyMs, stopAfter }) => {
+    const real = window.fetch;
+    window.__asked = 0;
+    window.__sent = 0;
+    window.fetch = function (input, init = {}) {
+      const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+      if (url.hostname !== 'api.open-meteo.com' || url.searchParams.get('timeformat') === 'unixtime') return real(input, init);
+      const slowOne = ++window.__asked <= slow;
+      const bytes = new TextEncoder().encode(body);
+      const size = Math.ceil(bytes.length / pieces);
+      const stream = new ReadableStream({
+        start(controller) {
+          init.signal?.addEventListener('abort', () => { try { controller.error(new DOMException('aborted', 'AbortError')); } catch (_) {} });
+          if (!slowOne) { controller.enqueue(bytes); controller.close(); return; }
+          for (let i = 0; i < Math.min(pieces, stopAfter); i++) {
+            setTimeout(() => {
+              try {
+                controller.enqueue(bytes.slice(i * size, (i + 1) * size));
+                window.__sent++;
+                if (i === pieces - 1) controller.close();
+              } catch (_) { /* aborted */ }
+            }, i * everyMs);
+          }
+        },
+      });
+      return Promise.resolve(new Response(stream, { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    };
+  }, { body, slow, pieces, everyMs, stopAfter });
+}
+
+test('a body that stops arriving is cut after 15 s without data, and the provider is not asked again', async ({ page }) => {
+  await startClock(page);
+  await streamProvider(page, { now: T0, pieces: 4, everyMs: 1000, stopAfter: 2 });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(() => page.evaluate(() => window.__sent)).toBe(2);
+  await page.waitForTimeout(500);
+  expect(await shownSnapshot(page), 'published before the body was cut').toBeNull();
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(0);
+  await expect(page.locator('.notice')).toContainText(notResponding);
+  expect(await page.evaluate(() => window.__asked), 'a provider given up was asked again in the same computation').toBe(1);
+});
+
+test('a slow body that keeps arriving for more than 15 s is never cut', async ({ page }) => {
+  await startClock(page);
+  await recordNotices(page);
+  await streamProvider(page, { now: T0, pieces: 8, everyMs: 5000 });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(() => page.evaluate(() => [window.__asked, window.__sent])).toEqual([1, 1]);
+  for (let i = 1; i < 8; i++) {
+    await page.clock.fastForward('00:05');
+    await expect.poll(() => page.evaluate(() => window.__sent)).toBe(i + 1);
+  }
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
+  const done = await shownSnapshot(page);
+  expect(done.usable).toBe(done.steps);
+  expect((await page.evaluate(() => window.__notices)).filter((n) => notResponding.test(n))).toEqual([]);
 });

@@ -195,7 +195,7 @@ protección que el código no da.
 | **H1** (alta, preexistente) | `fetchWeatherForSteps` en `app.js`, que reseteaba, escribía y pintaba `weatherData` | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (lo emite `publish` en `app.js` y lo escucha `native.js`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`, que la fase 3 sustituye por `requestId` y `computationId`), acumula en local y solo la última publica tabla, avisos, alertas y `cw:forecast`, y suelta su reclamación del indicador (`forecast:<id>`); `mobile/tests/forecast-runs.test.mjs`. `compare.js` escribía `weatherData` sin número hasta la fase 4, que le da identidad propia (`comparisonId`). |
 | **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. **Corregido**: reconstruye las claves de los pasos pintados con `makeCacheKey` y distingue nada, completo, parcial ("n de total") y fallo al fijar; cuatro tests en `smoke.spec.mjs`. |
 | **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. **Corregido**: la clave de OpenWeather es solo ubicación y unidades (`makeCacheKey`), una escritura por respuesta y la extracción elige la hora por `dt`; las claves antiguas se borran al arrancar. Con `route.gpx` y el stub de los tests, de 147 escrituras y 900 522 caracteres serializados a 3 y 18 378; tres tests en `smoke.spec.mjs`. |
-| **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. |
+| **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. **Corregido** (decisión del autor tras medir): la envoltura de `fetch` abandona una petición a los 15 s sin que el servidor empiece a responder o a los 15 s seguidos sin datos al leer el cuerpo (`readText` con `getReader()`); una descarga lenta que sigue recibiendo no se corta. El proveedor abandonado no se vuelve a pedir en ese cálculo o comparación y el aviso lo nombra; un cálculo o comparación sustituido aborta sus peticiones sin contarlo como fallo. Cinco tests nuevos y uno ampliado en `smoke.spec.mjs`, y uno adaptado en `forecast-runs.test.mjs`. |
 | **H5** (media) | `utils.js:34-58` | Los avisos de proveedor usan un temporizador de 1,5 s que nunca se reinicia, así que un aviso nuevo puede desaparecer al instante. **Corregido en la fase 2**: cada cálculo anota en su propio registro (`cwRecorder`) y el aviso se decide al publicar con `decideNotice`; `mobile/tests/forecast-runs.test.mjs` y `mobile/tests/forecast-outcome.test.mjs`. |
 | **H6** (media, seguridad, código propio) | `functions/share.js:20-60` | El límite de tamaño compara `raw.length` (unidades UTF-16, no bytes) y lo hace **después** de leer el cuerpo entero en memoria. Con multibyte pasan ~2,6 MB. **Corregido**: el cuerpo se lee con tope de bytes antes de parsear (`readCapped`), texto y multipart; `mobile/tests/share.test.mjs`. |
 
@@ -362,7 +362,7 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: tarea 7 del seguimiento, caché de OpenWeather por ubicación (H3).
+en `AGENTS.md → Open work`. Última actualización: tarea 8 del seguimiento, plazo de red de los proveedores (H4).
 
 ### Pendiente por fase del rediseño
 
@@ -374,10 +374,26 @@ en `AGENTS.md → Open work`. Última actualización: tarea 7 del seguimiento, c
 
 ### Hallazgos de la revisión del 14/09 aún abiertos
 
-- **H4.** Las peticiones a proveedores no tienen plazo: un proveedor que no responde retiene el
-  cálculo con el indicador encendido.
+- Ninguno: los seis están corregidos (§9).
 
 ### Límites aceptados (decididos, no se arreglan salvo que se pida)
+
+- **Plazo de red (H4).** 15 s sin que el servidor empiece a responder o 15 s seguidos sin datos al leer
+  el cuerpo. Quedan:
+  - Una petición abandonada deja el paso sin datos, como un error de red: la tabla no pasa a Open-Meteo
+    cuando OpenWeather o AROME no contestan (sí ante un error HTTP). Cada proveedor que no contesta
+    cuesta 15 s una vez por cálculo, así que la cadena OpenWeather → AROME → Open-Meteo puede tardar 45 s.
+  - El proveedor se distingue por la URL: AROME y Open-Meteo comparten servidor pero cuentan aparte, y
+    un servidor caído cuesta 15 s por cada uno.
+  - Con un proveedor abandonado, el aviso de la tabla lo nombra en lugar de los avisos de fallback, clave
+    u horizonte de ese cálculo, también con los avisos detallados apagados.
+  - El cuerpo de una respuesta de error (el fragmento que la tabla anota en el registro) también se corta
+    a los 15 s sin datos, pero no cuenta como plazo agotado ni deja de preguntar a ese proveedor.
+  - La consulta independiente de avisos oficiales tiene plazo y aborto con su propia grabadora; si
+    OpenWeather no contesta ahí, no se dice nada.
+  - Las peticiones sin grabadora (la línea base del aviso de ruta, la prueba de la clave) siguen sin plazo.
+  - Sin medir fuera de Chromium con reloj falso: `AbortController` y `ReadableStream.getReader()` en
+    WKWebView, y una red real lenta, no se han comprobado.
 
 - **Temperatura en °F.** Resuelto en la fase 7: Open-Meteo y AROME se piden en °F con
   `temperature_unit=fahrenheit`, como OpenWeather con `units=imperial`. Queda una foto preparada
@@ -568,8 +584,6 @@ en `AGENTS.md → Open work`. Última actualización: tarea 7 del seguimiento, c
       cobertura en la app se pinta la tabla normal con sus marcadores y el aviso de que comparar necesita
       cobertura.
   - **Reproducción.**
-    - Un proveedor que no responde retiene el cálculo y la reproducción tras un cálculo sin datos
-      (H4). Tiene test.
     - El aviso de antigüedad mide la foto (`createdAt` al publicar), no las respuestas, que pueden
       venir de caché.
     - El resultado (`outcome`) de una reproducción es el de la foto guardada con `preparedAt` y
@@ -669,6 +683,9 @@ en `AGENTS.md → Open work`. Última actualización: tarea 7 del seguimiento, c
     tapada por las comprobaciones del propio `centreOnUser`.
   - El script de usuario (`tools/userscripts/tamper_meteoride.user.js`) deja de reenviar con la
     primera respuesta a su envío. No tiene tests: se comprobó solo leyendo el código.
+  - Plazo de red (H4): que un aborto por sustitución no cuente como fallo. Contarlo no se vería, porque
+    el cálculo o la comparación sustituidos ya no publican. El salto de los puntos siguientes solo se
+    prueba en la tabla; comparar pasa por la misma envoltura, sin test propio de plazo.
   - La etiqueta `source` de cada entrada solo se ve envolviendo `cw.requestRoute`; la comprueban
     los tests de `shared_id`, no los del resto de entradas.
   - El reinicio de `keepOnly = false` en `takeSharedFromServiceWorker` (gpx-share.js ~228-233) no

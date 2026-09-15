@@ -190,7 +190,7 @@
     if (!run) return;
     const current = () => window.cwIsComparisonCurrent(run);
     // What this comparison's requests and cache reads saw; its notice is decided from it.
-    const recorder = window.cw.utils.createRecorder();
+    const recorder = window.cw.utils.createRecorder(run.signal);
     // Providers whose request left a step with nothing, named in the notice.
     const failedProviders = {};
 
@@ -406,7 +406,7 @@
     if (!run) return;
     const current = () => window.cwIsComparisonCurrent(run);
     // What this comparison's requests and cache reads saw; its notice is decided from it.
-    const recorder = window.cw.utils.createRecorder();
+    const recorder = window.cw.utils.createRecorder(run.signal);
     // Providers whose request left a step with nothing, named in the notice.
     const failedProviders = {};
 
