@@ -465,7 +465,8 @@ A first run out of coverage has nothing to restore and no way to fetch anything,
 it says that rather than sitting blank. The wait for the recent-route list is five
 seconds: generous for an IndexedDB read, short enough that an empty install is not left
 in silence. Both directions are tested, including that a first run *with* coverage
-stays quiet.
+stays quiet. A restore replaced by a route picked during that wait (its request resolves
+`'superseded'`) says nothing either: the screen and the notice belong to that request.
 
 The map background is kept too, by `scripts/tile-cache.js`. Do not count on the web
 view's own HTTP cache for it: serving tiles from a real server, loading a route, taking

@@ -2105,6 +2105,28 @@ test('a first run without coverage says so', async ({ page }) => {
   });
 });
 
+// The restore asks for its route before waiting for recent routes, so a route picked in
+// that wait replaces it. Finding nothing stored, it used to say so all the same, over the
+// notice of the request that replaced it.
+test('a first-run restore that a newer request replaced says nothing about coverage', async ({ page }) => {
+  await recordNotices(page);
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
+  );
+  await page.goto('/index.html');
+  await mapReady(page);
+  // Nothing else asks for a route at this start-up: the restore has asked, and is waiting.
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequests())).toBe(true);
+
+  await pickText(page, 'broken.gpx', 'this is not a route');
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+  await page.waitForTimeout(6000);   // past the restore's five-second wait
+  expect((await page.evaluate(() => window.__notices)).filter((n) => /needs coverage|necesita cobertura/.test(n))).toEqual([]);
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+});
+
 test('a first run with coverage stays quiet', async ({ page }) => {
   await installNativeBridge(page);
   await stubProvider(page, { celsius: 18, offline: false });

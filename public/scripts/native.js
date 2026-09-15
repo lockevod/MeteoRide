@@ -296,7 +296,7 @@
     // generous for an IndexedDB read and short enough that a first run with nothing
     // stored is not left in silence.
     let nothingStored = false;
-    await window.cw.requestRoute({
+    const result = await window.cw.requestRoute({
       source: 'recent',
       read: async () => {
         const routes = await waitFor(() => {
@@ -313,8 +313,9 @@
     });
 
     // First run out of coverage: nothing to restore and no way to fetch anything.
-    // Saying so beats an empty screen that looks broken.
-    if (nothingStored && !window.lastGPXFile && offline()) {
+    // Saying so beats an empty screen that looks broken. A later request replaced this one:
+    // the screen and the notice are that request's.
+    if (result !== 'superseded' && nothingStored && !window.lastGPXFile && offline()) {
       notify('offline_first_run', 'No connection. You can open a route, but the forecast needs coverage.');
     }
   }
