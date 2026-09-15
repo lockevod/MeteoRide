@@ -138,12 +138,6 @@
     return (snapshot.steps || []).map((s) => ({ lat: s.lat, lon: s.lon, time: new Date(s.time), distanceM: s.distanceM }));
   }
 
-  // The local date cache keys are filed under: the day the ride starts, as the date field holds it.
-  function localDateOf(d) {
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }
-
   // A comparison on screen says what its own requests saw (spec §4.10): a table whose requests
   // failed and that came out empty says why, and data read from the cache without connection says
   // how old it is. Per-provider notices do not apply: every provider already has a row, empty
@@ -194,7 +188,6 @@
     const MS_PER_DAY = horizons.MS_PER_DAY || (24*60*60*1000);
     const MS_PER_HOUR = horizons.MS_PER_HOUR || (60*60*1000);
     const now = new Date();
-    const dateStr = localDateOf(steps[0].time);
 
     const provs = getCompareProviders(keys);
     const baseProvs = provs.filter(p => p !== 'ow2_arome_openmeteo'); // NEW: exclude chain from direct fetch
@@ -250,7 +243,8 @@
 
         // Cache key (use effective provider for data source)
   const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-  const key = mk(effProv, dateStr, units.temp, units.wind, p.lat, p.lon, timeAt);
+  // Filed as the table files its answers: under each step's UTC date.
+  const key = mk(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt);
   const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, p, units);
@@ -513,8 +507,7 @@
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
   const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-  const dateStr2 = localDateOf(steps[0].time);
-  const key = mk2(effProv, dateStr2, units.temp, units.wind, p.lat, p.lon, timeAt);
+  const key = mk2(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt);
   const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
           const s = extractStepMetrics(effProv, cached, baseForIndex, units);

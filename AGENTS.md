@@ -1207,9 +1207,14 @@ a replay takes the ones in use ("Preparing and replaying").
     the table's own function, for both comparisons: the hour by the answer's `utc_offset_seconds`,
     and the quarter of `minutely_15` whenever the answer carries one for the step, which it does
     when it was requested within 5 h (`buildProviderUrl` asks for quarters only then, but the
-    answer then covers its whole date range, so a cached one keeps them). The value is per quarter,
-    as the table shows it; uv, probability and weather code come from `hourly` when the quarter
-    has none (AROME HD sends all three null there). The same unit conversion as the table
+    answer then covers its whole date range, so a cached one keeps them). Precipitation is the
+    exception: it always means mm in the hour, so the rows read alike within 5 h and beyond and
+    beside OpenWeather's `1h`. From `minutely_15` it is the sum of the four quarters of the
+    nearest hour T, (T − 60 min, T], which is what Open-Meteo's hourly value sums; with any of
+    them missing or null, the hour's own value. In replay the sum is read only where a quarter
+    counts (within fifteen minutes) and the hour is within the hour gap, as the other fields.
+    uv, probability and weather code come from `hourly` when the quarter has none (AROME HD sends
+    all three null there). The same unit conversion as the table
     (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from
     the sun when missing, the code synthesised or reconciled with rain and cloud. OpenWeather is
     still read by hand there. The comparison tables are unchanged (spec §2).
@@ -1217,6 +1222,9 @@ a replay takes the ones in use ("Preparing and replaying").
     standard Open-Meteo answer merged in with `cwForecastRules.mergeAromeWithStandard`, and
     Open-Meteo instead when AROME's answer is unusable, before caching. Compare-by-dates used to
     cache AROME unmerged under the key the table reads.
+  - **Cache keys.** Both comparisons file and read answers under `makeCacheKey` with each step's
+    UTC date (`timeAt.toISOString()`), exactly as the table does. They used the local date of
+    the ride's first step, so from 00:00 to 02:00 in Spain neither read the other's answers.
 - **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
   name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
   and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline

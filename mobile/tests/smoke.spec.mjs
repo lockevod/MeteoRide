@@ -5575,18 +5575,19 @@ test.describe('with the phone in New York and the route in Spain', () => {
   });
 });
 
-/** Open-Meteo with the quarter hours it sends for the next hours: `minutely_15` from an hour ago
- *  to six hours ahead reads 14º, 30 km/h, 0.4 mm and 80 % humidity, while `hourly` reads 21º,
- *  12 km/h, 0 mm and 60 %. Its probability is null, as Open-Meteo often sends it there. */
-function forecastWithQuarters() {
-  const hour = Math.floor(Date.now() / 3600000) * 3600000;
-  const body = forecastAround(Date.now());
+/** Open-Meteo with the quarter hours it sends for the next hours, around `now`: `minutely_15` from
+ *  an hour ago to six hours ahead reads 14º, 30 km/h, 0.25 mm a quarter (1 mm in the hour) and 80 %
+ *  humidity, while `hourly` reads 21º, 12 km/h, 0 mm and 60 %. Its probability is null, as
+ *  Open-Meteo often sends it there. */
+function forecastWithQuarters(now = Date.now()) {
+  const hour = Math.floor(now / 3600000) * 3600000;
+  const body = forecastAround(now);
   body.hourly.temperature_2m = body.hourly.time.map(() => 21);
   const time = [];
   for (let t = hour - 3600000; t <= hour + 6 * 3600000; t += 900000) time.push(new Date(t).toISOString().slice(0, 16));
   const fill = (v) => time.map(() => v);
   body.minutely_15 = {
-    time, temperature_2m: fill(14), precipitation: fill(0.4), precipitation_probability: fill(null),
+    time, temperature_2m: fill(14), precipitation: fill(0.25), precipitation_probability: fill(null),
     relative_humidity_2m: fill(80), wind_speed_10m: fill(30), wind_gusts_10m: fill(45),
     winddirection_10m: fill(90), weathercode: fill(61), uv_index: fill(null), is_day: fill(1), cloud_cover: fill(90),
   };
@@ -5605,13 +5606,14 @@ test('within five hours the comparison and the date comparison read Open-Meteo q
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   const read = (rows) => rows.map((s) => [s.temp, s.windSpeed, s.windGust, s.humidity, s.precipitation, s.precipProb, s.uvindex, s.cloudCover]);
   const table = await page.evaluate(`(${read})(window.weatherData)`);
-  // Wind in m/s, the units on screen.
-  expect(table[0].slice(0, 6)).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 0.4, 5]);
+  // Wind in m/s, the units on screen; rain in mm in the hour, the four quarters of its hour.
+  expect(table[0].slice(0, 6)).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 1, 5]);
 
   await selectProvider(page, 'compare');
   await expect.poll(() => compareShown(page)).toBe(true);
   await expect.poll(() => page.evaluate(`(${read})(window.cw.compareProviderData?.openmeteo ?? [])`)).toEqual(table);
   await expect(page.locator('#weatherTable tr[data-prov="openmeteo"] td[data-col] .combined-top').first()).toHaveText('14º');
+  await expect(page.locator('#weatherTable tr[data-prov="openmeteo"] td[data-col] .combined-bottom').nth(1)).toHaveText('1.0 (5%)');
 
   await openCompareDates(page);
   await runCompareDates(page);
@@ -5622,8 +5624,8 @@ test('within five hours the comparison and the date comparison read Open-Meteo q
 /** AROME HD as the live API answers: quarter hours like forecastWithQuarters, but weather code,
  *  probability, uv and cloud cover null in both `hourly` and `minutely_15`. The standard answer
  *  (forecastWithQuarters) fills the hourly ones: code 1, 5 %, uv 3, 20 % cloud. */
-function aromeWithNulls() {
-  const body = forecastWithQuarters();
+function aromeWithNulls(now = Date.now()) {
+  const body = forecastWithQuarters(now);
   for (const series of [body.hourly, body.minutely_15]) {
     for (const k of ['weathercode', 'precipitation_probability', 'uv_index', 'cloud_cover']) series[k] = series[k].map(() => null);
   }
@@ -5646,9 +5648,9 @@ test('within five hours the AROME row of the comparison reads and reconciles the
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   const table = await page.evaluate(`(${readRows})(window.weatherData)`);
-  // The quarter's 14º and 0.4 mm, uv and probability from the standard hour, and its code 1
-  // reconciled with the rain into light rain.
-  expect(table[0]).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 0.4, 5, 3, 20, 61, 1]);
+  // The quarter's 14º, 1 mm in its hour, uv and probability from the standard hour, and its code 1
+  // reconciled with the rain into moderate rain.
+  expect(table[0]).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 1, 5, 3, 20, 63, 1]);
 
   // The comparison asks for itself instead of reading the table's cached answers.
   await forgetForecasts(page);
@@ -5659,12 +5661,12 @@ test('within five hours the AROME row of the comparison reads and reconciles the
 
 // Compare-by-dates stored AROME's answer without the standard model's variables, under the key the
 // table reads, so the next table computed from it lost its probability, uv and cloud cover.
-test('a date comparison with AROME stores the answer filled from standard Open-Meteo, and the table computed after reads it', async ({ page }) => {
+async function dateComparisonFeedsTheTable(page, now = Date.now()) {
   const control = { aromeAsked: 0 };
   await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
     const arome = isArome(new URL(route.request().url()));
     if (arome) control.aromeAsked++;
-    const body = arome ? aromeWithNulls() : forecastWithQuarters();
+    const body = arome ? aromeWithNulls(now) : forecastWithQuarters(now);
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
@@ -5690,7 +5692,21 @@ test('a date comparison with AROME stores the answer filled from standard Open-M
   await expect.poll(() => page.evaluate(() => window.__published)).toBe(1);
   expect(control.aromeAsked, 'the table asked AROME again instead of reading the cache').toBe(asked);
   const table = await page.evaluate(`(${readRows})(window.weatherData)`);
-  expect(table[0]).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 0.4, 5, 3, 20, 61, 1]);
+  expect(table[0]).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 1, 5, 3, 20, 63, 1]);
+}
+test('a date comparison with AROME stores the answer filled from standard Open-Meteo, and the table computed after reads it',
+  ({ page }) => dateComparisonFeedsTheTable(page));
+
+// Compare filed its answers under the local date of the ride's first step, the table under each
+// step's UTC date: from 00:00 to 02:00 in Spain the two differ, and neither read the other's answers.
+test.describe('with the ride starting just after midnight in Spain', () => {
+  test.use({ timezoneId: 'Europe/Madrid' });
+
+  test('a date comparison with AROME at 00:30 stores its answers under the keys the table reads', async ({ page }) => {
+    const at = Date.parse('2026-09-21T00:30:00+02:00');
+    await page.clock.install({ time: at - 60000 });
+    await dateComparisonFeedsTheTable(page, at);
+  });
 });
 
 /* ---------- starting language ---------- */

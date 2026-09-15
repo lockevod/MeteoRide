@@ -76,6 +76,23 @@ var cwForecastRules = (function () {
       const arr = hourly[name];
       return Array.isArray(arr) && arr.length > idx ? arr[idx] : null;
     };
+    // Precipitation always means mm in the hour. From minutely_15 it is the sum of the four quarters
+    // that make up the nearest hour T, (T − 60 min, T], as Open-Meteo's hourly value sums the hour
+    // before T; with any of them missing or null, the hour's own value.
+    const hourRain = () => {
+      if (idx === -1 || !Array.isArray(m.precipitation)) return fromHourly('precipitation');
+      const T = parseProviderTime(hourly.time[idx], offset);
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < m.time.length; i++) {
+        const t = parseProviderTime(m.time[i], offset);
+        if (t <= T - 4 * QUARTER_MS || t > T) continue;
+        if (m.precipitation[i] == null) return fromHourly('precipitation');
+        sum += Number(m.precipitation[i]);
+        n++;
+      }
+      return n === 4 ? sum : fromHourly('precipitation');
+    };
     const get = (name) => {
       const arr = useMinutely ? m[name] : null;
       if (arr && Array.isArray(arr) && arr.length > mIdx
@@ -94,7 +111,7 @@ var cwForecastRules = (function () {
       gust: get('wind_gusts_10m'),
       windDir: get('winddirection_10m'),
       humidity: get('relative_humidity_2m'),
-      precipitation: get('precipitation'),
+      precipitation: useMinutely ? hourRain() : fromHourly('precipitation'),
       precipProb: get('precipitation_probability'),
       weatherCode: get('weathercode'),
       uvIndex: get('uv_index'),
