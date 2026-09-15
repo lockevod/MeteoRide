@@ -96,7 +96,7 @@
       app.addListener('appStateChange', (state) => {
         if (!state || !state.isActive) return;
         consumePendingShare();
-        warnIfStartTimeHasPassed();
+        refreshOnResume();
       });
       if (window.CW_PLATFORM === 'android') {
         app.addListener('backButton', ({ canGoBack }) => {
@@ -263,19 +263,16 @@
 
   /* ---------- coming back to the app later ---------- */
 
-  // An app is resumed, not reloaded. Come back hours later and the table is still
-  // the one computed for a departure time that has already passed, with nothing
-  // saying so. Fifteen minutes of slack, because leaving a little late is normal.
-  const STALE_START_MS = 15 * 60 * 1000;
+  // An app is resumed, not reloaded. Come back hours later and the table would still be the
+  // one computed for a departure that has passed. The start rule runs again (a time chosen
+  // ahead stays), and the forecast is computed again when that moved the start or the
+  // snapshot on screen is more than half an hour old.
+  const RESUMED_STALE_MS = 30 * 60 * 1000;
 
-  function warnIfStartTimeHasPassed() {
-    if (!window.lastGPXFile) return;    // nothing on screen to be wrong about
-    const field = document.getElementById('datetimeRoute');
-    if (!field || !field.value) return;
-    const start = new Date(field.value);
-    if (isNaN(start.getTime())) return;
-    if (Date.now() - start.getTime() < STALE_START_MS) return;
-    notify('start_time_passed', 'The start time has passed. Set a new one and run it again.');
+  function refreshOnResume() {
+    const moved = !!(window.cwApplyStartRule && window.cwApplyStartRule());
+    const shown = window.cw.currentSnapshot ? window.cw.currentSnapshot() : null;
+    if (moved || (shown && Date.now() - shown.createdAt > RESUMED_STALE_MS)) window.cw.startForecast();
   }
 
   /* ---------- reopening where you left off ---------- */

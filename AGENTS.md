@@ -177,10 +177,16 @@ What is still open, and why it was left:
   interval select beside it. The app's viewport carries `user-scalable=no` instead
   (added in `build-www.mjs`, so the website keeps pinch-zoom), which removes the cause
   rather than working around it, and every control keeps the size the website gives it.
-- **An app is resumed, not reloaded.** Come back hours later and the table is still the
-  one computed for a departure that has passed. `warnIfStartTimeHasPassed` says so on
-  `appStateChange`, with fifteen minutes of slack. Nothing is changed automatically: a
-  deliberately chosen future time must not be overwritten.
+- **An app is resumed, not reloaded.** Come back hours later and the table would still be the
+  one computed for a departure that has passed. On `appStateChange` the start rule runs again
+  (`cwApplyStartRule` in `app.js`: the time chosen while it is still ahead, otherwise now
+  rounded up to the next quarter hour), and the forecast is computed again when that moved the
+  start or the snapshot on screen is more than thirty minutes old. A deliberately chosen future
+  time is never overwritten. The same rule runs after every `loadSettings` (also the one
+  `restoreSettings` repeats) and whenever a computation reads its settings, and changing the
+  field saves it. Both boot blocks in `app.js` used to overwrite the field with now, so a saved
+  time never survived a reload; only the `DOMContentLoaded` one runs (`init()` is never called),
+  and neither overwrites it any more.
 - **localStorage inside a web view is not durable.** iOS reclaims WebKit storage when
   the device runs short of space, which would wipe the units, the language and the API
   key. Settings are mirrored to Preferences (UserDefaults, SharedPreferences) on every

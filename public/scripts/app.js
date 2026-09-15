@@ -614,6 +614,14 @@ function applyStartRule() {
   return start;
 }
 
+// The same rule after every loadSettings (utils.js) and when the app comes back (native.js).
+// True when the field had to move.
+window.cwApplyStartRule = function () {
+  const before = getVal("datetimeRoute");
+  applyStartRule();
+  return getVal("datetimeRoute") !== before;
+};
+
 // Everything a computation depends on, read once when it starts. A setting changed while
 // it is still fetching belongs to the next computation, never to the rest of this one.
 function readForecastSettings() {
@@ -3132,13 +3140,8 @@ function init() {
   updateProviderOptions();
   setupDateLimits();
 
-  // Ajuste del selector de hora: pasos 15 min y valor inicial redondeado hacia arriba
-  const dt = document.getElementById("datetimeRoute");
-  if (dt) {
-    dt.step = 900; // 15 minutos
-    const rounded = roundToNextQuarterISO(new Date());
-    dt.value = rounded;
-  }
+  // The start field keeps what loadSettings left in it once the start rule has run
+  // (cwApplyStartRule); setupDateLimits gives it its step and minimum.
   // Defensive fallback: if some other script cleared the value, set it after a short delay
   // so the input always contains a sensible rounded default on page load.
   setTimeout(() => {
@@ -3371,13 +3374,8 @@ document.addEventListener("DOMContentLoaded", () => {
   updateProviderOptions();
   setupDateLimits();
 
-  // Ajuste del selector de hora: pasos 15 min y valor inicial redondeado hacia arriba
-  const dt = document.getElementById("datetimeRoute");
-  if (dt) {
-    dt.step = 900; // 15 minutos
-    const rounded = roundToNextQuarterISO(new Date());
-    dt.value = rounded;
-  }
+  // The start field keeps what loadSettings left in it once the start rule has run
+  // (cwApplyStartRule); setupDateLimits gives it its step and minimum.
 
   // Observe map container size changes and window resizes to keep track centered
   const mapEl = document.getElementById("map");

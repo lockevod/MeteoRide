@@ -3307,45 +3307,84 @@ test('the settings panel still fits across the screen', async ({ page }) => {
   await expect(page.locator('#apiKeyOW')).toBeVisible();
 });
 
-test('coming back later says the start time has passed', async ({ page }) => {
-  const control = { celsius: 18, offline: false };
-  await recordNotices(page);
-  await installNativeBridge(page);
-  await stubProvider(page, control);
+/* ---------- the start time (spec §4.8) ---------- */
+
+const startField = (page) => page.locator('#datetimeRoute');
+const shownTimes = (page) =>
+  page.evaluate(() => [...document.querySelectorAll('#weatherTable .time-cell')].map((c) => c.textContent.trim()));
+/** Sets the start field the way the picker does, with its change event. */
+const chooseStart = (page, local) =>
+  page.evaluate((v) => {
+    const el = document.getElementById('datetimeRoute');
+    el.value = v;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, local);
+
+test('a start time chosen ahead is saved, and a reload without touching anything else keeps it', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-09-20T08:07:00') });
+  await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
-  await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect(routeName(page)).toContainText('Masnou');
-
-  // The phone was in a pocket for a couple of hours. The app is resumed, not
-  // reloaded, so the table is still the one computed for a departure already gone.
-  await page.evaluate(() => {
-    const field = document.getElementById('datetimeRoute');
-    const past = new Date(Date.now() - 2 * 3600 * 1000);
-    past.setSeconds(0, 0);
-    field.value = past.toISOString().slice(0, 16);
-    window.__appListeners.appStateChange({ isActive: true });
-  });
-
-  await expect
-    .poll(() => page.evaluate(() => window.__notices))
-    .toEqual(expect.arrayContaining([expect.stringMatching(/start time has passed|hora de salida ya ha pasado/)]));
+  await chooseStart(page, '2026-09-22T10:00');
+  await page.reload();
+  await mapReady(page);
+  await page.waitForTimeout(300);
+  await expect(startField(page)).toHaveValue('2026-09-22T10:00');
 });
 
-test('coming back while the departure is still ahead says nothing', async ({ page }) => {
-  const control = { celsius: 18, offline: false };
-  await recordNotices(page);
+test('a start time saved in the past comes back as now, rounded up to the quarter hour', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-09-20T08:07:00') });
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ datetimeRoute: '2026-09-20T06:00' })));
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.waitForTimeout(300);
+  await expect(startField(page)).toHaveValue('2026-09-20T08:15');
+});
+
+// An app is resumed, not reloaded: coming back hours later used to leave the table of a departure
+// already gone, and only say so.
+test('coming back to the app after the start has passed moves it to now, and the table follows', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-09-20T08:00:00') });
   await installNativeBridge(page);
-  await stubProvider(page, control);
+  await stubProvider(page, { celsius: 18, offline: false });
   await page.goto('/index.html');
   await mapReady(page);
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await expect(startField(page)).toHaveValue('2026-09-20T08:00');
+  expect((await shownTimes(page))[0]).toContain('08:00');
 
+  // Twenty minutes in a pocket: the start has passed, while the forecast on screen is not yet
+  // old enough to be computed again for its age alone.
+  await page.clock.fastForward('20:00');
   await page.evaluate(() => window.__appListeners.appStateChange({ isActive: true }));
-  await page.waitForTimeout(1500);
-  const seen = await page.evaluate(() => window.__notices);
-  expect(seen.join(' | ')).not.toMatch(/start time has passed|hora de salida ya ha pasado/);
+
+  await expect(startField(page)).toHaveValue('2026-09-20T08:30');
+  await expect.poll(async () => (await shownTimes(page))[0]).toContain('08:30');
+});
+
+test('coming back with the start still ahead computes nothing until the forecast is half an hour old', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-09-20T08:00:00') });
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 18, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await chooseStart(page, '2026-09-20T12:00');
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await countLaunches(page);
+
+  await page.clock.fastForward('10:00');
+  await page.evaluate(() => window.__appListeners.appStateChange({ isActive: true }));
+  await page.waitForTimeout(500);
+  expect((await page.evaluate(() => window.__launches)).launch, 'a recent forecast was computed again').toBe(0);
+  await expect(startField(page)).toHaveValue('2026-09-20T12:00');
+
+  await page.clock.fastForward('25:00');
+  await page.evaluate(() => window.__appListeners.appStateChange({ isActive: true }));
+  await expect.poll(async () => (await page.evaluate(() => window.__launches)).launch).toBe(1);
+  await expect(startField(page)).toHaveValue('2026-09-20T12:00');
 });
 
 test('a booby-trapped map tile cannot run script', async ({ page }) => {

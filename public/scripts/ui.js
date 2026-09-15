@@ -751,6 +751,8 @@
         } else {
           dtEl.value = rounded;
         }
+        // Saved like every other setting, so a reload keeps a time chosen ahead.
+        window.saveSettings();
         // Recomputed; publishing launches the comparison chosen, or a date comparison running by itself.
         window.cw.settingsChanged();
       });

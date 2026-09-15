@@ -111,7 +111,6 @@
       route_read_failed: "No se ha podido leer la ruta.",
       route_not_saved: "No se ha podido guardar la ruta en las recientes.",
       map_offline: "Mapa sin conexión",
-      start_time_passed: "La hora de salida ya ha pasado. Cambia la hora y vuelve a calcular.",
       ride_alerts_label: "Avisarme si cambia el tiempo de la ruta",
       ride_alerts_watching: "Vigilando {name} hasta las {until}",
       ride_alerts_denied: "Las notificaciones de MeteoRide están desactivadas. Actívalas en Ajustes para recibir avisos.",
@@ -230,7 +229,6 @@
       route_read_failed: "Could not read the route.",
       route_not_saved: "The route could not be saved to recent routes.",
       map_offline: "Map unavailable offline",
-      start_time_passed: "The start time has passed. Set a new one and run it again.",
       ride_alerts_label: "Tell me if the weather on the route changes",
       ride_alerts_watching: "Watching {name} until {until}",
       ride_alerts_denied: "Notifications are off for MeteoRide. Allow them in Settings to get ride alerts.",
@@ -490,6 +488,9 @@
       if (retries <= 0) return;
       setTimeout(() => tryApplyTranslations(retries - 1, delay), delay);
     })();
+
+    // A stored start that has passed becomes now, rounded up; one still ahead is kept (app.js).
+    try { if (window.cwApplyStartRule) window.cwApplyStartRule(); } catch (e) { /* ignore */ }
   }
   function getVal(id) {
     const el = document.getElementById(id);
@@ -697,7 +698,6 @@
     dt.step = 900;
     const rounded = roundToNextQuarterISO(new Date());
     dt.min = rounded;
-    if (!dt.value || new Date(dt.value) < new Date(dt.min)) dt.value = dt.min;
   }
   function haversine(p1, p2) {
     const R = 6371, toRad = (deg) => (deg * Math.PI) / 180;
