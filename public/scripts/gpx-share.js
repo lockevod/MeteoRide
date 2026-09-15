@@ -260,40 +260,47 @@
     };
   }
 
-  async function fetchText(url) {
-    const res = await fetch(url);
+  async function fetchText(url, init) {
+    const res = await fetch(url, init);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
   }
 
-  async function loadFromParams() {
+  // A hosted route is downloaded inside its request, so a route picked while it downloads is
+  // the later request and wins. What is not a GPX (a login page, say) fails the request with a
+  // notice. It is kept among recent routes only once confirmed.
+  function loadFromParams() {
     const { gpxUrl, name } = getParams();
     if (!gpxUrl) return;
-    try {
-      const txt = await fetchText(gpxUrl);
-      if (!txt || !txt.includes("<gpx")) throw new Error("Fetched content is not GPX");
-      cwInjectGPXFromText(txt, name);
-    } catch (e) {
-      console.warn('[ingest] loadFromParams error', e);
-    }
+    cwReceiveRoute({
+      source: 'url',
+      name,
+      importOn: 'commit',
+      fetchText: async () => {
+        const txt = await fetchText(gpxUrl);
+        if (!txt || !txt.includes("<gpx")) throw new Error("Fetched content is not GPX");
+        return txt;
+      },
+    });
   }
 
-  // Auto-load GPX from server share_id parameter
-  async function loadSharedIdIfPresent() {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const sid = urlParams.get('shared_id');
-      if (!sid) return;
-      const shareUrl = `/shared/${encodeURIComponent(sid)}`;
-      const resp = await fetch(shareUrl, { credentials: 'omit' });
-      if (!resp.ok) return;
-      const gpxText = await resp.text();
-      if (gpxText && gpxText.length > 0) {
-        window.cwInjectGPXFromText(gpxText, `shared_${sid}.gpx`);
-        // Try to delete server copy to minimize retention
-        try { await fetch(shareUrl, { method: 'DELETE' }); } catch (_) {}
-      }
-    } catch (e) { console.warn('shared_id load failed', e); }
+  // A route /share keeps for two minutes. Its request is made as the download starts; it is
+  // kept among recent routes as soon as its text arrives, whatever the request ends as, and the
+  // server copy is deleted then, without waiting for the answer.
+  function loadSharedIdIfPresent() {
+    const sid = new URLSearchParams(window.location.search).get('shared_id');
+    if (!sid) return;
+    const shareUrl = `/shared/${encodeURIComponent(sid)}`;
+    cwReceiveRoute({
+      source: 'shared-id',
+      name: `shared_${sid}.gpx`,
+      importOn: 'arrival',
+      fetchText: async () => {
+        const text = await fetchText(shareUrl, { credentials: 'omit' });
+        fetch(shareUrl, { method: 'DELETE' }).catch(() => {});
+        return text;
+      },
+    });
   }
 
   // NOTE: localizeHeader moved to ui.js; gpx-share.js will call the global function if present.

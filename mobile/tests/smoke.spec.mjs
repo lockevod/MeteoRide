@@ -2320,6 +2320,85 @@ test('a route handed over in sessionStorage is shown, kept among recent routes a
     .toEqual([null, null]);
 });
 
+/** Answers GETs of `pathname` with `body` only once the test calls the function this returns;
+ *  every DELETE of it is listed in `deletes`. */
+async function holdDownload(page, pathname, body, deletes = []) {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  await page.route((url) => url.pathname === pathname, async (route) => {
+    if (route.request().method() === 'DELETE') {
+      deletes.push(pathname);
+      return route.fulfill({ status: 204 });
+    }
+    await held;
+    return route.fulfill({ status: 200, contentType: 'application/gpx+xml', body });
+  });
+  return release;
+}
+
+// The download used to come before the request, so a file picked while it downloaded was the
+// earlier request and lost to the link, which was kept among recent routes as well.
+test('a ?gpx_url= still downloading when a file is picked loses to the file, and is not kept among recent routes', async ({ page }) => {
+  await goOffline(page);
+  const release = await holdDownload(page, '/hosted.gpx', routeAt('Enlace', 41.48));
+  await page.goto('/index.html?gpx_url=/hosted.gpx&name=hosted.gpx');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequests()), 'the link asked before its download').toBe(true);
+
+  await pickText(page, 'picked.gpx', routeAt('Elegida', 40.42));
+  await expect(routeName(page)).toHaveText('Elegida');
+  release();
+  await page.waitForTimeout(800);
+  await expect(routeName(page)).toHaveText('Elegida');
+  await importsDone(page);
+  expect(await storedNames(page)).toEqual(['picked.gpx']);
+});
+
+test('a ?gpx_url= route that is confirmed is kept among recent routes under its name', async ({ page }) => {
+  await goOffline(page);
+  await page.route((url) => url.pathname === '/hosted.gpx',
+    (route) => route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: routeAt('Enlace', 41.48) }));
+  await page.goto('/index.html?gpx_url=/hosted.gpx&name=hosted.gpx');
+  await mapReady(page);
+  await expect(routeName(page)).toHaveText('Enlace');
+  await expect.poll(() => storedNames(page)).toEqual(['hosted.gpx']);
+});
+
+test('a shared_id still downloading when a file is picked loses to the file, is still kept once its text arrives, and is deleted from the server', async ({ page }) => {
+  await goOffline(page);
+  const deletes = [];
+  const release = await holdDownload(page, '/shared/abc', routeAt('Servidor', 41.48), deletes);
+  await page.goto('/index.html?shared_id=abc');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequests()), 'shared_id asked before its download').toBe(true);
+
+  await pickText(page, 'picked.gpx', routeAt('Elegida', 40.42));
+  await expect(routeName(page)).toHaveText('Elegida');
+  release();
+  await expect.poll(() => storedNames(page)).toEqual(['picked.gpx', 'shared_abc.gpx']);
+  await expect.poll(() => deletes).toEqual(['/shared/abc']);
+  await page.waitForTimeout(300);
+  await expect(routeName(page)).toHaveText('Elegida');
+});
+
+// On the website nothing can be on screen before the link's request, which is made as the page
+// loads, so "leaves the screen alone" is an empty screen here.
+test('a ?gpx_url= that is not a GPX fails with a notice and puts nothing on screen or among recent routes', async ({ page }) => {
+  await recordNotices(page);
+  await goOffline(page);
+  await page.route((url) => url.pathname === '/login.html',
+    (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>Log in</body></html>' }));
+  await page.goto('/index.html?gpx_url=/login.html');
+  await mapReady(page);
+  const readFailed = await page.evaluate(() => window.t('route_read_failed'));
+  await expect.poll(() => page.evaluate(() => window.__notices)).toContain(readFailed);
+
+  expect(await page.evaluate(() => window.lastGPXFile)).toBe(null);
+  await expect(trackDrawn(page)).toHaveCount(0);
+  await importsDone(page);
+  expect(await storedRoutes(page)).toEqual([]);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {
