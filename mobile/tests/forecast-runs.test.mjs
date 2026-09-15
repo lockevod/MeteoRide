@@ -158,6 +158,39 @@ test('a snapshot carries its identities and the route it was computed for', asyn
   assert.deepEqual(plain(snapshot.route), { name: 'r7.gpx', fingerprint: 'fp7' });
 });
 
+// What the ride watch and the comparison read from a snapshot, and only from it (spec §4.6).
+test('a snapshot carries the interval, the language and the alerts key the computation read', async () => {
+  let h = harness();
+  h.s.values.language = 'es';
+  let a = h.run(41);
+  h.answer(0, ok(openMeteo())); await a;
+  let [snapshot] = h.s.published();
+  assert.equal(snapshot.settings.interval, 60);
+  assert.equal(snapshot.settings.lang, 'es');
+  assert.equal(snapshot.settings.alertsKey, 'a-valid-looking-key');
+
+  // Warnings off: nothing to look up in the background, so no key.
+  h = harness();
+  h.s.elements.showWeatherAlerts = { checked: false };
+  a = h.run(41);
+  h.answer(0, ok(openMeteo())); await a;
+  [snapshot] = h.s.published();
+  assert.equal(snapshot.settings.lang, 'en');
+  assert.equal(snapshot.settings.alertsKey, '');
+});
+
+test('currentSnapshot is the published snapshot of the confirmed route, and nothing else', async () => {
+  const { s, run, confirm, answer } = harness();
+  assert.equal(s.cw.currentSnapshot(), null, 'nothing published');
+  const a = run(41, 1);
+  answer(0, ok(openMeteo())); await a;
+  const [snapshot] = s.published();
+  assert.equal(s.cw.currentSnapshot(), snapshot);
+  // Another route confirmed: the snapshot on screen belongs to a route no longer there.
+  confirm(2, line(42));
+  assert.equal(s.cw.currentSnapshot(), null);
+});
+
 test('a replaced computation does not let go of the indicator claimed by the one replacing it', async () => {
   const { s, run, answer } = harness();
   const a = run(41);
@@ -435,7 +468,8 @@ test('settings changed while a computation is fetching do not reach the rest of 
   answer(1, ok(openMeteo()));
   await done;
   assert.deepEqual(plain(s.published()[0].settings),
-    { provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true });
+    { provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true,
+      interval: 60, lang: 'en', alertsKey: 'a-valid-looking-key' });
 });
 
 test('an API key changed while a computation is fetching is not used by its later steps', async () => {

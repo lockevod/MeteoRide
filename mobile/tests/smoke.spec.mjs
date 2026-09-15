@@ -1050,6 +1050,26 @@ const pickText = (page, name, text) =>
 
 const loadFailedNotice = /Could not open the route|No se ha podido abrir la ruta/;
 
+const currentRouteName = (page) => page.evaluate(() => window.cw.currentSnapshot()?.route.name ?? null);
+
+// Consumers (ride watch, comparison) work from cw.currentSnapshot(). A route still being read
+// has not replaced anything yet, so the snapshot on screen stays theirs until it confirms.
+test('the snapshot on screen stays current while another route is read, not once that route is confirmed', async ({ page }) => {
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => currentRouteName(page)).toBe('route.gpx');
+
+  await requestHeld(page, 'B');
+  await page.waitForTimeout(200);
+  expect(await currentRouteName(page)).toBe('route.gpx');
+
+  await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
+  await expect(routeName(page)).toHaveText('Ruta B');
+  expect(await currentRouteName(page)).not.toBe('route.gpx');
+});
+
 test('a route requested first and read last does not replace the one requested after it', async ({ page }) => {
   await stubProvider(page, { celsius: 21, offline: false });
   await page.goto('/index.html');

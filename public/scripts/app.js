@@ -583,14 +583,27 @@ window.cwHasCurrentForecast = () => !!confirmedRoute && (
 // Everything a computation depends on, read once when it starts. A setting changed while
 // it is still fetching belongs to the next computation, never to the rest of this one.
 function readForecastSettings() {
+  const keys = { meteoblue: getVal("apiKey") || "", openweather: getVal("apiKeyOW") || "" };
+  const alerts = !!document.getElementById("showWeatherAlerts")?.checked;
   return {
     provider: apiSource,
     units: { temp: getVal("tempUnits"), wind: getVal("windUnits") },
-    keys: { meteoblue: getVal("apiKey") || "", openweather: getVal("apiKeyOW") || "" },
+    keys,
     noticeAll: !!document.getElementById("noticeAll")?.checked,
-    alerts: !!document.getElementById("showWeatherAlerts")?.checked,
+    alerts,
+    interval: Number(getVal("intervalSelect")) || 15,
+    lang: getVal("language") === "es" ? "es" : "en",
+    // What the ride watch needs to look up official warnings in the background, and only
+    // when the user shows them. Kept in memory with the snapshot, never stored.
+    alertsKey: alerts ? keys.openweather : "",
   };
 }
+
+// The published snapshot while it still belongs to the confirmed route, or null. What the
+// ride watch and the comparison work from: a route still being read changes nothing here.
+window.cw.currentSnapshot = () =>
+  (publishedSnapshot && confirmedRoute && publishedSnapshot.requestId === confirmedRoute.requestId
+    ? publishedSnapshot : null);
 
 async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   // Still the latest computation launched, of the route last confirmed. Checked after
@@ -1070,7 +1083,10 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     requestId: ids.requestId,
     computationId: ids.computationId,
     route,
-    settings: { provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts },
+    settings: {
+      provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts,
+      interval: settings.interval, lang: settings.lang, alertsKey: settings.alertsKey,
+    },
     steps: snapshotSteps,
     // Providers only report warnings active when asked; keep those near the ride.
     alerts: timeSteps.length
