@@ -129,6 +129,8 @@
       prepare_offline_replaced: "Sustituye a la ruta preparada antes.",
       compare_needs_coverage: "Comparar proveedores necesita cobertura.",
       prepared_expired_needs_coverage: "La ruta preparada ya no sirve para esta hora de salida y se ha borrado: la previsión necesita cobertura.",
+      offline_cannot_recalculate: "Sin cobertura no se puede recalcular la previsión: se mantiene la guardada.",
+      prepared_out_of_range: "Sin cobertura: la ruta preparada no tiene datos para una salida a más de 3 h de la hora para la que se preparó.",
       prepared_replayed: "Previsión guardada hace {age} para salir a las {at}, recolocada a la hora de salida.",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
@@ -250,6 +252,8 @@
       prepare_offline_replaced: "It replaces the route prepared before.",
       compare_needs_coverage: "Comparing providers needs coverage.",
       prepared_expired_needs_coverage: "The prepared route no longer fits this start time and was deleted: the forecast needs coverage.",
+      offline_cannot_recalculate: "Without coverage the forecast cannot be computed again: the saved one stays.",
+      prepared_out_of_range: "No coverage: the prepared route has no data for a start more than 3 h from the one it was prepared for.",
       prepared_replayed: "Forecast saved {age} ago for a {at} start, moved to this start time.",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string

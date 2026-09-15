@@ -961,7 +961,7 @@ const preparedStored = (page) =>
     };
   }));
 const prepare = (page) => page.locator('#cwPrepareOffline').click();
-const preparedNotice = /Route saved|Ruta preparada/;
+const preparedNotice = /Route saved|Route only partly saved|Ruta preparada/;
 const replacedNotice = /replaces the route|Sustituye a la ruta/;
 
 async function routeWithForecast(page, control = {}) {
@@ -1147,6 +1147,12 @@ test('with coverage but every provider failing, the prepared forecast is replaye
   await expect.poll(() => shownOrigin(page)).toBe('prepared');
   expect((await shownTemperatures(page))[0]).toBe('13º');
   await expect(page.locator('.notice')).toContainText(/saved 45 min ago|hace 45 min/);
+
+  // With coverage, a change over the replay is computed like any other (and, still failing, replays).
+  const id = await page.evaluate(() => window.cw.currentSnapshot().computationId);
+  await setTempUnits(page, 'F');
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.computationId)).toBeGreaterThan(id);
+  await expect(page.locator('.notice')).not.toContainText(/cannot be computed again|no se puede recalcular/);
 });
 
 test('with compare chosen and no coverage, the replayed forecast stays with a notice and nothing is compared', async ({ page }) => {
@@ -1261,6 +1267,57 @@ test('a route shared at start-up still wins over the prepared route', async ({ p
   await page.waitForTimeout(1500);
   await expect(routeName(page)).toHaveText('Compartida');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+});
+
+/* ---------- changes with a replayed forecast and no coverage (spec §4.9.3, step 6) ---------- */
+
+const cannotRecalculate = /cannot be computed again|no se puede recalcular/;
+const outOfRangeNotice = /more than 3 h from the one it was prepared for|más de 3 h de la hora/;
+
+/** A replayed forecast on screen, without coverage, 45 minutes after preparing at T0. */
+async function replayOnScreen(page, control) {
+  await prepareThenLoseCoverage(page, control, '45:00');
+  await resume(page);
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+}
+
+test('with a replayed forecast and no coverage, changing the units says it cannot compute and keeps the table', async ({ page }) => {
+  await replayOnScreen(page, { now: T0 });
+  const id = await page.evaluate(() => window.cw.currentSnapshot().computationId);
+  const temps = await shownTemperatures(page);
+
+  await setTempUnits(page, 'F');
+  await expect(page.locator('.notice')).toContainText(cannotRecalculate);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.cw.currentSnapshot()?.computationId)).toBe(id);
+  expect(await shownOrigin(page)).toBe('prepared');
+  expect(await shownTemperatures(page)).toEqual(temps);
+});
+
+test('with a replayed forecast and no coverage, a start within three hours moves the replay and the values follow', async ({ page }) => {
+  // The answer for the last point ends an hour after T0: two hours later a replay reads nothing there,
+  // where a live reading would take its last hour.
+  const control = { now: T0, hours: (url) => (url.searchParams.get('latitude') === '41.468' ? 1 : 72) };
+  await replayOnScreen(page, control);
+  const steps = await page.evaluate(() => window.cw.currentSnapshot().steps.length);
+  expect(await shownTemperatures(page)).toHaveLength(steps);
+
+  await chooseStart(page, localAt(T0 + 2 * 3600000));
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');   // 10:00
+  expect(await shownOrigin(page)).toBe('prepared');
+  expect(await shownTemperatures(page)).toHaveLength(steps - 1);
+  await expect(page.locator('.notice')).toContainText(/moved to this start time|recolocada a la hora de salida/);
+});
+
+test('with a replayed forecast and no coverage, a start more than three hours away says so, shows no data and keeps the prepared route', async ({ page }) => {
+  await replayOnScreen(page, { now: T0 });
+  await chooseStart(page, localAt(T0 + 4 * 3600000));
+
+  await expect(page.locator('.notice')).toContainText(outOfRangeNotice);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBe(0);
+  expect(await shownOrigin(page)).toBe('prepared');
+  expect(await preparedStored(page)).not.toBeNull();
+  expect(await page.evaluate(() => window.cwPreparedRecord())).not.toBeNull();
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both

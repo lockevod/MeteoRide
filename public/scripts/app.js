@@ -535,6 +535,19 @@ function publishState() {
 // One that stops or throws before it fetches lets go here, or it would stay current forever.
 window.cwLaunchComputation = function () {
   if (!confirmedRoute) return null;
+  // Without coverage, with a replayed snapshot on screen (spec §4.9.3, step 6), a change other than
+  // the start cannot be computed: nothing is launched, so that snapshot stays the current forecast,
+  // and the user is told. A change of start replays it again below, within the margin or not.
+  const shown = window.cw.currentSnapshot();
+  const replayShown = !!shown && shown.origin === "prepared" && window.cw.utils.isOffline();
+  if (replayShown) {
+    let latest = null;
+    try { latest = readForecastSettings(); } catch (_) { /* the launch below says so */ }
+    if (latest && !sameButStart(shown.settings, latest)) {
+      setNotice(t("offline_cannot_recalculate"), "warn");
+      return lastComputationId;
+    }
+  }
   const cid = ++lastComputationId;
   window.cw.releaseLoadingPrefix("forecast:");
   // A comparison of the snapshot this computation replaces will not paint, so it lets go too.
@@ -547,8 +560,10 @@ window.cwLaunchComputation = function () {
     const settings = readForecastSettings();
     const ids = { requestId: confirmedRoute.requestId, computationId: cid };
     // Without coverage, a prepared snapshot of this route within three hours of the start is put
-    // back instead, and nothing is asked for (app only: only native.js prepares).
-    const prepared = window.cw.utils.isOffline() ? usablePreparedRecord(settings) : null;
+    // back instead, and nothing is asked for; with a replay already on screen, whatever the start
+    // (app only: only native.js prepares).
+    const prepared = !window.cw.utils.isOffline() ? null
+      : replayShown ? preparedRecordOfRoute() : usablePreparedRecord(settings);
     if (prepared) {
       replay(prepared, ids, settings);
       return cid;
@@ -580,23 +595,42 @@ window.cwConfirmedRouteText = () => (confirmedRoute
 // The prepared record (native.js) that can stand in for the confirmed route at this start: the
 // same route, prepared for a start at most three hours away. Always null on the website.
 function usablePreparedRecord(settings) {
-  const record = window.cwPreparedRecord ? window.cwPreparedRecord() : null;
+  const record = preparedRecordOfRoute();
   return cwForecastRules.usablePrepared(record, { fingerprint: confirmedRoute.fingerprint, startMs: settings.start })
     ? record : null;
+}
+
+// The prepared record of the confirmed route, whatever start it was prepared for.
+function preparedRecordOfRoute() {
+  const record = window.cwPreparedRecord ? window.cwPreparedRecord() : null;
+  return record && record.snapshot.route.fingerprint === confirmedRoute.fingerprint ? record : null;
+}
+
+// Two readings of the settings that would compute the same forecast but for its start. Choosing
+// compare computes nothing of its own; language and notices only change how it looks.
+function sameButStart(a, b) {
+  const computed = (s) => JSON.stringify([s.units && s.units.temp, s.units && s.units.wind, s.speed, s.interval,
+    s.alerts, s.keys && s.keys.meteoblue, s.keys && s.keys.openweather]);
+  return computed(a) === computed(b) && (b.provider === "compare" || a.provider === b.provider);
 }
 
 // Puts a prepared snapshot back on screen, moved to this computation's start (spec §4.9.3). It is a
 // computation like any other: it carries the identities it was launched with and publishes only
 // while they are current. The answers are the stored ones; the keys are the ones in use now, since
-// the record holds none. Returns whether it published.
+// the record holds none. A start more than three hours away (changed by hand with a replay on
+// screen) shows every step without data and says so; the record itself is kept (spec §4.9.3,
+// step 6). Returns whether it published.
 function replay(record, ids, settings) {
   const stored = record.snapshot;
   const snapshot = cwForecastRules.retime(stored, settings.start - stored.settings.start);
+  const inRange = cwForecastRules.usablePrepared(record, { fingerprint: stored.route.fingerprint, startMs: settings.start });
+  if (!inRange) snapshot.steps = snapshot.steps.map((s) => ({ ...s, payload: null }));
   snapshot.requestId = ids.requestId;
   snapshot.computationId = ids.computationId;
   snapshot.settings = { ...snapshot.settings, keys: settings.keys, alertsKey: settings.alertsKey };
   snapshot.outcome = { ...stored.outcome, preparedAt: stored.createdAt, preparedFor: stored.settings.start };
   const published = publish(snapshot);
+  if (published && !inRange) setNotice(t("prepared_out_of_range"), "warn");
   if (runningComputationId === ids.computationId) runningComputationId = null;
   return published;
 }
