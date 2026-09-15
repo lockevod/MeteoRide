@@ -272,7 +272,7 @@
 
   function refreshOnResume() {
     const moved = !!(window.cwApplyStartRule && window.cwApplyStartRule());
-    expireIfPast(preparedRecord);
+    expireIfPast(preparedRecord).then((dropped) => { if (dropped) notifyExpired(); });
     const shown = window.cw.currentSnapshot ? window.cw.currentSnapshot() : null;
     if (moved || (shown && Date.now() - shown.createdAt > RESUMED_STALE_MS)) window.cw.startForecast();
   }
@@ -288,25 +288,37 @@
     // restore would be a later request and replace it. Boot runs this before anything else in
     // the app asks, but the sessionStorage handoff (initGpxShare) asks while app.js loads,
     // before boot. lastGPXFile is set only on confirming.
-    if (window.lastGPXFile || window.cw.hasRouteRequests()) return;
-
     // A route arriving by URL or by share wins; do not fight it.
     const params = new URLSearchParams(window.location.search || '');
-    if (params.has('gpx_url') || params.has('url') || params.has('shared') || params.has('shared_id')) return;
+    if (window.lastGPXFile || window.cw.hasRouteRequests()
+        || params.has('gpx_url') || params.has('url') || params.has('shared') || params.has('shared_id')) {
+      // The prepared record still belongs to this session: later changes and coming back replay or
+      // expire with it. Expired, it goes without a word, over a route that is not its own.
+      loadPreparedRecord().then(expireIfPast);
+      return;
+    }
+    return openLastRoute();
+  }
 
+  // The restore's own request, past the checks above: they no longer hold once it has asked.
+  async function openLastRoute() {
     // The request is made before any wait, so a route that arrives while the recent
     // routes are still loading is a later request and replaces this one. Five seconds is
     // generous for an IndexedDB read and short enough that a first run with nothing
     // stored is not left in silence.
     let nothingStored = false;
+    let expired = false;
+    let opened = null;
     const result = await window.cw.requestRoute({
       source: 'recent',
       read: async () => {
-        // The prepared route comes first (spec §4.7): while its start is within three hours of the
-        // one in use it is what opens, whichever recent route is newest. Past that it is dropped.
+        // The prepared route comes first (spec §4.7): until it has expired it is what opens,
+        // whichever recent route is newest. Expired, it is dropped here and said after the request.
         const prepared = await loadPreparedRecord();
-        if (prepared && !(await expireIfPast(prepared))) {
+        if (prepared && (await expireIfPast(prepared))) expired = true;
+        else if (prepared) {
           log('restoring the prepared route', prepared.gpx.name || '');
+          opened = prepared;
           return { text: prepared.gpx.text, name: prepared.gpx.name };
         }
         const routes = await waitFor(() => {
@@ -322,10 +334,20 @@
       },
     });
 
+    // A later request replaced this one: the screen and the notice are that request's.
+    if (result === 'superseded') return;
+    // A prepared route whose text cannot be opened would stand in the way of every start for three
+    // hours: it is dropped, and the restore runs again on the recent routes. The request ends as
+    // 'failed' for a text that does not parse too; with the prepared text read, that is the only way.
+    if (result === 'failed' && opened) {
+      if (preparedRecord === opened) preparedRecord = null;
+      await writePrepared((store) => store.delete(PREPARED_KEY));
+      return openLastRoute();
+    }
+    if (expired) notifyExpired();
     // First run out of coverage: nothing to restore and no way to fetch anything.
-    // Saying so beats an empty screen that looks broken. A later request replaced this one:
-    // the screen and the notice are that request's.
-    if (result !== 'superseded' && nothingStored && !window.lastGPXFile && offline()) {
+    // Saying so beats an empty screen that looks broken.
+    if (nothingStored && !window.lastGPXFile && offline()) {
       notify('offline_first_run', 'No connection. You can open a route, but the forecast needs coverage.');
     }
   }
@@ -392,7 +414,8 @@
   // A record of another version, or one missing what a replay needs, is no record: dropped
   // without a word (spec §5).
   const wellFormed = (r) => !!(r && r.version === 1 && r.gpx && typeof r.gpx.text === 'string'
-    && r.snapshot && r.snapshot.route && r.snapshot.settings && Number.isFinite(r.snapshot.settings.start)
+    && r.snapshot && r.snapshot.route && typeof r.snapshot.route.fingerprint === 'string'
+    && r.snapshot.settings && Number.isFinite(r.snapshot.settings.start)
     && Array.isArray(r.snapshot.steps));
 
   async function loadPreparedRecord() {
@@ -412,21 +435,26 @@
     return preparedRecord;
   }
 
-  // A prepared route stands in only while the start in use is within three hours of the one it was
-  // prepared for. Past that, at start-up or when the app comes back, it is deleted, and without
-  // coverage the user is told the forecast needs coverage (spec §4.9.3, step 5). Changing the time
-  // by hand never deletes it. Resolves whether it was dropped.
+  // A prepared route is deleted, at start-up or when the app comes back (spec §4.9.3, step 5), only
+  // once it can never stand in again: the earliest start there can be, now rounded up to the quarter
+  // hour, is more than three hours past the start it was prepared for. The start in the field plays
+  // no part, so a time moved by hand, however far, never deletes it, and moved back within three hours
+  // it replays. Out of memory at once, then out of IndexedDB. Resolves whether it was dropped; saying
+  // so (notifyExpired) is the caller's.
   async function expireIfPast(record) {
     if (!record) return false;
-    if (window.cwApplyStartRule) window.cwApplyStartRule();
-    const startMs = new Date((document.getElementById('datetimeRoute') || {}).value || NaN).getTime();
+    const prepared = record.snapshot.settings.start;
+    const earliest = window.roundUpToNextQuarterDate(new Date()).getTime();
+    const startMs = Math.max(earliest, prepared);   // a start still ahead of it is always within reach
     if (cwForecastRules.usablePrepared(record, { fingerprint: record.snapshot.route.fingerprint, startMs })) return false;
     if (preparedRecord === record) preparedRecord = null;
     await writePrepared((store) => store.delete(PREPARED_KEY));
-    if (offline()) {
-      notify('prepared_expired_needs_coverage', 'The prepared route no longer fits this start time and was deleted: the forecast needs coverage.');
-    }
     return true;
+  }
+
+  function notifyExpired() {
+    if (!offline()) return;
+    notify('prepared_expired_needs_coverage', 'The prepared route no longer fits this start time and was deleted: the forecast needs coverage.');
   }
 
   async function prepareForOffline() {
@@ -440,14 +468,20 @@
     const { keys, alertsKey, ...settings } = snapshot.settings;
     const record = { version: 1, snapshot: { ...kept, settings }, gpx: { text: route.text, name: route.name } };
 
+    // What a replay can show whatever the start within three hours, not what was downloaded. Counted
+    // before anything is written: with no point covered there is nothing worth keeping, and a route
+    // prepared before must not be replaced by it.
+    const { covered, total } = cwForecastRules.preparedCoverage(record.snapshot);
+    if (!covered) {
+      notify('prepare_offline_uncovered', 'Nothing saved: no point has a forecast for every start up to 3 h earlier or later. Run it again while you have coverage.');
+      return;
+    }
     const before = await loadPreparedRecord();
     if (!(await writePrepared((store) => store.put(record, PREPARED_KEY)))) {
       notify('prepare_offline_failed', 'Could not save the prepared route.');
       return;
     }
     preparedRecord = record;
-    // What a replay can show whatever the start within three hours, not what was downloaded.
-    const { covered, total } = cwForecastRules.preparedCoverage(record.snapshot);
     const parts = [];
     if (before && before.snapshot.route.fingerprint !== record.snapshot.route.fingerprint) {
       parts.push(['prepare_offline_replaced', {}]);

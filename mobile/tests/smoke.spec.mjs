@@ -1081,6 +1081,25 @@ test('preparing another route replaces the one prepared before and says so; the 
   await expect(page.locator('.notice')).not.toContainText(replacedNotice);
 });
 
+test('preparing a forecast with no point covered stores nothing and keeps the route prepared before', async ({ page }) => {
+  const control = {};
+  await routeWithForecast(page, control);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+
+  // Another route whose forecast came out empty.
+  control.fail = true;
+  await pickText(page, 'otra.gpx', routeAt('Otra', 41.40));
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.route.name)).toBe('otra.gpx');
+  await page.evaluate(() => { document.querySelectorAll('.notice').forEach((n) => { n.textContent = ''; }); });
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(/\S/);
+  await page.waitForTimeout(300);
+  expect((await preparedStored(page)).gpx.name).toBe('route.gpx');
+  expect(await page.evaluate(() => window.cwPreparedRecord()?.gpx.name)).toBe('route.gpx');
+  await expect(page.locator('.notice')).toContainText(/Nothing saved|No se ha guardado nada/);
+});
+
 /* ---------- replaying a prepared forecast (spec §4.9.3) ---------- */
 
 const noLongerOnline = (page) =>
@@ -1238,6 +1257,15 @@ test('a route prepared twelve hours before its start and opened half an hour aft
   expect(await preparedStored(page)).not.toBeNull();
 });
 
+test('a route prepared for a start hours ahead is kept when the app comes back before then', async ({ page }) => {
+  const control = { now: T0 };
+  await prepareThenLoseCoverage(page, control, '10:00', localAt(T0 + 5 * 3600000));
+  await resume(page);
+  await page.waitForTimeout(500);
+  expect(await preparedStored(page)).not.toBeNull();
+  expect(await page.evaluate(() => window.cwPreparedRecord())).not.toBeNull();
+});
+
 test('a prepared route that is not the newest recent route opens and is replayed all the same', async ({ page }) => {
   const control = { now: T0 };
   await startClock(page);
@@ -1271,6 +1299,60 @@ test('a route shared at start-up still wins over the prepared route', async ({ p
   await page.waitForTimeout(1500);
   await expect(routeName(page)).toHaveText('Compartida');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+});
+
+test('a prepared route whose text cannot be opened is dropped at start-up, and the last recent route opens instead', async ({ page }) => {
+  const control = { now: T0 };
+  await prepareThenLoseCoverage(page, control, '45:00');
+  await page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('meteoride_prepared', 1);
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction('snapshot', 'readwrite');
+      const store = tx.objectStore('snapshot');
+      store.get('current').onsuccess = (e) =>
+        store.put({ ...e.target.result, gpx: { text: 'not a route', name: 'broken.gpx' } }, 'current');
+      tx.oncomplete = () => { db.close(); resolve(); };
+    };
+  }));
+  await page.reload();
+  await mapReady(page);
+
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(() => preparedStored(page)).toBeNull();
+  expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+});
+
+test('a start-up restore replaced by a route shared meanwhile says nothing about the prepared route it dropped', async ({ page }) => {
+  const control = { now: T0 };
+  await recordNotices(page);
+  await prepareThenLoseCoverage(page, control, '04:00:00');
+  // The share comes out of the inbox late, and until it has, the recent routes look empty: the
+  // restore is still reading when the share replaces it.
+  await installNativeBridge(page, { routes: [{ name: 'shared.gpx', gpx: routeAt('Compartida', 40.42) }], delayMs: 800 });
+  await page.addInitScript(() => {
+    let real;
+    Object.defineProperty(window, 'getRecentRoutes', {
+      configurable: true,
+      get: () => real && (() => (window.__delivered.length ? real() : [])),
+      set: (f) => { real = f; },
+    });
+  });
+  await page.reload();
+  await mapReady(page);
+
+  await expect(routeName(page)).toHaveText('Compartida');
+  await expect.poll(() => preparedStored(page)).toBeNull();
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__notices.join(' | '))).not.toMatch(expiredNotice);
+});
+
+test('opening the app on a route from a link still loads the prepared route for the session', async ({ page }) => {
+  const control = { now: T0 };
+  await prepareThenLoseCoverage(page, control, '45:00');
+  await page.goto('/index.html?shared=1');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.cwPreparedRecord()?.gpx.name ?? null)).toBe('route.gpx');
 });
 
 /* ---------- changes with a replayed forecast and no coverage (spec §4.9.3, step 6) ---------- */
@@ -1322,6 +1404,27 @@ test('with a replayed forecast and no coverage, a start more than three hours aw
   expect(await shownOrigin(page)).toBe('prepared');
   expect(await preparedStored(page)).not.toBeNull();
   expect(await page.evaluate(() => window.cwPreparedRecord())).not.toBeNull();
+});
+
+// Expiry follows the earliest start there can be, not the start in the field: only a record that can
+// never stand in again is deleted.
+test('a start moved by hand beyond the margin never deletes the prepared route: coming back or reopening keeps it, and a start back within the margin replays it', async ({ page }) => {
+  await replayOnScreen(page, { now: T0 });
+  await chooseStart(page, localAt(T0 + 5 * 3600000));
+  await expect(page.locator('.notice')).toContainText(outOfRangeNotice);
+
+  await resume(page);
+  await page.waitForTimeout(500);
+  expect(await preparedStored(page)).not.toBeNull();
+  await page.reload();
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+  await page.waitForTimeout(500);
+  expect(await preparedStored(page)).not.toBeNull();
+
+  await chooseStart(page, localAt(T0 + 3600000));
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('13º');   // 09:00
+  expect(await shownOrigin(page)).toBe('prepared');
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both
