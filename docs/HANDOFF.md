@@ -366,8 +366,8 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, tanda final de cor
 ### Pendiente por fase del rediseño
 
 - **Fase 7 — retirada y documentación.**
-  - Quitar `pinCacheKeys`, `cachedWeatherKeys` y `cw_offline_pinned`, que preparar ya no usa, y borrar
-    `cw_offline_pinned` una vez al arrancar. `warnIfStartTimeHasPassed` ya salió en la fase 6.
+  - Hecho: fuera `pinCacheKeys` y `cachedWeatherKeys`; `cw_offline_pinned` se borra una vez al
+    arrancar y el vaciado por cuota trata igual todas las entradas de caché.
   - Repaso final de `AGENTS.md` y de este documento.
 
 ### Hallazgos de la revisión del 14/09 aún abiertos

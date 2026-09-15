@@ -594,9 +594,9 @@ and says so. The coverage is counted before anything is written: the points a re
 start within three hours, in quarter hours (`cwForecastRules.preparedCoverage`). With none covered nothing
 is written, `prepare_offline_uncovered` says so, and a route prepared before stays (every provider failed,
 say); otherwise the notice says all of them, or "n of
-total". `pinCacheKeys`,
-`cachedWeatherKeys` and `cw_offline_pinned` still exist until phase 7, but nothing prepares through
-them any more.
+total". The cache-pinning of older versions (`pinCacheKeys`, `cachedWeatherKeys`) is gone: a quota
+clear-out treats every cache entry alike, and `utils.js` removes the `cw_offline_pinned` list an older
+version left behind once at start-up.
 
 `native.js` keeps the last record read or written in memory (`cwPreparedRecord()`), and launching a
 computation decides with that copy, with no wait; `cwLoadPreparedRecord()` reads IndexedDB again. A

@@ -5693,3 +5693,15 @@ test('the English help page says the same', async ({ page }) => {
     await expect(page.locator('.app-only')).toContainText(text);
   }
 });
+
+test('the list of pinned cache keys left by an older version is removed at start-up, and the cache itself stays', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('cw_offline_pinned', JSON.stringify(['cw_weather_old']));
+    localStorage.setItem('cw_weather_old', JSON.stringify({ data: {}, timestamp: Date.now() }));
+  });
+  await page.goto('/index.html');
+  await page.waitForFunction(() => !!window.cw?.utils);
+  const left = await page.evaluate(() => [localStorage.getItem('cw_offline_pinned'), localStorage.getItem('cw_weather_old')]);
+  expect(left[0]).toBeNull();
+  expect(left[1]).not.toBeNull();
+});

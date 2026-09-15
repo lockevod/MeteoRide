@@ -6,14 +6,9 @@
   // leaving an empty table. Beyond this a forecast is not worth looking at.
   const staleMaxAge = 1000 * 60 * 60 * 12;
 
-  // Keys covered by "prepare this route" survive the eviction that runs when
-  // localStorage fills up. Nothing else about them is special.
-  const PINNED_KEYS = 'cw_offline_pinned';
-
-  function pinnedKeys() {
-    try { return new Set(JSON.parse(localStorage.getItem(PINNED_KEYS) || '[]')); }
-    catch (_) { return new Set(); }
-  }
+  // Preparing a route used to pin its cache entries under this key; it now keeps its own record in
+  // IndexedDB, so the list an older version left behind is dropped once at start-up.
+  try { localStorage.removeItem('cw_offline_pinned'); } catch (_) { /* storage blocked */ }
 
   // Forecast requests are watched so the app can say why a table came out empty. A
   // computation hands fetch its own recorder (`cwRecorder`) and the wrapper notes each
@@ -558,10 +553,8 @@
       if (e.name === 'QuotaExceededError' || e.message.includes('quota')) {
         // Clear old cache entries to free space
         try {
-          const pinned = pinnedKeys();
           const keys = Object.keys(localStorage)
-            .filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'))
-            .filter(k => !pinned.has(k));
+            .filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'));
           if (keys.length > 0) {
             // Sort by timestamp (assuming keys have timestamps, but to be safe, remove oldest by access time if possible)
             // For simplicity, remove the first 10 oldest assuming they are weather caches
@@ -583,32 +576,6 @@
       }
     }
   }
-  /** Marks the cache entries a route depends on, so a quota clear-out spares them. */
-  function pinCacheKeys(keys) {
-    try {
-      localStorage.setItem(PINNED_KEYS, JSON.stringify([...new Set(keys)].slice(0, 2000)));
-      return true;
-    } catch (e) {
-      logDebug(`pinCacheKeys failed: ${e.message}`, true);
-      return false;
-    }
-  }
-
-  /** Every weather entry currently held, newest first, with its age. */
-  function cachedWeatherKeys() {
-    const out = [];
-    try {
-      for (const key of Object.keys(localStorage)) {
-        if (!key.startsWith('cw_weather_')) continue;
-        try {
-          const obj = JSON.parse(localStorage.getItem(key) || 'null');
-          if (obj && obj.timestamp) out.push({ key, timestamp: obj.timestamp });
-        } catch (_) { /* not ours, or corrupt */ }
-      }
-    } catch (e) { logDebug(`cachedWeatherKeys failed: ${e.message}`, true); }
-    return out.sort((a, b) => b.timestamp - a.timestamp);
-  }
-
   // Canonical cache key builder for weather payloads
   function makeCacheKey(providerId, dateStr, tempUnit, windUnit, lat, lon, timeAt) {
     try {
@@ -975,8 +942,6 @@
        createRecorder,
        readJson,
        staleMaxAge,
-       pinCacheKeys,
-       cachedWeatherKeys,
        isOffline,
        validateDateRange,
        validateRouteLoaded,
