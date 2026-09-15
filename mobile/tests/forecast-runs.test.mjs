@@ -45,7 +45,6 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
       tempUnits: 'C', windUnits: 'kmh', apiKey: 'a-valid-looking-key', apiKeyOW: 'a-valid-looking-key' },
     dateValidation: { valid: true },
     logDebug() {}, t: (key) => key, haversine,
-    getValidatedDateTime: () => new Date(Date.now() + 3600000),
     getCache: () => null, setCache() {}, makeCacheKey: () => 'key',
     buildProviderUrl: (prov) => prov, classifyProviderError: () => 'http',
     // The request is held until the test answers it. Answering notes the outcome in the
@@ -82,6 +81,9 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     },
   });
   s.window = s;
+  // The start field is written back as well as read.
+  s.elements.datetimeRoute = { get value() { return s.values.datetimeRoute; }, set value(v) { s.values.datetimeRoute = v; } };
+  s.roundUpToNextQuarterDate = (d) => new Date(Math.ceil(d.getTime() / 900000) * 900000);
   Object.assign(s, stubs);
   vm.createContext(s);
   vm.runInContext(`${rules}\n${slice}`, s);
@@ -374,19 +376,58 @@ test('a computation that throws lets go of its claim first, even when saying so 
   }
 });
 
-test('a start date that is empty or not a date says so, and leaves nothing current', async () => {
-  let h = harness();
-  h.s.values.datetimeRoute = '';
-  await h.run(41);
-  assert.deepEqual(h.s.notices, [['route_date_empty', 'error']]);
-  assert.deepEqual([...h.s.claims], []);
-  assert.equal(h.s.cwHasCurrentForecast(), false);
+// The start field as datetime-local writes it: local wall-clock time, minutes.
+const localIso = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
-  h = harness();
-  h.s.getValidatedDateTime = () => new Date(NaN);
-  await h.run(41);
-  assert.deepEqual(h.s.notices, [['route_date_invalid', 'error']]);
-  assert.deepEqual([...h.s.claims], []);
+// A start never earlier than now (spec §4.8): what the field says when it is ahead, now rounded
+// up to the quarter hour otherwise, and the field shows what was used.
+test('a start date that is empty, not a date or in the past computes from now rounded up, and the field shows it', async () => {
+  for (const value of ['', 'not a date', '2020-01-01T10:00']) {
+    const h = harness();
+    h.s.values.datetimeRoute = value;
+    const before = Date.now();
+    const a = h.run(41);
+    h.answer(0, ok(openMeteo())); await a;
+    const [snapshot] = h.s.published();
+    assert.ok(snapshot, `${value}: nothing published`);
+    const { start } = snapshot.settings;
+    assert.equal(start % 900000, 0, `${value}: not a quarter hour`);
+    assert.ok(start >= before && start - before <= 900000, `${value}: ${new Date(start).toISOString()}`);
+    assert.equal(new Date(snapshot.steps[0].time).getTime(), start, value);
+    assert.equal(h.s.values.datetimeRoute, localIso(start), `${value}: the field`);
+    assert.deepEqual(h.s.notices, [], value);
+  }
+});
+
+test('a snapshot carries the start and the speed it was segmented with', async () => {
+  const h = harness();
+  const start = Math.ceil((Date.now() + 2 * 3600000) / 900000) * 900000;
+  h.s.values.datetimeRoute = localIso(start);
+  h.s.values.cyclingSpeed = '24';
+  const a = h.run(41);
+  h.answer(0, ok(openMeteo())); await a;
+  const [snapshot] = h.s.published();
+  assert.equal(snapshot.settings.start, start);
+  assert.equal(snapshot.settings.speed, 24);
+  assert.equal(new Date(snapshot.steps[0].time).getTime(), start);
+  assert.equal(h.s.values.datetimeRoute, localIso(start), 'a time ahead is left as chosen');
+});
+
+test('the steps follow the speed the computation read, whatever the page says afterwards', async () => {
+  const { s, launch, answer, pending } = harness();
+  // 41 → 41.5 is about 55.6 km: at 24 km/h and an hour's interval, three steps and the arrival;
+  // at 12 km/h it would be five and the arrival.
+  const route = line(41, 41.5);
+  s.values.cyclingSpeed = '24';
+  const done = launch(route);
+  s.values.cyclingSpeed = '12';
+  for (let i = 0; i < 4; i++) { await waitFor(() => pending.length > i); answer(i, ok(openMeteo())); }
+  await done;
+  const [snapshot] = s.published();
+  assert.equal(snapshot.steps.length, 4);
+  assert.equal(snapshot.settings.speed, 24);
+  // Segmenting reads the settings it is handed, not the page.
+  assert.equal(s.segmentRouteByTime(route, { start: Date.now(), speed: 24, interval: 60 }).steps.length, 4);
 });
 
 test('a computation in flight is current until it ends', async () => {
@@ -467,9 +508,11 @@ test('settings changed while a computation is fetching do not reach the rest of 
   assert.equal(pending[1].url, 'openmeteo:C:', 'the second step used what changed after the start');
   answer(1, ok(openMeteo()));
   await done;
-  assert.deepEqual(plain(s.published()[0].settings),
+  const { start, ...settings } = plain(s.published()[0].settings);
+  assert.ok(Number.isFinite(start));
+  assert.deepEqual(settings,
     { provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true,
-      interval: 60, lang: 'en', alertsKey: 'a-valid-looking-key',
+      interval: 60, speed: 12, lang: 'en', alertsKey: 'a-valid-looking-key',
       keys: { meteoblue: 'a-valid-looking-key', openweather: 'a-valid-looking-key' } });
 });
 

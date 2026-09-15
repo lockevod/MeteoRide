@@ -383,9 +383,10 @@ function reconcileAromeVsOmCode(omCode, precip, prob, cloud) {
 }
 
 
-// The steps of a route at the speed, interval and start in the form now, or null when it
-// cannot be segmented (logged, and a start out of range also says so).
-function segmentRouteByTime(geojson) {
+// The steps of a route at the speed, interval and start of the settings a computation read
+// (readForecastSettings), or null when it cannot be segmented (logged, and a start out of
+// range also says so).
+function segmentRouteByTime(geojson, settings) {
   if (!geojson || !Array.isArray(geojson.features) || !geojson.features.length) {
     logDebug(t("geojson_invalid"), true);
     return null;
@@ -397,25 +398,12 @@ function segmentRouteByTime(geojson) {
     return null;
   }
 
-  const speed = Number(getVal("cyclingSpeed")) || 12;
-  const intervalMinutes = Number(getVal("intervalSelect")) || 15;
-  const datetimeValue = getVal("datetimeRoute");
-  if (!datetimeValue) {
-    logDebug(t("route_date_empty"), true);
-    if (window.setNotice) window.setNotice(t("route_date_empty"), 'error');
-    return null;
-  }
-
-  let startDateTime = getValidatedDateTime();
-
-  if (isNaN(startDateTime.getTime())) {
-    logDebug(t("route_date_invalid", { val: datetimeValue }), true);
-    if (window.setNotice) window.setNotice(t("route_date_invalid", { val: datetimeValue }), 'error');
-    return null;
-  }
+  const speed = settings.speed;
+  const intervalMinutes = settings.interval;
+  const startDateTime = new Date(settings.start);
 
   // Validate date range (today to today + 14 days)
-  const dateValidation = window.validateDateRange(datetimeValue, 'fecha de salida');
+  const dateValidation = window.validateDateRange(startDateTime, 'fecha de salida');
   if (!dateValidation.valid) {
     logDebug(dateValidation.error, true);
     if (window.setNotice) window.setNotice(dateValidation.error, 'error');
@@ -555,9 +543,11 @@ window.cwLaunchComputation = function () {
   runningComputationId = cid;
   let failure = null;
   try {
-    const segmented = segmentRouteByTime(confirmedRoute.geojson);
+    // Read once: the steps and the requests of this computation follow the same settings.
+    const settings = readForecastSettings();
+    const segmented = segmentRouteByTime(confirmedRoute.geojson, settings);
     if (segmented) {
-      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, readForecastSettings(),
+      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, settings,
         { requestId: confirmedRoute.requestId, computationId: cid });
       return cid;
     }
@@ -611,12 +601,27 @@ window.cwHasCurrentForecast = () => !!confirmedRoute && (
   (!!publishedSnapshot && publishedSnapshot.computationId === lastComputationId
     && publishedSnapshot.requestId === confirmedRoute.requestId)
   || runningComputationId === lastComputationId);
+// The start time rule (spec §4.8): the time chosen while it is still ahead, otherwise now
+// rounded up to the next quarter hour, and an empty or unreadable field counts as passed.
+// Whatever it gives is written back into the field. Returns the start in ms.
+function applyStartRule() {
+  const value = getVal("datetimeRoute");
+  const start = cwForecastRules.effectiveStart(Date.now(), value ? new Date(value).getTime() : NaN,
+    (ms) => roundUpToNextQuarterDate(new Date(ms)).getTime());
+  const local = new Date(start - new Date(start).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const field = document.getElementById("datetimeRoute");
+  if (field && value !== local) field.value = local;
+  return start;
+}
+
 // Everything a computation depends on, read once when it starts. A setting changed while
 // it is still fetching belongs to the next computation, never to the rest of this one.
 function readForecastSettings() {
   const keys = { meteoblue: getVal("apiKey") || "", openweather: getVal("apiKeyOW") || "" };
   const alerts = !!document.getElementById("showWeatherAlerts")?.checked;
   return {
+    start: applyStartRule(),
+    speed: Number(getVal("cyclingSpeed")) || 12,
     provider: apiSource,
     units: { temp: getVal("tempUnits"), wind: getVal("windUnits") },
     keys,
@@ -1115,6 +1120,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     computationId: ids.computationId,
     route,
     settings: {
+      start: settings.start, speed: settings.speed,
       provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts,
       interval: settings.interval, lang: settings.lang, alertsKey: settings.alertsKey,
       keys: settings.keys,   // what a comparison of this snapshot asks with; memory only
