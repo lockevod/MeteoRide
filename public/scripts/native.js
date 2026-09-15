@@ -497,17 +497,28 @@
   const WATCH_HORIZON_MS = 24 * 60 * 60 * 1000;
 
   let channelReady = false;
-  let armToken = 0;
+  let armToken = 0;   // a newer arm or a disarm supersedes an arm still waiting
+  // The route fingerprint of the watch last armed or stored: undefined until the stored one
+  // has been read at start-up, null while nothing is stored.
+  let watchFingerprint;
+  // Saves, disarms and reads reach the runner one at a time, each once the runner has
+  // answered the one before, so the save of a replaced forecast can never land after the
+  // disarm that followed it.
+  let watchQueue = Promise.resolve();
 
   function alertsWanted() {
     const el = document.getElementById('rideAlerts');
     return !!(el && el.checked);
   }
 
-  function readSettings() {
-    try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; }
-    catch (_) { return {}; }
+  function queueWatch(op) {
+    const done = watchQueue.then(op);
+    watchQueue = done.catch((e) => log('ride watch', e));
+    return done;
   }
+
+  const runnerCall = (event, details) =>
+    runnerPlugin().dispatchEvent({ label: WATCH_LABEL, event, details });
 
   async function notificationsAllowed() {
     const runner = runnerPlugin();
@@ -541,20 +552,22 @@
   const pad2 = (n) => String(n).padStart(2, '0');
   const clockLabel = (d) => pad2(d.getHours()) + ':' + pad2(d.getMinutes());
 
-  /** The record the runner works from, or null when there is nothing worth watching. */
-  function buildWatch(steps) {
+  /** The record the runner works from, built from a snapshot and nothing else (not the
+   *  page, not localStorage), or null when there is nothing worth watching. */
+  function buildWatch(snapshot) {
     const rules = window.cwWatchRules;
-    const valid = (steps || []).filter((s) =>
+    const settings = snapshot.settings || {};
+    const route = snapshot.route || {};
+    const valid = (snapshot.steps || []).filter((s) =>
       s && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lon))
         && s.time && !isNaN(new Date(s.time).getTime()));
     if (!rules || !valid.length) return null;
 
-    const intervalMin = Number(window.getVal ? window.getVal('intervalSelect') : 0) || 0;
+    const intervalMin = Number(settings.interval) || 0;
     const start = new Date(valid[0].time).getTime();
     const end = new Date(valid[valid.length - 1].time).getTime() + intervalMin * 60000;
     if (end < Date.now()) return null;   // the ride is over; nothing can change it
 
-    const settings = readSettings();
     const points = rules.sample(valid.map((s) => {
       const when = new Date(s.time);
       return {
@@ -567,8 +580,9 @@
     }));
 
     return {
-      name: (window.lastGPXFile && window.lastGPXFile.name) || 'GPX',
-      lang: settings.language === 'es' ? 'es' : 'en',
+      name: route.name || 'GPX',
+      fingerprint: route.fingerprint || '',   // ignored by the runner; tells rides apart here
+      lang: settings.lang === 'es' ? 'es' : 'en',
       createdAt: Date.now(),
       start,
       end,
@@ -576,8 +590,9 @@
       points,
       baseline: null,
       notified: [],
-      // Official warnings need the OpenWeather key, and only if the user shows them.
-      owKey: settings.showWeatherAlerts !== false ? String(settings.apiKeyOW || '') : '',
+      // Official warnings need the OpenWeather key, and only if the user shows them: the
+      // snapshot carries it only then.
+      owKey: String(settings.alertsKey || ''),
       channelId: channelReady ? WATCH_CHANNEL : '',
     };
   }
@@ -599,24 +614,34 @@
     }
   }
 
-  async function storeWatch(watch) {
-    await runnerPlugin().dispatchEvent({
-      label: WATCH_LABEL,
-      event: 'saveWatch',
-      details: { watch: watch || null },
+  // Queued. When its turn comes it runs only if no arm or disarm came after it and its
+  // snapshot is still the one on screen. Resolves true once the runner has it.
+  function saveWatch(watch, snapshot, token) {
+    const current = () => token === armToken && window.cw.currentSnapshot() === snapshot;
+    return queueWatch(async () => {
+      if (!current()) return false;
+      await runnerCall('saveWatch', { watch: watch || null });
+      watchFingerprint = watch ? watch.fingerprint : null;
+      if (current()) showWatchStatus(watch);
+      return true;
     });
-    showWatchStatus(watch);
   }
 
-  async function armWatch(steps) {
-    if (!runnerPlugin()) return;
-    const mine = ++armToken;   // a newer forecast supersedes one still being armed
+  // Arms the watch for a published snapshot. Every wait is followed by the same check,
+  // before any effect: still the latest arm, and still the snapshot on screen.
+  async function armWatch(snapshot) {
+    if (!runnerPlugin() || !snapshot) return;
+    const mine = ++armToken;
+    const current = () => mine === armToken && window.cw.currentSnapshot() === snapshot;
     try {
       if (!alertsWanted()) return;
-      const watch = buildWatch(steps);
-      if (!watch) return storeWatch(null);
+      const fresh = buildWatch(snapshot);
+      if (!fresh) return saveWatch(null, snapshot, mine);
+      watchFingerprint = fresh.fingerprint;
 
-      if (!(await notificationsAllowed())) {
+      const allowed = await notificationsAllowed();
+      if (!current()) return;
+      if (!allowed) {
         // The toggle would lie if it stayed on. Off, saved, and said out loud: the
         // user has to grant it in the system settings and tick it again.
         const el = document.getElementById('rideAlerts');
@@ -624,21 +649,30 @@
         notify('ride_alerts_denied', 'Notifications are off for MeteoRide. Allow them in the system settings to get ride alerts.');
         return;
       }
-      if (mine !== armToken) return;
-      watch.channelId = channelReady ? WATCH_CHANNEL : '';
-      await seedBaseline(watch);
-      if (mine !== armToken) return;
-      await storeWatch(watch);
-      log('watching the forecast until', new Date(watch.end).toISOString());
+      fresh.channelId = channelReady ? WATCH_CHANNEL : '';
+      // Read after every save and disarm already queued: arming the same ride again keeps
+      // what was notified, and the baseline when the points are the same.
+      const stored = await queueWatch(() => runnerCall('loadWatch', {}));
+      if (!current()) return;
+      const watch = window.cwWatchRules.reuse(stored, fresh);
+      if (!Array.isArray(watch.baseline)) {
+        await seedBaseline(watch);
+        if (!current()) return;
+      }
+      if (await saveWatch(watch, snapshot, mine)) log('watching the forecast until', new Date(watch.end).toISOString());
     } catch (e) {
       log('could not arm the watch', e);
     }
   }
 
-  async function disarmWatch() {
+  function disarmWatch() {
     if (!runnerPlugin()) return;
     ++armToken;
-    try { await storeWatch(null); } catch (e) { log('could not clear the watch', e); }
+    queueWatch(async () => {
+      await runnerCall('saveWatch', { watch: null });
+      watchFingerprint = null;
+      showWatchStatus(null);
+    }).catch((e) => log('could not clear the watch', e));
   }
 
   function showWatchStatus(watch) {
@@ -657,22 +691,31 @@
     if (!runner || !row) return;
     row.hidden = false;
 
-    // app.js announces every rendered forecast with the steps it was computed for.
+    // app.js announces every published forecast with its snapshot.
     document.addEventListener('cw:forecast', (ev) => {
-      armWatch(ev.detail && ev.detail.steps);
+      armWatch(ev.detail && ev.detail.snapshot);
     });
 
     const toggle = document.getElementById('rideAlerts');
     if (toggle) {
       toggle.addEventListener('change', () => {
-        if (toggle.checked) armWatch(window.weatherData);
+        if (toggle.checked) armWatch(window.cw.currentSnapshot());
         else disarmWatch();
       });
     }
 
+    // Called by app.js as a route is confirmed. The watch belongs to the route it was armed
+    // for: another route disarms it; the same route keeps it, so arming it again keeps
+    // what was already notified.
+    window.cwDisarmWatchFor = (fingerprint) => {
+      if (watchFingerprint === null || watchFingerprint === fingerprint) return;
+      disarmWatch();
+    };
+
     // Reflect a watch stored by a previous session.
     runner.dispatchEvent({ label: WATCH_LABEL, event: 'loadWatch', details: {} })
       .then((watch) => {
+        if (watchFingerprint === undefined) watchFingerprint = watch ? (watch.fingerprint || '') : null;
         const rules = window.cwWatchRules;
         if (watch && rules && !rules.expired(watch, Date.now())) showWatchStatus(watch);
       })

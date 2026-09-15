@@ -317,16 +317,26 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
           // reads the watch through it. Backed by sessionStorage like Preferences.
           // The key is the name the plugin registers with the bridge, which is NOT
           // its npm export — tests/plugin-names.test.mjs keeps the two in step.
+          // A test can hold the system's permission answer (`__permissionHeld`, a promise), and
+          // the runner's answer to the next save of a watch (`__runnerHoldNext`). A save lands in
+          // the store when the runner answers it, which is when native code would have written
+          // it; `__runnerStored` lists what landed, in that order.
           CapacitorBackgroundRunner: {
             checkPermissions: async () => ({ notifications: sessionStorage.getItem('__notif') || 'prompt' }),
             requestPermissions: async () => {
               window.__notifAsked = true;
+              if (window.__permissionHeld) await window.__permissionHeld;
               if (!sessionStorage.getItem('__notif')) sessionStorage.setItem('__notif', window.__notifAnswer);
               return { notifications: sessionStorage.getItem('__notif') };
             },
             dispatchEvent: async ({ label, event, details }) => {
               window.__runnerEvents.push({ label, event, details });
-              if (event === 'saveWatch') sessionStorage.setItem('__watch', JSON.stringify(details.watch || null));
+              if (event === 'saveWatch') {
+                const held = details.watch ? window.__runnerHoldNext : null;
+                if (held) { window.__runnerHoldNext = null; await held; }
+                sessionStorage.setItem('__watch', JSON.stringify(details.watch || null));
+                window.__runnerStored = (window.__runnerStored || []).concat([details.watch || null]);
+              }
               if (event === 'loadWatch') return JSON.parse(sessionStorage.getItem('__watch') || 'null');
               return undefined;
             },
@@ -2683,6 +2693,162 @@ test('when the OS will not run background tasks, the toggle says so', async ({ p
   await mapReady(page);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => document.getElementById('rideAlertsHint').hidden)).toBe(true);
+});
+
+/* ---------- ride alerts: arming from the snapshot, in a queue ---------- */
+
+/** Open-Meteo for the table and for the ride watch's baseline, each held while its promise is set. */
+async function stubWatchProviders(page, control) {
+  control.baselineAsked = 0;
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    const url = new URL(route.request().url());
+    const baseline = url.searchParams.get('timeformat') === 'unixtime';
+    if (baseline) { control.baselineAsked++; if (control.baselineHeld) await control.baselineHeld; }
+    else if (control.forecastHeld) await control.forecastHeld;
+    const body = baseline ? watchForecast(url, control.watch) : forecastAt(20);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+}
+const heldPromise = () => { let release; const promise = new Promise((r) => { release = r; }); return { promise, release }; };
+const storedWatches = (page) => page.evaluate(() => window.__runnerStored || []);
+const lastStored = async (page) => (await storedWatches(page)).slice(-1)[0];
+const armedWatches = async (page) => (await storedWatches(page)).filter((w) => w !== null);
+/** Pretends the runner has already notified a warning, and read a baseline of its own. Also
+ *  empties the picker, which fires no change for the same file picked twice in a row. */
+const markStoredWatch = (page) =>
+  page.evaluate(() => {
+    document.getElementById('gpxFile').value = '';
+    const w = JSON.parse(sessionStorage.getItem('__watch'));
+    w.notified = ['AEMET_Viento_1_2'];
+    w.baseline = w.points.map(() => ({ rain: 9, wind: 99, gust: 99 }));
+    sessionStorage.setItem('__watch', JSON.stringify(w));
+  });
+
+for (const answer of ['granted', 'denied']) {
+  test(`notification permission ${answer} after another route was confirmed stores nothing and leaves the toggle`, async ({ page }) => {
+    await installNativeBridge(page, { notifications: answer });
+    await recordNotices(page);
+    const control = {};
+    await stubWatchProviders(page, control);
+    await page.addInitScript(() => { window.__permissionHeld = new Promise((r) => { window.__grantPermission = r; }); });
+    await page.goto('/index.html');
+    await mapReady(page);
+    await page.locator('#gpxFile').setInputFiles(FIXTURE);
+    await expect.poll(() => page.evaluate(() => window.__notifAsked)).toBe(true);
+
+    // Another route is confirmed while the system dialog is open; its forecast has not published.
+    control.forecastHeld = heldPromise().promise;
+    await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+    await expect(routeName(page)).toHaveText('Ruta B');
+    await page.evaluate(() => window.__grantPermission());
+    await page.waitForTimeout(800);
+
+    expect(await armedWatches(page)).toEqual([]);
+    await expect(page.locator('#rideAlerts')).toBeChecked();
+    expect((await page.evaluate(() => window.__notices)).filter((n) => /Notifications are off/.test(n))).toEqual([]);
+  });
+}
+
+test('a baseline that answers after another route was confirmed stores nothing', async ({ page }) => {
+  await installNativeBridge(page);
+  const control = { baselineHeld: heldPromise() };
+  const baseline = control.baselineHeld;
+  control.baselineHeld = baseline.promise;
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => control.baselineAsked).toBeGreaterThan(0);
+
+  control.forecastHeld = heldPromise().promise;
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  control.baselineHeld = null;
+  baseline.release();
+  await page.waitForTimeout(800);
+  expect(await armedWatches(page)).toEqual([]);
+});
+
+test('a save the runner answers late cannot land after the disarm that followed it', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { window.__runnerHoldNext = new Promise((r) => { window.__answerSave = r; }); });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  // The save has reached the runner, which has not answered it yet.
+  await expect.poll(() => page.evaluate(() => window.__runnerEvents.some((e) => e.event === 'saveWatch' && e.details.watch))).toBe(true);
+
+  await page.evaluate(() => {
+    const el = document.getElementById('rideAlerts');
+    el.checked = false;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__answerSave());
+  await expect.poll(() => page.evaluate(() => (window.__runnerStored || []).length)).toBe(2);
+  expect(await lastStored(page)).toBeNull();
+  expect(await page.evaluate(() => sessionStorage.getItem('__watch'))).toBe('null');
+});
+
+test('arming the same route again keeps what was already notified, and the baseline of the same points', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubWatchProviders(page, { watch: { rain: 0, wind: 8, gust: 12 } });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  await markStoredWatch(page);
+
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(2);
+  const watch = await lastStored(page);
+  expect(watch.notified).toEqual(['AEMET_Viento_1_2']);
+  expect(watch.baseline[0]).toEqual({ rain: 9, wind: 99, gust: 99 });
+});
+
+test('a new speed for the same route and start keeps what was notified and reads the baseline again', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubWatchProviders(page, { watch: { rain: 0, wind: 8, gust: 12 } });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  const before = await lastStored(page);
+  await markStoredWatch(page);
+
+  await setSpeed(page, 20);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(2);
+  const watch = await lastStored(page);
+  expect(watch.start).toBe(before.start);
+  expect(watch.points.map((p) => p.t)).not.toEqual(before.points.map((p) => p.t));
+  expect(watch.notified).toEqual(['AEMET_Viento_1_2']);
+  expect(watch.baseline).toHaveLength(watch.points.length);
+  expect(watch.baseline[0]).toEqual({ rain: 0, wind: 8, gust: 12 });
+});
+
+test('confirming another route disarms the watch; confirming the same route does not', async ({ page }) => {
+  await installNativeBridge(page);
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
+  control.forecastHeld = heldPromise().promise;
+
+  await countLaunches(page);
+  await page.evaluate(() => { document.getElementById('gpxFile').value = ''; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.__launches.launch)).toBe(1);
+  await page.waitForTimeout(300);
+  expect(await lastStored(page)).not.toBeNull();
+
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await expect.poll(() => lastStored(page)).toBeNull();
+  await expect(page.locator('#rideAlertsStatus')).toHaveText('');
 });
 
 /* ---------- starting language ---------- */

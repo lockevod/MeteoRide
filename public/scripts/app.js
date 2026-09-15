@@ -3193,6 +3193,8 @@ window.cwCommitRoute = function (parsed, requestId) {
   confirmedRoute = {
     requestId, name: parsed.name, fingerprint: parsed.fingerprint, geojson: parsed.geojson, text: parsed.text,
   };
+  // The ride watch of another route is disarmed now, through its queue, with no wait here.
+  try { window.cwDisarmWatchFor?.(parsed.fingerprint); } catch (_) { /* never stops a confirmation */ }
   window.lastGPXFile = file;
   const rutaEl = document.getElementById("rutaName");
   if (rutaEl) {
