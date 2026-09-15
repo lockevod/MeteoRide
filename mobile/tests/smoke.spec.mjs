@@ -1115,7 +1115,9 @@ const resume = (page) => page.evaluate(() => window.__appListeners.appStateChang
 const T0 = Date.parse('2026-09-20T08:00:00');   // local time, in the browser as in Node
 // The fake clock runs on from the moment it is installed, and a start counts the seconds when it is
 // rounded up to the quarter hour: installed a minute early, "now" stays just under the quarter a
-// test names for as long as the test takes.
+// test names. That is a budget: a test still running 60 s of real time after installing it (plus any
+// fastForward) rounds to the next quarter. Pausing the clock is not an option: nothing in the page
+// (polls, IndexedDB callbacks, the provider pauses) would run without advancing it by hand.
 const startClock = (page, at = T0) => page.clock.install({ time: at - 60000 });
 
 test('coming back without coverage 45 minutes later replays the prepared forecast at the new start, and nothing replaces it', async ({ page }) => {
@@ -1670,6 +1672,12 @@ test('with a replayed forecast and no coverage, a start more than three hours aw
   expect(await shownOrigin(page)).toBe('prepared');
   expect(await preparedStored(page)).not.toBeNull();
   expect(await page.evaluate(() => window.cwPreparedRecord())).not.toBeNull();
+
+  // Coming back with that replay on screen leaves its notice: nothing new could be computed anyway.
+  await resume(page);
+  await page.waitForTimeout(500);
+  await expect(page.locator('.notice')).toContainText(outOfRangeNotice);
+  await expect(page.locator('.notice')).not.toContainText(cannotRecalculate);
 });
 
 // Expiry follows the earliest start there can be, not the start in the field: only a record that can
@@ -1728,6 +1736,44 @@ test('with a replayed forecast and no coverage, a change refused before still le
   await chooseStart(page, localAt(T0 + 2 * 3600000));
   await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');
   expect(await shownOrigin(page)).toBe('prepared');
+});
+
+// A refused change became the reference, so going back to what the replay shows was refused too.
+test('with a replayed forecast and no coverage, going back to the setting it shows is accepted, and a third setting is still refused', async ({ page }) => {
+  await replayOnScreen(page, { now: T0 });
+  const snapshotId = () => page.evaluate(() => window.cw.currentSnapshot()?.computationId);
+  await setTempUnits(page, 'F');
+  await expect(page.locator('.notice')).toContainText(cannotRecalculate);
+
+  const refused = await snapshotId();
+  await setTempUnits(page, 'C');
+  await expect.poll(snapshotId).toBeGreaterThan(refused);
+  expect(await shownOrigin(page)).toBe('prepared');
+  await expect(page.locator('.notice')).not.toContainText(cannotRecalculate);
+
+  // Two wind units in a row, neither the one launched nor the one shown.
+  const id = await snapshotId();
+  await setWindUnits(page, 'kmh');
+  await expect(page.locator('.notice')).toContainText(cannotRecalculate);
+  await page.evaluate(() => { document.querySelectorAll('.notice').forEach((n) => { n.textContent = ''; }); });
+  await setWindUnits(page, 'mph');
+  await expect(page.locator('.notice')).toContainText(cannotRecalculate);
+  await page.waitForTimeout(300);
+  expect(await snapshotId()).toBe(id);
+});
+
+// Launched with compare chosen, the reference said compare: leaving it counted as a change of provider.
+test('with a replayed forecast and no coverage, leaving compare after a start moved with it chosen is accepted', async ({ page }) => {
+  await replayOnScreen(page, { now: T0 });
+  await selectProvider(page, 'compare');
+  await chooseStart(page, localAt(T0 + 2 * 3600000));
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');
+  const id = await page.evaluate(() => window.cw.currentSnapshot().computationId);
+
+  await selectProvider(page, 'openmeteo');
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.computationId)).toBeGreaterThan(id);
+  expect(await shownOrigin(page)).toBe('prepared');
+  await expect(page.locator('.notice')).not.toContainText(cannotRecalculate);
 });
 
 test('with a replayed forecast and no coverage, choosing compare is nothing to compute: a new start still moves the replay', async ({ page }) => {

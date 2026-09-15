@@ -284,7 +284,8 @@
     // computing again would read the cache under keys the new start has moved and put an empty table
     // over one with data: the table stays, and the user is told.
     if (offline() && !preparedStandsIn()) {
-      if (shown) notify('offline_cannot_recalculate', 'Without coverage the forecast cannot be computed again: the saved one stays.');
+      // A replay on screen here is out of range, or expired and said so: its own notice stays.
+      if (shown && shown.origin !== 'prepared') notify('offline_cannot_recalculate', 'Without coverage the forecast cannot be computed again: the saved one stays.');
       return;
     }
     window.cw.startForecast();

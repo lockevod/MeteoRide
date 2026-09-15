@@ -547,7 +547,9 @@ window.cwLaunchComputation = function () {
   if (replayShown) {
     let latest = null;
     try { latest = readForecastSettings(); } catch (_) { /* the launch below says so */ }
-    if (latest && launchedSettings && !sameButStart(launchedSettings, latest)) {
+    // Refused only when it differs from both the last launch and the replay on screen (its settings carry
+    // the keys in use): going back to what it shows, or leaving compare chosen at the last launch, replays.
+    if (latest && launchedSettings && !sameButStart(launchedSettings, latest) && !sameButStart(shown.settings, latest)) {
       launchedSettings = latest;
       setNotice(t("offline_cannot_recalculate"), "warn");
       return lastComputationId;
