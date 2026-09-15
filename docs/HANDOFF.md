@@ -378,22 +378,45 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
 - **iOS, «Abrir en».** Lee el fichero en el hilo principal (hasta 25 MB).
 - **Comparar.**
   - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
-  - Con comparar fechas abierto en modo explícito (el que abre el botón), un ajuste que recalcula
-    pinta la tabla normal encima; la de fechas vuelve con el botón de ejecutar. El modo automático,
-    que se relanza al publicar, no se alcanza desde el botón y no tiene test.
+  - Con comparar fechas abierto (el botón lo abre siempre en modo explícito), un ajuste que
+    recalcula pinta la tabla normal encima; la de fechas vuelve con el botón de ejecutar.
+  - `ui.js` conserva las ramas anteriores del modo automático de comparar fechas (relanzar al
+    cambiar la fecha B o un control cuando `explicitCompareActive` es falso). No se alcanzan,
+    porque el botón siempre abre el modo explícito; el relanzamiento automático desde `publish` ya
+    se ha quitado.
+  - Comparar lee Open-Meteo y AROME solo por horas (`hourly`), mientras que la tabla usa
+    `minutely_15` en las primeras 5 h: en ese tramo los valores pueden no coincidir con la tabla.
+  - En las ventanas de cambio de hora, la hora se elige con el único `utc_offset_seconds` de la
+    respuesta de Open-Meteo, igual que en la tabla. No se ha comprobado cuál de las dos horas
+    posibles es la correcta.
   - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores.
   - Solo avisa de fallos de transporte, sin conexión y datos caducados; los avisos por proveedor no
     se aplican, porque cada proveedor ya tiene su fila.
-  - Un cuerpo de respuesta ilegible deja la fila vacía sin contar como fallo de transporte.
   - En modo comparar, la foto normal lleva datos de Open-Meteo con proveedor `compare`, así que
     sus pasos no cuentan como utilizables. Ya era así; importa para reproducir (fase 6).
 - **Alerta de ruta.**
-  - Una llamada al runner que no responde nunca detiene la cola de guardados y desarmados sin aviso.
-  - Hasta leer la alerta guardada al arrancar no se conoce su huella: la primera confirmación
-    desarma. Una alerta guardada antes de la fase 4 no tiene huella y cuenta como otra ruta, así
-    que se desarma y pierde lo ya avisado una vez.
+  - Una llamada al runner que no responde nunca detiene la cola de guardados y desarmados sin aviso,
+    y la ruta anterior puede quedar armada: el desarmado de la ruta confirmada después espera
+    detrás en la cola.
+  - Una alerta guardada antes de la fase 4 no tiene huella y cuenta como otra ruta, así que la
+    primera confirmación la desarma y pierde lo ya avisado una vez. Si falla la lectura de la
+    alerta guardada al arrancar, la primera confirmación también desarma.
   - Un guardado que llega después de ser sustituido deja el registro en el runner, pero no
     actualiza la línea de estado.
+  - **Comprobaciones en capas.** Algunas mutaciones sobreviven solas porque otra comprobación cubre
+    el mismo caso:
+    - La comprobación tras leer la alerta guardada y la de tras la línea base. Sin la primera, la
+      segunda para el guardado. Sin las dos, solo se hace una petición de línea base de más, porque
+      el guardado vuelve a comprobar cuando le llega el turno.
+    - La de tras la línea base y la del turno del guardado. Entre las dos no hay ninguna espera en
+      la que pueda entrar algo que no suba la ficha, así que cada una cubre a la otra. Sin las dos,
+      falla «a baseline that answers after another route was confirmed stores nothing».
+    - La ficha frente a la foto. Confirmar otra ruta sube la ficha solo si ya se había enviado una
+      alerta; confirmar la misma ruta no la sube nunca. Las dos comprobaciones de la foto (en
+      `armWatch` y en el turno del guardado) y la de la línea de estado tienen cada una un test que
+      falla si se quita solo esa.
+    - Anular la huella después de que el runner conteste un desarmado, o volver a fijarla al empezar
+      a armar, no cambia nada observable: como mucho encola un desarmado de más.
 - **Tests que faltan.**
   - La carrera entre la migración desde `localStorage` y una importación.
   - IndexedDB no disponible.

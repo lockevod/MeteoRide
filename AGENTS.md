@@ -925,29 +925,41 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
   is the confirmed one, the run's computation is both the latest launched and the one published,
   and no comparison was launched after it. Launching one launches no computation, so reconciling
   and preparing still see the normal snapshot.
-  - **Launched once**, from `publish` (step 7: the date comparison that was on screen if it runs
-    by itself, otherwise the providers comparison when compare is chosen), from choosing compare
-    in the selector, and from the dates row (its run button, and date B in automatic mode). The
-    observer on the table, `compare.js`'s own listeners and control refresh, the launch from
-    `renderWeatherTable` and the `window.reloadFull` alias are gone. A setting that computes again
-    goes through `cw.settingsChanged()`, also while compare-by-dates is open: in explicit mode (the
-    one the toggle opens) that repaints the normal table and the run button brings the date
-    comparison back.
+  - **Launched once**, from `publish` (step 7: the providers comparison when compare is chosen),
+    from choosing compare in the selector, and from the dates row's run button. The observer on
+    the table, `compare.js`'s own listeners and control refresh, the launch from
+    `renderWeatherTable`, the `window.reloadFull` alias, the automatic date relaunch from
+    `publish` and the `_pendingCompareRestore` flag are gone. A setting that computes again goes
+    through `cw.settingsChanged()`, also while compare-by-dates is open: the toggle always opens
+    it in explicit mode, so that repaints the normal table and the run button brings the date
+    comparison back. The automatic date-B branches still in `ui.js` are unreachable. Closing the
+    dates row with compare chosen computes again, and that publish compares providers.
+  - **Leaving compare.** Choosing any other provider calls `cwCancelComparisons()`, which takes
+    the next `comparisonId` and drops every `compare:*` claim. Without it, a comparison still
+    fetching while a route request holds the recomputation back (the change is only pending)
+    stays current and paints its table under the new provider.
   - **Input.** Steps, temperature and wind units, keys, interval and (for dates) provider come
     from `run.snapshot`. Rain and distance units, and dates A and B, are still read from the page:
     they only change how it looks, or are what the comparison is asked for.
   - **Checks** at every step, before every cache write and right before painting (markers,
     `setWeatherData`, the table, `compareProviderData`, `weatherDataA`/`B`). The `finally` lets
-    go of its own claim only. Only the providers comparison's paint check has a test of its own;
-    the others are covered in layers (a replaced run stops at the step after its request).
+    go of its own claim only: a replaced run that finishes while the next one fetches leaves the
+    indicator on, and a test holds exactly that. Only the providers comparison's paint check has a
+    test of its own; the others are covered in layers (a replaced run stops at the step after its
+    request).
   - **Notice.** Each run has its own recorder, passed to every provider request and cache read.
     When it paints it decides its notice with `decideNotice` (`cwShowForecastNotice`) on an
     outcome with `usableSteps` (steps with a temperature or wind in any painted row), the
     recorder's failures, offline flag and stale age, and `requestedProvider: 'compare'`. The
     per-provider notices do not apply: every provider already has its own row, empty when it
-    gave nothing.
+    gave nothing. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
+    `publish`, a comparison with nothing to say leaves up the notice of a route that failed to
+    open while the run's computation was the latest. A 200 whose body cannot be read counts as a
+    failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).
   - **Hours.** Open-Meteo and AROME hours are read with `cwForecastRules.nearestIndex` and the
-    answer's `utc_offset_seconds`, as in the table. The comparison tables are unchanged (spec §2).
+    answer's `utc_offset_seconds`, as in the table. Compare reads only `hourly`; the table reads
+    `minutely_15` within 5 h, so the two can differ there. The comparison tables are unchanged
+    (spec §2).
 - **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
   name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
   and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline
@@ -961,10 +973,16 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
     start keeps what was already notified, so arming it again does not announce a warning twice;
     the baseline is kept only over identical points (count, latitude, longitude and time), since
     `compare` reads it by index. A new speed keeps `notified` and reads the baseline again.
-  - **Disarm on confirm.** `cwCommitRoute` calls `cwDisarmWatchFor(fingerprint)`: a watch armed
+  - **Disarm on confirm.** `cwCommitRoute` calls `cwDisarmWatchFor(fingerprint)`: a watch sent
     or stored for another route is disarmed through the queue, the same route keeps its own.
-    Until the stored watch is read at start-up the fingerprint is unknown, and the first
+    `watchFingerprint` is set only inside a queued save or disarm, before the runner call, so it
+    names the last watch sent even while an earlier answer is still on its way; set after the
+    answer, a late disarm nulled a newer save and the next route confirmed left the old one
+    armed. The start-up read is the first operation in the queue. A confirmation before it
+    answers (fingerprint still `undefined`) queues a disarm that decides at its turn, so a
+    restored route keeps its stored watch and what it notified. If that read fails, the first
     confirmation disarms; a stored watch from before fingerprints counts as another route.
+  - **A read that fails** while arming counts as nothing stored: the route arms afresh.
   - The toggle arms with `cw.currentSnapshot()`; `cw:forecast` arms with `detail.snapshot`.
 - **Official warnings** are looked up only by a computation (`checkWeatherAlertsIndependent`
   requires its sink and settings and touches nothing on the page) and shown only by `publish`.
