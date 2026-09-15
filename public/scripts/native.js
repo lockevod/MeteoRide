@@ -266,11 +266,13 @@
   // An app is resumed, not reloaded. Come back hours later and the table would still be the
   // one computed for a departure that has passed. The start rule runs again (a time chosen
   // ahead stays), and the forecast is computed again when that moved the start or the
-  // snapshot on screen is more than half an hour old.
+  // snapshot on screen is more than half an hour old. A prepared route whose start is now more
+  // than three hours away is dropped first.
   const RESUMED_STALE_MS = 30 * 60 * 1000;
 
   function refreshOnResume() {
     const moved = !!(window.cwApplyStartRule && window.cwApplyStartRule());
+    expireIfPast(preparedRecord);
     const shown = window.cw.currentSnapshot ? window.cw.currentSnapshot() : null;
     if (moved || (shown && Date.now() - shown.createdAt > RESUMED_STALE_MS)) window.cw.startForecast();
   }
@@ -300,6 +302,13 @@
     const result = await window.cw.requestRoute({
       source: 'recent',
       read: async () => {
+        // The prepared route comes first (spec §4.7): while its start is within three hours of the
+        // one in use it is what opens, whichever recent route is newest. Past that it is dropped.
+        const prepared = await loadPreparedRecord();
+        if (prepared && !(await expireIfPast(prepared))) {
+          log('restoring the prepared route', prepared.gpx.name || '');
+          return { text: prepared.gpx.text, name: prepared.gpx.name };
+        }
         const routes = await waitFor(() => {
           const list = window.getRecentRoutes ? window.getRecentRoutes() : [];
           return list && list.length ? list : null;
@@ -401,6 +410,23 @@
     }
     preparedRecord = wellFormed(record) ? record : null;
     return preparedRecord;
+  }
+
+  // A prepared route stands in only while the start in use is within three hours of the one it was
+  // prepared for. Past that, at start-up or when the app comes back, it is deleted, and without
+  // coverage the user is told the forecast needs coverage (spec §4.9.3, step 5). Changing the time
+  // by hand never deletes it. Resolves whether it was dropped.
+  async function expireIfPast(record) {
+    if (!record) return false;
+    if (window.cwApplyStartRule) window.cwApplyStartRule();
+    const startMs = new Date((document.getElementById('datetimeRoute') || {}).value || NaN).getTime();
+    if (cwForecastRules.usablePrepared(record, { fingerprint: record.snapshot.route.fingerprint, startMs })) return false;
+    if (preparedRecord === record) preparedRecord = null;
+    await writePrepared((store) => store.delete(PREPARED_KEY));
+    if (offline()) {
+      notify('prepared_expired_needs_coverage', 'The prepared route no longer fits this start time and was deleted: the forecast needs coverage.');
+    }
+    return true;
   }
 
   async function prepareForOffline() {

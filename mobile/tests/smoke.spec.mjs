@@ -939,6 +939,7 @@ async function stubAround(page, control = {}) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(watchForecast(url)) });
     }
     control.asked = (control.asked || 0) + 1;
+    if (control.offline) return route.abort();
     if (control.held) await control.held;
     if (control.fail) return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
     const body = forecastAround(control.now ?? Date.now(), control.hours ? control.hours(url) : 72);
@@ -1165,6 +1166,101 @@ test('with compare chosen and no coverage, the replayed forecast stays with a no
   await page.waitForTimeout(800);
   expect(await comparisonsLaunched(page)).toBe(0);
   expect(await compareShown(page)).toBe(false);
+});
+
+/* ---------- opening the app on a prepared route (spec §4.7, §4.9.3) ---------- */
+
+const expiredNotice = /prepared route no longer fits|ruta preparada ya no sirve/;
+
+/** Prepares the route on screen at T0 (with `start` as the start field, if given), then closes the
+ *  app, loses coverage and lets `later` pass (a clock string); the caller reopens or resumes. */
+async function prepareThenLoseCoverage(page, control, later, start) {
+  await page.clock.install({ time: T0 });
+  await installNativeBridge(page);
+  await stubAround(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  if (start) await chooseStart(page, start);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  control.offline = true;
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }));
+  await noLongerOnline(page);
+  await page.clock.fastForward(later);
+}
+
+test('opening without coverage four hours later drops the prepared route and says the forecast needs coverage', async ({ page }) => {
+  const control = { now: T0 };
+  await recordNotices(page);
+  await prepareThenLoseCoverage(page, control, '04:00:00');
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toMatch(expiredNotice);
+  await expect.poll(() => preparedStored(page)).toBeNull();
+  expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+  expect(await shownOrigin(page)).not.toBe('prepared');
+});
+
+test('coming back without coverage four hours later drops the prepared route too', async ({ page }) => {
+  const control = { now: T0 };
+  await recordNotices(page);
+  await prepareThenLoseCoverage(page, control, '04:00:00');
+  await resume(page);
+
+  await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toMatch(expiredNotice);
+  await expect.poll(() => preparedStored(page)).toBeNull();
+  expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+});
+
+// Expiry follows the distance between the two starts, not the age of what was prepared.
+test('a route prepared twelve hours before its start and opened half an hour after that start is replayed', async ({ page }) => {
+  const control = { now: T0 };
+  await prepareThenLoseCoverage(page, control, '12:30:00', localAt(T0 + 12 * 3600000));
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  await expect(startField(page)).toHaveValue(localAt(T0 + 12.5 * 3600000));
+  expect((await shownTemperatures(page))[0]).toBe('24º');   // 20:30 reads 20:00, a tie that keeps the earlier hour
+  expect(await preparedStored(page)).not.toBeNull();
+});
+
+test('a prepared route that is not the newest recent route opens and is replayed all the same', async ({ page }) => {
+  const control = { now: T0 };
+  await page.clock.install({ time: T0 });
+  await routeWithForecast(page, control);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  await pickText(page, 'otra.gpx', routeAt('Otra', 41.40));
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.route.name)).toBe('otra.gpx');
+  // The newest recent route, the one a restore would read.
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes()[0]?.name)).toBe('otra.gpx');
+
+  control.offline = true;
+  await page.addInitScript(() => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }));
+  await page.clock.fastForward('45:00');
+  await page.reload();
+  await mapReady(page);
+
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+});
+
+test('a route shared at start-up still wins over the prepared route', async ({ page }) => {
+  const control = { now: T0 };
+  await prepareThenLoseCoverage(page, control, '45:00');
+  // The share waits in the native inbox for the next start.
+  await installNativeBridge(page, { routes: [{ name: 'shared.gpx', gpx: routeAt('Compartida', 40.42) }] });
+  await page.reload();
+  await mapReady(page);
+
+  await expect(routeName(page)).toHaveText('Compartida');
+  await page.waitForTimeout(1500);
+  await expect(routeName(page)).toHaveText('Compartida');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both
