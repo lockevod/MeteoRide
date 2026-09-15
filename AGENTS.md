@@ -185,7 +185,8 @@ What is still open, and why it was left:
   (`refreshOnResume` in `native.js`): with the start unchanged and the latest computation still
   running (`cwIsComputing`), nothing is launched again; and without coverage, unless the prepared
   record can replay the confirmed route at the start now in the field, nothing is computed: the table
-  stays and `offline_cannot_recalculate` says so. Computing without coverage read the cache under keys
+  stays and `offline_cannot_recalculate` says so, except over a replay on screen (out of range, or
+  expired and said so), whose own notice stays. Computing without coverage read the cache under keys
   the moved start had shifted, and put an empty table over one with data. A deliberately chosen future
   time is never overwritten. The same rule runs after every `loadSettings` (also the one
   `restoreSettings` repeats, which then calls `cw.settingsChanged()` so a forecast already computed
@@ -194,7 +195,8 @@ What is still open, and why it was left:
   `roundToNextQuarterISO` in `utils.js`): the seconds count, so at 10:00:30 the start is 10:15, and
   setting wall-clock hours can no longer land an hour off on the day the clocks go back. The Playwright
   tests install their fake clock a minute before the quarter they name (`startClock`), because that
-  clock keeps running. Both boot blocks in `app.js` used to overwrite the field with now, so a saved
+  clock keeps running: each test has 60 s of real time (besides its `fastForward`) before now rounds to
+  the next quarter. Pausing it would stop the page's own timers. Both boot blocks in `app.js` used to overwrite the field with now, so a saved
   time never survived a reload; only the `DOMContentLoaded` one runs (`init()` is never called),
   and neither overwrites it any more.
 - **localStorage inside a web view is not durable.** iOS reclaims WebKit storage when
@@ -591,15 +593,20 @@ could not be saved and keeps nothing. There is one prepared route: preparing ano
 and says so. The coverage is counted before anything is written: the points a replay can show for every
 start within three hours, in quarter hours (`cwForecastRules.preparedCoverage`). With none covered nothing
 is written, `prepare_offline_uncovered` says so, and a route prepared before stays (every provider failed,
-say, or compare was chosen, whose steps never count); otherwise the notice says all of them, or "n of
+say); otherwise the notice says all of them, or "n of
 total". `pinCacheKeys`,
 `cachedWeatherKeys` and `cw_offline_pinned` still exist until phase 7, but nothing prepares through
 them any more.
 
 `native.js` keeps the last record read or written in memory (`cwPreparedRecord()`), and launching a
 computation decides with that copy, with no wait; `cwLoadPreparedRecord()` reads IndexedDB again. A
-record of another version, or one missing what a replay needs (a string route fingerprint among it),
-counts as none, without a word; `usablePrepared` never takes two missing fingerprints for the same route.
+record of another version, or one missing what a replay, the table and the ride alert read (a string
+route fingerprint, `settings.units.temp`/`wind`, an `outcome` object, alerts as a list, and every step an
+object with a finite latitude and longitude and a readable time), counts as none and is deleted, without a
+word (`wellFormed`). The delete runs in a transaction that finds the record still ill-formed, so a route
+prepared meanwhile stays; what a provider answer holds inside is not checked. Before, such a record
+replayed, threw, and stayed stored. A read that fails, or a database that does not open, leaves the copy in
+memory as it was. `usablePrepared` never takes two missing fingerprints for the same route.
 
 **Replaying.** `cwLaunchComputation` puts the prepared snapshot back instead of computing when
 `navigator.onLine` is false and the record belongs to the confirmed route (same fingerprint), with its
@@ -618,7 +625,14 @@ reads a day, so a step moved past its answer shows no data instead of a distant 
 are clipped from now, as for any snapshot, so those already over are gone. The notice
 (`prepared_replayed`, decided after an empty table and before stale data) says how old the snapshot is
 and for what start it was prepared. Comparing is never launched over a replayed snapshot, nor without
-coverage in the app. `cwLaunchComparison` says it needs coverage only when there is none: a replay with
+coverage in the app (`comparisonHeldBack`). Over such a snapshot the normal table and its markers are
+painted even with compare chosen (`compareOwnsTable`, read by `renderWeatherTable`, the marker guards and
+the sun cell, spec §4.6): before, a cold start without coverage and compare saved showed an empty table,
+and coming back left the old one while the snapshot and the ride alert were the replay. With compare
+chosen the normal computation asks Open-Meteo and labels its steps `openmeteo` (`settings.provider` stays
+`compare`): labelled `compare`, working answers never counted as usable, a usable prepared snapshot
+replayed over them and compare stayed off for up to three hours, and preparing in compare mode saved
+nothing. `cwLaunchComparison` says it needs coverage only when there is none: a replay with
 coverage is there because every provider failed, and its own notice stays up. On the website, where
 nothing prepares, comparing without connection still runs and says so (phase 4). A replay moved to another
 start arms the ride alert as the same ride ("Ride alerts", reuse). Nothing computes again when coverage
@@ -638,16 +652,25 @@ IndexedDB and, without coverage, the user is told the forecast needs coverage
 (`prepared_expired_needs_coverage`): at start-up once the restore's request has ended, and not at all when
 a later request (a share) replaced it. A prepared GPX that does not parse is deleted and the restore opens
 the last recent route instead (`openLastRoute`), so it cannot stand in the way of every start for three
-hours. When the restore asks for nothing (a link, the sessionStorage handoff, a route already asked for),
-the record is still loaded for the session, and dropped without a word if it has expired.
+hours. That second attempt is made once, only when the delete succeeded (a failed delete opened the broken
+record again, forever) and only while no route has been asked for since the restore's own request
+(`cw.lastRouteRequestId()`, read right after asking): it is a new request, and made after the wait it
+replaced a route picked during the delete. `route_load_failed` stays up. When the restore asks for nothing
+(a link, the sessionStorage handoff, a route already asked for), the record is still loaded for the
+session, and dropped without a word if it has expired. The route that arrived may have been computed
+before that read and found nothing, so once it is read, a record that can replay the confirmed route at the
+start in the field launches the forecast once more, which replays it, but only over a live table with no
+usable step, or with nothing published and nothing running (`replayIfComputedWithout`).
 
 **Changes with a replay on screen and no coverage.** A change that needs computing other than the start
-(units, provider, speed, interval, keys, warnings) is found by comparing the settings with those the last
-launch read (`launchedSettings` in `app.js`, through `sameButStart`; choosing compare counts as no change),
-and refused before any identity is taken: `offline_cannot_recalculate`, and the snapshot stays current. A
-refused change becomes that reference too. Comparing with the replayed record's settings, as before, refused
-every later start once a setting had changed after preparing or a change had been refused, and kept an
-expired replay on screen. A new start replays again: within
+(units, provider, speed, interval, keys, warnings) is refused before any identity is taken, with
+`offline_cannot_recalculate` and the snapshot kept current, only when the settings differ both from those
+the last launch read (`launchedSettings` in `app.js`) and from the replayed snapshot's, which carry the
+keys in use (`sameButStart`; choosing compare counts as no change). A refused change becomes the launch
+reference too; the second comparison is what accepts going back to what the replay shows, and leaving
+compare after a launch made with it chosen. Comparing with the replayed record's settings alone, as in the
+first version, refused every later start once a setting had changed after preparing or a change had been
+refused; comparing with the launch alone refused going back. A new start replays again: within
 the margin it moves; beyond it every step shows no data with `prepared_out_of_range`, and the record is
 kept (only expiry deletes it). Language and notices repaint as before. With coverage, a change over a replay
 is computed like any other.
@@ -926,7 +949,8 @@ runtime, because `app.js` and `ui.js` load after it.
 - **Asked for, not yet on screen.** `lastGPXFile` is set only when a route is confirmed, so it
   cannot tell whether a route is on its way. `cw.hasRouteRequests()` can: the restore at
   start-up returns on it, so a file picked and still being read is not replaced by the last
-  recent route. A tap in the recent-routes menu closes the menu and makes its request at
+  recent route. `cw.lastRouteRequestId()` is the identity of the last request made; read right
+  after asking, it is that request's own, and a later change says another route was asked for. A tap in the recent-routes menu closes the menu and makes its request at
   once with the listed metadata; `cwReadRecentRoute` finds the text by id, then by name, then
   in the old localStorage list.
 - **A request never rejects.** Whatever `commit`, `launch`, `paintLoading` or a notice

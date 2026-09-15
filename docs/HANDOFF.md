@@ -361,7 +361,7 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de correcciones.
+en `AGENTS.md → Open work`. Última actualización: fase 6, tanda final de correcciones.
 
 ### Pendiente por fase del rediseño
 
@@ -469,9 +469,6 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
     fechas sigue abierta.
   - Solo avisa de fallos de transporte, sin conexión y datos caducados; los avisos por proveedor no
     se aplican, porque cada proveedor ya tiene su fila.
-  - En modo comparar, la foto normal lleva datos de Open-Meteo con proveedor `compare`, así que
-    sus pasos no cuentan como utilizables. Ya era así. Desde la fase 6, preparar en modo comparar
-    cuenta 0 puntos cubiertos, y reproducir esa foto la deja sin datos.
   - Comparar sin conexión en la web se sigue lanzando y dice que no hay conexión (test de la fase 4).
     Solo la app lo bloquea, porque en la web no se prepara nada.
 - **Alerta de ruta.**
@@ -521,7 +518,8 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
       `route_date_invalid`.
     - El redondeo cuenta los segundos: a las 10:00:30 la salida queda a las 10:15. Los relojes falsos
       de los tests de Playwright se instalan un minuto antes del cuarto (`startClock`), porque siguen
-      corriendo.
+      corriendo: cada test tiene 60 s de tiempo real, además de lo que avance con `fastForward`, antes
+      de que ahora redondee al cuarto siguiente. Pausar el reloj pararía los temporizadores de la página.
     - El `min` del campo se fija al cargar y no avanza en una sesión larga. Elegir una hora pasada
       la deja escrita hasta que un cálculo, una carga o volver a la app aplican la regla.
   - **Volver a la app.**
@@ -531,7 +529,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
       recalcula, y sin cobertura la vuelve a reproducir.
     - Sin cobertura y sin foto preparada que sirva para la nueva salida no recalcula: la tabla se queda
       con las horas de la salida anterior hasta que haya cobertura, con el aviso
-      `offline_cannot_recalculate`.
+      `offline_cannot_recalculate`. Sobre una foto reproducida (fuera de margen, o caducada y ya avisada)
+      no lo dice y deja su propio aviso.
+    - Sin cobertura, con la salida sin mover y una foto en vivo de más de 30 min, cada vuelta a la app
+      vuelve a mostrar `offline_cannot_recalculate`.
     - Con la salida sin mover y el último cálculo aún en marcha no relanza nada, aunque la foto en
       pantalla tenga más de 30 min.
     - Nada recalcula cuando vuelve la cobertura con la app en primer plano: solo volver a la app, un
@@ -539,14 +540,14 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
   - **Ajustes sin cobertura con una foto reproducida.**
     - Un ajuste que no es la hora se rechaza, pero queda guardado. Nada lo aplica cuando vuelve la
       cobertura hasta otro cambio, volver a la app u otra ruta.
-    - El cambio se compara con los ajustes que leyó el último lanzamiento, y un cambio rechazado pasa a
-      ser esa referencia. Volver después al ajuste anterior también se rechaza, y la tabla sigue con las
-      unidades de la foto preparada.
+    - Un cambio se rechaza solo si difiere a la vez de los ajustes que leyó el último lanzamiento (un
+      cambio rechazado pasa a ser esa referencia) y de los de la foto en pantalla. Volver al ajuste que
+      muestra la foto, o salir de comparar, se acepta y la reproduce.
     - La foto reproducida lleva la velocidad y el intervalo de la preparada, aunque los de la página
       sean otros.
-    - Elegir comparar no cuenta como cambio. Con comparar elegido, la tabla normal no se repinta hasta
-      que pinta una comparación, así que una reproducción movida solo se ve en la foto. Salir de comparar
-      después de un lanzamiento con comparar elegido se rechaza como cambio de proveedor.
+    - Elegir comparar no cuenta como cambio. Con comparar elegido, sobre una foto reproducida o sin
+      cobertura en la app se pinta la tabla normal con sus marcadores y el aviso de que comparar necesita
+      cobertura.
   - **Reproducción.**
     - Un proveedor que no responde retiene el cálculo y la reproducción tras un cálculo sin datos
       (H4). Tiene test.
@@ -555,9 +556,8 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
     - El resultado (`outcome`) de una reproducción es el de la foto guardada con `preparedAt` y
       `preparedFor`. No se recuentan los pasos utilizables en modo reproducción.
     - Una reproducción muestra los avisos oficiales guardados solo si están activados ahora.
-    - Con comparar elegido, los pasos de un cálculo en vivo llevan proveedor `compare` y no cuentan como
-      utilizables, así que con una foto preparada utilizable de esa ruta se reproduce aunque los
-      proveedores respondan. Se deduce del código; no tiene test ni se corrige en esta tanda.
+    - Un registro con la forma correcta pero con respuestas de proveedor malformadas por dentro no se
+      detecta: `wellFormed` comprueba la forma del registro y de cada paso, no el contenido de `payload`.
     - MeteoBlue no se reproduce: sus pasos no cuentan como cubiertos y reproducidos salen sin datos
       (spec §2).
     - Fuera del margen la tabla sale sin datos aunque la respuesta guardada cubra esa hora.
@@ -573,10 +573,15 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
     - El aviso de caducidad sin cobertura lo tapa enseguida el del cálculo que viene después
       (`offline_no_data`).
     - Cuando la restauración no pide nada (un enlace, el traspaso por `sessionStorage`, una ruta ya
-      pedida), la foto preparada se carga para la sesión, pero el cálculo de la ruta que llega pudo
-      lanzarse antes sin ella.
-    - Una ruta preparada cuyo GPX no se abre se borra y se abre la última reciente; el aviso de que no se
-      pudo abrir la ruta queda en pantalla.
+      pedida), la foto preparada se carga para la sesión. Si para entonces la ruta que llegó publicó una
+      tabla en vivo sin datos, o no hay nada publicado ni en marcha, se relanza una vez y se reproduce;
+      con datos en pantalla no se relanza.
+    - Una ruta preparada cuyo GPX no se abre se borra y se abre la última reciente, una sola vez, solo si
+      el borrado salió bien y no se ha pedido otra ruta desde la petición de arranque. El aviso
+      `route_load_failed` queda en pantalla. Si el borrado falla no se abre nada, y el registro roto se
+      vuelve a probar en el siguiente arranque.
+    - Un registro mal formado se borra al leerlo, en una transacción que vuelve a comprobarlo. La
+      caducidad no lo comprueba otra vez y puede borrar una foto preparada en ese momento (ver arriba).
   - **Sin medir.** El tamaño real de la foto en IndexedDB (la spec estimaba del orden de 1 MB para
     unas 20 etapas).
 - **Tests que faltan.**
@@ -585,7 +590,12 @@ en `AGENTS.md → Open work`. Última actualización: fase 6, primera tanda de c
     - quitar la corrección de `setupDateLimits` (equivalente a la regla al cargar);
     - la comprobación `origin !== 'live'` al preparar con una foto reproducida en pantalla, porque
       solo se prueba sin foto;
-    - un registro de otra versión o sin huella descartado (`wellFormed`);
+    - un registro sin huella, sin `outcome` o con avisos que no son una lista (otra versión, sin
+      unidades y un paso nulo sí tienen test); quitar las dos últimas comprobaciones no hace fallar nada,
+      porque reproducir no las lee de forma que lance;
+    - la segunda comprobación dentro de la transacción que borra un registro mal formado;
+    - limitar a una vez el reintento tras borrar un GPX preparado roto (equivalente mientras se exija que
+      el borrado haya salido bien);
     - IndexedDB no disponible al preparar;
     - que la web no reproduce;
   - La carrera entre la migración desde `localStorage` y una importación.
