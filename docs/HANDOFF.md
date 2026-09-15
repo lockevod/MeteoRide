@@ -467,6 +467,8 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
   - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores. La tabla
     deja el modo de fechas al pintarse, así que pulsar una fila muestra ese proveedor; la fila de
     fechas sigue abierta.
+  - Sin clave de OpenWeather, comparar proveedores deja OpenWeather fuera sin fila y sin aviso. Es lo
+    decidido, no un límite.
   - En comparar fechas con la cadena OpenWeather → AROME → Open-Meteo y una clave de menos de cinco
     caracteres, el paso que llega a OpenWeather pide Open-Meteo, como la tabla. No tiene test.
   - Cuando AROME contesta algo inservible y falla el Open-Meteo que lo sustituye, el aviso nombra a

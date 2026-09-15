@@ -450,9 +450,8 @@ var cwForecastRules = (function () {
     // OpenWeather is the only provider left that needs a key, so missingKey never fires for another one.
     const keyed = 'OpenWeather';
     const short = ['fallback_short', {}];
-    // The missing key, said once: the table and a date comparison asked Open-Meteo instead; the providers
-    // comparison only left OpenWeather out (`missingKeyOmitted`), so nothing fell back.
-    const keyParts = o.missingKey ? [['provider_key_missing', { prov: keyed }], ...(o.missingKeyOmitted ? [] : [short])] : [];
+    // The missing key, said once, by the table and by a date comparison: both asked Open-Meteo instead.
+    const keyParts = o.missingKey ? [['provider_key_missing', { prov: keyed }], short] : [];
 
     // A comparison names every provider whose row a failed request left with a gap (`failedProviders`,
     // id → { status, code }): OpenWeather's key (`invalid_key`) and quota (`quota`) as the table names

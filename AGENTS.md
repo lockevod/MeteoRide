@@ -1217,8 +1217,8 @@ a replay takes the ones in use ("Preparing and replaying").
     characters asks Open-Meteo for every step, decided before `resolveProviderForTimestamp`, which
     reads the page's key field and would pick AROME-HD or OpenWeather; it then says
     `provider_key_missing` and `fallback_short`, the table's rule. The providers comparison leaves
-    OpenWeather out without such a key (`getCompareProviders`) and says the key is missing without
-    `fallback_short` (`missingKeyOmitted`), since no row replaces it. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
+    OpenWeather out without such a key (`getCompareProviders`), with no row and no notice: that is
+    the author's decision, not a limit. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
     `publish`, a comparison with nothing to say leaves up the notice of a route that failed to
     open while the run's computation was the latest. A 200 whose body cannot be read counts as a
     failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).

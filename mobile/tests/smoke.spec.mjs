@@ -4967,17 +4967,10 @@ const comparedLat = (page) => page.evaluate(() => window.cw.compareProviderData?
 const forgetForecasts = (page) =>
   page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('cw_weather_')) localStorage.removeItem(k); });
 
-/** `openWeatherKey`: a comparison without one says OpenWeather needs a key, so a comparison that
- *  has to have nothing to say gets one, with OpenWeather answering nothing. */
-async function routeInCompareMode(page, control, { openWeatherKey = false } = {}) {
+async function routeInCompareMode(page, control) {
   await stubWatchProviders(page, control);
-  if (openWeatherKey) {
-    await page.route((url) => url.hostname === 'api.openweathermap.org', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
-  }
   await page.goto('/index.html');
   await mapReady(page);
-  if (openWeatherKey) await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; });
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
   await selectProvider(page, 'compare');
@@ -5073,7 +5066,7 @@ test('choosing compare while a new forecast is computed leaves its indicator on 
 
 test('a comparison that paints with nothing to say leaves up the notice of a route that failed to open while it fetched', async ({ page }) => {
   const control = {};
-  await routeInCompareMode(page, control, { openWeatherKey: true });
+  await routeInCompareMode(page, control);
   await watchComparisons(page);
   await forgetForecasts(page);
   const held = heldPromise();
@@ -5091,7 +5084,7 @@ test('a comparison that paints with nothing to say leaves up the notice of a rou
 });
 
 test('a comparison with nothing to say clears the notice of the comparison before it, even after a route failed to open for the same forecast', async ({ page }) => {
-  await routeInCompareMode(page, {}, { openWeatherKey: true });
+  await routeInCompareMode(page, {});
   await watchComparisons(page);
   const notice = page.locator('#horizonNotice');
   await pickText(page, 'broken.gpx', 'this is not a route');
@@ -5546,12 +5539,11 @@ test('a comparison names the provider that fails, and nobody when every step got
   await forgetForecasts(page);
   await page.evaluate(() => { window.cw.runCompareMode(); });
   await expect.poll(() => comparisonsPainted(page)).toBe(3);
-  expect(await providerNotices(page)).toEqual(['OpenWeather requires an API Key. AROME-HD provider error: HTTP 500.']);
+  expect(await providerNotices(page)).toEqual(['AROME-HD provider error: HTTP 500.']);
 });
 
-// Without an OpenWeather key the comparison drops its row and said nothing, clearing any notice. The
-// table's key notice says it now, without the fallback: no row replaces OpenWeather's.
-test('a comparison without an OpenWeather key leaves it out and says it needs a key, without a fallback', async ({ page }) => {
+// Without an OpenWeather key the comparison leaves OpenWeather out on purpose, and says nothing about the key.
+test('a comparison without an OpenWeather key leaves it out and says nothing about the key', async ({ page }) => {
   await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) }));
   await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
@@ -5564,7 +5556,7 @@ test('a comparison without an OpenWeather key leaves it out and says it needs a 
   await selectProvider(page, 'compare');
   await expect.poll(() => comparisonsPainted(page)).toBe(1);
   expect(await page.evaluate(() => Object.keys(window.cw.compareProviderData))).not.toContain('openweather');
-  await expect(page.locator('#horizonNotice')).toHaveText('OpenWeather requires an API Key.');
+  await expect(page.locator('#horizonNotice')).toBeHidden();
 });
 
 // The table says an invalid key on a 401 and a spent quota on a 429 (classifyProviderError); a 403 it
@@ -5630,7 +5622,7 @@ ${points.map(([lat, lon]) => `<trkpt lat="${lat}" lon="${lon}"><ele>10</ele></tr
   await expect.poll(() => comparisonsPainted(page)).toBe(1);
   expect(await page.evaluate(() => window.cw.compareProviderData.aromehd.map((s) => s.provider))).toContain('openmeteo');
   await expect(page.locator('#horizonNotice')).toHaveText(
-    'OpenWeather requires an API Key. Open-Meteo provider error: HTTP 500. AROME-HD provider error: HTTP 500.');
+    'Open-Meteo provider error: HTTP 500. AROME-HD provider error: HTTP 500.');
 });
 
 test('a date comparison names the provider that fails, and says nothing when it answers', async ({ page }) => {

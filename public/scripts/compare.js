@@ -159,10 +159,9 @@
   // A comparison on screen says what its own requests saw (spec §4.10): a table whose requests
   // failed and that came out empty says why, data read from the cache without connection says how
   // old it is, and otherwise every provider that failed is named (`failedProviders`), after the
-  // missing OpenWeather key: a date comparison asked Open-Meteo for lack of it, and the providers
-  // comparison left OpenWeather out (`missingKeyOmitted`). A step counts when any painted row has a
-  // temperature or a wind for it.
-  function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false, missingKeyOmitted = false } = {}) {
+  // missing OpenWeather key when a date comparison asked Open-Meteo for lack of it. A step counts
+  // when any painted row has a temperature or a wind for it.
+  function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false } = {}) {
     const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
     let usableSteps = 0;
     for (let i = 0; i < length; i++) {
@@ -178,7 +177,6 @@
       staleAgeMs: recorder.staleAgeMs,
       failedProviders,
       missingKey,
-      missingKeyOmitted,
     }, !!run.snapshot.settings.noticeAll, run);
   }
 
@@ -384,9 +382,8 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
-    // Without an OpenWeather key its row is left out (getCompareProviders), and the table's key notice says so.
-    showComparisonNotice(recorder, Object.values(compareData), run,
-      { failedProviders, missingKey: !provs.includes('openweather'), missingKeyOmitted: true });
+    // Without an OpenWeather key its row is left out (getCompareProviders) on purpose, and nothing is said.
+    showComparisonNotice(recorder, Object.values(compareData), run, { failedProviders });
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);

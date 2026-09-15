@@ -73,12 +73,9 @@ test('a comparison names each provider that failed: its key, its quota, its HTTP
   assert.deepEqual(ow('401', 'invalid_key'), [['provider_key_invalid', { prov: 'OpenWeather' }]]);
   assert.deepEqual(ow('429', 'quota'), [['provider_quota_exceeded', { prov: 'OpenWeather' }]]);
   assert.deepEqual(ow('403', 'forbidden'), [['provider_http_error', { prov: 'OpenWeather', status: '403' }]]);
-  // The missing key goes first: a date comparison asked Open-Meteo instead, as the table does…
+  // The missing key goes first: a date comparison asked Open-Meteo instead, as the table does.
   assert.deepEqual(decide({ ...compare, missingKey: true, failedProviders: { openmeteo: { status: 'body', code: null } } }).parts,
     [['provider_key_missing', { prov: 'OpenWeather' }], ['fallback_short', {}], ['provider_not_responding', { prov: 'Open-Meteo' }]]);
-  // …while the providers comparison only leaves OpenWeather out, so nothing fell back.
-  assert.deepEqual(decide({ ...compare, missingKey: true, missingKeyOmitted: true }),
-    { parts: [['provider_key_missing', { prov: 'OpenWeather' }]], type: 'error' });
   // Without connection the failure is not the provider's, and a comparison where none failed says nothing.
   assert.equal(decide({ ...compare, offline: true, failedProviders: { openmeteo: { status: 'network', code: null } } }), null);
   assert.equal(decide({ ...compare, failedProviders: {} }), null);
