@@ -1410,26 +1410,183 @@ test('a route shared at start-up still wins over the prepared route', async ({ p
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
 });
 
-test('a prepared route whose text cannot be opened is dropped at start-up, and the last recent route opens instead', async ({ page }) => {
-  const control = { now: T0 };
-  await prepareThenLoseCoverage(page, control, '45:00');
-  await page.evaluate(() => new Promise((resolve) => {
+/** Spoils the stored prepared record: 'gpx' (a text that is no route), 'units' (none), 'step' (a step that
+ *  is not one) or 'version' (another one). */
+const spoilPrepared = (page, how) =>
+  page.evaluate((k) => new Promise((resolve) => {
     const req = indexedDB.open('meteoride_prepared', 1);
     req.onsuccess = () => {
       const db = req.result;
       const tx = db.transaction('snapshot', 'readwrite');
       const store = tx.objectStore('snapshot');
-      store.get('current').onsuccess = (e) =>
-        store.put({ ...e.target.result, gpx: { text: 'not a route', name: 'broken.gpx' } }, 'current');
+      store.get('current').onsuccess = (e) => {
+        const r = e.target.result;
+        if (k === 'gpx') r.gpx = { text: 'not a route', name: 'broken.gpx' };
+        if (k === 'units') delete r.snapshot.settings.units;
+        if (k === 'step') r.snapshot.steps[0] = null;
+        if (k === 'version') r.version = 2;
+        store.put(r, 'current');
+      };
       tx.oncomplete = () => { db.close(); resolve(); };
     };
-  }));
+  }), how);
+
+/** From the next page on, the `nth` opening of the prepared database answers only once the page calls
+ *  window.__releasePrepared(); window.__preparedHeld is true while it waits. */
+const holdPreparedOpen = (page, nth) =>
+  page.addInitScript((n) => {
+    let opens = 0;
+    const released = new Promise((r) => { window.__releasePrepared = r; });
+    const open = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (name, ...rest) {
+      const req = open.call(this, name, ...rest);
+      if (name !== 'meteoride_prepared' || ++opens !== n) return req;
+      let handler = null;
+      Object.defineProperty(req, 'onsuccess', { configurable: true, get: () => handler, set: (fn) => { handler = fn; } });
+      req.addEventListener('success', async (e) => {
+        window.__preparedHeld = true;
+        await released;
+        if (handler) handler.call(req, e);
+      });
+      return req;
+    };
+  }, nth);
+
+test('a prepared route whose text cannot be opened is dropped at start-up, and the last recent route opens instead', async ({ page }) => {
+  const control = { now: T0 };
+  await prepareThenLoseCoverage(page, control, '45:00');
+  await spoilPrepared(page, 'gpx');
   await page.reload();
   await mapReady(page);
 
   await expect(routeName(page)).toContainText('Masnou');
   await expect.poll(() => preparedStored(page)).toBeNull();
   expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+});
+
+// The restore opened the recent route after awaiting the delete, as a new request: a route picked during
+// that wait was replaced by it.
+test('a route picked while a broken prepared route is being deleted at start-up wins: no recent route opens over it', async ({ page }) => {
+  await prepareThenLoseCoverage(page, { now: T0 }, '45:00');
+  await spoilPrepared(page, 'gpx');
+  // The first opening reads the record at start-up; the second deletes it.
+  await holdPreparedOpen(page, 2);
+  await page.reload();
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => !!window.__preparedHeld)).toBe(true);
+
+  await countLaunches(page);
+  await pickText(page, 'otra.gpx', routeAt('Otra', 41.40));
+  await expect(routeName(page)).toHaveText('Otra');
+  await page.evaluate(() => window.__releasePrepared());
+  await expect.poll(() => preparedStored(page)).toBeNull();
+  await page.waitForTimeout(1500);
+  await expect(routeName(page)).toHaveText('Otra');
+  expect((await page.evaluate(() => window.__launches)).requestRoute, 'the restore asked for a route again').toBe(1);
+});
+
+test('a broken prepared route that cannot be deleted is tried once at start-up, not again and again', async ({ page }) => {
+  await prepareThenLoseCoverage(page, { now: T0 }, '45:00');
+  await spoilPrepared(page, 'gpx');
+  await page.addInitScript(() => {
+    window.__routeFailures = 0;
+    const del = IDBObjectStore.prototype.delete;
+    IDBObjectStore.prototype.delete = function (...args) {
+      const request = del.apply(this, args);
+      if (this.name === 'snapshot') request.addEventListener('success', () => request.transaction.abort());
+      return request;
+    };
+    let notify;
+    Object.defineProperty(window, 'cwNotifyRouteFailure', {
+      configurable: true,
+      get: () => notify && ((...args) => { window.__routeFailures++; return notify(...args); }),
+      set: (fn) => { notify = fn; },
+    });
+  });
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => page.evaluate(() => window.__routeFailures)).toBeGreaterThan(0);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__routeFailures)).toBe(1);
+});
+
+// A route arriving before the restore (a link, the sessionStorage handoff) can be computed before the
+// prepared record is read: its empty table used to stay.
+test('a route handed over at start-up and computed before the prepared route was read is replayed once it has been', async ({ page }) => {
+  await prepareThenLoseCoverage(page, { now: T0 }, '45:00');
+  const text = await readFile(FIXTURE, 'utf8');
+  await page.evaluate((t) => { sessionStorage.setItem('cw_gpx_text', t); sessionStorage.setItem('cw_gpx_name', 'route.gpx'); }, text);
+  await holdPreparedOpen(page, 1);
+  await page.reload();
+  await mapReady(page);
+
+  // Out of coverage and without the record, the route computes and finds nothing.
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.outcome.usableSteps ?? null)).toBe(0);
+  expect(await shownOrigin(page)).toBe('live');
+  await page.evaluate(() => window.__releasePrepared());
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  expect((await shownTemperatures(page))[0]).toBe('13º');   // 08:45 reads 09:00
+});
+
+test('a route handed over at start-up with its forecast already on screen launches nothing more once the prepared route is read', async ({ page }) => {
+  await startClock(page);
+  await routeWithForecast(page, { now: T0 });
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  const text = await readFile(FIXTURE, 'utf8');
+  await page.evaluate((t) => { sessionStorage.setItem('cw_gpx_text', t); sessionStorage.setItem('cw_gpx_name', 'route.gpx'); }, text);
+  await holdPreparedOpen(page, 1);
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.outcome.usableSteps ?? 0)).toBeGreaterThan(0);
+  await countLaunches(page);
+  await page.evaluate(() => window.__releasePrepared());
+  await expect.poll(() => page.evaluate(() => window.cwPreparedRecord()?.gpx.name ?? null)).toBe('route.gpx');
+  await page.waitForTimeout(800);
+  expect((await page.evaluate(() => window.__launches)).launch).toBe(0);
+  expect(await shownOrigin(page)).toBe('live');
+});
+
+// A record missing what a replay reads used to pass the check: the replay threw, and the record stayed.
+for (const [what, how] of [['without units', 'units'], ['with a step that is not one', 'step'], ['of another version', 'version']]) {
+  test(`a prepared record ${what} is dropped without a word, and the last recent route opens with nothing replayed`, async ({ page }) => {
+    const { crashes } = watchForBreakage(page);
+    await recordNotices(page);
+    await prepareThenLoseCoverage(page, { now: T0 }, '45:00');
+    await spoilPrepared(page, how);
+    await page.reload();
+    await mapReady(page);
+
+    await expect(routeName(page)).toContainText('Masnou');
+    await expect.poll(() => preparedStored(page)).toBeNull();
+    expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+    await page.waitForTimeout(800);
+    expect(await shownOrigin(page)).not.toBe('prepared');
+    expect(await page.evaluate(() => window.__notices.join(' | '))).not.toMatch(/API error|Error API/);
+    expect(crashes).toEqual([]);
+  });
+}
+
+test('a prepared route that cannot be read back keeps the copy in memory', async ({ page }) => {
+  await routeWithForecast(page);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  await page.evaluate(() => {
+    window.__get = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function () { throw new Error('the read failed'); };
+  });
+  expect(await page.evaluate(() => window.cwLoadPreparedRecord().then((r) => r?.gpx.name ?? null))).toBe('route.gpx');
+  expect(await page.evaluate(() => window.cwPreparedRecord()?.gpx.name ?? null)).toBe('route.gpx');
+
+  // Nor when the database does not open.
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.get = window.__get;
+    IDBFactory.prototype.open = function () { throw new Error('no database'); };
+  });
+  expect(await page.evaluate(() => window.cwLoadPreparedRecord().then((r) => r?.gpx.name ?? null))).toBe('route.gpx');
+  expect(await page.evaluate(() => window.cwPreparedRecord()?.gpx.name ?? null)).toBe('route.gpx');
 });
 
 test('a start-up restore replaced by a route shared meanwhile says nothing about the prepared route it dropped', async ({ page }) => {

@@ -315,14 +315,25 @@
         || params.has('gpx_url') || params.has('url') || params.has('shared') || params.has('shared_id')) {
       // The prepared record still belongs to this session: later changes and coming back replay or
       // expire with it. Expired, it goes without a word, over a route that is not its own.
-      loadPreparedRecord().then(expireIfPast);
+      loadPreparedRecord().then(expireIfPast).then((dropped) => { if (!dropped) replayIfComputedWithout(); });
       return;
     }
     return openLastRoute();
   }
 
+  // The route that arrived may have been computed before the record was read, and found nothing. Once
+  // read, a record that can stand in for it gets one more launch, which replays: only over an empty live
+  // table, or with nothing published and nothing running.
+  function replayIfComputedWithout() {
+    if (!preparedStandsIn()) return;
+    const shown = window.cw.currentSnapshot();
+    const empty = shown ? shown.origin === 'live' && shown.outcome.usableSteps === 0 : !window.cwIsComputing();
+    if (empty) window.cw.startForecast();
+  }
+
   // The restore's own request, past the checks above: they no longer hold once it has asked.
-  async function openLastRoute() {
+  // `retried` marks the one attempt made after dropping a prepared route that does not open.
+  async function openLastRoute(retried = false) {
     // The request is made before any wait, so a route that arrives while the recent
     // routes are still loading is a later request and replaces this one. Five seconds is
     // generous for an IndexedDB read and short enough that a first run with nothing
@@ -330,7 +341,7 @@
     let nothingStored = false;
     let expired = false;
     let opened = null;
-    const result = await window.cw.requestRoute({
+    const asked = window.cw.requestRoute({
       source: 'recent',
       read: async () => {
         // The prepared route comes first (spec §4.7): until it has expired it is what opens,
@@ -354,16 +365,22 @@
         return window.cwReadRecentRoute(routes[0]);
       },
     });
+    // The identity is taken before any wait, so this is the restore's own.
+    const requestId = window.cw.lastRouteRequestId();
+    const result = await asked;
 
     // A later request replaced this one: the screen and the notice are that request's.
     if (result === 'superseded') return;
     // A prepared route whose text cannot be opened would stand in the way of every start for three
     // hours: it is dropped, and the restore runs again on the recent routes. The request ends as
     // 'failed' for a text that does not parse too; with the prepared text read, that is the only way.
+    // Again only once, only with the record really gone (a delete that fails would open it again, and
+    // again), and only while no route was asked for since: one picked during the delete wins.
     if (result === 'failed' && opened) {
       if (preparedRecord === opened) preparedRecord = null;
-      await writePrepared((store) => store.delete(PREPARED_KEY));
-      return openLastRoute();
+      const deleted = await writePrepared((store) => store.delete(PREPARED_KEY));
+      if (deleted && !retried && window.cw.lastRouteRequestId() === requestId) return openLastRoute(true);
+      return;
     }
     if (expired) notifyExpired();
     // First run out of coverage: nothing to restore and no way to fetch anything.
@@ -432,25 +449,43 @@
     });
   }
 
-  // A record of another version, or one missing what a replay needs, is no record: dropped
-  // without a word (spec §5).
-  const wellFormed = (r) => !!(r && r.version === 1 && r.gpx && typeof r.gpx.text === 'string'
-    && r.snapshot && r.snapshot.route && typeof r.snapshot.route.fingerprint === 'string'
-    && r.snapshot.settings && Number.isFinite(r.snapshot.settings.start)
-    && Array.isArray(r.snapshot.steps));
+  // A record of another version, or one missing what a replay, the table and the ride alert read,
+  // is no record: dropped without a word (spec §5). What a provider answer holds is not checked.
+  const wellFormedStep = (s) => !!(s && typeof s === 'object' && Number.isFinite(s.lat) && Number.isFinite(s.lon)
+    && s.time != null && Number.isFinite(new Date(s.time).getTime())
+    && (s.payload == null || typeof s.payload === 'object'));
+  const wellFormed = (r) => {
+    const snap = r && r.snapshot;
+    const settings = snap && snap.settings;
+    return !!(r && r.version === 1 && r.gpx && typeof r.gpx.text === 'string'
+      && snap && snap.route && typeof snap.route.fingerprint === 'string'
+      && settings && Number.isFinite(settings.start)
+      && settings.units && typeof settings.units.temp === 'string' && typeof settings.units.wind === 'string'
+      && snap.outcome && typeof snap.outcome === 'object'
+      && (snap.alerts == null || Array.isArray(snap.alerts))
+      && Array.isArray(snap.steps) && snap.steps.every(wellFormedStep));
+  };
 
   async function loadPreparedRecord() {
     const db = await openPrepared();
-    let record = null;
-    if (db) {
-      record = await new Promise((resolve) => {
-        try {
-          const get = db.transaction(PREPARED_STORE, 'readonly').objectStore(PREPARED_STORE).get(PREPARED_KEY);
-          get.onsuccess = () => resolve(get.result);
-          get.onerror = () => resolve(null);
-        } catch (_) { resolve(null); }
+    // Nothing read says nothing about what is stored: the copy in memory stays.
+    if (!db) return preparedRecord;
+    const record = await new Promise((resolve) => {
+      try {
+        const get = db.transaction(PREPARED_STORE, 'readonly').objectStore(PREPARED_STORE).get(PREPARED_KEY);
+        get.onsuccess = () => resolve(get.result ?? null);
+        get.onerror = () => resolve(undefined);
+      } catch (_) { resolve(undefined); }
+    });
+    try { db.close(); } catch (_) { /* closed */ }
+    if (record === undefined) return preparedRecord;
+    if (record && !wellFormed(record)) {
+      // Deleted in the same transaction that finds it still ill-formed, so a route prepared meanwhile stays.
+      await writePrepared((store) => {
+        store.get(PREPARED_KEY).onsuccess = (e) => {
+          if (e.target.result && !wellFormed(e.target.result)) store.delete(PREPARED_KEY);
+        };
       });
-      try { db.close(); } catch (_) { /* closed */ }
     }
     preparedRecord = wellFormed(record) ? record : null;
     return preparedRecord;
