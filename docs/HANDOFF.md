@@ -170,7 +170,8 @@ Prompt sugerido para un asistente:
 > desde `mobile/` antes de cada commit, y **nunca dos suites a la vez** (comparten el
 > puerto 4173 y `www/`). La memoria de decisiones está en `AGENTS.md`; actualízala
 > cuando cambies algo que un lector no deduciría del código. Lo pendiente está en la
-> sección 9 de `docs/HANDOFF.md`.
+> sección 9 de `docs/HANDOFF.md`, y la lista completa de lo que falta y de los límites
+> aceptados, en la sección 10.
 
 ## 9. Lo pendiente: los seis hallazgos de la revisión
 
@@ -303,3 +304,90 @@ tanda: el buzón de iOS no entregaba una ruta con salto de línea en el
 nombre; el dato diario de OpenWeather podía elegir el día anterior justo en la medianoche
 local; una temperatura diaria de 0°C se perdía; y dos imprecisiones de `AGENTS.md` sobre la
 decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes en Android.
+
+## 10. Lista viva de lo que falta y de los límites aceptados
+
+Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
+se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
+sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
+en `AGENTS.md → Open work`. Última actualización: cierre de la fase 3 (`452cd09`).
+
+### Pendiente por fase del rediseño
+
+- **Fase 4 — consumidores.**
+  - Comparar parte de la foto publicada, con su propia identidad y su registro de avisos. Hoy
+    `compare.js` escribe `weatherData` sin identidad, no da avisos de proveedor y elige las
+    horas de Open-Meteo en la zona del teléfono.
+  - La alerta de ruta:
+    - cola serial de guardados y desarmados;
+    - desarmar al confirmar otra ruta;
+    - conservar `notified` al rearmar la misma ruta, porque hoy un aviso oficial se repite.
+  - Retirar `revalidateWeatherAlerts`, incluido su camino al teclear la velocidad.
+  - Quitar el alias `window.reloadFull`, que solo existe para `compare.js`.
+  - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
+- **Fase 5 — rutas que llegan de fuera.**
+  - Cada entrada entra con su fuente, se importa al llegar y pasa por el coordinador:
+    - buzón nativo;
+    - lector único del service worker;
+    - `sessionStorage`;
+    - `shared_id`;
+    - `?gpx_url=`;
+    - `postMessage`, con acuse del resultado real.
+  - `postMessage` no espera al mapa.
+  - El arranque espera a `consumePendingShare` antes de crear la petición de restauración.
+  - Android pierde una ruta compartida si el proceso muere a mitad de la importación.
+  - El contador de secuencia del buzón de iOS no es único entre procesos.
+  - Los comentarios de `gpx-share.js` sobre `reloadFull` están obsoletos, y `loadSharedGPX` es
+    una rama muerta.
+- **Fase 6 — hora y uso sin cobertura.**
+  - Guardar la hora de salida y aplicar la hora mínima al cargar y al volver a la app.
+  - Preparar y reproducir con la foto, caducidad incluida.
+  - La foto aún no guarda salida, velocidad, intervalo ni idioma, y la segmentación sigue
+    leyendo esos valores del DOM.
+- **Fase 7 — retirada y documentación.**
+  - Quitar `pinCacheKeys`, `cw_offline_pinned` y `warnIfStartTimeHasPassed`.
+  - Repaso final de `AGENTS.md` y de este documento.
+
+### Hallazgos de la revisión del 14/09 aún abiertos
+
+- **H3.** La caché no está indexada por ubicación y proveedor.
+- **H4.** Las peticiones a proveedores no tienen plazo: un proveedor que no responde retiene el
+  cálculo con el indicador encendido.
+- **H5.** Resuelto para el cálculo normal; falta comparar (fase 4).
+
+### Límites aceptados (decididos, no se arreglan salvo que se pida)
+
+- **Temperatura en °F.** Open-Meteo y AROME devuelven siempre °C. Con °F elegido, la tabla
+  muestra valores en °C bajo la etiqueta °F. La conversión queda fuera de alcance (spec §2).
+  OpenWeather sí respeta la unidad.
+- **Fichero roto al arrancar.** Si al arrancar la app se elige un fichero roto antes de que termine
+  la restauración, no se restaura la última ruta; el usuario ve el aviso del fallo.
+- **Avisos que se pisan.** El aviso de una ruta que no se pudo abrir lo sustituye el aviso propio
+  de un cálculo que publica después.
+- **Transacción colgada.** Una transacción de IndexedDB que no termina nunca (por ejemplo, una
+  apertura bloqueada) detiene la cola de recientes sin aviso: importaciones, subir al principio y
+  la carga inicial.
+- **Recientes.**
+  - Guarda 3 rutas; las de más de 750 KB se muestran pero no se guardan.
+  - Una ruta guardada antes de la fase 3, reimportada, queda duplicada una vez como
+    `Nombre (2)`.
+  - Un sufijo puede pasar de los 64 caracteres del nombre.
+  - Un KML guardado antes como `.gpx` no coincide con el mismo fichero reimportado como `.kml`.
+- **Indicador en el primer arranque.** Sin rutas guardadas, el indicador de carga sigue encendido
+  hasta 5 s mientras espera a recientes.
+- **iOS, «Abrir en».** Lee el fichero en el hilo principal (hasta 25 MB).
+- **Tests que faltan.**
+  - La carrera entre la migración desde `localStorage` y una importación.
+  - IndexedDB no disponible.
+  - Una excepción dentro de `publish`.
+  - Un `logDebug` que lance dentro del `catch` del cálculo acabaría en rechazo no gestionado.
+
+### Sin comprobar en dispositivo
+
+- **Tareas en segundo plano.** Nunca se han ejecutado por la vía real ni en iPhone ni en
+  Android, así que ninguna alerta de ruta ha llegado todavía.
+- **WKWebView.** Nada de esto se ha probado: la CSP, la red de seguridad del parseo de GPX (un
+  temporizador de 0 ms, probado solo en Chromium), la durabilidad de IndexedDB y la lectura de
+  teselas de OpenStreetMap con `fetch`.
+- **Android.** Probado en emulador, no en dispositivo físico.
+- **Uso sin cobertura real.** Sin comprobar en ninguno de los dos.
