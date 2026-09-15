@@ -24,7 +24,7 @@ sin segundo código: el mismo `public/` va dentro de la app.
 ```bash
 cd mobile
 npm install                 # aplica también un parche a un plugin (sección 4)
-npm test                    # build de www + tests Node + Playwright (43 + 16 + 9)
+npm test                    # build de www + tests Node + Playwright
 npm run ios                 # build + cap sync + abre Xcode
 npm run android             # build + cap sync + abre Android Studio
 ```
@@ -108,9 +108,10 @@ se ejecutan en el simulador) y firma de release de Android.
 
 ## 6. Verificado / no verificado
 
-Verificado aquí: **89 tests** (55 Playwright sobre el bundle real con la red cortada y
-el bridge nativo simulado; 16 de reglas; 9 del runner ensamblado con KV/notificaciones/
-fetch simulados; 5 de iconos; 2 de nombres de plugin; 2 de traducciones); Java
+Verificado aquí, al cerrar la fase 7: **435 tests** (223 de Playwright sobre el bundle real con la
+red cortada, respuestas de proveedor simuladas y el bridge nativo simulado; 212 de Node: reglas,
+coordinador de rutas, extracción, runner ensamblado con KV/notificaciones/fetch simulados, iconos,
+nombres de plugin y traducciones); Java
 compilado contra stubs; nombres de API de Capacitor 8.5.2 cotejados con las fuentes de
 `node_modules` (`CAPBridgedPlugin`, `registerPluginInstance`, `capacitorDidLoad`,
 `SceneDelegateProxy`, `BackgroundRunnerPlugin.registerBackgroundTask`); `cap sync
@@ -368,7 +369,8 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
 - **Fase 7 — retirada y documentación.**
   - Hecho: fuera `pinCacheKeys` y `cachedWeatherKeys`; `cw_offline_pinned` se borra una vez al
     arrancar y el vaciado por cuota trata igual todas las entradas de caché.
-  - Repaso final de `AGENTS.md` y de este documento.
+  - Hecho: repaso final de `AGENTS.md` y de este documento contra el código (recuentos de tests y
+    cobertura de la suite al día). El rediseño no tiene más fases pendientes.
 
 ### Hallazgos de la revisión del 14/09 aún abiertos
 

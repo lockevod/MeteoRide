@@ -1285,9 +1285,8 @@ code does and what makes the race reproducible.
 - The remote branch `claude/cool-allen-w8evld` is stale — it predates this work and
   nothing on it is wanted. It has to be deleted from the GitHub side by the author;
   an agent session here gets a 403 trying.
-- The smoke suite does not touch the forecast itself: providers, the weather table,
-  comparison modes and the unit/language settings are all untested. Stubbing a
-  provider response would make that tractable.
+- The smoke suite stubs provider responses, so providers, the weather table, comparison modes and the
+  unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
 - The suite runs on Chromium only. iOS ships WKWebView, so anything Safari-specific
   goes unnoticed; adding Playwright's `webkit` project would close most of that gap.
 - The iOS native code has now been compiled and run in the simulator on the author's
