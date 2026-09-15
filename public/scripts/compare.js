@@ -1003,47 +1003,25 @@
     const step = { ...baseStep, provider: prov, weather: raw };
     const safeNum = window.cw.safeNum || ((v)=>Number.isFinite(Number(v))?Number(v):null);
     const windToUnits = window.cw.windToUnits || ((v)=>v);
-    // Open-Meteo and AROME send wall-clock hours in the route's zone with its offset beside them.
-    // Read in the phone's zone they picked another hour than the table (cwForecastRules) does.
-    const nearestHour = (times) => cwForecastRules.nearestIndex(times, new Date(step.time).getTime(), raw && raw.utc_offset_seconds);
     try {
       if (!raw) return blankStep(prov, baseStep);
 
       if (prov === "openmeteo" || prov === "aromehd") {
-        const H = raw.hourly || {};
-        const idx = Array.isArray(H.time) ? nearestHour(H.time) : -1;
-        if (idx >= 0) {
-          step.temp = safeNum(H.temperature_2m?.[idx]);
-          step.windSpeed = safeNum(windToUnits(H.wind_speed_10m?.[idx], windUnit));
-          step.windDir = H.winddirection_10m?.[idx];
-          step.windGust = safeNum(windToUnits(H.wind_gusts_10m?.[idx], windUnit));
-          step.humidity = safeNum(H.relative_humidity_2m?.[idx]);
-          step.precipitation = safeNum(H.precipitation?.[idx]);
-          // Use precipitation probability when available (0..100)
-          step.precipProb = safeNum(H.precipitation_probability?.[idx]);
-          step.weatherCode = H.weathercode?.[idx];
-          // Debug: log uv_index array and selected index when debugging enabled
-          try {
-            if (window.cw && window.cw.DEBUG_MERGE) {
-              console.debug('[extract][compare] idx=', idx, 'has_uv_array=', Array.isArray(H.uv_index), 'uv_sample=', Array.isArray(H.uv_index) ? H.uv_index.slice(0,5) : null);
-            }
-          } catch(_) {}
-          // If uv array exists but idx is out of bounds, try to find closest index by time
-          let uvVal = null;
-          if (Array.isArray(H.uv_index)) {
-            if (H.uv_index.length > idx) uvVal = H.uv_index[idx];
-            else {
-              try {
-                if (Array.isArray(H.time)) {
-                  const alt = nearestHour(H.time);
-                  if (alt != null && alt >= 0 && H.uv_index.length > alt) uvVal = H.uv_index[alt];
-                }
-              } catch (_) {}
-            }
-          }
-          step.uvindex = safeNum(uvVal);
-          step.isDaylight = H.is_day?.[idx];
-          step.cloudCover = safeNum(H.cloud_cover?.[idx]);
+        // The table's own reading: the hour by the answer's utc_offset_seconds, and the quarter of
+        // minutely_15 while the step falls within it (the first 5 h), uv and probability from hourly.
+        const r = cwForecastRules.extractStep(raw, { provider: prov, time: step.time });
+        if (r) {
+          step.temp = safeNum(r.temp);
+          step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+          step.windDir = r.windDir;
+          step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
+          step.humidity = safeNum(r.humidity);
+          step.precipitation = safeNum(r.precipitation);
+          step.precipProb = safeNum(r.precipProb);
+          step.weatherCode = r.weatherCode;
+          step.uvindex = safeNum(r.uvIndex);
+          step.isDaylight = r.isDay;
+          step.cloudCover = safeNum(r.cloudCover);
         }
         // Derive category for models without robust weathercode (e.g., AROME‑HD)
         step._derivedCat = deriveCategoryFromParams(step);

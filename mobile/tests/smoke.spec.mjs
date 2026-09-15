@@ -5575,6 +5575,50 @@ test.describe('with the phone in New York and the route in Spain', () => {
   });
 });
 
+/** Open-Meteo with the quarter hours it sends for the next hours: `minutely_15` from an hour ago
+ *  to six hours ahead reads 14º, 30 km/h, 0.4 mm and 80 % humidity, while `hourly` reads 21º,
+ *  12 km/h, 0 mm and 60 %. Its probability is null, as Open-Meteo often sends it there. */
+function forecastWithQuarters() {
+  const hour = Math.floor(Date.now() / 3600000) * 3600000;
+  const body = forecastAround(Date.now());
+  body.hourly.temperature_2m = body.hourly.time.map(() => 21);
+  const time = [];
+  for (let t = hour - 3600000; t <= hour + 6 * 3600000; t += 900000) time.push(new Date(t).toISOString().slice(0, 16));
+  const fill = (v) => time.map(() => v);
+  body.minutely_15 = {
+    time, temperature_2m: fill(14), precipitation: fill(0.4), precipitation_probability: fill(null),
+    relative_humidity_2m: fill(80), wind_speed_10m: fill(30), wind_gusts_10m: fill(45),
+    winddirection_10m: fill(90), weathercode: fill(61), uv_index: fill(null), is_day: fill(1), cloud_cover: fill(90),
+  };
+  return body;
+}
+
+// Compare read only `hourly` from Open-Meteo, so within five hours its row differed from the table,
+// which reads the quarter hours there. Both, and compare-by-dates, read a step the same way now.
+test('within five hours the comparison and the date comparison read Open-Meteo quarter hours as the table does', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastWithQuarters()) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  const read = (rows) => rows.map((s) => [s.temp, s.windSpeed, s.windGust, s.humidity, s.precipitation, s.precipProb, s.uvindex, s.cloudCover]);
+  const table = await page.evaluate(`(${read})(window.weatherData)`);
+  // Wind in m/s, the units on screen.
+  expect(table[0].slice(0, 6)).toEqual([14, 30 / 3.6, 45 / 3.6, 80, 0.4, 5]);
+
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await expect.poll(() => page.evaluate(`(${read})(window.cw.compareProviderData?.openmeteo ?? [])`)).toEqual(table);
+  await expect(page.locator('#weatherTable tr[data-prov="openmeteo"] td[data-col] .combined-top').first()).toHaveText('14º');
+
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+  await expect.poll(() => page.evaluate(`(${read})(window.cw.weatherDataA ?? [])`)).toEqual(table);
+});
+
 /* ---------- starting language ---------- */
 
 const chosenLanguage = (page) => page.evaluate(() => document.getElementById('language').value);

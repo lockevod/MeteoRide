@@ -461,8 +461,6 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
     cambiar la fecha B o un control cuando `explicitCompareActive` es falso). No se alcanzan,
     porque el botón siempre abre el modo explícito; el relanzamiento automático desde `publish` ya
     se ha quitado.
-  - Comparar lee Open-Meteo y AROME solo por horas (`hourly`), mientras que la tabla usa
-    `minutely_15` en las primeras 5 h: en ese tramo los valores pueden no coincidir con la tabla.
   - En las ventanas de cambio de hora, la hora se elige con el único `utc_offset_seconds` de la
     respuesta de Open-Meteo, igual que en la tabla. No se ha comprobado cuál de las dos horas
     posibles es la correcta.

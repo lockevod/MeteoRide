@@ -1203,10 +1203,12 @@ a replay takes the ones in use ("Preparing and replaying").
     `publish`, a comparison with nothing to say leaves up the notice of a route that failed to
     open while the run's computation was the latest. A 200 whose body cannot be read counts as a
     failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).
-  - **Hours.** Open-Meteo and AROME hours are read with `cwForecastRules.nearestIndex` and the
-    answer's `utc_offset_seconds`, as in the table. Compare reads only `hourly`; the table reads
-    `minutely_15` within 5 h, so the two can differ there. The comparison tables are unchanged
-    (spec §2).
+  - **Hours.** `extractStepMetrics` reads Open-Meteo and AROME with `cwForecastRules.extractStep`,
+    the table's own function, for both comparisons: the hour by the answer's `utc_offset_seconds`,
+    the quarter of `minutely_15` while the step falls within it (the first 5 h; the value per
+    quarter, as the table shows it), and uv and probability from `hourly` when the quarter has
+    none. It keeps its own unit conversion, `_derivedCat` and the precipitation-probability rule.
+    OpenWeather is still read by hand there. The comparison tables are unchanged (spec §2).
 - **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
   name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
   and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline
