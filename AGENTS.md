@@ -780,6 +780,18 @@ never kept warnings out. And a repaint read a cached OpenWeather answer in the u
 now rather than the ones it was requested in, so a metric answer repainted in °F had its
 wind read as mph.
 
+The table labels the temperature with the unit its snapshot was computed in, not with the
+selector: `mirrorSteps` copies `settings.units.temp` onto every step as `tempUnit`, and
+`renderWeatherTable` takes it from the first step that has one, for the row and the route
+summary. The two differ while a units change is computed and something repaints (language,
+detailed notices), and when a units change waits behind a route request and the older
+computation publishes; both used to show 21 ºC as 21 ºF. Nothing is converted (spec §2): an
+OpenWeather answer is in the units it was asked for, Open-Meteo and AROME always in °C, so
+an Open-Meteo forecast computed in °F still shows °C values under °F. Steps with no unit
+(the comparison's `cw.setWeatherData`) follow the selector as before. Wind needs none of
+this: it is kept in km/h and converted with the selected unit on every paint, so its label
+always matches.
+
 ## Route requests
 
 `public/scripts/route-requests.js` decides which route is on screen, and nothing else

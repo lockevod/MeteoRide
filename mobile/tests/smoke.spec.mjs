@@ -1237,6 +1237,99 @@ test('units changed while a computation fetches: only the new one publishes', as
   expect(await page.evaluate(() => window.__publishedUnits)).toEqual([other]);
 });
 
+/** OpenWeather answers in the units it was asked for: 21 in metric, 70 in imperial. While
+ *  `control.held` is a promise, every answer waits for it. */
+async function stubOpenWeather(page, control) {
+  await page.route((url) => url.hostname === 'api.openweathermap.org', async (route) => {
+    if (control.held) await control.held;
+    const imperial = new URL(route.request().url()).searchParams.get('units') === 'imperial';
+    const base = Math.floor(Date.now() / 3600000) * 3600;
+    const hourly = Array.from({ length: 48 }, (_, i) => ({
+      dt: base + i * 3600, temp: imperial ? 70 : 21, wind_speed: 3, wind_deg: 180, humidity: 60,
+      pop: 0.05, weather: [{ id: 800 }], uvi: 3, clouds: 20,
+    }));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ timezone_offset: 0, hourly, daily: [] }) });
+  });
+}
+const holdOpenWeather = (control) => {
+  let open;
+  control.held = new Promise((r) => { open = r; });
+  return () => { control.held = null; open(); };
+};
+const selectOpenWeather = (page) =>
+  page.evaluate(() => {
+    const key = document.getElementById('apiKeyOW');
+    key.value = 'a-valid-looking-key';
+    key.dispatchEvent(new Event('change', { bubbles: true }));
+    const sel = document.getElementById('apiSource');
+    sel.value = 'openweather';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+const setTempUnits = (page, unit) =>
+  page.evaluate((u) => {
+    const el = document.getElementById('tempUnits');
+    el.value = u;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, unit);
+/** The temperature as the table shows it: every cell, the row's unit and the route summary. */
+const shownTemperature = (page) =>
+  page.evaluate(() => ({
+    cells: [...new Set([...document.querySelectorAll('#weatherTable td')]
+      .map((c) => c.textContent.trim()).filter((t) => /^-?\d+º$/.test(t)))],
+    unit: document.querySelector('#weatherTable .unit-temp')?.textContent,
+    summary: /Temp:\s*(\S+)/.exec(document.querySelector('#weatherTable .route-summary')?.textContent || '')?.[1],
+  }));
+
+// A repaint (language, detailed notices) paints the published forecast again. The label
+// used to come from the units selected now, so 21 ºC computed before a change to ºF was
+// shown as 21 ºF until the new computation published.
+test('a repaint while new units are computed keeps the temperature under the units it was computed in', async ({ page }) => {
+  const control = {};
+  await goOffline(page);
+  await stubOpenWeather(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+
+  const release = holdOpenWeather(control);
+  await setTempUnits(page, 'F');
+  const label = () => page.evaluate(() => document.querySelector('#weatherTable .unit-temp')?.parentElement.textContent);
+  const before = await label();
+  await flipControl(page, 'language');
+  // Repainted: the row is in the other language now.
+  await expect.poll(label).not.toBe(before);
+  expect(await shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+
+  release();
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['70º'], unit: 'ºF', summary: '70ºF' });
+});
+
+// Units changed while another route is read wait for that request. The route on screen keeps
+// its computation, asked for in the old units, and that one still publishes.
+test('a forecast that publishes while a units change waits behind another route keeps its own units', async ({ page }) => {
+  const control = {};
+  await goOffline(page);
+  await stubOpenWeather(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectOpenWeather(page);
+  const release = holdOpenWeather(control);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(routeName(page)).toContainText('Masnou');
+
+  await requestHeld(page, 'B');
+  await setTempUnits(page, 'F');
+  release();
+  await expect.poll(async () => (await shownTemperature(page)).cells.length).toBeGreaterThan(0);
+  expect(await shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+
+  await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['70º'], unit: 'ºF', summary: '70ºF' });
+});
+
 test('a file with a route and a track of two segments draws them all and follows the route', async ({ page }) => {
   await stubProvider(page, { celsius: 21, offline: false });
   await page.goto('/index.html');

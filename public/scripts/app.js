@@ -1160,10 +1160,13 @@ function publish(snapshot) {
 }
 
 // The steps of a snapshot in the shape the table and the markers read (window.weatherData).
+// tempUnit is the temperature unit the snapshot was computed in; the table labels the
+// temperature with it, not with the selector, which may have changed since.
 function mirrorSteps(snapshot) {
   return snapshot.steps.map((s) => ({
     lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
     provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
+    tempUnit: snapshot.settings.units.temp,
   }));
 }
 
@@ -1887,7 +1890,10 @@ function renderWeatherTable() {
   let row;
 
   // Unidades seleccionadas (precipUnits opcional, por defecto 'mm')
-  const tempUnit = getVal("tempUnits"); // 'C' o 'F'
+  // A published forecast's temperature is labelled with the units it was computed in, which a
+  // repaint or a units change still waiting can differ from. Steps without them (a comparison)
+  // follow the selector.
+  const tempUnit = weatherData.find((s) => s && s.tempUnit)?.tempUnit || getVal("tempUnits"); // 'C' o 'F'
   const windUnit = getVal("windUnits"); // ej. 'ms', 'kmh', 'mph'
   const precipUnit = (getVal("precipUnits") || "mm").toLowerCase();
   const distanceUnit = getVal("distanceUnits") || "km";
