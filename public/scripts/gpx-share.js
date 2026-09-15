@@ -6,23 +6,14 @@
     // so the service worker handoff is neither available nor needed there.
     if (window.CW_NATIVE) return;
     if (!('serviceWorker' in navigator)) return;
+    // Listening before registering: the worker posts as soon as it has stored a route.
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.type === 'cw-shared-gpx') takeSharedFromServiceWorker();
+    });
     try {
       await navigator.serviceWorker.register('/scripts/service-worker.js');
     } catch (err) {
       console.warn('[cw] sw register failed', err);
-    }
-    if (navigator.serviceWorker.addEventListener) {
-      navigator.serviceWorker.addEventListener('message', (ev) => {
-        try {
-          if (ev.data && ev.data.type === 'cw-shared-gpx') {
-            readSharedGPXFromIDB().then(payload => {
-              if (payload && payload.text) {
-                window.cwInjectGPXFromText(payload.text, payload.name || ev.data.name);
-              }
-            }).catch(()=>{});
-          }
-        } catch(_) {}
-      });
     }
   }
 
@@ -179,7 +170,8 @@
     } catch(_) { if (window.logdebug) window.logdebug('GPX: (unreadable)'); else console.log('GPX: (unreadable)'); }
   }
 
-  // Read GPX stored by the Service Worker in IndexedDB (one-time read)
+  // Takes the route the service worker stored in IndexedDB, if any: read and delete in one
+  // readwrite transaction, settled only once it completes. Resolves null when there is none.
   function readSharedGPXFromIDB() {
     if (typeof indexedDB === 'undefined') return Promise.resolve(null);
     return new Promise((resolve) => {
@@ -192,20 +184,50 @@
           const db = evt.target.result;
           const tx = db.transaction('files', 'readwrite');
           const store = tx.objectStore('files');
+          const done = (val) => { try { db.close(); } catch(_) {} ; resolve(val); };
+          tx.onabort = () => done(null);
           const gt = store.get('gpx');
           gt.onsuccess = () => {
             const val = gt.result || null;
-            if (val) {
-              // remove stored item so it's one-time
-              store.delete('gpx');
-            }
-            tx.oncomplete = () => { try { db.close(); } catch(_) {} ; resolve(val); };
+            if (val) store.delete('gpx');
+            tx.oncomplete = () => done(val);
           };
-          gt.onerror = () => { try { db.close(); } catch(_) {} ; resolve(null); };
+          gt.onerror = () => done(null);
         } catch (err) { resolve(null); }
       };
       req.onerror = () => resolve(null);
     });
+  }
+
+  // The one reader of the service worker's slot, which holds a single route. One read at a
+  // time: a call while a read runs makes that read go round once more when it ends, so a route
+  // stored meanwhile, whose message found the reader busy, is still taken, and no route is
+  // taken twice. Called at start-up (which covers ?shared, where the worker sends the page)
+  // and on every cw-shared-gpx message.
+  // ponytail: a slot transaction that never settles stalls the reader for the page's life,
+  // like the recent-routes queue; a timeout per read would unstick it.
+  let slotRead = null;
+  let slotAgain = false;
+
+  function takeSharedFromServiceWorker() {
+    if (slotRead) {
+      slotAgain = true;
+      return slotRead;
+    }
+    slotRead = (async () => {
+      try {
+        do {
+          slotAgain = false;
+          const payload = await readSharedGPXFromIDB();
+          if (payload && payload.text) {
+            cwReceiveRoute({ source: 'share-sw', name: payload.name, text: payload.text, importOn: 'arrival' });
+          }
+        } while (slotAgain);
+      } finally {
+        slotRead = null;
+      }
+    })();
+    return slotRead;
   }
 
   // sessionStorage handoff (keeps existing behavior for open-in from other pages)
@@ -219,51 +241,11 @@
         const routeName = ss.getItem(KEY_NAME) || 'Shared route';
         ss.removeItem(KEY);
         ss.removeItem(KEY_NAME);
-        window.cwInjectGPXFromText(pending, routeName);
+        cwReceiveRoute({ source: 'share-session', name: routeName, text: pending, importOn: 'arrival' });
         console.log('[cw] loaded GPX from sessionStorage');
         if (window.openDebug) window.openDebug();
       }
     } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
-  }
-
-  // Helper to open the shared DB (used elsewhere)
-  function openIndexedDB() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('cw_shared_db', 1);
-      request.onupgradeneeded = (e) => {
-        try { e.target.result.createObjectStore('files'); } catch(_) {}
-      };
-      request.onsuccess = (e) => resolve(e.target.result);
-      request.onerror = (e) => reject(e);
-    });
-  }
-
-  // Called from UI when needing to load shared GPX (from '?shared' or message)
-  async function loadSharedGPX() {
-    try {
-      const db = await openIndexedDB();
-      const tx = db.transaction('files', 'readonly');
-      const store = tx.objectStore('files');
-      const request = store.get('gpx');
-      request.onsuccess = () => {
-        const data = request.result;
-        if (data && data.text) {
-          // Parse and load the GPX
-          if (typeof window.cw !== 'undefined' && window.cw.loadGPXFromText) {
-            window.cw.loadGPXFromText(data.text, data.name || 'shared.gpx');
-          } else {
-            // fallback to injector
-            window.cwInjectGPXFromText(data.text, data.name || 'shared.gpx');
-          }
-          // Clear the shared data
-          const delTx = db.transaction('files', 'readwrite');
-          delTx.objectStore('files').delete('gpx');
-        }
-      };
-      request.onerror = () => console.error('Failed to load shared GPX');
-    } catch (e) {
-      console.error('Error loading shared GPX:', e);
-    }
   }
 
   // --- Minimal URL param ingest (moved from gpx-ingest.js) ---
@@ -318,38 +300,17 @@
 
   // Expose some helpers globally (non-enumerable)
   window.cwInjectGPXFromText = cwInjectGPXFromText;
-  window.readSharedGPXFromIDB = readSharedGPXFromIDB;
-  window.openIndexedDB = openIndexedDB;
 
-  // Boot/initialization logic is exposed so the main app can control when to start
-  async function initGpxShare() {
-    await registerServiceWorker();
+  // Boot/initialization logic is exposed so the main app can control when to start.
+  // Called while app.js loads, before the map exists: every entry below asks for its route
+  // at once and waits for the map inside its request.
+  function initGpxShare() {
+    registerServiceWorker();
     sessionStorageHandoff();
     // prefer UI module's header localize if available
     try { if (typeof window.localizeHeader === 'function') window.localizeHeader(); } catch(_) {}
-    // Try to read any GPX the SW might have stored
-    try {
-      const payload = await readSharedGPXFromIDB();
-      if (payload && payload.text) {
-        console.log('[cw] loaded GPX from IndexedDB (service-worker handoff)', payload.name || '');
-        cwInjectGPXFromText(payload.text, payload.name || 'Shared route');
-      }
-    } catch (e) { console.warn('[cw] readSharedGPXFromIDB error', e); }
-
-    // Listen for in-page messages to load shared GPX
-    if (navigator.serviceWorker && navigator.serviceWorker.addEventListener) {
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'cw-shared-gpx') {
-          loadSharedGPX();
-        }
-      });
-    }
-
-    // If URL has ?shared, attempt to load
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('shared')) loadSharedGPX();
-    } catch (_) {}
+    // Whatever the service worker stored while no page was reading.
+    takeSharedFromServiceWorker();
 
     // ?gpx_url= / ?url= — the documented way to open a hosted route.
     loadFromParams();

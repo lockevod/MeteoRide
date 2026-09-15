@@ -2188,6 +2188,138 @@ test('four shared routes in a row: the fourth is shown and the last three to arr
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('d.gpx');
 });
 
+/* The service worker's slot: one route in IndexedDB (cw_shared_db, store files, key gpx), and a
+   cw-shared-gpx message once it is written. The test's own reads and writes set __slotBypass so
+   the holds below never catch them. */
+
+const slotOp = (page, write) =>
+  page.evaluate((w) => new Promise((resolve, reject) => {
+    window.__slotBypass = true;
+    const open = indexedDB.open('cw_shared_db', 1);
+    window.__slotBypass = false;
+    open.onupgradeneeded = () => open.result.createObjectStore('files');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      window.__slotBypass = true;
+      const tx = open.result.transaction('files', w ? 'readwrite' : 'readonly');
+      window.__slotBypass = false;
+      const store = tx.objectStore('files');
+      let value = null;
+      if (w) store.put({ text: w.text, name: w.name, ts: Date.now() }, 'gpx');
+      else store.get('gpx').onsuccess = (ev) => { value = ev.target.result ? ev.target.result.name : null; };
+      tx.oncomplete = () => { open.result.close(); resolve(value); };
+      tx.onerror = () => reject(tx.error);
+    };
+  }), write || null);
+const writeSlot = (page, text, name) => slotOp(page, { text, name });
+const slotName = (page) => slotOp(page, null);
+const swAnnounces = (page) =>
+  page.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'cw-shared-gpx' } })));
+
+/** From the next page load, every route from outside that reaches the import is listed by name
+ *  in __received. */
+const listReceived = (page) =>
+  page.addInitScript(() => {
+    window.__received = [];
+    let real;
+    Object.defineProperty(window, 'cwImportIfRoute', {
+      configurable: true,
+      set(v) { real = v; },
+      get() { return (text, name) => { window.__received.push(name); return real(text, name); }; },
+    });
+  });
+
+test('a route the service worker announces while the start-up read of its slot is held is not lost, and arrives after that one', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/help.html');
+  await writeSlot(page, routeAt('Primera', 41.48), 'first.gpx');
+  await listReceived(page);
+  // The first transaction on the slot has read and deleted its route; its answer waits for the test.
+  await page.addInitScript(() => {
+    let open;
+    const gate = new Promise((r) => { open = r; });
+    window.__openSlot = open;
+    const transaction = IDBDatabase.prototype.transaction;
+    IDBDatabase.prototype.transaction = function (...args) {
+      const tx = transaction.apply(this, args);
+      if (this.name !== 'cw_shared_db' || window.__slotBypass || window.__slotHeld) return tx;
+      window.__slotHeld = true;
+      let handler = null;
+      Object.defineProperty(tx, 'oncomplete', { configurable: true, get: () => handler, set: (fn) => { handler = fn; } });
+      tx.addEventListener('complete', (ev) => { gate.then(() => handler && handler.call(tx, ev)); });
+      return tx;
+    };
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => !!window.__slotHeld)).toBe(true);
+
+  await writeSlot(page, routeAt('Segunda', 40.42), 'second.gpx');
+  await swAnnounces(page);
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__openSlot());
+
+  await expect(routeName(page)).toHaveText('Segunda');
+  expect(await slotName(page)).toBe(null);
+  expect(await page.evaluate(() => window.__received)).toEqual(['first.gpx', 'second.gpx']);
+});
+
+test('a route in the service worker slot is received once, however many messages announce it', async ({ page }) => {
+  await listReceived(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.waitForTimeout(500);   // the start-up read of the empty slot is over
+  // Every open of the slot from here on is answered when the test says, the last one first.
+  await page.evaluate(() => {
+    window.__heldOpens = [];
+    const real = IDBFactory.prototype.open;
+    IDBFactory.prototype.open = function (name, ...rest) {
+      const req = real.call(this, name, ...rest);
+      if (name !== 'cw_shared_db' || window.__slotBypass) return req;
+      let handler = null;
+      Object.defineProperty(req, 'onsuccess', { configurable: true, get: () => handler, set: (fn) => { handler = fn; } });
+      req.addEventListener('success', (ev) => { window.__heldOpens.push(() => handler && handler.call(req, ev)); });
+      return req;
+    };
+  });
+
+  await writeSlot(page, routeAt('Tercera', 41.48), 'third.gpx');
+  await swAnnounces(page);
+  await swAnnounces(page);
+  await page.waitForTimeout(300);
+  // Last open first, each let its microtasks run (so a read waiting on the open starts its
+  // transaction) before the next is answered: two reads then both find the route unless each
+  // reads and deletes in one transaction, one at a time.
+  await page.evaluate(async () => {
+    while (window.__heldOpens.length) {
+      window.__heldOpens.pop()();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    }
+  });
+
+  await expect(routeName(page)).toHaveText('Tercera');
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__received)).toEqual(['third.gpx']);
+  expect(await slotName(page)).toBe(null);
+});
+
+test('a route handed over in sessionStorage is shown, kept among recent routes and taken out of sessionStorage', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/help.html');
+  await page.evaluate((text) => {
+    sessionStorage.setItem('cw_gpx_text', text);
+    sessionStorage.setItem('cw_gpx_name', 'handed.gpx');
+  }, routeAt('Traspasada', 41.48));
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(routeName(page)).toHaveText('Traspasada');
+  await expect.poll(() => storedNames(page)).toEqual(['handed.gpx']);
+  expect(await page.evaluate(() => [sessionStorage.getItem('cw_gpx_text'), sessionStorage.getItem('cw_gpx_name')]))
+    .toEqual([null, null]);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {
