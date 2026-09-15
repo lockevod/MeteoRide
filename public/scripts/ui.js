@@ -1200,10 +1200,11 @@
         const hs = simpleHash(msg.gpx);
         console.log('[MeteoRide] Accepted loadGPX postMessage origin=' + ev.origin + ' name=' + name + ' size=' + size + ' hash=' + hs);
         window.logDebug && window.logDebug('Received GPX via postMessage from ' + ev.origin + ' name=' + name + ' size=' + size + ' hash=' + hs);
-        // Imported into recent routes and shown through the coordinator, like any route
-        // arriving from outside.
-        window.cwLoadGPXFromString(msg.gpx, name);
-        try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: true, name, size }, ev.origin || '*'); } catch(_) {}
+        // Shown through its own request, which waits for the map, and kept among recent routes
+        // once confirmed. The sender hears what that request ended as, not just that it arrived.
+        const reply = (answer) => { try { ev.source && ev.source.postMessage(answer, ev.origin || '*'); } catch(_) {} };
+        window.cwReceiveRoute({ source: 'message', name, text: msg.gpx, importOn: 'commit' })
+          .then((status) => reply({ action: 'loadGPX:ack', ok: status === 'committed', status, name, size }));
       } catch (e) {
         console.warn('postMessage loadGPX error', e);
         try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: false, reason: 'exception' }, ev.origin || '*'); } catch(_) {}

@@ -2399,6 +2399,81 @@ test('a ?gpx_url= that is not a GPX fails with a notice and puts nothing on scre
   expect(await storedRoutes(page)).toEqual([]);
 });
 
+/** Posts a route to the page as a trusted site would. Every answer lands in __acks, with the
+ *  route on screen when it arrived. */
+const postRoute = (page, gpx, name) =>
+  page.evaluate(([g, n]) => {
+    if (!window.__acks) {
+      window.__acks = [];
+      window.addEventListener('message', (ev) => {
+        if (ev.data && ev.data.action === 'loadGPX:ack') {
+          window.__acks.push({ ...ev.data, onScreen: window.lastGPXFile ? window.lastGPXFile.name : null });
+        }
+      });
+    }
+    window.postMessage({ action: 'loadGPX', gpx: g, name: n }, window.location.origin);
+  }, [gpx, name]);
+const acks = (page) => page.evaluate(() => window.__acks || []);
+
+// The answer used to be ok: true as soon as the message arrived, before anything was known.
+test('a posted route is answered once it is confirmed, with what its request ended as', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const route = routeAt('Mensaje', 41.48);
+  await postRoute(page, route, 'posted.gpx');
+
+  await expect.poll(() => acks(page)).toEqual([
+    { action: 'loadGPX:ack', ok: true, status: 'committed', name: 'posted.gpx', size: route.length, onScreen: 'posted.gpx' },
+  ]);
+  await expect.poll(() => storedNames(page)).toEqual(['posted.gpx']);
+});
+
+test('a posted text with no track is answered as failed and stays out of recent routes', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await postRoute(page, '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"></gpx>', 'empty.gpx');
+
+  await expect.poll(() => acks(page)).toEqual([expect.objectContaining({ ok: false, status: 'failed', name: 'empty.gpx' })]);
+  await importsDone(page);
+  expect(await storedRoutes(page)).toEqual([]);
+});
+
+test('a posted route replaced by a file picked before the map is ready is answered as superseded, and not kept', async ({ page }) => {
+  await holdMap(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await postRoute(page, routeAt('Mensaje', 41.48), 'posted.gpx');
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequests())).toBe(true);
+  await requestHeld(page, 'pick');
+
+  await page.evaluate(() => window.__openMap());
+  await mapReady(page);
+  await openRead(page, 'pick', routeAt('Elegida', 40.42), 'picked.gpx');
+  await expect.poll(() => acks(page)).toEqual([expect.objectContaining({ ok: false, status: 'superseded', name: 'posted.gpx' })]);
+  await expect.poll(() => requestStatus(page, 'pick')).toBe('committed');
+  await importsDone(page);
+  expect(await storedRoutes(page)).toEqual([]);
+});
+
+// Posting used to confirm straight away: before the map existed the commit threw, leaving the
+// name on screen with no track.
+test('a route posted before the map exists is drawn once the map is ready, and only then answered', async ({ page }) => {
+  await holdMap(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await postRoute(page, routeAt('Temprana', 41.48), 'early.gpx');
+  await page.waitForTimeout(300);
+  expect(await acks(page), 'answered before anything was decided').toEqual([]);
+
+  await page.evaluate(() => window.__openMap());
+  await mapReady(page);
+  await expect(routeName(page)).toHaveText('Temprana');
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+  await expect.poll(() => acks(page)).toEqual([expect.objectContaining({ ok: true, status: 'committed', onScreen: 'early.gpx' })]);
+});
+
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
 // future one should fail here rather than in a screenshot nobody takes.
 test('the app toolbar stays on one line', async ({ page }) => {
