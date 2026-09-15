@@ -267,8 +267,8 @@ indicador de carga funciona por reclamaciones, así que comparar ya no lo apaga 
 cálculo. Recientes importa en cola, con nombre único (`Ruta (2).gpx`) y en una sola
 transacción, sin respaldo en `localStorage` al escribir. La restauración al arrancar pide su
 ruta antes de esperar a recientes: una ruta compartida que llega durante esa espera gana, y
-ahora tiene test. Quedan para la fase 4 comparar, `revalidateWeatherAlerts` y desarmar la alerta
-de ruta al confirmar otra; para la fase 5, cada entrada de fuera con su fuente (hecho en la
+ahora tiene test. Quedaban para la fase 4 comparar, `revalidateWeatherAlerts` y desarmar la alerta
+de ruta al confirmar otra (hechos en la fase 4); para la fase 5, cada entrada de fuera con su fuente (hecho en la
 fase 5, abajo). Detalle en
 `AGENTS.md`, «Route requests». Las fases 4 a 7 tendrán cada una su plan cuando empiecen.
 
@@ -361,7 +361,7 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: fase 6, tanda final de correcciones.
+en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijado de caché y repaso de documentación.
 
 ### Pendiente por fase del rediseño
 
