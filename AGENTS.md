@@ -160,7 +160,11 @@ What is still open, and why it was left:
 - The `postMessage` route importer accepts an empty origin (`isAllowedOrigin` in
   `ui.js`), meant for userscript contexts. A browser page always has an origin, so
   this is not reachable from the web, but it is a hole to remember if that listener
-  grows.
+  grows. The allowlist itself is pinned by a test that loads the app from `http://[::1]:4173`
+  (the test server over IPv6, a hostname the list does not name) and posts to itself, since the
+  browser sets the origin. Framing the app inside a foreign page does not work in the tests: the
+  app's CSP keeps foreign frames out of the app, and a page on another hostname framing 127.0.0.1
+  is blocked by Chromium's local network access checks (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`).
 
 ## Behaving like an app rather than a page
 
@@ -442,7 +446,9 @@ so they work with any app rather than a hardcoded list.
 - **In**: the share extension on iOS, the intent filters on Android. Whatever the other
   app exports as a `.gpx`/`.kml` file, we accept. A shared *link* is refused on purpose
   — those services gate their downloads behind a session, so a URL would fetch a login
-  page, and on iOS it also caused a blocking download inside the extension.
+  page, and on iOS it also caused a blocking download inside the extension. Whatever the
+  entry (native inbox, service worker, `?gpx_url=`, `postMessage`…), the route enters the page
+  through `cwReceiveRoute` in `gpx-share.js` ("Routes from outside").
 - **Out**: `shareCurrentRoute` in `native.js` writes the loaded route to the cache
   directory and hands the file to `Share`. It shares the file that was loaded, not a
   re-rendering of it, falling back to `cw.exportRouteToGpx` when the route was built
@@ -910,7 +916,10 @@ in for a route that comes neither from the file picker nor from recent routes. I
 it asks the coordinator for its route; a download (`fetchText`) starts right after, and `read`
 awaits the text and then the map (`window.map` and `cwParseRoute`), all under the request's
 30 s deadline. A rejected download or an empty text ends the request as `'failed'` with
-`route_read_failed`. It resolves with what the request ended as.
+`route_read_failed`. It resolves with what the request ended as. Given no text (or a text that
+is not a non-empty string) and no `fetchText`, it resolves `'failed'` without asking, so it
+replaces nothing. Each read polls for the map on its own and stops when its request ends,
+whatever it ends as; an import that throws is logged, never left as an unhandled rejection.
 
 Keeping the route among the recent ones is separate from showing it, and when it happens
 depends on the entry:
@@ -920,7 +929,7 @@ depends on the entry:
 | Native inbox (`native.js`, `injectRoute`) | `share-native` | as it arrives |
 | Service worker slot | `share-sw` | as it arrives |
 | `sessionStorage` (`cw_gpx_text`, `cw_gpx_name`) | `share-session` | as it arrives |
-| `?shared_id=` | `shared-id` | as its text arrives; the server copy is deleted then, unawaited |
+| `?shared_id=` | `shared-id` | as its text arrives; the server copy is deleted then, unawaited, and `shared_id` leaves the address |
 | `?gpx_url=` / `?url=` | `url` | once confirmed; text without `<gpx` fails the request |
 | `postMessage` (`ui.js`, trusted origins) | `message` | once confirmed |
 
@@ -929,14 +938,32 @@ never calls `read` for a request replaced in the same tick, and a share replaced
 still be kept. `postMessage` answers with the result, not on arrival:
 `{ action: 'loadGPX:ack', ok: status === 'committed', status, name, size }`. A message from an
 origin not allowed is still refused with `forbidden_origin`, and one that throws synchronously
-with `exception`.
+with `exception`. `ok: true` means the route was shown (its request confirmed), not that it was
+saved: the import into recent routes runs after the answer and can still fail with
+`route_not_saved`.
+
+A used `shared_id` link is spent: once its text arrives, `history.replaceState` takes
+`shared_id` out of the address, keeping the other parameters and the hash, so a reload does not
+ask the server again for a copy already deleted (and show `route_read_failed` over an empty page).
+A GET that fails (HTTP error, network, empty body) leaves it in place.
+
+**KML.** Keeping a route and opening it decide whether it is a KML the same way, `isKmlRoute` in
+`app.js`: the name ends in `.kml`, or a `<kml` element starts within the first 4096 characters.
+They used to disagree (the import looked anywhere in the text), so a KML with a long comment
+first and no `.kml` name was kept, failed to open, and became the recent route the next start-up
+failed to restore. A shared KML is kept as it arrived, under its own name (`Name.kml`) and with
+its raw KML text. Before phase 5 it was kept as `Name.gpx` with the converted GPX text, so sharing
+again a KML an older version stored adds a second entry, and forecast caches and ride-watch
+fingerprints computed from the old text do not match the new one.
 
 **The service worker slot has one reader.** `service-worker.js` stores one route in IndexedDB
 (`cw_shared_db`, store `files`, key `gpx`) and posts `cw-shared-gpx`.
 `takeSharedFromServiceWorker` reads and deletes in one `readwrite` transaction, settled on
 `oncomplete`, one read at a time; a call while a read runs makes that read go round once more.
 It runs at start-up, which covers `?shared` (where the worker sends the page), and on every
-message, from a listener attached before the worker is registered. There used to be three
+message, from a listener attached before the worker is registered. Neither runs in the app
+(`CW_NATIVE`), which has no service worker; reading there only created `cw_shared_db`. A
+transaction that cannot even start closes the database before resolving `null`. There used to be three
 readers, one of them reading and deleting in separate transactions, so a message could delete
 a route written in between or take the same route twice. The tests hold the slot's transactions
 and opens to force both orders; the first version of the "received once" test released them in

@@ -375,7 +375,10 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
   - Una ruta guardada antes de la fase 3, reimportada, queda duplicada una vez como
     `Nombre (2)`.
   - Un sufijo puede pasar de los 64 caracteres del nombre.
-  - Un KML guardado antes como `.gpx` no coincide con el mismo fichero reimportado como `.kml`.
+  - Un KML guardado antes de la fase 5 quedó como `Nombre.gpx` con el texto ya convertido; desde
+    la fase 5 se guarda como `Nombre.kml` con el KML tal cual llegó. Compartir otra vez ese KML
+    crea una segunda entrada, y la caché y la huella de la alerta calculadas con el texto anterior
+    no coinciden con el nuevo.
 - **Indicador en el primer arranque.** Sin rutas guardadas, el indicador de carga sigue encendido
   hasta 5 s mientras espera a recientes.
 - **Rutas que llegan de fuera.**
@@ -391,9 +394,16 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
   - Una lectura del hueco del service worker que no termina nunca detiene su lector hasta recargar,
     como la cola de recientes.
   - Una ruta de fuera que llega sin que el mapa llegue a existir falla a los 30 s con el aviso de
-    lectura.
+    lectura, y deja de esperar al mapa en ese momento.
   - Un `shared_id` que ya no está en el servidor (error HTTP) muestra el aviso de lectura; antes no
-    decía nada.
+    decía nada. Recargar un enlace ya usado no vuelve a pedirlo, porque `shared_id` sale de la
+    dirección en cuanto llega su texto; abrir otra vez el mismo enlace desde fuera sí muestra el
+    aviso.
+  - La restauración puede desarmar la alerta de una ruta compartida otra vez. Hay una alerta
+    guardada para la ruta S, la reciente más nueva es otra ruta R (importada y nunca confirmada) y S
+    se comparte de nuevo en un arranque en frío con el buzón lento. La restauración confirma R antes
+    de que salga S y desarma la alerta de S, así que cuando S publica ha perdido lo ya avisado
+    (`notified`). Es un caso estrecho y no se corrige.
   - La posición del teléfono se aplica cuando termina el vaciado del buzón, no al arrancar.
   - Una descarga de `?gpx_url=` o `shared_id` empieza aunque su petición quede sustituida en la
     misma vuelta, porque la importación no puede depender de que la petición llegue a leer.
@@ -482,6 +492,14 @@ en `AGENTS.md → Open work`. Última actualización: fase 5.
     confirmado que entra en recientes. Fijan un comportamiento que ya existía, y a cada uno lo hace
     fallar una mutación. En el de cuatro compartidas, «la puerta de IndexedDB abierta en orden
     inverso» no puede abrirse de verdad fuera de orden, porque cada escritura espera a la anterior.
+  - Tests de la primera tanda de correcciones de la fase 5 que también pasan con el código anterior,
+    porque fijan un comportamiento que ya existía y cada uno cae con una mutación: los tres de
+    `shared_id` que falla (404, red, cuerpo vacío; cae quitando `res.ok`), el DELETE que no se
+    espera (cae con `await`), el `shared_id` que se guarda aunque falle el DELETE y se agote el
+    plazo, el origen no permitido de `postMessage` (cae con `allowed = true`) y el de la petición
+    anterior al arranque (cae quitando `hasRouteRequests()` de la restauración).
+  - La etiqueta `source` de cada entrada solo se ve envolviendo `cw.requestRoute`; la comprueban
+    los tests de `shared_id`, no los del resto de entradas.
 
 ### Sin comprobar en dispositivo
 
