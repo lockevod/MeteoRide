@@ -159,6 +159,10 @@ test('replay: minutely_15 is read only within fifteen minutes of a quarter, othe
   assert.equal(near.source, 'minutely_15');
   assert.equal(near.temp, 100);
   assert.equal(rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T05:50:00Z') }).source, 'hourly');
+  // 07:45 is exactly fifteen minutes away: still the quarter.
+  const edge = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T05:45:00Z'), ...REPLAY });
+  assert.equal(edge.source, 'minutely_15');
+  assert.equal(edge.temp, 100);
   // 07:40 is twenty minutes away: the hour, 08:00 → slot 8.
   const far = rules.extractStep(openMeteo(), { provider: 'openmeteo', time: at('2026-09-20T05:40:00Z'), ...REPLAY });
   assert.equal(far.source, 'hourly');
@@ -167,7 +171,7 @@ test('replay: minutely_15 is read only within fifteen minutes of a quarter, othe
   assert.equal(tempAt(openMeteo(), '2026-09-23T12:00:00Z'), null);
 });
 
-test('replay: OpenWeather never falls back to daily, and reads the same canonical values in metric and imperial', () => {
+test('replay: OpenWeather never falls back to daily, and reads the same wind in km/h from metric and imperial', () => {
   const w = openWeather('metric');
   w.hourly = [];
   const t = at('2026-09-22T11:00:00Z');
@@ -186,7 +190,8 @@ test('replay: OpenWeather never falls back to daily, and reads the same canonica
   const t2 = at('2026-09-20T14:10:00Z');
   const metric = rules.extractStep(openWeather('metric'), { provider: 'openweather', time: t2, payloadUnits: 'metric', ...REPLAY });
   const imperial = rules.extractStep(openWeather('imperial'), { provider: 'openweather', time: t2, payloadUnits: 'imperial', ...REPLAY });
-  assert.equal(metric.temp, imperial.temp);
+  // Temperatures come back as sent (the fixture sends the same numbers in both), so only the
+  // wind, turned into km/h, has anything to compare.
   assert.ok(Math.abs(metric.wind - 21) < 1e-9 && Math.abs(imperial.wind - 21) < 1e-9, `${metric.wind} / ${imperial.wind}`);
   assert.ok(Math.abs(metric.gust - imperial.gust) < 1e-9);
 });
@@ -238,6 +243,20 @@ test('preparedCoverage counts the steps with data at every start from three hour
   assert.equal(tempAt(early.steps[0].payload, Date.parse('2026-09-19T23:30:00Z') + 3 * H), 14);
   same(rules.preparedCoverage(early), { covered: 0, total: 1 });
 
+  // Three hours later is inside the margin: a step a minute past the end of its answer at +3 h is
+  // not covered, though at +2 h 45 it still reads the last slot.
+  assert.equal(tempAt(openMeteo({ minutely: false }), Date.parse('2026-09-21T19:01:00Z') + 165 * 60000), 57);
+  same(rules.preparedCoverage(snapshotAt('2026-09-21T19:01:00Z')), { covered: 0, total: 1 });
+
+  // Every quarter hour counts: an answer with nothing within an hour of 11:15, and data at 11:00
+  // and 11:30, leaves a step at 09:00 uncovered.
+  const sparseTimes = ['05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '12:20', '13:00'].map((h) => `2026-09-20T${h}`);
+  const sparse = { utc_offset_seconds: 0, hourly: { time: sparseTimes, temperature_2m: sparseTimes.map((_, i) => i) } };
+  assert.equal(tempAt(sparse, '2026-09-20T11:00:00Z'), 5);
+  assert.equal(tempAt(sparse, '2026-09-20T11:15:00Z'), null);
+  assert.equal(tempAt(sparse, '2026-09-20T11:30:00Z'), 6);
+  same(rules.preparedCoverage(snapshotAt('2026-09-20T09:00:00Z', sparse)), { covered: 0, total: 1 });
+
   // A step whose request failed is never covered.
   const twoSteps = snapshotAt('2026-09-20T09:00:00Z');
   twoSteps.steps.push({ ...twoSteps.steps[0], payload: null });
@@ -254,6 +273,11 @@ test('usablePrepared: the same route, and a start at most three hours from the p
   assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start + 3 * H + 60000 }), false);
   assert.equal(rules.usablePrepared(record, { fingerprint: 'fp', startMs: start - 3 * H - 60000 }), false);
   assert.equal(rules.usablePrepared(null, { fingerprint: 'fp', startMs: start }), false);
+  // A fingerprint is a string on both sides: two missing ones are not the same route.
+  const unnamed = { version: 1, snapshot: { ...snapshotAt('2026-09-20T09:00:00Z'), route: { name: 'r.gpx' } } };
+  assert.equal(rules.usablePrepared(unnamed, { fingerprint: undefined, startMs: start }), false);
+  assert.equal(rules.usablePrepared(unnamed, { startMs: start }), false);
+  assert.equal(rules.usablePrepared(record, { startMs: start }), false);
 });
 
 test('effectiveStart is now rounded up when the chosen time has passed, and the chosen time when it is ahead', () => {

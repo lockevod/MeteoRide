@@ -210,7 +210,11 @@ var cwForecastRules = (function () {
     return Number.isFinite(fieldMs) ? Math.max(earliest, fieldMs) : earliest;
   }
 
-  /** A copy of a snapshot moved by `diffMs`: every step's time and the start. Answers are kept. */
+  /**
+   * A copy of a snapshot moved by `diffMs`: every step's time and the start. Answers are kept.
+   * Shallow: the steps and the settings are new objects, but every payload, the alerts and the
+   * outcome are the stored ones, shared with the input. Replace them, never change them in place.
+   */
   function retime(snapshot, diffMs) {
     return {
       ...snapshot,
@@ -241,10 +245,12 @@ var cwForecastRules = (function () {
     return { covered, total: steps.length };
   }
 
-  /** A prepared record can stand in for the route confirmed: same route, start within the margin. */
+  /** A prepared record can stand in for the route confirmed: same route, start within the margin.
+   *  The route is the same only by a fingerprint string on both sides; two missing ones are not. */
   function usablePrepared(record, { fingerprint, startMs } = {}) {
     const snap = record && record.snapshot;
-    return !!(snap && snap.route && snap.settings && snap.route.fingerprint === fingerprint
+    return !!(snap && snap.route && snap.settings && typeof fingerprint === 'string'
+      && snap.route.fingerprint === fingerprint
       && Math.abs(startMs - snap.settings.start) <= PREPARED_MARGIN_MS);
   }
 
@@ -384,9 +390,12 @@ var cwForecastRules = (function () {
     return n;
   }
 
+  // Whole minutes, floored from the total, so 1 h 59 min 40 s never reads "1 h 60 min". An age that
+  // is not a number (no clock passed in) reads as none rather than "NaN min".
   function formatAge(ms) {
-    const hours = Math.floor(ms / 3600000);
-    const mins = Math.round((ms % 3600000) / 60000);
+    const total = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 60000) : 0;
+    const hours = Math.floor(total / 60);
+    const mins = total % 60;
     return hours ? `${hours} h ${mins} min` : `${mins} min`;
   }
 

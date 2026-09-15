@@ -91,8 +91,6 @@
       error_api: "Error API: {msg}",
       geojson_invalid: "Geojson inválido o vacío",
       track_too_short: "Pista demasiado corta",
-      route_date_empty: "Fecha y hora ruta vacías o inválidas",
-      route_date_invalid: "Fecha y hora ruta no válida: {val}",
       route_date_past: "Fecha/hora seleccionada anterior a la actual, usando fecha y hora actual",
       select_gpx: "Primero selecciona un archivo GPX.",
       error_reading_gpx: "Error leyendo GPX: {msg}",
@@ -214,8 +212,6 @@
       error_api: "API error: {msg}",
       geojson_invalid: "Invalid or empty GeoJSON",
       track_too_short: "Track too short",
-      route_date_empty: "Route date/time empty or invalid",
-      route_date_invalid: "Invalid route date/time: {val}",
       route_date_past: "Selected date/time is earlier than now, using current date/time",
       select_gpx: "Please select a GPX file first.",
       error_reading_gpx: "Error reading GPX: {msg}",
@@ -638,15 +634,6 @@
     }
   }
 
-  function getValidatedDateTime() {
-    const datetimeValue = getVal("datetimeRoute");
-    const now = new Date();
-    if (!datetimeValue) return roundUpToNextQuarterDate(now);
-    const selected = new Date(datetimeValue);
-    if (isNaN(selected.getTime())) return roundUpToNextQuarterDate(now);
-    if (selected < now) return roundUpToNextQuarterDate(now);
-    return selected;
-  }
   function validateDateRange(dateString, fieldName = 'fecha') {
     if (!dateString) return { valid: false, error: window.t ? window.t('date_empty', { field: fieldName }) : `La ${fieldName} no puede estar vacía.` };
 
@@ -681,26 +668,16 @@
     }
     return { valid: true };
   }
+  // The same instant as roundUpToNextQuarterDate, as a datetime-local value (local wall clock).
   function roundToNextQuarterISO(date = new Date()) {
-    const d = new Date(date);
-    const q = Math.ceil(d.getMinutes() / 15);
-    const mm = (q * 15) % 60;
-    let hh = d.getHours() + (q === 4 ? 1 : 0);
-    if (hh >= 24) { hh = 0; d.setDate(d.getDate() + 1); }
-    d.setHours(hh, mm, 0, 0);
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 16);
+    const d = roundUpToNextQuarterDate(new Date(date));
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
+  // Up to the next quarter hour, in epoch ms. Every zone in use is offset by whole quarters, so this
+  // is the next local quarter too; seconds count, and setting wall-clock hours on a day the clocks
+  // go back can no longer land an hour off.
   function roundUpToNextQuarterDate(date = new Date()) {
-    const d = new Date(date.getTime());
-    const q = Math.ceil(d.getMinutes() / 15);
-    const mm = (q * 15) % 60;
-    let hh = d.getHours() + (q === 4 ? 1 : 0);
-    if (hh >= 24) { hh = 0; d.setDate(d.getDate() + 1); }
-    d.setSeconds(0, 0);
-    d.setMinutes(mm);
-    d.setHours(hh);
-    return d;
+    return new Date(Math.ceil(date.getTime() / 900000) * 900000);
   }
   function setupDateLimits() {
     const dt = document.getElementById("datetimeRoute");
@@ -962,7 +939,6 @@
   window.getVal = getVal;
   window.getCache = getCache;
   window.setCache = setCache;
-  window.getValidatedDateTime = getValidatedDateTime;
   window.roundToNextQuarterISO = roundToNextQuarterISO;
   window.roundUpToNextQuarterDate = roundUpToNextQuarterDate;
   window.setupDateLimits = setupDateLimits;
@@ -1000,7 +976,6 @@
        pinCacheKeys,
        cachedWeatherKeys,
        isOffline,
-       getValidatedDateTime,
        validateDateRange,
        validateRouteLoaded,
        roundToNextQuarterISO,

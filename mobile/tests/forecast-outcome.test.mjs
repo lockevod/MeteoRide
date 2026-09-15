@@ -145,3 +145,15 @@ test('a replayed prepared snapshot says how old its data is and for what start i
   // A live snapshot says nothing of the kind.
   assert.equal(rules.decideNotice(outcome(), { ...prepared, origin: 'live' }), null);
 });
+
+test('an age is told in whole minutes, never as sixty of them, and never as NaN', () => {
+  const age = (o, opts) => plain(rules.decideNotice(outcome(o), opts)).parts[0][1].age;
+  const now = Date.parse('2026-09-20T10:00:00Z');
+  const replayed = (ms) => ({ origin: 'prepared', preparedAt: now - ms, preparedFor: now, now });
+  assert.equal(age({}, replayed(2 * 3600000 - 20000)), '1 h 59 min');
+  assert.equal(age({}, replayed(45 * 60000 - 20000)), '44 min');
+  assert.equal(age({}, replayed(60 * 60000)), '1 h 0 min');
+  assert.equal(age({ staleAgeMs: 3600000 - 20000 }, {}), '59 min');
+  // Without a clock there is no age to tell.
+  assert.doesNotMatch(age({}, { origin: 'prepared', preparedAt: now, preparedFor: now }), /NaN/);
+});

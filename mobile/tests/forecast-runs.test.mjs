@@ -413,7 +413,7 @@ test('a snapshot carries the start and the speed it was segmented with', async (
   assert.equal(h.s.values.datetimeRoute, localIso(start), 'a time ahead is left as chosen');
 });
 
-test('the steps follow the speed the computation read, whatever the page says afterwards', async () => {
+test('a computation segments with the speed it read at launch, and segmenting reads the settings it is handed', async () => {
   const { s, launch, answer, pending } = harness();
   // 41 → 41.5 is about 55.6 km: at 24 km/h and an hour's interval, three steps and the arrival;
   // at 12 km/h it would be five and the arrival.

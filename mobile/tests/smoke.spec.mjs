@@ -1089,11 +1089,15 @@ const shownOrigin = (page) => page.evaluate(() => window.cw.currentSnapshot()?.o
 const localAt = (ms) => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 const resume = (page) => page.evaluate(() => window.__appListeners.appStateChange({ isActive: true }));
 const T0 = Date.parse('2026-09-20T08:00:00');   // local time, in the browser as in Node
+// The fake clock runs on from the moment it is installed, and a start counts the seconds when it is
+// rounded up to the quarter hour: installed a minute early, "now" stays just under the quarter a
+// test names for as long as the test takes.
+const startClock = (page, at = T0) => page.clock.install({ time: at - 60000 });
 
 test('coming back without coverage 45 minutes later replays the prepared forecast at the new start, and nothing replaces it', async ({ page }) => {
   const control = { now: T0 };
   const sec = Math.floor(T0 / 1000);
-  await page.clock.install({ time: T0 });
+  await startClock(page);
   await installNativeBridge(page);
   await stubAround(page, control);
   await page.route((url) => url.hostname === 'api.openweathermap.org', (route) => route.fulfill({
@@ -1135,7 +1139,7 @@ test('coming back without coverage 45 minutes later replays the prepared forecas
 
 test('with coverage but every provider failing, the prepared forecast is replayed', async ({ page }) => {
   const control = { now: T0 };
-  await page.clock.install({ time: T0 });
+  await startClock(page);
   await routeWithForecast(page, control);
   await prepare(page);
   await expect(page.locator('.notice')).toContainText(preparedNotice);
@@ -1157,7 +1161,7 @@ test('with coverage but every provider failing, the prepared forecast is replaye
 
 test('with compare chosen and no coverage, the replayed forecast stays with a notice and nothing is compared', async ({ page }) => {
   const control = { now: T0 };
-  await page.clock.install({ time: T0 });
+  await startClock(page);
   await routeWithForecast(page, control);
   await prepare(page);
   await expect(page.locator('.notice')).toContainText(preparedNotice);
@@ -1181,7 +1185,7 @@ const expiredNotice = /prepared route no longer fits|ruta preparada ya no sirve/
 /** Prepares the route on screen at T0 (with `start` as the start field, if given), then closes the
  *  app, loses coverage and lets `later` pass (a clock string); the caller reopens or resumes. */
 async function prepareThenLoseCoverage(page, control, later, start) {
-  await page.clock.install({ time: T0 });
+  await startClock(page);
   await installNativeBridge(page);
   await stubAround(page, control);
   await page.goto('/index.html');
@@ -1236,7 +1240,7 @@ test('a route prepared twelve hours before its start and opened half an hour aft
 
 test('a prepared route that is not the newest recent route opens and is replayed all the same', async ({ page }) => {
   const control = { now: T0 };
-  await page.clock.install({ time: T0 });
+  await startClock(page);
   await routeWithForecast(page, control);
   await prepare(page);
   await expect(page.locator('.notice')).toContainText(preparedNotice);
@@ -3654,7 +3658,7 @@ test('a start time saved in the past comes back as now, rounded up to the quarte
 // An app is resumed, not reloaded: coming back hours later used to leave the table of a departure
 // already gone, and only say so.
 test('coming back to the app after the start has passed moves it to now, and the table follows', async ({ page }) => {
-  await page.clock.install({ time: new Date('2026-09-20T08:00:00') });
+  await startClock(page, Date.parse('2026-09-20T08:00:00'));
   await installNativeBridge(page);
   await stubProvider(page, { celsius: 18, offline: false });
   await page.goto('/index.html');
