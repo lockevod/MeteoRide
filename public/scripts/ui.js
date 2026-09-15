@@ -759,9 +759,8 @@
             window.cw.runCompareDatesMode();
           }
           // In explicit mode, do nothing until user clicks Run Compare
-        } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-          window.cw.runCompareMode();
         } else {
+          // Recomputed; with compare chosen, publishing launches the comparison.
           window.cw.settingsChanged();
         }
       });
@@ -898,11 +897,9 @@
               return;
             }
             return;
-          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-            window.cw.runCompareMode();
-            return;
           }
-          // Official warnings are looked up by the computation this launches.
+          // Official warnings are looked up by the computation this launches, and with compare
+          // chosen its publish launches the comparison.
           window.cw.settingsChanged();
         });
       }
@@ -926,10 +923,8 @@
           if (window.cw?.runCompareDatesMode && !explicitCompareActive) window.cw.runCompareDatesMode();
           return;
         }
-        if (prov === "compare") {
-          if (window.cw?.runCompareMode) window.cw.runCompareMode();
-          return;
-        }
+        // Choosing compare launched the comparison in the handler above, once.
+        if (prov === "compare") return;
         window.renderWeatherTable();
       });
     }
@@ -1049,12 +1044,8 @@
         if (compareActive) {
           return;
         }
-        // Otherwise behave as before for compare-mode (provider compare) or normal reload
-        if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-          window.cw.runCompareMode();
-        } else {
-          window.cw.settingsChanged();
-        }
+        // Recomputed; with compare chosen, publishing launches the comparison.
+        window.cw.settingsChanged();
       });
     }
 
@@ -1069,11 +1060,7 @@
           const row2 = document.getElementById('datetimeRoute2Row');
           const compareActive = row2 && row2.style.display !== 'none';
           if (compareActive) return;
-          if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-            window.cw.runCompareMode();
-          } else {
-            window.cw.settingsChanged();
-          }
+          window.cw.settingsChanged();
         }
       });
       cyclingInput.addEventListener("blur", () => {
@@ -1086,11 +1073,7 @@
           const row2 = document.getElementById('datetimeRoute2Row');
           const compareActive = row2 && row2.style.display !== 'none';
           if (compareActive) return;
-          if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-            window.cw.runCompareMode();
-          } else {
-            window.cw.settingsChanged();
-          }
+          window.cw.settingsChanged();
         }
       });
       cyclingInput.addEventListener("input", () => {
@@ -1187,9 +1170,6 @@
   window.testMeteoBlueKey = testMeteoBlueKey;
   window.testOpenWeatherKey = testOpenWeatherKey;
   window.bindUIEvents = bindUIEvents;
-  // compare.js still asks for a recompute by this name when one of its controls changes.
-  // It goes through the coordinator like every other settings change.
-  window.reloadFull = () => window.cw.settingsChanged();
   window.replaceGPXMarkers = replaceGPXMarkers;
 
   // Via window.cw

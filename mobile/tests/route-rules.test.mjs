@@ -41,6 +41,24 @@ test('shouldPublish: only the latest computation of the confirmed route', () => 
   assert.equal(rules.shouldPublish({ requestId: 3, computationId: 7 }, { ...state }), true);
 });
 
+test('shouldPublishComparison: only the latest comparison of the latest computation, published, of the confirmed route', () => {
+  const state = { confirmedRequestId: 3, lastComputationId: 7, publishedComputationId: 7, lastComparisonId: 2 };
+  const run = { requestId: 3, computationId: 7, comparisonId: 2 };
+  assert.equal(rules.shouldPublishComparison(run, state), true);
+  assert.equal(rules.shouldPublishComparison({ ...run, comparisonId: 1 }, state), false, 'another comparison launched since');
+  assert.equal(rules.shouldPublishComparison(run, { ...state, lastComputationId: 8 }), false, 'another computation launched');
+  assert.equal(rules.shouldPublishComparison(run, { ...state, publishedComputationId: 6 }), false, 'the snapshot on screen is of another computation');
+  assert.equal(rules.shouldPublishComparison(run, { ...state, confirmedRequestId: 4 }), false, 'another route confirmed');
+  for (const field of ['requestId', 'computationId', 'comparisonId']) {
+    const partial = { ...run };
+    delete partial[field];
+    assert.equal(rules.shouldPublishComparison(partial, state), false, `no ${field}`);
+  }
+  assert.equal(rules.shouldPublishComparison({ requestId: '3', computationId: '7', comparisonId: '2' }, state), false, 'identities are integers');
+  assert.equal(rules.shouldPublishComparison(null, state), false);
+  assert.equal(rules.shouldPublishComparison(run, null), false);
+});
+
 const rec = (id, name, fingerprint, size) => ({ id, name, fingerprint, size });
 const unique = (records, name, fingerprint = 'fp-new', bytes = 100) =>
   plain(rules.uniqueRouteName(records, { name, fingerprint, bytes }));

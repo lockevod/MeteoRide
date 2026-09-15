@@ -18,32 +18,9 @@
     const sel = document.getElementById("apiSource");
     if (!sel) return;
 
-    // Run compare when selected or when table mutates after route load
-    // NOTE: Do NOT auto-run when the table is in compare-dates-mode. That mode
-    // relies on an explicit "run" button and should not auto-refresh on control
-    // changes.
-    const runIfCompare = () => {
-      try {
-        const tableEl = document.getElementById("weatherTable");
-        // If user explicitly selected compare but the table is currently in
-        // compare-dates-mode, don't auto-refresh (preserve explicit button behavior)
-        if (tableEl && tableEl.classList.contains('compare-dates-mode')) return;
-      } catch (_) {}
-      if (sel.value === "compare" && !compareRendering) {
-        // Force a fresh render even if key matches previous (user explicitly switched)
-        lastCompareKey = "";
-        // Slight delay to allow baseline render/markers
-        setTimeout(runCompareMode, 0);
-      }
-    };
-    sel.addEventListener("change", runIfCompare);
-
-    // Also monitor table changes (GPX reloads/interval changes)
-    const table = document.getElementById("weatherTable");
-    if (table) {
-      compareMO = new MutationObserver(() => runIfCompare());
-      compareMO.observe(table, { childList: true, subtree: true });
-    }
+    // Nothing here launches a comparison: publish (app.js) does, for the snapshot it puts on
+    // screen, and so does choosing compare (ui.js). A table observer and a listener of our own
+    // used to launch it too, several times per route and with whatever weatherData held.
 
     // Add our own click handler (selection) with higher priority in compare mode
     const container = document.getElementById("weatherTableContainer");
@@ -116,23 +93,6 @@
       });
     }
 
-    // Check initial value and trigger if compare
-    if (sel.value === "compare") {
-      runIfCompare();
-    }
-
-    // Auto-refresh compare mode when controls change
-    ['intervalSelect', 'tempUnits', 'windUnits', 'precipUnits', 'distanceUnits', 'apiKey', 'apiKeyOW', 'datetimeRoute'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const ev = (id === 'apiKey' || id === 'apiKeyOW') ? 'input' : 'change';
-      el.addEventListener(ev, () => {
-        const tableEl = document.getElementById('weatherTable');
-        if (sel.value === 'compare' && tableEl?.classList.contains('compare-mode') && !compareRendering) {
-          setTimeout(() => window.reloadFull?.(), 150);
-        }
-      });
-    });
   });
 
   function isReady() {
@@ -156,62 +116,55 @@
     return !temp.some(v => v != null && !Number.isNaN(Number(v)));
   }
 
+  // A comparison's steps: the published snapshot's, in the shape the table and markers read.
+  function snapshotSteps(snapshot) {
+    return (snapshot.steps || []).map((s) => ({ lat: s.lat, lon: s.lon, time: new Date(s.time), distanceM: s.distanceM }));
+  }
+
+  // The local date cache keys are filed under: the day the ride starts, as the date field holds it.
+  function localDateOf(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
   async function runCompareMode() {
     if (!isReady()) return;
     const apiSel = document.getElementById("apiSource");
     if (!apiSel || apiSel.value !== "compare") return;
+    // Compares the snapshot on screen, or nothing. Every effect below waits for a check that
+    // this is still the comparison of that snapshot.
+    const run = window.cwLaunchComparison && window.cwLaunchComparison("providers");
+    if (!run) return;
+    const current = () => window.cwIsComparisonCurrent(run);
 
-    // Prevent re-entrancy and stop observer while we render
-    compareRendering = true;
-    try { compareMO && compareMO.disconnect(); } catch(_) {}
+    try {
+    const snapshot = run.snapshot;
+    const steps = snapshotSteps(snapshot);
+    if (!steps.length) return;
 
-    // Mark body as compare-active (used for small-screen behavior)
-    try { document.body.classList.add("compare-active"); } catch {}
-
-    // Ensure no wind/rain markers are shown in compare mode: always clear on entering/refresh
-    if (window.cw?.clearMarkers) {
-      try { window.cw.clearMarkers(); } catch(_) {}
-      try { window.cw._compareMarkersCleared = true; } catch(_) {}
-    }
-
-    const steps = (window.cw.getSteps && window.cw.getSteps()) || [];
-    if (!steps.length) { compareRendering = false; return; } // no baseline yet
-
-    const units = (window.cw.getUnits && window.cw.getUnits()) || { temp: "C", wind: "kmh", precip: "mm", distance: "km" };
+    // Temperature and wind as the snapshot was computed; rain and distance only change how it looks.
+    const units = {
+      temp: snapshot.settings.units.temp,
+      wind: snapshot.settings.units.wind,
+      precip: document.getElementById("precipUnits")?.value || "mm",
+      distance: document.getElementById("distanceUnits")?.value || "km",
+    };
+    const keys = snapshot.settings.keys || {};
     const horizons = window.cw.horizons || {};
     const MS_PER_DAY = horizons.MS_PER_DAY || (24*60*60*1000);
     const MS_PER_HOUR = horizons.MS_PER_HOUR || (60*60*1000);
     const now = new Date();
-    const dateStr = (function () {
-      const dt = document.getElementById("datetimeRoute")?.value || "";
-      return dt ? dt.substring(0, 10) : new Date().toISOString().substring(0, 10);
-    })();
+    const dateStr = localDateOf(steps[0].time);
 
-    const provs = getCompareProviders();
+    const provs = getCompareProviders(keys);
     const baseProvs = provs.filter(p => p !== 'ow2_arome_openmeteo'); // NEW: exclude chain from direct fetch
-    // Simple key to avoid redundant work triggered by our own DOM changes
-    const k0 = steps[0]?.time ? new Date(steps[0].time).toISOString() : "";
-    const k1 = steps[steps.length - 1]?.time ? new Date(steps[steps.length - 1].time).toISOString() : "";
-    const newKey = `${provs.join(",")}|${steps.length}|${k0}|${k1}|${units.temp}|${units.wind}|${units.precip}`;
-    if (lastCompareKey === newKey) {
-      // Reconnect observer and bail out
-      try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-      compareRendering = false;
-      return;
-    }
 
     const compareData = {};
     const hasAny = {};
     for (const p of provs) compareData[p] = [];
 
-    // Show loading overlay (use global overlay for consistency)
-    try {
-      if (window.cw && window.cw.ui && typeof window.cw.ui.showLoading === 'function') window.cw.ui.showLoading();
-      else if (typeof window.showLoading === 'function') window.showLoading();
-    } catch(_) {}
-
-    try {
     for (let i = 0; i < steps.length; i++) {
+      if (!current()) return;
       const p = steps[i];
       const timeAt = new Date(p.time);
       const daysAhead = (timeAt - now) / MS_PER_DAY;
@@ -249,8 +202,8 @@
         }
 
         // Keys presence
-        const apiKeyMB  = document.getElementById("apiKey")?.value || "";
-        const apiKeyOWM = document.getElementById("apiKeyOW")?.value || "";
+        const apiKeyMB  = keys.meteoblue || "";
+        const apiKeyOWM = keys.openweather || "";
         const needsKey  = (effProv === "meteoblue" || effProv === "openweather");
         if (needsKey && ((effProv === "meteoblue" && apiKeyMB.trim().length < 5) || (effProv === "openweather" && apiKeyOWM.trim().length < 5))) {
           compareData[prov].push(blankStep(prov, p));
@@ -382,6 +335,7 @@
                 effProv = "openmeteo";
               }
             }
+            if (!current()) return;
             window.cw.setCache && window.cw.setCache(key, json);
             const s = extractStepMetrics(effProv, json, p, units.wind);
             // Preserve effective provider and original requested provider separately.
@@ -456,6 +410,17 @@
 
     // Baseline for summary (prefer OM). Markers are disabled in compare mode.
     const baseline = filtered.openmeteo || filtered.aromehd || filtered.meteoblue || filtered.openweather || [];
+
+    // Replaced by another comparison, another computation or another route: nothing reaches the page.
+    if (!current()) return;
+
+    // Mark body as compare-active (used for small-screen behavior)
+    try { document.body.classList.add("compare-active"); } catch {}
+    // No wind or rain markers in compare mode
+    if (window.cw?.clearMarkers) {
+      try { window.cw.clearMarkers(); } catch(_) {}
+      try { window.cw._compareMarkersCleared = true; } catch(_) {}
+    }
     if (window.cw.setWeatherData) window.cw.setWeatherData(baseline);
 
     // Store provider data for row selection
@@ -463,29 +428,9 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
-
-    // Compare mode: ensure no markers remain (only once)
-    if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
-      window.cw.clearMarkers();
-      try { window.cw._compareMarkersCleared = true; } catch(_) {}
-    }
-
-    // Hide global loading overlay
-    try {
-      if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-      else if (typeof window.hideLoading === 'function') window.hideLoading();
-    } catch(_) {}
-
-    // Store key and reconnect observer after rendering
-    lastCompareKey = newKey;
-    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-    compareRendering = false;
     } finally {
-      // Ensure global loading is hidden even if there's an error
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-        else if (typeof window.hideLoading === 'function') window.hideLoading();
-      } catch(_) {}
+      // Only this comparison's claim: a newer one, or a computation, holds its own.
+      window.cw.releaseLoading("compare:" + run.comparisonId);
     }
   }
 
@@ -1028,10 +973,10 @@
     } catch (_) { return String(d); }
   }
 
-  function getCompareProviders() {
+  function getCompareProviders(keys) {
     const provs = ["openmeteo", "aromehd"];
-    const hasMB  = ((document.getElementById("apiKey")?.value || "").trim().length >= 5);
-    const hasOWM = ((document.getElementById("apiKeyOW")?.value || "").trim().length >= 5);
+    const hasMB  = ((keys.meteoblue || "").trim().length >= 5);
+    const hasOWM = ((keys.openweather || "").trim().length >= 5);
     if (hasMB)  provs.push("meteoblue");
     if (hasOWM) {
       provs.push("openweather");

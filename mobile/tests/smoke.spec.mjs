@@ -2851,6 +2851,136 @@ test('confirming another route disarms the watch; confirming the same route does
   await expect(page.locator('#rideAlertsStatus')).toHaveText('');
 });
 
+/* ---------- comparing providers ---------- */
+
+/** From now on, counts the comparisons launched (cwLaunchComparison giving a run) and the
+ *  latitudes of every baseline a comparison writes into weatherData, which it does as it paints. */
+const watchComparisons = (page) =>
+  page.evaluate(() => {
+    window.__comparisons = [];
+    const launch = window.cwLaunchComparison;
+    window.cwLaunchComparison = function (...args) {
+      const run = launch.apply(this, args);
+      if (run) window.__comparisons.push(run.comparisonId);
+      return run;
+    };
+    window.__baselines = [];
+    const set = window.cw.setWeatherData;
+    window.cw.setWeatherData = function (arr) {
+      window.__baselines.push((arr || []).map((s) => s.lat));
+      return set.call(this, arr);
+    };
+  });
+const comparisonsLaunched = (page) => page.evaluate(() => (window.__comparisons || []).length);
+const selectProvider = (page, value) =>
+  page.evaluate((v) => {
+    const sel = document.getElementById('apiSource');
+    sel.value = v;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+const compareShown = (page) => page.evaluate(() => document.getElementById('weatherTable').classList.contains('compare-mode'));
+const comparedLat = (page) => page.evaluate(() => window.cw.compareProviderData?.openmeteo?.[0]?.lat ?? null);
+/** Forgets every cached forecast, so the next comparison has to ask the provider. */
+const forgetForecasts = (page) =>
+  page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith('cw_weather_')) localStorage.removeItem(k); });
+
+async function routeInCompareMode(page, control) {
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+}
+
+test('with compare selected, a new route publishes its forecast and then launches one comparison, of that route', async ({ page }) => {
+  await routeInCompareMode(page, {});
+  await watchComparisons(page);
+  await page.evaluate(() => {
+    window.__published = [];
+    document.addEventListener('cw:forecast', (e) => window.__published.push(e.detail.snapshot.route.name));
+  });
+
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  await expect.poll(() => comparedLat(page)).toBeCloseTo(40.42, 2);
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => window.__published)).toEqual(['b.gpx']);
+  expect(await comparisonsLaunched(page)).toBe(1);
+  expect(await compareShown(page)).toBe(true);
+});
+
+test('a comparison still fetching when the speed changes never paints; the one after the new forecast does', async ({ page }) => {
+  const control = {};
+  await routeInCompareMode(page, control);
+  const slow = await page.evaluate(() => window.cw.compareProviderData.openmeteo.length);
+  await watchComparisons(page);
+  await forgetForecasts(page);
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => comparisonsLaunched(page)).toBe(1);
+
+  await setSpeed(page, 60);
+  await page.waitForTimeout(200);
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(() => comparisonsLaunched(page)).toBe(2);
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
+  await page.waitForTimeout(1000);
+  const baselines = await page.evaluate(() => window.__baselines);
+  expect(baselines).toHaveLength(1);
+  expect(baselines[0].length).toBeLessThan(slow);
+  expect(await page.evaluate(() => window.weatherData.length)).toBe(baselines[0].length);
+});
+
+test('a comparison still fetching when another route is confirmed never paints', async ({ page }) => {
+  const control = {};
+  await routeInCompareMode(page, control);
+  await watchComparisons(page);
+  await forgetForecasts(page);
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => comparisonsLaunched(page)).toBe(1);
+
+  await pickText(page, 'b.gpx', routeAt('Ruta B', 40.42));
+  await expect(routeName(page)).toHaveText('Ruta B');
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(() => comparedLat(page)).toBeCloseTo(40.42, 2);
+  await page.waitForTimeout(1000);
+  const baselines = await page.evaluate(() => window.__baselines);
+  expect(baselines).toHaveLength(1);
+  expect(baselines[0][0]).toBeCloseTo(40.42, 2);
+});
+
+test('choosing compare while a new forecast is computed leaves its indicator on and compares once it publishes', async ({ page }) => {
+  const control = {};
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await watchComparisons(page);
+
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await setSpeed(page, 60);
+  await expect.poll(() => overlayVisibility(page)).toBe('visible');
+  await selectProvider(page, 'compare');
+  await page.waitForTimeout(300);
+  expect(await comparisonsLaunched(page), 'compared the forecast being replaced').toBe(0);
+  expect(await overlayVisibility(page)).toBe('visible');
+
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(() => compareShown(page)).toBe(true);
+  expect(await comparisonsLaunched(page)).toBe(1);
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+});
+
 /* ---------- starting language ---------- */
 
 const chosenLanguage = (page) => page.evaluate(() => document.getElementById('language').value);

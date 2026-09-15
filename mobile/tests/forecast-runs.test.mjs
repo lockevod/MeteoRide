@@ -469,7 +469,8 @@ test('settings changed while a computation is fetching do not reach the rest of 
   await done;
   assert.deepEqual(plain(s.published()[0].settings),
     { provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true,
-      interval: 60, lang: 'en', alertsKey: 'a-valid-looking-key' });
+      interval: 60, lang: 'en', alertsKey: 'a-valid-looking-key',
+      keys: { meteoblue: 'a-valid-looking-key', openweather: 'a-valid-looking-key' } });
 });
 
 test('an API key changed while a computation is fetching is not used by its later steps', async () => {

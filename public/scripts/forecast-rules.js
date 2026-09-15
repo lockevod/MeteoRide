@@ -423,6 +423,20 @@ var cwForecastRules = (function () {
   }
 
   /**
+   * A comparison may reach the screen only while it still compares the snapshot there: its
+   * route is the confirmed one, its computation is both the latest launched and the one
+   * published, and no comparison was launched after it. Without all three identities it never does.
+   */
+  function shouldPublishComparison(run, state) {
+    if (!run || !state) return false;
+    const { requestId, computationId, comparisonId } = run;
+    return Number.isInteger(requestId) && Number.isInteger(computationId) && Number.isInteger(comparisonId)
+      && requestId === state.confirmedRequestId
+      && computationId === state.lastComputationId && computationId === state.publishedComputationId
+      && comparisonId === state.lastComparisonId;
+  }
+
+  /**
    * The name an imported route is stored under. Walks `name`, `base (2)ext`,
    * `base (3)ext`… and takes the first that is free, or the first held by the same
    * content, which is then replaced. A suffix already in `name` is not interpreted.
@@ -446,6 +460,6 @@ var cwForecastRules = (function () {
   return {
     parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
     usableSteps, decideNotice, alertId, alertsInWindow,
-    fingerprint, shouldPublish, uniqueRouteName,
+    fingerprint, shouldPublish, shouldPublishComparison, uniqueRouteName,
   };
 })();

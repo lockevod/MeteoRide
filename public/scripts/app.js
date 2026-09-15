@@ -549,6 +549,8 @@ window.cwLaunchComputation = function () {
   if (!confirmedRoute) return null;
   const cid = ++lastComputationId;
   window.cw.releaseLoadingPrefix("forecast:");
+  // A comparison of the snapshot this computation replaces will not paint, so it lets go too.
+  window.cw.releaseLoadingPrefix("compare:");
   window.cw.claimLoading("forecast:" + cid);
   runningComputationId = cid;
   let failure = null;
@@ -573,6 +575,29 @@ window.cwLaunchComputation = function () {
 };
 
 window.cwHasConfirmedRoute = () => !!confirmedRoute;
+
+// Comparisons (compare.js) compare the snapshot on screen and take their own number when
+// launched. One paints only while that snapshot is still the published one, of the confirmed
+// route and of the latest computation, and no comparison was launched after it. Launching one
+// launches no computation: reconciling and preparing still see the normal snapshot.
+let lastComparisonId = 0;
+
+window.cwLaunchComparison = function (kind) {
+  const snapshot = window.cw.currentSnapshot();
+  // A computation still running replaces that snapshot; its publish launches the comparison.
+  if (!snapshot || snapshot.computationId !== lastComputationId) return null;
+  const comparisonId = ++lastComparisonId;
+  window.cw.releaseLoadingPrefix("compare:");
+  window.cw.claimLoading("compare:" + comparisonId);
+  return { kind, requestId: snapshot.requestId, computationId: snapshot.computationId, comparisonId, snapshot };
+};
+
+window.cwIsComparisonCurrent = (run) => cwForecastRules.shouldPublishComparison(run, {
+  confirmedRequestId: confirmedRoute ? confirmedRoute.requestId : null,
+  lastComputationId,
+  publishedComputationId: publishedSnapshot ? publishedSnapshot.computationId : null,
+  lastComparisonId,
+});
 
 // The confirmed route has a forecast of its latest computation on screen, or that
 // computation is still running. A request ending recomputes a route without either.
@@ -1086,6 +1111,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
     settings: {
       provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts,
       interval: settings.interval, lang: settings.lang, alertsKey: settings.alertsKey,
+      keys: settings.keys,   // what a comparison of this snapshot asks with; memory only
     },
     steps: snapshotSteps,
     // Providers only report warnings active when asked; keep those near the ride.
@@ -1172,6 +1198,10 @@ function publish(snapshot) {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
   window.cw.releaseLoading("forecast:" + snapshot.computationId);
+  // With compare chosen, the comparison of this snapshot starts here and nowhere else.
+  if (snapshot.origin === "live" && document.getElementById("apiSource")?.value === "compare") {
+    window.cw.runCompareMode?.();
+  }
   return true;
 }
 
@@ -1871,26 +1901,18 @@ function renderWeatherTable() {
     return;
   }
 
-  // Check for pending compare mode restoration after reload
+  // Leaving compare-by-dates with compare chosen goes back to comparing providers: the
+  // selector is set again here, and publish launches the comparison of this snapshot.
   if (window._pendingCompareRestore) {
     window._pendingCompareRestore = false;
-    // Set apiSource back to compare mode
     const sel = document.getElementById("apiSource");
     if (sel) sel.value = "compare";
     window.apiSource = "compare";
-    // Trigger compare mode
-    if (window.cw?.runCompareMode) {
-      setTimeout(() => window.cw.runCompareMode(), 0);
-      return;
-    }
   }
 
-  // If in compare mode, trigger compare render instead  
+  // In compare mode the comparison table stays until the next comparison paints over it.
   const sel = document.getElementById("apiSource");
-  if (sel && sel.value === "compare") {
-    if (window.cw?.runCompareMode) window.cw.runCompareMode();
-    return;
-  }
+  if (sel && sel.value === "compare") return;
 
   // Leave compare mode: remove body flag so compact summary shows metrics again
   try { document.body.classList.remove("compare-active"); } catch {}
