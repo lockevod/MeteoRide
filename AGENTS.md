@@ -926,7 +926,9 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
   comparisonId, snapshot }`, or null with no current snapshot or while a computation of the
   route is still running (its publish launches the comparison instead). It takes the next
   `comparisonId`, drops earlier comparisons' claims and claims `compare:<id>`. That drop matters
-  only when a provider never answers, so the earlier run's `finally` never comes; a test holds it.
+  while an earlier run's provider has not answered: provider requests have no deadline, so without
+  it the indicator stays on after the newer comparison painted, until that request comes back, or
+  for good when it never does. A test holds the never-answering case.
   `cwIsComparisonCurrent(run)` (`cwForecastRules.shouldPublishComparison`) holds while the route
   is the confirmed one, the run's computation is both the latest launched and the one published,
   and no comparison was launched after it. Launching one launches no computation, so reconciling
@@ -948,7 +950,15 @@ stores a snapshot yet; whatever does (phase 6) must leave the keys out.
     callers then go through `settingsChanged`, whose computation drops those claims too.
   - **Input.** Steps, temperature and wind units, keys, interval and (for dates) provider come
     from `run.snapshot`. Rain and distance units, and dates A and B, are still read from the page:
-    they only change how it looks, or are what the comparison is asked for.
+    they only change how it looks, or are what the comparison is asked for. The answers are read and
+    labelled in the run's units too (`extractStepMetrics(prov, raw, step, units)`, both tables'
+    temperature and wind labels): OpenWeather answers in the system asked for, and new units can
+    wait behind a route request while the old snapshot is still compared. Read in the selected
+    units, its 3 m/s came out as 1.3.
+  - **One mode on the table.** Each comparison table removes the other's class
+    (`compare-mode`, `compare-dates-mode`). Row clicks check dates mode first, so a providers table
+    painted over a date comparison, with the row still open, used to select date rows and show the
+    old `weatherDataA`/`B` on the map.
   - **Checks** at every step, before every cache write and right before painting (markers,
     `setWeatherData`, the table, `compareProviderData`, `weatherDataA`/`B`). The `finally` lets
     go of its own claim only: a replaced run that finishes while the next one fetches leaves the

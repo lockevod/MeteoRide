@@ -392,7 +392,9 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
   - En las ventanas de cambio de hora, la hora se elige con el único `utc_offset_seconds` de la
     respuesta de Open-Meteo, igual que en la tabla. No se ha comprobado cuál de las dos horas
     posibles es la correcta.
-  - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores.
+  - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores. La tabla
+    deja el modo de fechas al pintarse, así que pulsar una fila muestra ese proveedor; la fila de
+    fechas sigue abierta.
   - Solo avisa de fallos de transporte, sin conexión y datos caducados; los avisos por proveedor no
     se aplican, porque cada proveedor ya tiene su fila.
   - En modo comparar, la foto normal lleva datos de Open-Meteo con proveedor `compare`, así que
@@ -410,6 +412,12 @@ en `AGENTS.md → Open work`. Última actualización: fase 4.
     anterior: la alerta nueva, o nada si era el guardado vacío de una ruta ya terminada. En ese
     último caso, confirmar otra ruta no desarma la anterior. Un desarmado rechazado sí se cubre:
     la huella se anula solo cuando el runner lo acepta.
+  - Dos rechazos del runner pueden dejar armada la ruta anterior (reproducido fuera del
+    navegador). Hay una alerta X guardada y se confirma la ruta A. El runner rechaza el desarmado, y
+    la huella sigue siendo X. Luego A publica y el runner rechaza también su guardado, pero la
+    huella ya nombra A, porque se fija antes de que conteste (`saveWatch`). Si A se confirma otra
+    vez y no vuelve a publicar, `cwDisarmWatchFor` ve la misma huella y no encola nada. El runner
+    conserva X con A en pantalla.
   - **Comprobaciones en capas.** Algunas mutaciones sobreviven solas porque otra comprobación cubre
     el mismo caso:
     - La comprobación tras leer la alerta guardada y la de tras la línea base. Sin la primera, la
