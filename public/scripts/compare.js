@@ -3,7 +3,6 @@
   const providerAbbreviations = {
     'openmeteo': 'OPM',
     'aromehd': 'ARM',
-    'meteoblue': 'MB',
     'openweather': 'OPW',
     'ow2_arome_openmeteo': 'CHAIN'
   };
@@ -190,8 +189,7 @@
 
       for (const prov of baseProvs) { // CHANGED: use baseProvs
         // Respect horizons
-        if ((prov === "meteoblue"   && daysAhead > (horizons.METEOBLUE_MAX_DAYS   || 7))  ||
-            (prov === "openweather" && daysAhead > (horizons.OPENWEATHER_MAX_DAYS || 2))  ||
+        if ((prov === "openweather" && daysAhead > (horizons.OPENWEATHER_MAX_DAYS || 2))  ||
             (prov === "aromehd"     && hoursAhead > (horizons.AROMEHD_MAX_HOURS   || 48)) ||
             (daysAhead > (horizons.OPENMETEO_MAX_DAYS || 14))) {
           compareData[prov].push(blankStep(prov, p));
@@ -220,10 +218,9 @@
         }
 
         // Keys presence
-        const apiKeyMB  = keys.meteoblue || "";
         const apiKeyOWM = keys.openweather || "";
-        const needsKey  = (effProv === "meteoblue" || effProv === "openweather");
-        if (needsKey && ((effProv === "meteoblue" && apiKeyMB.trim().length < 5) || (effProv === "openweather" && apiKeyOWM.trim().length < 5))) {
+        const needsKey  = (effProv === "openweather");
+        if (needsKey && apiKeyOWM.trim().length < 5) {
           compareData[prov].push(blankStep(prov, p));
           continue;
         }
@@ -246,7 +243,7 @@
         }
 
         try {
-          const apiKey = (effProv === "meteoblue") ? apiKeyMB : (effProv === "openweather") ? apiKeyOWM : "";
+          const apiKey = (effProv === "openweather") ? apiKeyOWM : "";
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
           const res = await fetch(url, { cwRecorder: recorder });
           if (res.ok) {
@@ -422,12 +419,12 @@
     }
 
     // Filter providers without any usable data
-    const order = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"];
+    const order = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo"];
     const filtered = {};
     order.forEach(k => { if (compareData[k] && (hasAny[k] || k === 'ow2_arome_openmeteo')) filtered[k] = compareData[k]; });
 
     // Baseline for summary (prefer OM). Markers are disabled in compare mode.
-    const baseline = filtered.openmeteo || filtered.aromehd || filtered.meteoblue || filtered.openweather || [];
+    const baseline = filtered.openmeteo || filtered.aromehd || filtered.openweather || [];
 
     // Replaced by another comparison, another computation or another route: nothing reaches the page.
     if (!current()) return;
@@ -573,10 +570,6 @@
           const h = (new Date(ts) - new Date()) / (1000*60*60);
           return (h <= 48) ? 'openweather' : 'openmeteo';
         }
-        if (pid === 'meteoblue') {
-          const hasMB = ((keys.meteoblue || '').trim().length >= 5);
-          return hasMB ? 'meteoblue' : 'openmeteo';
-        }
         return 'openmeteo';
       } catch (_) { return 'openmeteo'; }
     };
@@ -595,7 +588,6 @@
         // Decide effective provider for this timestamp/location
         let effProv = resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider;
         // Ensure keys exist when required; fallback to OpenMeteo if missing
-        if (effProv === 'meteoblue' && !(keys.meteoblue || '').trim()) effProv = 'openmeteo';
         if (effProv === 'openweather' && !(keys.openweather || '').trim()) effProv = 'openmeteo';
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
@@ -610,9 +602,8 @@
           continue;
         }
         try {
-          const apiKeyMB  = keys.meteoblue || "";
           const apiKeyOWM = keys.openweather || "";
-          const apiKey = (effProv === 'meteoblue') ? apiKeyMB : (effProv === 'openweather' ? apiKeyOWM : '');
+          const apiKey = (effProv === 'openweather') ? apiKeyOWM : '';
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
           const res = await fetch(url, { cache: 'no-store', cwRecorder: recorder });
           if (res.ok) {
@@ -986,9 +977,7 @@
 
   function getCompareProviders(keys) {
     const provs = ["openmeteo", "aromehd"];
-    const hasMB  = ((keys.meteoblue || "").trim().length >= 5);
     const hasOWM = ((keys.openweather || "").trim().length >= 5);
-    if (hasMB)  provs.push("meteoblue");
     if (hasOWM) {
       provs.push("openweather");
       // NEW: include chain id when OpenWeather key present
@@ -1106,29 +1095,6 @@
           step.uvindex = safeNum(src.uvi ?? raw.current?.uvi ?? null);
           step.cloudCover = safeNum(src.clouds);
         }
-      } else if (prov === "meteoblue") {
-        step.temp = safeNum(raw.temperature_2m);
-        step.windSpeed = safeNum(raw.wind_speed_10m);
-        step.windDir = raw.wind_direction_10m || 0;
-        step.windGust = safeNum(raw.wind_gust_10m);
-        step.humidity = safeNum(raw.relative_humidity_2m);
-        step.precipitation = safeNum(raw.precipitation);
-        // MeteoBlue may provide precipitation_probability per timestep; attempt to pick closest
-        try {
-          const Ht = raw.time || raw.valid_time || null;
-          const idx = Array.isArray(Ht) ? (window.cw.findClosestIndex ? window.cw.findClosestIndex(Ht, step.time) : -1) : -1;
-          step.precipProb = idx >= 0 ? safeNum(raw.precipitation_probability?.[idx]) : null;
-        } catch (_) { step.precipProb = null; }
-        let pic = null;
-        try {
-          const Ht = raw.time || raw.valid_time || null;
-          const idx = Array.isArray(Ht) ? (window.cw.findClosestIndex ? window.cw.findClosestIndex(Ht, step.time) : -1) : -1;
-          pic = Array.isArray(raw.pictocode) && idx >= 0 ? raw.pictocode[idx] : null;
-        } catch {}
-        step.weatherCode = pic;
-        step.uvindex = safeNum((raw.uvindex?.[0] ?? raw.uv_index?.[0]));
-        step.isDaylight = raw.isdaylight ?? 1;
-        step.cloudCover = safeNum(raw.total_cloud_cover?.[0] ?? raw.cloudcover?.[0]);
       }
 
       if (step.precipitation != null && Number(step.precipitation) === 0) {
@@ -1206,8 +1172,7 @@
     const prov = step.provider;
     const eff = step._effProv || prov;
     let iconClass = "";
-    if (eff === "meteoblue") iconClass = (window.cw.icons?.mb ? window.cw.icons.mb(step.weatherCode, step.isDaylight) : "");
-    else if (eff === "openweather") iconClass = (window.cw.icons?.ow ? window.cw.icons.ow(step.weatherCode, step.isDaylight) : "");
+    if (eff === "openweather") iconClass = (window.cw.icons?.ow ? window.cw.icons.ow(step.weatherCode, step.isDaylight) : "");
     else iconClass = (window.cw.icons?.om ? window.cw.icons.om(step.weatherCode, step.isDaylight) : "");
 
     const tempTxt = (step.temp != null && Number.isFinite(Number(step.temp))) ? `${Math.round(Number(step.temp))}º` : "-";
@@ -1381,7 +1346,7 @@
   }
 
     // Keep only those present in compareData; append any others (unexpected) at end
-    const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"]; // FIXED ORDER
+    const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo"]; // FIXED ORDER
     let provOrder = desiredOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !desiredOrder.includes(p)));
 
     provOrder.forEach((prov, rowIndex) => {
@@ -1526,8 +1491,7 @@
   function labelForProvider(p) {
     if (p === "openmeteo") return "OpenMeteo";
     if (p === "aromehd")   return "AromeHD";
-    if (p === "ow2_arome_openmeteo") return "OPW-AromeHD"; 
-    if (p === "meteoblue") return "MeteoBlue";
+    if (p === "ow2_arome_openmeteo") return "OPW-AromeHD";
     if (p === "openweather") return "OpenWeather";
     return String(p || "");
   }
@@ -1536,7 +1500,6 @@
     if (p === "openmeteo") return "OMT";
     if (p === "aromehd")   return "ARM";
     if (p === "ow2_arome_openmeteo") return "OARM"; // NEW chain abbrev
-    if (p === "meteoblue") return "MTB";
     if (p === "openweather") return "OWM";
     return String(p || "").substring(0, 3).toUpperCase();
   }

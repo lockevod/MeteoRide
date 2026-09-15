@@ -5706,6 +5706,27 @@ test('the list of pinned cache keys left by an older version is removed at start
   expect(left[1]).not.toBeNull();
 });
 
+// MeteoBlue cannot be chosen any more, but a settings blob saved by an older version could still
+// name it as the provider and carry its API key. Both are dropped once at start-up, the same as
+// cw_offline_pinned, so the app starts on Open-Meteo instead of a provider it can no longer run.
+test('an old setting saved with provider meteoblue starts as Open-Meteo, and its stored key is dropped', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('cwSettings', JSON.stringify({ apiSource: 'meteoblue', apiKey: 'old-mb-key', windUnits: 'kmh' }));
+  });
+  const control = { celsius: 18, offline: false };
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  expect(await shownTemperatures(page)).toContain('18º');
+  expect(await page.evaluate(() => window.apiSource)).toBe('openmeteo');
+  expect(await page.evaluate(() => document.getElementById('apiSource').value)).toBe('openmeteo');
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cwSettings')));
+  expect(stored.apiSource).toBe('openmeteo');
+  expect('apiKey' in stored).toBe(false);
+});
+
 // Open-Meteo answered in °C whatever the selector said, so a forecast computed in °F showed
 // 21º under ºF. It is asked for the unit chosen and shows what the provider sent in that unit.
 test('with °F chosen, Open-Meteo is asked for °F and the table shows its values under ºF', async ({ page }) => {

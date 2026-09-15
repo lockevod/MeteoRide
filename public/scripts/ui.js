@@ -215,7 +215,6 @@
 
       // Disable options that require API keys when keys missing
       const hasOW = !!getVal('apiKeyOW');
-    const hasMB = false;
       // Helper to set disabled state
       function setDisabled(val, disabled) {
         const opt = Array.from(sel.options).find(o => o.value === val);
@@ -224,8 +223,6 @@
       // OpenWeather-dependent options
       setDisabled('openweather', !hasOW);
       setDisabled('ow2_arome_openmeteo', !hasOW);
-      // MeteoBlue option (if exists)
-  setDisabled('meteoblue', true);
 
       // If the currently selected option is disabled, pick first non-disabled option
       const curOpt = sel.options[sel.selectedIndex];
@@ -247,13 +244,6 @@
     if (!el) return;
     el.className = "key-status" + (cls ? " " + cls : "");
     el.textContent = msg || "";
-  }
-
-  // Test MeteoBlue key is intentionally disabled in the UI — provide a no-op to avoid errors
-  async function testMeteoBlueKey() {
-    // UI for MeteoBlue removed; nothing to test.
-    try { setKeyStatus(window.t('key_test_missing'), 'warn', 'apiKeyStatusOW'); } catch (e) {}
-    return;
   }
 
   // Test OpenWeather API key
@@ -795,7 +785,6 @@
       "tempUnits",
       "distanceUnits",
       "precipUnits",
-      "apiKey",
       "apiKeyOW",
       "apiSource",
       "intervalSelect",
@@ -810,9 +799,8 @@
           if (id === "apiSource") {
             window.apiSource = el.value;
 
-            if ((window.apiSource === "meteoblue" || window.apiSource === "openweather") && !window.getVal("apiKey") && !window.getVal("apiKeyOW")) {
-              const provName = window.apiSource === "openweather" ? "OpenWeather" : "MeteoBlue";
-              window.setNotice(window.t("provider_key_missing", { prov: provName }), "warn");
+            if (window.apiSource === "openweather" && !window.getVal("apiKeyOW")) {
+              window.setNotice(window.t("provider_key_missing", { prov: "OpenWeather" }), "warn");
             } else {
               window.clearNotice();
             }
@@ -825,15 +813,11 @@
               return;
             }
           }
-          if (id === "apiKey" || id === "apiKeyOW") {
+          if (id === "apiKeyOW") {
             updateProviderOptions();
-            const hasMB  = ((window.getVal("apiKey")  || "").trim().length >= 5);
             const hasOWM = ((window.getVal("apiKeyOW") || "").trim().length >= 5);
             const sel = document.getElementById("apiSource");
-            if (sel) {
-              if (sel.value === "meteoblue" && !hasMB)  { sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
-              if (sel.value === "openweather" && !hasOWM){ sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
-            }
+            if (sel && sel.value === "openweather" && !hasOWM) { sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
           }
           
           if (id === "showDebugButton") {
@@ -1035,12 +1019,7 @@
       });
     }
 
-    // API key test buttons
-    const chk = document.getElementById("checkApiKey");
-  // Disable MeteoBlue key test UI if present
-  try { if (chk) { chk.disabled = true; chk.classList.remove('testing'); } } catch(e){}
-    if (chk) chk.addEventListener("click", testMeteoBlueKey);
-
+    // API key test button
     const chkOW = document.getElementById("checkApiKeyOW");
     if (chkOW) chkOW.addEventListener("click", testOpenWeatherKey);
 
@@ -1055,14 +1034,8 @@
       });
     }
 
-    // Update options when API keys change so options can be enabled/disabled live
-    const apiKeyEl = document.getElementById('apiKey');
+    // Update options when the OpenWeather key changes so options can be enabled/disabled live
     const apiKeyOWEl = document.getElementById('apiKeyOW');
-    const apiKeyMBEl = document.getElementById('apiKey');
-    // MeteoBlue key input is intentionally disabled and always kept empty
-    if (apiKeyMBEl) { apiKeyMBEl.value = ''; apiKeyMBEl.disabled = true; apiKeyMBEl.addEventListener('input', () => { apiKeyMBEl.value = ''; }); }
-    // Wire OpenWeather and generic apiKey inputs to update provider options when changed
-    if (apiKeyEl) apiKeyEl.addEventListener('input', () => { updateProviderOptions(); });
     if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); });
 
     // Call update once to inject new options
@@ -1117,7 +1090,6 @@
   window.localizeHeader = localizeHeader;
   window.updateProviderOptions = updateProviderOptions;
   window.setKeyStatus = setKeyStatus;
-  window.testMeteoBlueKey = testMeteoBlueKey;
   window.testOpenWeatherKey = testOpenWeatherKey;
   window.bindUIEvents = bindUIEvents;
   window.replaceGPXMarkers = replaceGPXMarkers;
@@ -1136,7 +1108,6 @@
     applyTranslations,
     updateProviderOptions,
     setKeyStatus,
-    testMeteoBlueKey,
     testOpenWeatherKey,
     bindUIEvents,
     replaceGPXMarkers,

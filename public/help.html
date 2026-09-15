@@ -206,7 +206,6 @@
             <p>Selecciona el proveedor meteorológico que deseas utilizar para obtener los datos.</p>
             <ul>
                 <li><strong>Open-Meteo:</strong> Gratuito, no requiere API key, hasta 14 días de previsión.</li>
-                <!-- MeteoBlue removed from UI; provider not advertised -->
                 <li><strong>OpenWeather:</strong> Requiere API key, hasta 5 días, datos detallados</li>
                 <li><strong>AromeHD:</strong> Modelo de alta resolución de MeteoFrance, accesible vía Open-Meteo. Solo disponible para Europa (aprox. 39-52°N, 10.5°W-16.5°E) y dentro de 48 horas (fuera de estas horas conmuta directamente al mejor provedor que provee Open-Meteo para esa localización). Es especialmente útil para viento y precipitaciones a corto plazo.</li>
                 <li><strong>OpenWeather - AromeHD</strong> Utilizar Openweather para la primera hora, luego AromeHD hasta 48 horas. Rutas fuera de este periodo se calculan con OpenMeteo. Solo disponible si hay key de Openweather. Esta cadena aprovecha los datos en tiempo real de OpenWeather para planificación inmediata y la precisión hiperlocal de AROME para viento y precipitaciones.</li>
@@ -241,7 +240,6 @@
         
         <ul>
             <li><strong>Open-Meteo:</strong> Gratuito, sin API key, cobertura global, hasta 14 días. OpenMeteo usa su mejor modelo dependiendo de la zona de tu track. Recomendado para todos los escenarios, ideal para planificación a largo plazo y rutas globales.</li>
-            <!-- MeteoBlue provider reference removed -->
             <li><strong>OpenWeather:</strong> Requiere API key, hasta 4 días, excelente datos en tiempo real y alertas meteorológicas oficiales. Ideal para salidas inmediatas y áreas urbanas.</li>
             <li><strong>AROME-HD:</strong> Modelo de alta resolución (~1-2km) de MeteoFrance, disponible para Europa dentro de 48 horas. Superior para pronósticos de viento y precipitaciones a corto plazo en Francia y países cercanos.</li>
         </ul>
@@ -357,7 +355,7 @@
     
         <h3>🔑 Test de API Keys y avisos</h3>
         <p>
-        En el panel de configuración hay botones <code>Check</code> para MeteoBlue y OpenWeather. Al pulsarlos
+        En el panel de configuración hay un botón <code>Check</code> para OpenWeather. Al pulsarlo
         se realiza una petición simple y el estado se muestra junto al campo (válida / inválida / cuota / HTTP).
         </p>
         <p>

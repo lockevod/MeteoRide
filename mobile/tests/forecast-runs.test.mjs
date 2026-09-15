@@ -39,10 +39,10 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
   const s = {
     console: quiet, Date, Promise, setTimeout, clearTimeout, structuredClone,
     apiSource: provider, weatherData: [], offline: false,
-    MS_PER_DAY: 86400000, MS_PER_HOUR: 3600000, OPENMETEO_MAX_DAYS: 14, METEOBLUE_MAX_DAYS: 7,
+    MS_PER_DAY: 86400000, MS_PER_HOUR: 3600000, OPENMETEO_MAX_DAYS: 14,
     OPENWEATHER_MAX_DAYS: 4, OPENWEATHER_MAX_HOURS: 1, AROMEHD_MAX_HOURS: 48, isAromeHdCovered: () => false,
     values: { datetimeRoute: new Date().toISOString(), cyclingSpeed: '12', intervalSelect: '60',
-      tempUnits: 'C', windUnits: 'kmh', apiKey: 'a-valid-looking-key', apiKeyOW: 'a-valid-looking-key' },
+      tempUnits: 'C', windUnits: 'kmh', apiKeyOW: 'a-valid-looking-key' },
     dateValidation: { valid: true },
     logDebug() {}, t: (key) => key, haversine,
     getCache: () => null, setCache() {}, makeCacheKey: () => 'key',
@@ -513,7 +513,7 @@ test('settings changed while a computation is fetching do not reach the rest of 
   assert.deepEqual(settings,
     { provider: 'openmeteo', units: { temp: 'C', wind: 'kmh' }, noticeAll: true, alerts: true,
       interval: 60, speed: 12, lang: 'en', alertsKey: 'a-valid-looking-key',
-      keys: { meteoblue: 'a-valid-looking-key', openweather: 'a-valid-looking-key' } });
+      keys: { openweather: 'a-valid-looking-key' } });
 });
 
 test('an API key changed while a computation is fetching is not used by its later steps', async () => {
@@ -558,7 +558,7 @@ test('unticking "show weather alerts" keeps warnings out of the computation', as
 // and, when that is cached, used to label the step with `cached2.provider` — a field
 // the raw Open-Meteo JSON does not have. The step then carried no provider at all, so
 // the table parsed Open-Meteo JSON as the primary provider's format.
-for (const provider of ['meteoblue', 'openweather', 'aromehd']) {
+for (const provider of ['openweather', 'aromehd']) {
   test(`a ${provider} error served from the cached Open-Meteo forecast is labelled openmeteo`, async () => {
     const cached = { hourly: { time: [] } };
     const { s, run } = harness({ provider, stubs: {

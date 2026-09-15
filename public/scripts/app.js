@@ -113,7 +113,6 @@ const PROB_MIN   = 20;   // muestra gota si prob >= 20%
 
 // NEW: provider horizons and day-to-ms constant
 const OPENMETEO_MAX_DAYS = 14;
-const METEOBLUE_MAX_DAYS = 7;
 const OPENWEATHER_MAX_DAYS = 4;
 // Match providerChains (ow2_arome_openmeteo uses OpenWeather for 0..1 hour)
 const OPENWEATHER_MAX_HOURS = 1; 
@@ -139,60 +138,12 @@ function aromeResponseLooksInvalid(j) {
   return !temp.some(v => v != null && !Number.isNaN(Number(v)));
 }
 
-// NEW: MeteoBlue hourly pictocode -> internal category
-const MB_PICTO_TO_KEY = {
-  1: 'clearsky',
-
-  // Clear with some low/cirrus clouds -> partlycloudy
-  2: 'partlycloudy', 3: 'partlycloudy', 4: 'partlycloudy',
-  5: 'partlycloudy', 6: 'partlycloudy',
-
-  // Partly cloudy (variants)
-  7: 'partlycloudy', 8: 'partlycloudy', 9: 'partlycloudy',
-
-  // Variable with possible storm clouds -> thunderstorm (identification purpose)
-  10: 'thunderstorm', 11: 'thunderstorm', 12: 'thunderstorm',
-
-  // Hazy/nebula -> fog
-  13: 'fog', 14: 'fog', 15: 'fog',
-
-  // Fog/low stratus (with/without cirrus)
-  16: 'fog', 17: 'fog', 18: 'fog',
-
-  // Mostly cloudy / overcast group
-  19: 'overcast', 20: 'overcast', 21: 'overcast', 22: 'overcast',
-
-  // Precip with cloudiness
-  23: 'rain',          // cloudy with rain
-  24: 'snow',          // cloudy with snow
-  25: 'rain_heavy',    // cloudy with heavy rain
-  26: 'snow_heavy',    // cloudy with heavy snow
-
-  // Thunder-probable variants
-  27: 'thunderstorm',          // rain, thunderstorms probable
-  28: 'thunderstorm',          // light rain, thunderstorms probable
-  29: 'thunderstorm',          // storm with heavy snow
-  30: 'thunderstorm',          // heavy rain, thunderstorms probable
-
-  // Mixed/transition types
-  31: 'drizzle',       // mixed with drizzle
-  32: 'snow',          // variable with snow
-  33: 'rain_light',    // cloudy with light rain
-  34: 'snow_light',    // cloudy with light snow
-  35: 'sleet',         // mixed snow/rain
-
-  // Not used
-  36: 'default',
-  37: 'default'
-};
-
 
 // NEW: restored helpers (translation, logs, settings, cache, dates, math, conversions)
 function getWeatherCategoryForStep(step) {
   const prov = step?.provider || apiSource;
   const code = step?.weatherCode;
   if (code == null) return "default";
-  if (prov === "meteoblue") return getDetailedCategoryMeteoBlue(Number(code));
   if (prov === "openweather") return getDetailedCategoryOpenWeather(Number(code));
   return getDetailedCategoryOpenMeteo(Number(code));
 }
@@ -280,12 +231,6 @@ function computeLuminance(step) {
 
 // Helper: classify common provider errors (reusable)
 function classifyProviderError(prov, status, bodyText = "") {
-  if (prov === "meteoblue") {
-    // Treat 401 and most 403 as invalid key; keep quota/limit as quota
-    if (status === 401) return "invalid_key";
-    if (status === 403) return /quota|limit/i.test(bodyText) ? "quota" : "invalid_key";
-    if (status === 429) return "quota";
-  }
   if (prov === "openweather") {
     if (status === 401) return "invalid_key";
     if (status === 403) return "forbidden";
@@ -322,9 +267,6 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
       `&hourly=${hourlyVars}` +
       `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
       `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto&models=arome_france_hd${omTemp}`;
-  }
-  if (prov === "meteoblue") {
-    return `https://my.meteoblue.com/packages/basic-1h,clouds-1h?lat=${p.lat}&lon=${p.lon}&apikey=${apiKey}&time=${timeAt.toISOString()}&tz=auto`;
   }
   if (prov === "openweather") {
     // Units: metric (°C, m/s), imperial (°F, mph). We normalize later.
@@ -621,7 +563,7 @@ function preparedRecordOfRoute() {
 // notices only change how it looks. So compare on either side is never a change of provider.
 function sameButStart(a, b) {
   const computed = (s) => JSON.stringify([s.units && s.units.temp, s.units && s.units.wind, s.speed, s.interval,
-    s.alerts, s.keys && s.keys.meteoblue, s.keys && s.keys.openweather]);
+    s.alerts, s.keys && s.keys.openweather]);
   return computed(a) === computed(b)
     && (a.provider === "compare" || b.provider === "compare" || a.provider === b.provider);
 }
@@ -734,7 +676,7 @@ window.cwApplyStartRule = function () {
 // Everything a computation depends on, read once when it starts. A setting changed while
 // it is still fetching belongs to the next computation, never to the rest of this one.
 function readForecastSettings() {
-  const keys = { meteoblue: getVal("apiKey") || "", openweather: getVal("apiKeyOW") || "" };
+  const keys = { openweather: getVal("apiKeyOW") || "" };
   const alerts = !!document.getElementById("showWeatherAlerts")?.checked;
   return {
     start: applyStartRule(),
@@ -783,9 +725,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   });
 
   let apiKeyFinal = "";
-  if (settings.provider === "meteoblue") {
-    apiKeyFinal = settings.keys.meteoblue;
-  } else if (settings.provider === "openweather") {
+  if (settings.provider === "openweather") {
     apiKeyFinal = settings.keys.openweather;
   }
   const tempUnit = settings.units.temp;
@@ -801,17 +741,6 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   let usedFallbackError = false;   // NEW
   let beyondHorizon = false;
   let missingKeyFallback = false;
-  let invalidKeyOnce = false;
-  let quotaOnce = false;
-  let httpErrOnce = false;
-  // NEW: keep last MB HTTP status for the banner
-  let lastHttpStatusMB = null;
-
-  // NEW: provider fail-fast state
-  let providerHardFailCode = null;      // "invalid_key" | "quota" | "http" | "forbidden"
-  let providerFailCount = 0;
-  const providerFailLimit = 3;
-  let hardFailLogged = false;
 
   // NEW: flags for OpenWeather provider notices
   let invalidKeyOnceOWM = false;
@@ -830,7 +759,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
   let horizonDaysUsed = null;
 
   // If provider requires key but not provided (MB or OWM), fallback to Open‑Meteo
-  const providerNeedsKey = (settings.provider === "meteoblue" || settings.provider === "openweather");
+  const providerNeedsKey = (settings.provider === "openweather");
   const hasKey = (apiKeyFinal || "").trim().length >= 5;
     for (let i = 0; i < steps.length; i++) {
       if (!isCurrent()) return;
@@ -859,7 +788,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       } catch(e){ console.warn('chain resolve error', e); }
 
       // Determine API key for this effective provider (chain-aware)
-      const stepApiKey = (prov === 'meteoblue') ? settings.keys.meteoblue : (prov === 'openweather') ? settings.keys.openweather : '';
+      const stepApiKey = (prov === 'openweather') ? settings.keys.openweather : '';
       const hasKeyProv = stepApiKey.trim().length >= 5;
 
       // store provider on step so later processing knows real source (may still change if fallback)
@@ -867,17 +796,6 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       if (i === 0) logDebug(`chainMode=${settings.provider} -> first provider=${prov}`);
       logDebug(`step ${i+1}/${steps.length} effectiveProv(pre)=${prov} t=${timeAt.toISOString()}`);
 
-      // Hard-fail skip for MB
-      if (prov === "meteoblue" && providerHardFailCode) {
-        prov = "openmeteo";
-        p.provider = prov;
-        usedFallback = true;
-        usedFallbackError = true;
-        if (!hardFailLogged) {
-          logDebug(t("provider_disabled_after_errors", { prov: "MeteoBlue" }), true);
-          hardFailLogged = true;
-        }
-      }
       // Hard-fail skip for OWM
       if (prov === "openweather" && providerHardFailCodeOWM) {
         prov = "openmeteo";
@@ -888,7 +806,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       }
 
       // Missing key fallback (chain-aware)
-      if ((prov === "meteoblue" || prov === "openweather") && !hasKeyProv) {
+      if (prov === "openweather" && !hasKeyProv) {
         prov = "openmeteo";
         p.provider = prov;
         missingKeyFallback = true;
@@ -903,17 +821,6 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       }
 
       // Horizon checks
-      if (prov === "meteoblue" && daysAhead > METEOBLUE_MAX_DAYS) {
-        prov = "openmeteo";
-        p.provider = prov;
-        usedFallback = true;
-        usedFallbackHorizon = true;
-        horizonDaysUsed = METEOBLUE_MAX_DAYS;
-        if (!warnedFallback) {
-          logDebug(`MeteoBlue excede ${METEOBLUE_MAX_DAYS} días; usando Open‑Meteo como fallback.`);
-          warnedFallback = true;
-        }
-      }
       if (prov === "openweather" && ((isChain && hoursAhead > OPENWEATHER_MAX_HOURS) || (!isChain && daysAhead > OPENWEATHER_MAX_DAYS))) {
         prov = "openmeteo";
         p.provider = prov;
@@ -1054,54 +961,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
           }
           const code = classifyProviderError(prov, res.status, bodyText);
 
-          if (prov === "meteoblue") {
-            // Count MB failures and consider hard-fail
-            providerFailCount++;
-            // NEW: remember status for final banner
-            lastHttpStatusMB = res.status;
-
-            if (code === "invalid_key" && !invalidKeyOnce) {
-              invalidKeyOnce = true;
-              logDebug(t("provider_key_invalid", { prov: "MeteoBlue" }), true);
-            } else if (code === "quota" && !quotaOnce) {
-              quotaOnce = true;
-              logDebug(t("provider_quota_exceeded", { prov: "MeteoBlue" }), true);
-            } else if (!httpErrOnce && code === "http") {
-              httpErrOnce = true;
-              logDebug(t("provider_http_error", { prov: "MeteoBlue", status: res.status }), true);
-            }
-
-            if (providerFailCount >= providerFailLimit) {
-              providerHardFailCode = code;
-            }
-
-            // Fallback to OM for this step
-            const prov2 = "openmeteo";
-            const mk3 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            const key2 = mk3(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2, recorder);
-            usedFallback = true;
-            usedFallbackError = true;
-
-            if (cached2) {
-              results.push({ ...p, provider: prov2, weather: cached2 });
-              continue;
-            }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit, settings.alerts);
-            if (!isCurrent()) return;
-            const res2 = await fetch(url2, { cwRecorder: recorder });
-            if (res2.ok) {
-              const json2 = await readJson(res2);
-              if (!isCurrent()) return;
-              results.push({ ...p, provider: prov2, weather: json2 });
-              setCache(key2, json2);
-              continue;
-            } else {
-              results.push({ ...p, provider: prov2, weather: null });
-              continue;
-            }
-          } else if (prov === "openweather") {
-            // Mirror MB error handling for OWM
+          if (prov === "openweather") {
+            // Provider error handling for OWM
             providerFailCountOWM++;
             lastHttpStatusOWM = res.status;
 
@@ -1169,7 +1030,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
               continue;
             }
           } else {
-            // Non-recoverable or non-meteoblue error -> blank step but keep going
+            // Non-recoverable error -> blank step but keep going
             lastHttpStatusOM = res.status;
             if (!httpErrOnceOM) {
               httpErrOnceOM = true;
@@ -1263,10 +1124,9 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       usedFallback,
       usedFallbackError,
       usedFallbackHorizon,
-      horizonDays: horizonDaysUsed ?? METEOBLUE_MAX_DAYS,
+      horizonDays: horizonDaysUsed,
       missingKey: missingKeyFallback && providerNeedsKey,
       providers: {
-        meteoblue: { invalidKey: invalidKeyOnce, quota: quotaOnce, httpError: httpErrOnce, httpStatus: lastHttpStatusMB },
         openweather: { invalidKey: invalidKeyOnceOWM, quota: quotaOnceOWM, httpError: httpErrOnceOWM, httpStatus: lastHttpStatusOWM },
         openmeteo: { httpError: httpErrOnceOM, httpStatus: lastHttpStatusOM },
       },
@@ -1410,7 +1270,6 @@ function processWeatherData() {
       return;
     }
     const w = step.weather;
-    let idx = -1;              // only the MeteoBlue branch still reads it
     let extracted = null;
     if (prov === "openmeteo" || prov === "aromehd") {
       // Ensure we have at least hourly data shape to work with
@@ -1477,21 +1336,7 @@ function processWeatherData() {
       return; // handled OpenWeather branch
     }
 
-    if (prov === "meteoblue") {
-      step.temp = safeNum(w.temperature_2m);
-      step.windSpeed = safeNum(w.wind_speed_10m);
-      step.windDir = w.wind_direction_10m || 0;
-      step.windGust = safeNum(w.wind_gust_10m);
-      step.humidity = safeNum(w.relative_humidity_2m);
-      step.precipitation = safeNum(w.precipitation);
-      step.precipProb = safeNum(w.precipitation_probability);
-      step.weatherCode = w.pictocode[idx];
-      step.uvindex = safeNum((w.uvindex?.[idx] ?? w.uv_index?.[idx]));
-      step.isDaylight = w.isdaylight;
-      step.cloudCover = safeNum(w.total_cloud_cover?.[idx] ?? w.cloudcover?.[idx]);
-      step.luminance = computeLuminance(step);
-
-    } else if ((prov === "openmeteo" || prov === "aromehd") && extracted) {
+    if ((prov === "openmeteo" || prov === "aromehd") && extracted) {
       const r = extracted;
       step.temp = safeNum(r.temp);
       step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
@@ -1674,12 +1519,6 @@ function getWeatherIconClassOpenMeteo(code, isDay) {
   return (weatherIconsMap[key] || weatherIconsMap.default)[dayOrNight];
 }
 
-function getWeatherIconClassMeteoBlue(pictocode, isdaylight) {
-  const dayOrNight = isdaylight === 1 ? "day" : "night";
-  const key = MB_PICTO_TO_KEY[Number(pictocode)] || "default";
-  return (weatherIconsMap[key] || weatherIconsMap.default)[dayOrNight];
-}
-
 // --- OpenWeather mappers (appended, no other code modified) ---
 function getDetailedCategoryOpenWeather(owmId) {
   const id = Number(owmId);
@@ -1839,10 +1678,6 @@ function getDetailedCategoryOpenMeteo(code) {
     default: return "default";
   }
 }
-function getDetailedCategoryMeteoBlue(pictocode) {
-  return MB_PICTO_TO_KEY[Number(pictocode)] || "default";
-}
-
 // Helper: mediana de un array numérico
 function median(arr = []) {
   const vals = arr
@@ -1921,8 +1756,7 @@ function computeRouteSummaryFromArray(srcArr) {
     }
 
     let cat = "default";
-    if (prov === "meteoblue") cat = getDetailedCategoryMeteoBlue(presentationCode);
-    else if (prov === "openweather") cat = getDetailedCategoryOpenWeather(presentationCode);
+    if (prov === "openweather") cat = getDetailedCategoryOpenWeather(presentationCode);
     else cat = getDetailedCategoryOpenMeteo(presentationCode);
 
     // Ajuste por nubosidad alta
@@ -2246,8 +2080,7 @@ function renderWeatherTable() {
   // Provider abbreviations for change indicators
   const providerAbbreviations = {
     'openmeteo': 'OPM',
-    'aromehd': 'ARM', 
-    'meteoblue': 'MB',
+    'aromehd': 'ARM',
     'openweather': 'OPW'
   };
 
@@ -2299,9 +2132,7 @@ function renderWeatherTable() {
     }
 
     let iconClass =
-      prov === "meteoblue"
-        ? getWeatherIconClassMeteoBlue(presentationCode, w.isDaylight)
-        : prov === "openweather"
+      prov === "openweather"
         ? getWeatherIconClassOpenWeather(presentationCode, w.isDaylight)
         : getWeatherIconClassOpenMeteo(presentationCode, w.isDaylight);
   const icon = document.createElement("i");
@@ -3430,7 +3261,6 @@ try {
   });
   window.cw.horizons = {
     OPENMETEO_MAX_DAYS,
-    METEOBLUE_MAX_DAYS,
     OPENWEATHER_MAX_DAYS,
     AROMEHD_MAX_HOURS,
     MS_PER_DAY,
@@ -3447,7 +3277,6 @@ try {
   // Icons per provider
   window.cw.icons = {
     om: getWeatherIconClassOpenMeteo,
-    mb: getWeatherIconClassMeteoBlue,
     ow: getWeatherIconClassOpenWeather,
   };
   // Summary/header builders and time formatter
@@ -3460,7 +3289,6 @@ try {
   };
   window.cw.getDetailedCategoryOpenMeteo = getDetailedCategoryOpenMeteo;
   window.cw.getDetailedCategoryOpenWeather = getDetailedCategoryOpenWeather;
-  window.cw.getDetailedCategoryMeteoBlue = getDetailedCategoryMeteoBlue;
   window.cw.formatTime = formatTime;
   // Allow compare.js to set a baseline and re-render markers
   window.cw.setWeatherData = (arr) => { weatherData = Array.isArray(arr) ? arr.slice() : []; };

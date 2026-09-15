@@ -711,7 +711,7 @@ The forecast is a plan; this watches whether it still holds. Four pieces:
 Things that were decided rather than discovered:
 
 - **The baseline is Open-Meteo, whatever the table shows.** Comparing the table
-  (MeteoBlue, OpenWeather, AROME) against a later Open-Meteo reading would report the
+  (OpenWeather, AROME) against a later Open-Meteo reading would report the
   difference between providers as a change in the weather. So the web view reads the
   baseline from the runner's own request when it arms the watch, and offline the
   runner seeds it on its first run and stays silent that time.

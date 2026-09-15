@@ -2499,14 +2499,6 @@ input[type="number"] {
   border-color: #fca5a5;/* red-300 */
 }
 
-/* Larger MeteoBlue API input for readability */
-#configMenu #apiKey {
-  height: 36px;
-  font-size: 14px;
-  letter-spacing: 0.02em;
-  width: 65%; /* make it span the full panel width */
-}
-
 #configMenu #apiKeyOW {
   height: 36px;
   font-size: 14px;

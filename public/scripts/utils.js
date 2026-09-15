@@ -14,7 +14,7 @@
   // computation hands fetch its own recorder (`cwRecorder`) and the wrapper notes each
   // provider answer there and nowhere else, so what one computation saw can never turn
   // into a notice over another. A request without a recorder is not watched at all.
-  const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org', 'my.meteoblue.com'];
+  const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org'];
 
   function createRecorder() {
     return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false };
@@ -79,8 +79,6 @@
       app_name: "MeteoRide",
       subtitle: "Previsión para tu salida",
       subtitle_long: " – Previsión meteorológica para tu salida a lo largo de la ruta GPX (MTB, ciclismo y senderismo)",
-      enter_meteoblue_key: "Introduzca API key MeteoBlue",
-      missing_meteoblue_key: "Error: falta API Key MeteoBlue",
       error_http_step: "Error API paso {step}: HTTP {status}",
       error_api_step: "Error API paso {step}: {msg}",
       error_api: "Error API: {msg}",
@@ -135,7 +133,6 @@
       // nuevas claves para labels/placeholders
       provider_label: "Proveedor:",
       api_key_init: "API Key",
-      api_key_label: "MeteoBlue:",
       api_key_label_ow: "OpenWeather:",
       language_label: "Idioma:",
       wind_units_label: "Viento:",
@@ -201,8 +198,6 @@
       app_name: "MeteoRide",
       subtitle: "Forecast for your ride",
       subtitle_long: " – Weather forecast for your ride along the GPX route (MTB, cycling & walking)",
-      enter_meteoblue_key: "Enter MeteoBlue API key",
-      missing_meteoblue_key: "Error: missing MeteoBlue API key",
       error_http_step: "API error step {step}: HTTP {status}",
       error_api_step: "API error step {step}: {msg}",
       error_api: "API error: {msg}",
@@ -256,7 +251,6 @@
       // new keys
       provider_label: "Provider:",
       api_key_init: "API Key",
-      api_key_label: "MeteoBlue:",
       api_key_label_ow: "OpenWeather:",
       language_label: "Language:",
       wind_units_label: "Wind:",
@@ -360,8 +354,6 @@
       distanceUnits: getVal("distanceUnits"), // NEW
       precipUnits: getVal("precipUnits"),     // NEW
       cyclingSpeed: Number(getVal("cyclingSpeed")),
-      // Do NOT persist MeteoBlue API key to avoid accidental storage — always keep empty
-      apiKey: "",
       apiKeyOW: getVal("apiKeyOW"),
       apiSource: getVal("apiSource"),
       datetimeRoute: getVal("datetimeRoute"),
@@ -402,21 +394,14 @@
   function loadSettings() {
     const raw = localStorage.getItem("cwSettings");
     const s = raw ? JSON.parse(raw) : {};
-    // Ensure any stored MeteoBlue API key is cleared so it never becomes active
-    try { if (s && s.apiKey) s.apiKey = ""; } catch (e) { /* ignore */ }
 
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
-      "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
+      "cyclingSpeed","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
       "noticeAll","showWeatherAlerts","showDebugButton","rideAlerts",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
-      // For MeteoBlue API key input always force empty and do not populate from settings
-      if (id === 'apiKey') {
-        if (el.type === 'checkbox') el.checked = false; else el.value = '';
-        return;
-      }
       if (el.type === "checkbox") el.checked = !!s[id];
       // Nothing stored: leave whatever the markup already holds. Blanking it here
       // threw away the defaults written in index.html — speed 12 and interval 15
@@ -429,6 +414,10 @@
 
     // Apply sensible defaults when missing and persist them so subsequent loads are consistent
     let changed = false;
+    // A MeteoBlue API key or provider choice left by an older version is dropped once at
+    // start-up, the same as cw_offline_pinned, so that provider can never run again.
+    if (Object.prototype.hasOwnProperty.call(s, 'apiKey')) { delete s.apiKey; changed = true; }
+    if (s.apiSource === 'meteoblue') { s.apiSource = ''; changed = true; }
     if (s.apiSource) apiSource = s.apiSource;
     else { apiSource = 'openmeteo'; s.apiSource = 'openmeteo'; changed = true; }
     // Only when nothing is stored: once the selector has been touched it wins,
@@ -875,7 +864,7 @@
       const withinHours = h <= 48; // app policy
       return withinHours && isAromeHdCoveredLatLon(lat, lon);
     }
-    // OpenWeather/OpenMeteo/MeteoBlue: assume operational (network/key checks elsewhere)
+    // OpenWeather/OpenMeteo: assume operational (network/key checks elsewhere)
     return true;
   }
 

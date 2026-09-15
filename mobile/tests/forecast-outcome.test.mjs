@@ -22,7 +22,7 @@ function outcome(over = {}) {
     offline: false, staleAgeMs: 0, beyondHorizon: false, openMeteoMaxDays: 14,
     usedFallback: false, usedFallbackError: false, usedFallbackHorizon: false, horizonDays: 7,
     missingKey: false,
-    providers: { meteoblue: {}, openweather: {}, openmeteo: {} },
+    providers: { openweather: {}, openmeteo: {} },
   };
   const { providers = {}, ...rest } = over;
   const out = { ...base, ...rest, providers: { ...base.providers } };
@@ -65,15 +65,10 @@ test('an empty table outranks stale data, and stale data outranks the provider p
 test('quiet mode: key, quota and HTTP errors are named only when they forced a fallback', () => {
   assert.deepEqual(decide({ missingKey: true, requestedProvider: 'openweather' }),
     { parts: [['provider_key_missing', { prov: 'OpenWeather' }], ['fallback_short', {}]], type: 'error' });
-  assert.deepEqual(decide({ missingKey: true, requestedProvider: 'meteoblue' }).parts[0], ['provider_key_missing', { prov: 'MeteoBlue' }]);
   assert.deepEqual(decide({ usedFallbackError: true, providers: { openweather: { invalidKey: true } } }),
     { parts: [['provider_key_invalid', { prov: 'OpenWeather' }], ['fallback_short', {}]], type: 'error' });
-  assert.deepEqual(decide({ usedFallbackError: true, providers: { meteoblue: { quota: true } } }).parts[0],
-    ['provider_quota_exceeded', { prov: 'MeteoBlue' }]);
   assert.deepEqual(decide({ usedFallbackError: true, providers: { openweather: { httpError: true, httpStatus: 502 } } }).parts[0],
     ['provider_http_error', { prov: 'OpenWeather', status: '502' }]);
-  assert.deepEqual(decide({ usedFallbackError: true, providers: { meteoblue: { httpError: true } } }).parts[0],
-    ['provider_http_error', { prov: 'MeteoBlue', status: '…' }]);
   assert.deepEqual(decide({ usedFallbackError: true, requestedProvider: 'openweather' }),
     { parts: [['fallback_due_error', { prov: 'OpenWeather' }]], type: 'warn' });
   // Without a fallback, quiet mode keeps these to itself.
@@ -93,7 +88,7 @@ test('detailed mode adds the horizon notices and the errors that did not force a
     { parts: [['fallback_to_openmeteo', { days: 4 }]], type: 'warn' });
   assert.deepEqual(decide({ providers: { openweather: { invalidKey: true } } }, true),
     { parts: [['provider_key_invalid', { prov: 'OpenWeather' }]], type: 'error' });
-  assert.deepEqual(decide({ providers: { meteoblue: { quota: true } } }, true).parts, [['provider_quota_exceeded', { prov: 'MeteoBlue' }]]);
+  assert.deepEqual(decide({ providers: { openweather: { quota: true } } }, true).parts, [['provider_quota_exceeded', { prov: 'OpenWeather' }]]);
   assert.deepEqual(decide({ providers: { openmeteo: { httpError: true, httpStatus: 500 } } }, true),
     { parts: [['provider_http_error', { prov: 'Open-Meteo', status: '500' }]], type: 'error' });
   // A missing key still outranks the error flags, as before.
@@ -109,9 +104,9 @@ test('usableSteps counts steps with a temperature or wind at their time, cached 
     { provider: 'openmeteo', time, payload: { hourly: { time: ['2026-09-20T11:00'] } } },  // hours, no values
     { provider: 'openweather', time, payloadUnits: 'metric', payload: { hourly: [], daily: [] } },
     { provider: 'openmeteo', time, payload: null },                         // the request failed
-    { provider: 'meteoblue', time, payload: { data_1h: {} } },              // not extracted: an answer counts
+    { provider: 'unknown', time, payload: { data_1h: {} } },                // an unhandled provider is never extracted
   ];
-  assert.equal(rules.usableSteps(steps), 3);
+  assert.equal(rules.usableSteps(steps), 2);
   assert.equal(rules.usableSteps([]), 0);
 });
 

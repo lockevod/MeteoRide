@@ -100,7 +100,7 @@ test('OpenWeather daily: a temperature of 0°C is not treated as missing', () =>
 test('no answer, no hourly block or an unhandled provider gives null', () => {
   assert.equal(rules.extractStep(null, { provider: 'openmeteo', time: new Date() }), null);
   assert.equal(rules.extractStep({}, { provider: 'openmeteo', time: new Date() }), null);
-  assert.equal(rules.extractStep(openMeteo(), { provider: 'meteoblue', time: new Date() }), null);
+  assert.equal(rules.extractStep(openMeteo(), { provider: 'unknown', time: new Date() }), null);
 });
 
 // Arrays built inside the vm context have their own prototypes; compare through JSON.

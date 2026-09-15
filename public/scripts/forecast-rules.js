@@ -377,13 +377,11 @@ var cwForecastRules = (function () {
   /**
    * Steps the table can show: the answer holds a temperature or a wind for the step's
    * time. A step served from cache counts; an HTTP 200 with nothing in it does not.
-   * MeteoBlue answers are not extracted here (spec §2), so any MeteoBlue answer counts.
    */
   function usableSteps(steps) {
     let n = 0;
     for (const s of steps || []) {
       if (!s || s.payload == null) continue;
-      if (s.provider === 'meteoblue') { n++; continue; }
       const r = extractStep(s.payload, { provider: s.provider, time: s.time, payloadUnits: s.payloadUnits });
       if (r && (Number.isFinite(r.temp) || Number.isFinite(r.wind))) n++;
     }
@@ -412,7 +410,6 @@ var cwForecastRules = (function () {
   function decideNotice(outcome, { noticeAll, origin, preparedAt, preparedFor, now } = {}) {
     const o = outcome || {};
     const pv = o.providers || {};
-    const mb = pv.meteoblue || {};
     const ow = pv.openweather || {};
     const om = pv.openmeteo || {};
     const say = (type, ...parts) => ({ parts, type });
@@ -429,10 +426,11 @@ var cwForecastRules = (function () {
     }
     if (o.staleAgeMs > 0) return say('warn', ['offline_stale_forecast', { age: formatAge(o.staleAgeMs) }]);
 
-    const keyed = o.requestedProvider === 'openweather' ? 'OpenWeather' : 'MeteoBlue';
-    const named = (flag) => (ow[flag] ? 'OpenWeather' : mb[flag] ? 'MeteoBlue' : null);
-    const httpFrom = ow.httpError ? ow : mb.httpError ? mb : om.httpError ? om : null;
-    const httpName = ow.httpError ? 'OpenWeather' : mb.httpError ? 'MeteoBlue' : 'Open-Meteo';
+    // OpenWeather is the only provider left that needs a key, so missingKey never fires for another one.
+    const keyed = 'OpenWeather';
+    const named = (flag) => (ow[flag] ? 'OpenWeather' : null);
+    const httpFrom = ow.httpError ? ow : om.httpError ? om : null;
+    const httpName = ow.httpError ? 'OpenWeather' : 'Open-Meteo';
     const httpParams = () => ({ prov: httpName, status: httpFrom.httpStatus != null ? String(httpFrom.httpStatus) : '…' });
     const short = ['fallback_short', {}];
     const fallbackError = !!o.usedFallbackError;

@@ -382,8 +382,7 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
 
 - **Temperatura en °F.** Resuelto en la fase 7: Open-Meteo y AROME se piden en °F con
   `temperature_unit=fahrenheit`, como OpenWeather con `units=imperial`. Queda una foto preparada
-  antes del cambio con °F elegido, que muestra °C bajo °F hasta que caduca (3 h). MeteoBlue no se
-  extrae (spec §2).
+  antes del cambio con °F elegido, que muestra °C bajo °F hasta que caduca (3 h).
 - **Fichero roto al arrancar.** Si al arrancar la app se elige un fichero roto antes de que termine
   la restauración, no se restaura la última ruta; el usuario ve el aviso del fallo.
 - **Avisos que se pisan.** El aviso de una ruta que no se pudo abrir lo sustituye el aviso propio
@@ -561,8 +560,6 @@ en `AGENTS.md → Open work`. Última actualización: fase 7, retirada del fijad
     - Una reproducción muestra los avisos oficiales guardados solo si están activados ahora.
     - Un registro con la forma correcta pero con respuestas de proveedor malformadas por dentro no se
       detecta: `wellFormed` comprueba la forma del registro y de cada paso, no el contenido de `payload`.
-    - MeteoBlue no se reproduce: sus pasos no cuentan como cubiertos y reproducidos salen sin datos
-      (spec §2).
     - Fuera del margen la tabla sale sin datos aunque la respuesta guardada cubra esa hora.
   - **Arranque y caducidad.**
     - La petición de arranque lleva `source: 'recent'` también cuando abre la ruta preparada: la
