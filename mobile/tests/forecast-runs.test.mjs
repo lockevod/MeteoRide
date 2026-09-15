@@ -719,6 +719,27 @@ test('a computation with a usable step publishes itself, even with a usable prep
   assert.deepEqual(h.s.notices, []);
 });
 
+// With compare chosen the computation asks Open-Meteo. Its steps labelled 'compare' never counted as
+// usable, so a usable prepared snapshot replayed over working answers and then refused the comparison.
+test('with compare chosen, working answers publish live and launch the comparison, even with a usable prepared snapshot', async () => {
+  const h = harness({ provider: 'compare' });
+  const start = aheadStart();
+  h.s.values.datetimeRoute = localIso(start);
+  h.s.cwPreparedRecord = () => preparedFor(start);
+  h.s.elements.apiSource = { value: 'compare' };
+  const comparisons = [];
+  h.s.cw.runCompareMode = () => comparisons.push(h.s.cwLaunchComparison('providers'));
+  const a = h.run(41, 1);
+  h.answer(0, ok(around(start))); await a;
+  const [snapshot] = h.s.published();
+  assert.equal(snapshot.origin, 'live');
+  assert.equal(snapshot.outcome.usableSteps, 1);
+  assert.equal(snapshot.steps[0].provider, 'openmeteo', 'the provider the answer came from');
+  assert.equal(snapshot.settings.provider, 'compare', 'the choice is kept');
+  assert.equal(comparisons.length, 1);
+  assert.ok(comparisons[0], 'the comparison was refused');
+});
+
 test('a replay shows the stored official warnings only while official warnings are shown now', async () => {
   for (const shown of [true, false]) {
     const h = harness();

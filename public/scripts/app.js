@@ -651,6 +651,19 @@ function replay(record, ids, settings) {
 // launches no computation: reconciling and preparing still see the normal snapshot.
 let lastComparisonId = 0;
 
+// No comparison runs over a replayed snapshot, nor without coverage in the app.
+function comparisonHeldBack(snapshot) {
+  return snapshot.origin === "prepared" || !!(window.CW_NATIVE && window.cw.utils.isOffline());
+}
+
+// Compare is chosen and a comparison can paint over the published snapshot: the normal table and
+// markers keep out of its way. Over a snapshot no comparison can run over, they are what shows (spec
+// §4.6), or a replay would leave an empty table or the one before it on screen.
+function compareOwnsTable() {
+  return document.getElementById("apiSource")?.value === "compare"
+    && !(publishedSnapshot && comparisonHeldBack(publishedSnapshot));
+}
+
 window.cwLaunchComparison = function (kind) {
   const snapshot = window.cw.currentSnapshot();
   // A computation still running replaces that snapshot; its publish launches the comparison.
@@ -659,7 +672,7 @@ window.cwLaunchComparison = function (kind) {
   // app, where the forecast on screen stays instead (spec §4.6). Only a missing connection is said: a
   // replay with coverage is there because every provider failed, and its own notice (how old, for
   // what start) stays up.
-  if (snapshot.origin === "prepared" || (window.CW_NATIVE && window.cw.utils.isOffline())) {
+  if (comparisonHeldBack(snapshot)) {
     if (window.cw.utils.isOffline()) setNotice(t("compare_needs_coverage"), "warn");
     return null;
   }
@@ -820,7 +833,9 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids) {
       const daysAhead = (timeAt - now) / MS_PER_DAY;
       const hoursAhead = (timeAt - now) / MS_PER_HOUR;   // NEW
 
-      let prov = settings.provider;
+      // Compare is a choice, not a provider: the normal forecast asks Open-Meteo (as compare.js does) and
+      // its steps say so, or none would count as usable and a prepared snapshot would replay over them.
+      let prov = settings.provider === "compare" ? "openmeteo" : settings.provider;
 
       // NEW: resolve chain provider (e.g. ow2_arome_openmeteo) per timestamp
       let isChain = false;
@@ -1537,8 +1552,7 @@ function processWeatherData() {
   renderWeatherTable();
   // Ensure wind/rain markers are rendered in normal mode (do not run in compare mode)
   try {
-    const isCompareMode = (document.getElementById('apiSource')?.value || '').toLowerCase() === 'compare';
-    if (!isCompareMode && window.cw && typeof window.cw.renderWindMarkers === 'function') {
+    if (!compareOwnsTable() && window.cw && typeof window.cw.renderWindMarkers === 'function') {
       window.cw.renderWindMarkers();
     }
   } catch (e) { /* tolerate any DOM errors */ }
@@ -1574,9 +1588,7 @@ function buildSunHeaderCell(lat, lon, dateLike) {
   const ck = fmtSafe(times.dusk || times.civilDusk);
 
   // In compare mode show only sunrise/sunset (compact)
-  const isCompare =
-    (document.getElementById("apiSource")?.value || "").toLowerCase() === "compare";
-  if (isCompare) {
+  if (compareOwnsTable()) {
     return `
       <div class="sunHeaderBox">
         <div class="sunCol">
@@ -2035,8 +2047,7 @@ function renderWeatherTable() {
   }
 
   // In compare mode the comparison table stays until the next comparison paints over it.
-  const sel = document.getElementById("apiSource");
-  if (sel && sel.value === "compare") return;
+  if (compareOwnsTable()) return;
 
   // Leave compare mode: remove body flag so compact summary shows metrics again
   try { document.body.classList.remove("compare-active"); } catch {}
@@ -2775,9 +2786,8 @@ function selectByOriginalIdx(originalIdx, centerMap = false) {
 function renderWindMarkers() {
   // Compare mode: when compare is active we must not clear or re-render
   // markers here because compare-specific markers are created elsewhere
-  const sel = document.getElementById("apiSource");
   const table = document.getElementById("weatherTable");
-  const isCompareActive = sel && (sel.value === "compare") || table?.classList.contains('compare-dates-mode');
+  const isCompareActive = compareOwnsTable() || table?.classList.contains('compare-dates-mode');
   if (isCompareActive) {
     // If compare is active and a row is selected, markers are managed by compare handlers
     // If no row is selected, nothing should be shown. In both cases we skip clearing/rendering here.

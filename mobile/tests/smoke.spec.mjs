@@ -1193,13 +1193,62 @@ test('with compare chosen and no coverage, the replayed forecast stays with a no
   await noLongerOnline(page);
   await watchComparisons(page);
   await selectProvider(page, 'compare');
+  expect((await shownTemperatures(page))[0]).toBe('12º');
   await page.clock.fastForward('45:00');
   await resume(page);
   await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  // The replayed table is painted even with compare chosen: its hours and its values.
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('13º');
+  expect((await shownTimes(page))[0]).toContain('08:45');
   await expect(page.locator('.notice')).toContainText(/Comparing providers needs coverage|Comparar proveedores necesita cobertura/);
   await page.waitForTimeout(800);
   expect(await comparisonsLaunched(page)).toBe(0);
   expect(await compareShown(page)).toBe(false);
+});
+
+test('opening without coverage with compare saved shows the replayed table and says comparing needs coverage', async ({ page }) => {
+  await prepareThenLoseCoverage(page, { now: T0 }, '45:00');
+  await selectProvider(page, 'compare');
+  await page.reload();
+  await mapReady(page);
+
+  await expect.poll(() => shownOrigin(page)).toBe('prepared');
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('13º');   // 08:45 reads 09:00
+  await expect(page.locator('.notice')).toContainText(/Comparing providers needs coverage|Comparar proveedores necesita cobertura/);
+  expect(await compareShown(page)).toBe(false);
+  // And its wind markers on the map.
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.leaflet-wind-pane .leaflet-marker-icon').length))
+    .toBeGreaterThan(0);
+});
+
+// With compare chosen the forecast asks Open-Meteo. Its steps labelled 'compare' never counted as usable:
+// a usable prepared snapshot replayed over working answers, and compare stayed off for up to three hours.
+test('with compare chosen and the route prepared, working answers are published live and compared', async ({ page }) => {
+  await startClock(page);
+  await routeWithForecast(page, { now: T0 });
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+
+  await watchComparisons(page);
+  await forgetForecasts(page);
+  const id = await page.evaluate(() => window.cw.currentSnapshot().computationId);
+  await setSpeed(page, 13);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.computationId)).toBeGreaterThan(id);
+  expect(await shownOrigin(page)).toBe('live');
+  await expect.poll(() => comparisonsLaunched(page)).toBe(1);
+});
+
+test('with compare chosen, preparing stores the forecast computed for it', async ({ page }) => {
+  await routeWithForecast(page);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  const id = await page.evaluate(() => window.cw.currentSnapshot().computationId);
+  await setSpeed(page, 13);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.computationId)).toBeGreaterThan(id);
+  await prepare(page);
+  await expect.poll(async () => (await preparedStored(page))?.snapshot.settings.speed ?? null).toBe(13);
 });
 
 test('with coverage, every provider failing and compare chosen, the replay keeps its age notice and nothing is compared', async ({ page }) => {
@@ -1530,10 +1579,10 @@ test('with a replayed forecast and no coverage, choosing compare is nothing to c
   await selectProvider(page, 'compare');
   await expect(page.locator('.notice')).toContainText(/Comparing providers needs coverage|Comparar proveedores necesita cobertura/);
 
-  // With compare chosen the normal table is left as it is until a comparison paints over it, so the
-  // snapshot is what shows the replay moved.
+  // No comparison can run over a replay, so the moved replay is painted with compare chosen.
   await chooseStart(page, localAt(T0 + 2 * 3600000));
   await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.start)).toBe(T0 + 2 * 3600000);
+  await expect.poll(async () => (await shownTemperatures(page))[0]).toBe('14º');   // 10:00
   expect(await shownOrigin(page)).toBe('prepared');
   expect(await page.evaluate(() => window.__notices.join(' | '))).not.toMatch(cannotRecalculate);
 });
