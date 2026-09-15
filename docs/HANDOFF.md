@@ -191,7 +191,7 @@ protección que el código no da.
 
 | # | Dónde | Qué pasa |
 |---|-------|----------|
-| **H1** (alta, preexistente) | `fetchWeatherForSteps` en `app.js`, que reseteaba, escribía y pintaba `weatherData` | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (lo emite `publish` en `app.js` y lo escucha `native.js`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`, que la fase 3 sustituye por `requestId` y `computationId`), acumula en local y solo la última publica tabla, avisos, alertas y `cw:forecast`, y suelta su reclamación del indicador (`forecast:<id>`); `mobile/tests/forecast-runs.test.mjs`. Queda fuera `compare.js`, que escribe `weatherData` sin número. |
+| **H1** (alta, preexistente) | `fetchWeatherForSteps` en `app.js`, que reseteaba, escribía y pintaba `weatherData` | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (lo emite `publish` en `app.js` y lo escucha `native.js`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`, que la fase 3 sustituye por `requestId` y `computationId`), acumula en local y solo la última publica tabla, avisos, alertas y `cw:forecast`, y suelta su reclamación del indicador (`forecast:<id>`); `mobile/tests/forecast-runs.test.mjs`. `compare.js` escribía `weatherData` sin número hasta la fase 4, que le da identidad propia (`comparisonId`). |
 | **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. **Corregido**: reconstruye las claves de los pasos pintados con `makeCacheKey` y distingue nada, completo, parcial ("n de total") y fallo al fijar; cuatro tests en `smoke.spec.mjs`. |
 | **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. |
 | **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. |
@@ -242,10 +242,9 @@ en git: `docs/superpowers/` está en el `.gitignore` global del autor. La extrac
 proveedor, la elección de la línea de la ruta y la fusión de AROME están en
 `public/scripts/forecast-rules.js`, con tres correcciones intencionadas: el primer cuarto de
 `minutely_15`, las horas según `utc_offset_seconds` y la fusión alineada por hora. La
-corrección de `utc_offset_seconds` solo cubre la tabla; `public/scripts/compare.js` todavía
-elige las horas de Open-Meteo con `window.cw.findClosestIndex` en la zona del teléfono, así
-que un teléfono en otra zona que la ruta puede ver horas distintas en comparar que en la
-tabla hasta que se mueva a las mismas reglas, en la fase 4.
+corrección de `utc_offset_seconds` cubría solo la tabla; `public/scripts/compare.js` elegía las
+horas de Open-Meteo con `window.cw.findClosestIndex` en la zona del teléfono hasta la fase 4, que
+lo pasa a `cwForecastRules.nearestIndex`.
 
 La fase 2 (registro, foto y publicación) tiene su plan en
 `docs/superpowers/plans/2026-09-14-fase-2-registro-foto-publicacion.md`, también fuera de
@@ -253,8 +252,8 @@ git. Cada cálculo anota lo que ven sus peticiones en su propio registro, lee su
 vez y termina en una foto con pasos, alertas oficiales y resultado; solo `publish()` la lleva
 a pantalla, y el aviso sale de `decideNotice`, sin temporizadores (H5). Con ella se corrigen
 la casilla «mostrar alertas», que nunca dejaba fuera los avisos, y la unidad con que se lee
-al repintar una respuesta de OpenWeather cacheada. Mientras no llegue la fase 4, comparar no
-da avisos de proveedor y `revalidateWeatherAlerts` sigue mostrando alertas por su cuenta.
+al repintar una respuesta de OpenWeather cacheada. Hasta la fase 4, comparar no daba avisos de
+proveedor y `revalidateWeatherAlerts` mostraba alertas por su cuenta.
 
 La fase 3 (coordinador de rutas para fichero y recientes) tiene su plan en
 `docs/superpowers/plans/2026-09-14-fase-3-coordinador-rutas.md`, también fuera de git. Toda
@@ -272,6 +271,17 @@ ahora tiene test. Quedan para la fase 4 comparar, `revalidateWeatherAlerts` y de
 de ruta al confirmar otra; para la fase 5, cada entrada de fuera con su fuente (hoy siguen
 entrando por `cwLoadGPXFromString`, que ya es un envoltorio del coordinador). Detalle en
 `AGENTS.md`, «Route requests». Las fases 4 a 7 tendrán cada una su plan cuando empiecen.
+
+La fase 4 (consumidores) tiene su plan en
+`docs/superpowers/plans/2026-09-15-fase-4-consumidores.md`, también fuera de git. Comparar, la
+alerta de ruta y las alertas oficiales trabajan sobre la foto publicada (`cw.currentSnapshot()`) y
+comprueban su vigencia antes de cada efecto. Comparar se lanza una sola vez, al publicar o al
+elegirlo, con su propio `comparisonId`: una comparación sustituida no pinta ni escribe
+`weatherData` ni guarda sus filas, avisa con su propio registro y lee las horas de Open-Meteo y
+AROME en la zona de la ruta. La alerta de ruta arma desde la foto, guarda y desarma en una cola
+serial, conserva lo ya avisado al rearmar la misma ruta con la misma salida y se desarma al
+confirmar otra. Desaparecen `revalidateWeatherAlerts` y el alias `window.reloadFull`. Detalle en
+`AGENTS.md`, «Consumers of the snapshot».
 
 ### Revisión adversarial de las correcciones (852f61a..8b6e3fb)
 
@@ -291,7 +301,7 @@ intents relanzados desde Recientes. Detalle completo en `AGENTS.md`.
 
 Queda para fases posteriores, documentado pero no corregido en esta revisión: identidad por
 petición en `fetchWeatherForSteps` (hecha en la fase 3, abajo); `compare.js` y `revalidateWeatherAlerts`, que
-todavía no pasan por el registro por cálculo ni por `decideNotice` (fase 4); y, para la fase
+no pasaban por el registro por cálculo ni por `decideNotice` (hecho en la fase 4); y, para la fase
 5, un coordinador de arranque y una importación duradera — hoy Android puede perder una ruta
 compartida si el proceso muere entre marcar el intent como gestionado y escribir el fichero
 en el buzón, e iOS lee un fichero abierto con «Abrir en» de forma síncrona en el hilo
@@ -310,21 +320,10 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: cierre de la fase 3 (`452cd09`).
+en `AGENTS.md → Open work`. Última actualización: fase 4.
 
 ### Pendiente por fase del rediseño
 
-- **Fase 4 — consumidores.**
-  - Comparar parte de la foto publicada, con su propia identidad y su registro de avisos. Hoy
-    `compare.js` escribe `weatherData` sin identidad, no da avisos de proveedor y elige las
-    horas de Open-Meteo en la zona del teléfono.
-  - La alerta de ruta:
-    - cola serial de guardados y desarmados;
-    - desarmar al confirmar otra ruta;
-    - conservar `notified` al rearmar la misma ruta, porque hoy un aviso oficial se repite.
-  - Retirar `revalidateWeatherAlerts`, incluido su camino al teclear la velocidad.
-  - Quitar el alias `window.reloadFull`, que solo existe para `compare.js`.
-  - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
 - **Fase 5 — rutas que llegan de fuera.**
   - Cada entrada entra con su fuente, se importa al llegar y pasa por el coordinador:
     - buzón nativo;
@@ -342,8 +341,10 @@ en `AGENTS.md → Open work`. Última actualización: cierre de la fase 3 (`452c
 - **Fase 6 — hora y uso sin cobertura.**
   - Guardar la hora de salida y aplicar la hora mínima al cargar y al volver a la app.
   - Preparar y reproducir con la foto, caducidad incluida.
-  - La foto aún no guarda salida, velocidad, intervalo ni idioma, y la segmentación sigue
-    leyendo esos valores del DOM.
+  - La foto lleva en memoria intervalo, idioma y claves (`alertsKey`, `keys`), pero no la salida
+    ni la velocidad, y la segmentación sigue leyendo esos valores del DOM. Al guardar la foto
+    preparada hay que dejar fuera las claves.
+  - Con cobertura ausente, comparar todavía se lanza como con cobertura (precedencia de §4.6).
 - **Fase 7 — retirada y documentación.**
   - Quitar `pinCacheKeys`, `cw_offline_pinned` y `warnIfStartTimeHasPassed`.
   - Repaso final de `AGENTS.md` y de este documento.
@@ -353,7 +354,6 @@ en `AGENTS.md → Open work`. Última actualización: cierre de la fase 3 (`452c
 - **H3.** La caché no está indexada por ubicación y proveedor.
 - **H4.** Las peticiones a proveedores no tienen plazo: un proveedor que no responde retiene el
   cálculo con el indicador encendido.
-- **H5.** Resuelto para el cálculo normal; falta comparar (fase 4).
 
 ### Límites aceptados (decididos, no se arreglan salvo que se pida)
 
@@ -376,11 +376,34 @@ en `AGENTS.md → Open work`. Última actualización: cierre de la fase 3 (`452c
 - **Indicador en el primer arranque.** Sin rutas guardadas, el indicador de carga sigue encendido
   hasta 5 s mientras espera a recientes.
 - **iOS, «Abrir en».** Lee el fichero en el hilo principal (hasta 25 MB).
+- **Comparar.**
+  - Con la tabla de comparación en pantalla, cambiar idioma o avisos detallados no la repinta.
+  - Con comparar fechas abierto en modo explícito (el que abre el botón), un ajuste que recalcula
+    pinta la tabla normal encima; la de fechas vuelve con el botón de ejecutar. El modo automático,
+    que se relanza al publicar, no se alcanza desde el botón y no tiene test.
+  - Elegir «comparar» con comparar fechas abierto lanza la comparación de proveedores.
+  - Solo avisa de fallos de transporte, sin conexión y datos caducados; los avisos por proveedor no
+    se aplican, porque cada proveedor ya tiene su fila.
+  - Un cuerpo de respuesta ilegible deja la fila vacía sin contar como fallo de transporte.
+  - En modo comparar, la foto normal lleva datos de Open-Meteo con proveedor `compare`, así que
+    sus pasos no cuentan como utilizables. Ya era así; importa para reproducir (fase 6).
+- **Alerta de ruta.**
+  - Una llamada al runner que no responde nunca detiene la cola de guardados y desarmados sin aviso.
+  - Hasta leer la alerta guardada al arrancar no se conoce su huella: la primera confirmación
+    desarma. Una alerta guardada antes de la fase 4 no tiene huella y cuenta como otra ruta, así
+    que se desarma y pierde lo ya avisado una vez.
+  - Un guardado que llega después de ser sustituido deja el registro en el runner, pero no
+    actualiza la línea de estado.
 - **Tests que faltan.**
   - La carrera entre la migración desde `localStorage` y una importación.
   - IndexedDB no disponible.
   - Una excepción dentro de `publish`.
   - Un `logDebug` que lance dentro del `catch` del cálculo acabaría en rechazo no gestionado.
+  - El aviso de comparar fechas y el de datos caducados en comparar (mismo código que el de
+    proveedores, sin test propio).
+  - La comprobación justo antes de pintar de comparar fechas: la cubren la del bucle y la previa a
+    escribir en caché, salvo si la sustitución cae en la espera de 30 ms tras el último paso.
+  - Que lanzar un cálculo suelte las reclamaciones `compare:*`.
 
 ### Sin comprobar en dispositivo
 

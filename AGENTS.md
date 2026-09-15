@@ -539,8 +539,8 @@ in `utils.js` notes each provider answer in that recorder and nowhere else, and 
 notes the age of an old entry it serves without connection. Both also note that it happened
 offline, when it happens (`recorder.offline`): by the time the computation publishes the
 connection may be back, and the notice would blame the provider instead. A request without a recorder
-is not watched: the ride-watch baseline, the API-key test and, until phase 4, the compare
-view never produce a provider notice. The notice is
+is not watched: the ride-watch baseline and the API-key test never produce a provider notice. A
+comparison carries a recorder of its own ("Consumers of the snapshot"). The notice is
 `cwForecastRules.decideNotice(outcome, { noticeAll })`, decided in `publish()`: an empty
 table whose requests failed says offline, rejected (401/403, usually a bad API key) or not
 responding; otherwise data read from the cache without connection says how old it is;
@@ -580,10 +580,11 @@ The forecast is a plan; this watches whether it still holds. Four pieces:
   in front of it into `www/runners/watch.js`, the path `capacitor.config.json` names,
   and refuses `import`/`export` in either file because the runner has no loader.
 - `native.js`, "ride alerts": `publish()` in `app.js` dispatches `cw:forecast` with the
-  snapshot and its rendered steps; `buildWatch` samples them to twelve points with a clock
-  label and a km mark (the runner has no trustworthy locale or timezone, so labels are
-  made here), `seedBaseline` reads the baseline from the same request the runner will
-  make, and `storeWatch` hands it to the runner through `dispatchEvent`, whose KV store
+  snapshot and its rendered steps; `buildWatch` samples the snapshot's steps to twelve points
+  with a clock label and a km mark (the runner has no trustworthy locale or timezone, so labels
+  are made here), `seedBaseline` reads the baseline from the same request the runner will
+  make, and `saveWatch` hands it to the runner through `dispatchEvent`, in a queue ("Consumers
+  of the snapshot"), whose KV store
   (UserDefaults / SharedPreferences under the runner's label) is the only thing the
   background task can read. Preferences is a different store with a different prefix;
   do not try to share.
@@ -692,11 +693,10 @@ Four things changed on purpose when the extraction moved, each in its own commit
 - **Open-Meteo times are read in the answer's offset.** With `timezone=auto` they arrive as
   wall-clock times with `utc_offset_seconds` beside them, and they were read in the phone's
   zone: a phone in another zone than the route read other hours. Without that field the old
-  reading stays. This only covers the table, through `processWeatherData` →
-  `extractStep`: `public/scripts/compare.js` still picks Open-Meteo hours with
-  `window.cw.findClosestIndex` in the phone's zone, so a phone in another zone than the
-  route can see different hours in compare than in the table until it moves onto the same
-  rules, in phase 4.
+  reading stays. The table does it through `processWeatherData` → `extractStep`; since phase 4
+  the comparison (`extractStepMetrics` in `compare.js`) picks its Open-Meteo and AROME hours
+  with the same `cwForecastRules.nearestIndex` and offset, and the rest of its extraction is
+  still its own.
 - **AROME is completed hour by hour.** A variable AROME lacks was copied from Open-Meteo slot
   by slot even when the two time axes differed. A value is now taken only for an hour both
   answers have; with no standard time axis nothing is copied onto AROME hours.
@@ -731,7 +731,7 @@ committing: a diff wider than that change is a regression.
 
 `fetchWeatherForSteps` computes; `publish(snapshot)` in `app.js` is the only thing that
 puts a forecast on screen. A computation reads its settings once (`readForecastSettings`:
-provider, units, API keys, `noticeAll`, `showWeatherAlerts`), so a setting changed while it
+provider, units, API keys, `noticeAll`, `showWeatherAlerts`, interval, language), so a setting changed while it
 is still fetching reaches the next computation, never its later steps. It ends with a
 snapshot: its steps as the provider answered them (`payload`, plus `payloadUnits` for
 OpenWeather), the official warnings it found and an `outcome` for the notice. `publish`
@@ -749,8 +749,9 @@ Official warnings are collected during the computation, from the OpenWeather for
 answers and from `checkWeatherAlertsIndependent`, kept when they overlap the ride with four
 hours either side, and shown from now or the start, whichever is later, to the end
 (`cwForecastRules.alertsInWindow`). They used to be filtered to an hour around each step
-and shown as soon as each answer arrived. `revalidateWeatherAlerts` still shows warnings on
-its own until phase 4 removes it.
+and shown as soon as each answer arrived. `revalidateWeatherAlerts`, which looked them up
+again on its own after a speed, interval or date change and showed what it found, is gone:
+those changes compute again, and only `publish` shows warnings.
 
 A replaced run writes nothing once it no longer matters: every `setCache` after an
 `await` — including the AROME standard companion answer — is guarded by the same
@@ -859,9 +860,9 @@ runtime, because `app.js` and `ui.js` load after it.
   snapshot (`cwRepaintPublished`: no request, no `cw:forecast`); the debug button and ride
   alerts do neither. `updateUnits` is no longer called; a unit change computes again.
 - **Loading indicator.** On while anyone holds a claim: `request:<id>`, `forecast:<id>`,
-  `share-upload`, and `legacy`, which is what `showLoading`/`hideLoading` claim now for
-  `compare.js` and `createDiscreteLoadingIndicator`. A comparison hiding its own
-  indicator cannot switch off a computation's.
+  `compare:<id>`, `share-upload`, and `legacy`, which is what `showLoading`/`hideLoading`
+  claim now for `createDiscreteLoadingIndicator`. A comparison ending cannot switch off a
+  computation's indicator.
 - **Recent routes** are written through their own queue, `cw.importRoute({ text, name })`:
   one at a time in arrival order, with `arrivedAt` fixed on arrival (one millisecond after
   the previous one on a tie) and stored as the timestamp, so trimming to three keeps the
@@ -899,12 +900,74 @@ runtime, because `app.js` and `ui.js` load after it.
   fingerprint and could write a trimmed route back. The name on
   screen no longer decides the stored name: while a new route is read it is the old one's.
 
-Left for later phases on purpose: compare runs still write `weatherData` and paint with no
-identity, and `revalidateWeatherAlerts` still shows warnings on its own (phase 4); the ride
-watch is not disarmed when another route is confirmed (phase 4); each outside entry with its
-own source and a durable import (phase 5); the start-time rule, replaying a prepared snapshot
-and `startForecast` choosing between them (phase 6). `window.reloadFull` survives only as a
-one-line alias to `cw.settingsChanged()`, because `compare.js` still calls it.
+Left for later phases on purpose: each outside entry with its own source and a durable import
+(phase 5); the start-time rule, replaying a prepared snapshot and `startForecast` choosing
+between them (phase 6).
+
+## Consumers of the snapshot
+
+Three things work from the published snapshot and from nothing else: the comparisons, the ride
+watch and the official warnings. Each checks, right before every effect, that what it works from
+is still what is on screen, so none can write, paint, notify or store anything of a route or a
+computation already replaced.
+
+`cw.currentSnapshot()` (`app.js`) is the published snapshot while it belongs to the confirmed
+route, or null; a route still being read changes nothing there. The snapshot's settings carry
+what the consumers need beyond its steps: `interval`, `lang`, `alertsKey` (the OpenWeather key
+when official warnings are shown, `''` otherwise) and `keys`. They live in memory only. Nothing
+stores a snapshot yet; whatever does (phase 6) must leave the keys out.
+
+- **Comparisons.** `cwLaunchComparison(kind)` returns a run `{ requestId, computationId,
+  comparisonId, snapshot }`, or null with no current snapshot or while a computation of the
+  route is still running (its publish launches the comparison instead). It takes the next
+  `comparisonId`, drops earlier comparisons' claims and claims `compare:<id>`.
+  `cwIsComparisonCurrent(run)` (`cwForecastRules.shouldPublishComparison`) holds while the route
+  is the confirmed one, the run's computation is both the latest launched and the one published,
+  and no comparison was launched after it. Launching one launches no computation, so reconciling
+  and preparing still see the normal snapshot.
+  - **Launched once**, from `publish` (step 7: the date comparison that was on screen if it runs
+    by itself, otherwise the providers comparison when compare is chosen), from choosing compare
+    in the selector, and from the dates row (its run button, and date B in automatic mode). The
+    observer on the table, `compare.js`'s own listeners and control refresh, the launch from
+    `renderWeatherTable` and the `window.reloadFull` alias are gone. A setting that computes again
+    goes through `cw.settingsChanged()`, also while compare-by-dates is open: in explicit mode (the
+    one the toggle opens) that repaints the normal table and the run button brings the date
+    comparison back.
+  - **Input.** Steps, temperature and wind units, keys, interval and (for dates) provider come
+    from `run.snapshot`. Rain and distance units, and dates A and B, are still read from the page:
+    they only change how it looks, or are what the comparison is asked for.
+  - **Checks** at every step, before every cache write and right before painting (markers,
+    `setWeatherData`, the table, `compareProviderData`, `weatherDataA`/`B`). The `finally` lets
+    go of its own claim only. Only the providers comparison's paint check has a test of its own;
+    the others are covered in layers (a replaced run stops at the step after its request).
+  - **Notice.** Each run has its own recorder, passed to every provider request and cache read.
+    When it paints it decides its notice with `decideNotice` (`cwShowForecastNotice`) on an
+    outcome with `usableSteps` (steps with a temperature or wind in any painted row), the
+    recorder's failures, offline flag and stale age, and `requestedProvider: 'compare'`. The
+    per-provider notices do not apply: every provider already has its own row, empty when it
+    gave nothing.
+  - **Hours.** Open-Meteo and AROME hours are read with `cwForecastRules.nearestIndex` and the
+    answer's `utc_offset_seconds`, as in the table. The comparison tables are unchanged (spec §2).
+- **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
+  name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
+  and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline
+  it checks that it is still the latest arm (`armToken`) and that the snapshot is still
+  `cw.currentSnapshot()`, and only then touches the toggle, says anything or goes on.
+  - **One queue** carries every save, every disarm and the read of what the runner holds, each
+    once the runner has answered the one before. A save checks token and snapshot again when its
+    turn comes and is dropped if either changed, so the save of a replaced forecast never lands
+    after the disarm that followed it. The status line changes only after a save that ran.
+  - **Reuse.** `cwWatchRules.reuse(stored, fresh)`: the same route (fingerprint) with the same
+    start keeps what was already notified, so arming it again does not announce a warning twice;
+    the baseline is kept only over identical points (count, latitude, longitude and time), since
+    `compare` reads it by index. A new speed keeps `notified` and reads the baseline again.
+  - **Disarm on confirm.** `cwCommitRoute` calls `cwDisarmWatchFor(fingerprint)`: a watch armed
+    or stored for another route is disarmed through the queue, the same route keeps its own.
+    Until the stored watch is read at start-up the fingerprint is unknown, and the first
+    confirmation disarms; a stored watch from before fingerprints counts as another route.
+  - The toggle arms with `cw.currentSnapshot()`; `cw:forecast` arms with `detail.snapshot`.
+- **Official warnings** are looked up only by a computation (`checkWeatherAlertsIndependent`
+  requires its sink and settings and touches nothing on the page) and shown only by `publish`.
 
 ## Verifying a change
 
@@ -1006,13 +1069,10 @@ code does and what makes the race reproducible.
   recovery is gone along with the duplicates it used to cost. Belongs with the
   durable-import work planned for phase 5.
 - Of the six findings in `docs/REVIEW-2026-09-14.md`, H6 (the `/share` size limit),
-  H2 (offline preparation) and H1 (overlapping forecasts) are fixed; H3, H4 and H5 are
-  open. H5 and H4 should build on the computation identities rather than add timers.
+  H2 (offline preparation), H1 (overlapping forecasts) and H5 (notices by time window, for the
+  computation in phase 2 and the comparisons in phase 4) are fixed; H3 and H4 are open. H4
+  should build on the computation identities rather than add timers.
   `docs/HANDOFF.md` §9 has the table and the order being followed.
-- A comparison run (`compare.js`) sets `weatherData` through `cw.setWeatherData` and
-  has no computation identity (phase 4), so a normal run finishing after it can still
-  replace its data.
-  Not observed, not tested.
 - Nothing runs the tests automatically. A GitHub Actions job on pull requests would
   cost a few lines.
 - `loadSharedGPX` in `gpx-share.js` still references a `window.cw.loadGPXFromText`
