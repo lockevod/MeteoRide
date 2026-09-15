@@ -599,6 +599,12 @@ window.cwIsComparisonCurrent = (run) => cwForecastRules.shouldPublishComparison(
   lastComparisonId,
 });
 
+// Leaving compare mode: no comparison still running paints, and none keeps the indicator on.
+window.cwCancelComparisons = function () {
+  ++lastComparisonId;
+  window.cw.releaseLoadingPrefix("compare:");
+};
+
 // The confirmed route has a forecast of its latest computation on screen, or that
 // computation is still running. A request ending recomputes a route without either.
 window.cwHasCurrentForecast = () => !!confirmedRoute && (
@@ -1189,8 +1195,6 @@ function showOfficialAlerts(snapshot) {
  */
 function publish(snapshot) {
   if (!cwForecastRules.shouldPublish(snapshot, publishState())) return false;
-  // Painting replaces a date comparison on screen; it is launched again below if it runs by itself.
-  const datesOnScreen = !!document.getElementById("weatherTable")?.classList?.contains("compare-dates-mode");
   publishedSnapshot = snapshot;
   weatherData = mirrorSteps(snapshot);
   processWeatherData();
@@ -1200,11 +1204,9 @@ function publish(snapshot) {
     document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
   } catch (e) { /* ignore */ }
   window.cw.releaseLoading("forecast:" + snapshot.computationId);
-  // The comparison of this snapshot starts here: the date comparison that was on screen when
-  // it runs by itself, otherwise the providers comparison when compare is chosen.
-  if (snapshot.origin === "live") {
-    if (datesOnScreen && window.cw.compareDatesAuto?.()) window.cw.runCompareDatesMode?.();
-    else if (document.getElementById("apiSource")?.value === "compare") window.cw.runCompareMode?.();
+  // With compare chosen, the providers comparison of this snapshot starts here.
+  if (snapshot.origin === "live" && document.getElementById("apiSource")?.value === "compare") {
+    window.cw.runCompareMode?.();
   }
   return true;
 }
@@ -1227,8 +1229,10 @@ function showNotice(outcome, noticeAll, keepFailure = false) {
   if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
   else if (!keepFailure) clearNotice();
 }
-// A comparison of the published snapshot decides and shows its notice the same way (compare.js).
-window.cwShowForecastNotice = (outcome, noticeAll) => showNotice(outcome, noticeAll);
+// A comparison (compare.js) decides and shows its notice the same way, and leaves up the notice
+// of a route that failed to open while the computation it compares was the latest.
+window.cwShowForecastNotice = (outcome, noticeAll, run) =>
+  showNotice(outcome, noticeAll, routeFailureComputationId === run.computationId);
 
 // Paints the published snapshot again for a setting that only changes how it looks
 // (language, detailed notices): the table from the answers it holds, and its notice
@@ -1905,15 +1909,6 @@ function renderWeatherTable() {
     if (cs) cs.innerHTML = "";
     try { window._autoScrolledWeather = false; } catch {}
     return;
-  }
-
-  // Leaving compare-by-dates with compare chosen goes back to comparing providers: the
-  // selector is set again here, and publish launches the comparison of this snapshot.
-  if (window._pendingCompareRestore) {
-    window._pendingCompareRestore = false;
-    const sel = document.getElementById("apiSource");
-    if (sel) sel.value = "compare";
-    window.apiSource = "compare";
   }
 
   // In compare mode the comparison table stays until the next comparison paints over it.

@@ -25,6 +25,16 @@
     return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false };
   }
 
+  // A body that cannot be read is a failed answer, not a success with no data.
+  function readJson(response, recorder) {
+    return response.json().catch((err) => {
+      recorder.failed++;
+      recorder.lastFailStatus = 'body';
+      if (isOffline()) recorder.offline = true;
+      throw err;
+    });
+  }
+
   function isProviderUrl(url) {
     try { return PROVIDER_HOSTS.includes(new URL(String(url), location.href).hostname); }
     catch (_) { return false; }
@@ -973,6 +983,7 @@
        getCache,
        setCache,
        createRecorder,
+       readJson,
        staleMaxAge,
        pinCacheKeys,
        cachedWeatherKeys,

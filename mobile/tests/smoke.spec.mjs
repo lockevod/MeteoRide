@@ -3104,6 +3104,122 @@ test('choosing compare while a new forecast is computed leaves its indicator on 
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
 });
 
+test('a comparison that paints with nothing to say leaves up the notice of a route that failed to open while it fetched', async ({ page }) => {
+  const control = {};
+  await routeInCompareMode(page, control);
+  await watchComparisons(page);
+  await forgetForecasts(page);
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => comparisonsLaunched(page)).toBe(1);
+
+  await pickText(page, 'broken.gpx', 'this is not a route');
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
+  await page.waitForTimeout(300);
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+});
+
+test('a comparison still fetching when the selector leaves compare never paints, even while a route request holds back the forecast', async ({ page }) => {
+  const control = {};
+  await routeInCompareMode(page, control);
+  await watchComparisons(page);
+  await forgetForecasts(page);
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => comparisonsLaunched(page)).toBe(1);
+
+  // A route request still being read leaves the provider change pending: nothing is computed yet.
+  await requestHeld(page, 'next');
+  await selectProvider(page, 'openmeteo');
+  await expect.poll(() => compareShown(page)).toBe(false);
+  control.forecastHeld = null;
+  held.release();
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.__baselines)).toEqual([]);
+  expect(await compareShown(page)).toBe(false);
+});
+
+test('a replaced comparison that finishes lets go of its own claim only: the indicator stays on while the next one fetches', async ({ page }) => {
+  // Open-Meteo answers at once; AROME, which only a comparison asks here, waits while `held` is set.
+  const control = { held: null, arome: 0 };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    const arome = new URL(route.request().url()).searchParams.get('models') === 'arome_france_hd';
+    if (arome) control.arome++;
+    const held = arome ? control.held : null;
+    if (held) await held;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+  await watchComparisons(page);
+  await forgetForecasts(page);
+
+  const first = heldPromise();
+  Object.assign(control, { held: first.promise, arome: 0 });
+  await page.evaluate(() => { window.cw.runCompareMode(); });
+  await expect.poll(() => control.arome).toBe(1);
+  const second = heldPromise();
+  control.held = second.promise;
+  // The new forecast publishes at once and launches the comparison that replaces the first.
+  await setSpeed(page, 60);
+  await expect.poll(() => comparisonsLaunched(page)).toBe(2);
+  await expect.poll(() => control.arome).toBe(2);
+
+  first.release();
+  await page.waitForTimeout(800);
+  expect(await overlayVisibility(page), 'the replaced comparison switched off the indicator of the next').toBe('visible');
+  control.held = null;
+  second.release();
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+});
+
+test('a cold start with compare saved compares the restored route once', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await storedRoutes(page)).length).toBe(1);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+
+  // Counts every comparison launched from the very start of the next page.
+  await page.addInitScript(() => {
+    window.__comparisons = [];
+    let launch;
+    Object.defineProperty(window, 'cwLaunchComparison', {
+      configurable: true,
+      get: () => launch,
+      set: (fn) => {
+        launch = function (...args) {
+          const run = fn.apply(this, args);
+          if (run) window.__comparisons.push(run.comparisonId);
+          return run;
+        };
+      },
+    });
+  });
+  await page.reload();
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await page.waitForTimeout(1500);
+  expect(await comparisonsLaunched(page)).toBe(1);
+});
+
 /* ---------- comparing dates ---------- */
 
 const setDateB = (page, days) =>
@@ -3188,23 +3304,47 @@ test('of two date comparisons launched one after the other, only the last paints
   expect(await page.evaluate(() => window.__datePaints)).toEqual([{ lat: expect.any(Number), dateB: second }]);
 });
 
-test('the run button compares dates for the forecast on screen, and does nothing without one', async ({ page }) => {
-  let forecasts = 0;
-  page.on('request', (r) => { if (new URL(r.url()).hostname === 'api.open-meteo.com') forecasts++; });
-  await stubWatchProviders(page, {});
+test('the run button compares dates for the forecast on screen, and nothing while its computation still runs', async ({ page }) => {
+  const control = {};
+  await stubWatchProviders(page, control);
   await page.goto('/index.html');
   await mapReady(page);
-  await openCompareDates(page);
-  await runCompareDates(page);
-  await page.waitForTimeout(500);
-  expect(await datesShown(page)).toBe(false);
-  expect(forecasts).toBe(0);
-
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await openCompareDates(page);
+  await watchComparisons(page);
+
+  // The forecast on screen is being replaced: there is nothing to compare until it publishes.
+  const held = heldPromise();
+  control.forecastHeld = held.promise;
+  await setSpeed(page, 60);
+  await expect.poll(() => overlayVisibility(page)).toBe('visible');
+  await runCompareDates(page);
+  await page.waitForTimeout(500);
+  expect(await comparisonsLaunched(page)).toBe(0);
+
+  control.forecastHeld = null;
+  held.release();
+  await expect.poll(() => overlayVisibility(page)).toBe('hidden');
+  expect(await datesShown(page)).toBe(false);
   await setDateB(page, 1);
   await runCompareDates(page);
   await expect.poll(() => datesShown(page)).toBe(true);
+  expect(await comparisonsLaunched(page)).toBe(1);
+});
+
+test('closing compare-by-dates with compare chosen goes back to comparing providers', async ({ page }) => {
+  await routeInCompareMode(page, {});
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+  await watchComparisons(page);
+
+  await page.evaluate(() => document.getElementById('toggleCompareDates').click());
+  await expect.poll(() => compareShown(page)).toBe(true);
+  expect(await datesShown(page)).toBe(false);
+  await page.waitForTimeout(800);
+  expect(await comparisonsLaunched(page)).toBe(1);
 });
 
 /* ---------- what a comparison says, and which hour it reads ---------- */
@@ -3224,6 +3364,24 @@ test('a comparison whose requests all fail without connection says there is no c
   await selectProvider(page, 'compare');
   await expect.poll(() => compareShown(page)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toContain('No connection, and no saved forecast');
+});
+
+test('a comparison whose answers cannot be read says the provider is not responding', async ({ page }) => {
+  await recordNotices(page);
+  const control = { unreadable: false };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: control.unreadable ? '{"hourly": ' : JSON.stringify(forecastAt(20)) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await forgetForecasts(page);
+
+  control.unreadable = true;
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__notices.join(' | '))).toContain('not responding');
 });
 
 test('a replaced comparison whose requests failed leaves no notice over the comparison that replaced it', async ({ page }) => {
@@ -3288,7 +3446,7 @@ function forecastInZone(offsetSeconds) {
 test.describe('with the phone in New York and the route in Spain', () => {
   test.use({ timezoneId: 'America/New_York' });
 
-  test('the comparison reads the hour the rider is there, the same as the table', async ({ page }) => {
+  test('the comparison reads the hour the rider is there in the zone of the route, where the table reads it too', async ({ page }) => {
     await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastInZone(2 * 3600)) }));
     await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());

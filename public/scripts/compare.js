@@ -126,7 +126,7 @@
   // failed and that came out empty says why, and data read from the cache without connection says
   // how old it is. Per-provider notices do not apply: every provider already has a row, empty
   // when it gave nothing. A step counts when any painted row has a temperature or a wind for it.
-  function showComparisonNotice(recorder, rows, snapshot) {
+  function showComparisonNotice(recorder, rows, run) {
     const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
     let usableSteps = 0;
     for (let i = 0; i < length; i++) {
@@ -140,7 +140,7 @@
       lastFailStatus: recorder.lastFailStatus,
       offline: recorder.offline,
       staleAgeMs: recorder.staleAgeMs,
-    }, !!snapshot.settings.noticeAll);
+    }, !!run.snapshot.settings.noticeAll, run);
   }
 
   async function runCompareMode() {
@@ -250,14 +250,14 @@
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
           const res = await fetch(url, { cwRecorder: recorder });
           if (res.ok) {
-            let json = await res.json();
+            let json = await window.cw.utils.readJson(res, recorder);
             if (effProv === "aromehd") {
               // Backfill + validate coverage
               try {
                 const urlStd = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
                 const r2 = await fetch(urlStd, { cwRecorder: recorder });
                 if (r2.ok) {
-                  const std = await r2.json();
+                  const std = await window.cw.utils.readJson(r2, recorder);
                   const stdH = std?.hourly || {};
                   const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
                   json.hourly = json.hourly || {};
@@ -349,7 +349,7 @@
               if (aromeResponseLooksInvalid(json)) {
                 const url2 = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
                 const r3 = await fetch(url2, { cwRecorder: recorder });
-                if (r3.ok) json = await r3.json();
+                if (r3.ok) json = await window.cw.utils.readJson(r3, recorder);
                 effProv = "openmeteo";
               }
             }
@@ -446,7 +446,7 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
-    showComparisonNotice(recorder, Object.values(compareData), snapshot);
+    showComparisonNotice(recorder, Object.values(compareData), run);
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -616,7 +616,7 @@
           const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
           const res = await fetch(url, { cache: 'no-store', cwRecorder: recorder });
           if (res.ok) {
-            const json = await res.json();
+            const json = await window.cw.utils.readJson(res, recorder);
             if (!current()) return null;
             window.cw.setCache && window.cw.setCache(key, json);
             const s = extractStepMetrics(effProv, json, baseForIndex, units.wind);
@@ -653,7 +653,7 @@
       // Store data for row selection
       window.cw.weatherDataA = dataA;
       window.cw.weatherDataB = dataB;
-      showComparisonNotice(recorder, [dataA, dataB], snapshot);
+      showComparisonNotice(recorder, [dataA, dataB], run);
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -705,12 +705,11 @@
 
   const tbody = document.createElement('tbody');
   // Build compact summary (route summary + sun) HTML for each base date using first available step
-    const latA = (dataA && dataA[0] && dataA[0].lat) != null ? dataA[0].lat : ((window.cw.getSteps && window.cw.getSteps()[0]?.lat) || 0);
-    const lonA = (dataA && dataA[0] && dataA[0].lon) != null ? dataA[0].lon : ((window.cw.getSteps && window.cw.getSteps()[0]?.lon) || 0);
+    // Every row copies its step from the snapshot, position included.
+    const { lat: latA, lon: lonA } = dataA[0];
     const dateLikeA = (dataA && dataA[0] && dataA[0].time) || null;
     const sunA = buildSunHeaderFull(latA, lonA, dateLikeA);
-    const latB = (dataB && dataB[0] && dataB[0].lat) != null ? dataB[0].lat : ((window.cw.getSteps && window.cw.getSteps()[0]?.lat) || 0);
-    const lonB = (dataB && dataB[0] && dataB[0].lon) != null ? dataB[0].lon : ((window.cw.getSteps && window.cw.getSteps()[0]?.lon) || 0);
+    const { lat: latB, lon: lonB } = dataB[0];
     const dateLikeB = (dataB && dataB[0] && dataB[0].time) || null;
   const sunB = buildSunHeaderFull(latB, lonB, dateLikeB);
 

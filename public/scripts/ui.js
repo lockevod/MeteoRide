@@ -680,11 +680,6 @@
   // Explicit compare-by-dates mode flag: when true and compare UI is visible,
   // date changes do NOT auto-recalculate; user must click the "Run compare" button.
   let explicitCompareActive = false;
-  // Compare-by-dates showing and running by itself; publish (app.js) relaunches it only then.
-  window.cw.compareDatesAuto = () => {
-    const row = document.getElementById('datetimeRoute2Row');
-    return !!row && row.style.display !== 'none' && !explicitCompareActive;
-  };
 
   // Bind UI events
   function bindUIEvents() {
@@ -819,6 +814,8 @@
             } else {
               window.clearNotice();
             }
+            // Leaving compare: a comparison still fetching never paints under another provider.
+            if (el.value !== "compare") window.cwCancelComparisons?.();
             if (el.value === "compare" && window.cw?.runCompareMode) {
               // If switching TO compare-providers mode, run compare
               window.saveSettings();
@@ -950,16 +947,8 @@
           if (compareNowBtn) compareNowBtn.style.display = 'none';
           explicitCompareActive = false;
           
-          // Check if we should return to compare-providers mode after reloading
-          const apiSel = document.getElementById("apiSource");
-          const shouldReturnToCompare = apiSel && apiSel.value === "compare";
-          
-          // Store flag to restore compare mode after reload completes
-          if (shouldReturnToCompare) {
-            window._pendingCompareRestore = true;
-          }
-          
-          // Recalculate normal weather data when exiting compare-dates mode
+          // Recalculate normal weather data when exiting compare-dates mode; with compare chosen,
+          // its publish compares providers again.
           window.cw.settingsChanged();
         }
       });
