@@ -19,17 +19,15 @@
 
   // Confirming a route draws it onto the Leaflet map, and routes from outside routinely
   // arrive before app.js has built it: the native inbox at boot, the service worker,
-  // sessionStorage, ?gpx_url=. One wait shared by every read that needs it.
-  let mapReady = null;
-  function whenMapReady() {
-    if (!mapReady) {
-      mapReady = new Promise((resolve) => {
-        const ready = () => !!window.map && typeof window.cwParseRoute === 'function';
-        if (ready()) return resolve();
-        const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 100);
-      });
-    }
-    return mapReady;
+  // sessionStorage, ?gpx_url=. Each read waits on its own and stops once its request has ended
+  // (`ended`), so a map that never comes leaves no poll running for the life of the page.
+  function whenMapReady(ended) {
+    const ready = () => !!window.map && typeof window.cwParseRoute === 'function';
+    return new Promise((resolve) => {
+      if (ready()) return resolve();
+      const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 100);
+      ended.then(() => clearInterval(timer));
+    });
   }
 
   // Every route from outside the page arrives here. Its request is made at once, before any
@@ -40,21 +38,25 @@
   // rather than in its read, because a request replaced in the same tick never reads, and
   // its import must not depend on that. Resolves with what the request ends as.
   function cwReceiveRoute({ source, name, text, fetchText, importOn = source === 'url' || source === 'message' ? 'commit' : 'arrival' }) {
+    // No text and nothing to download it from: fail without asking, so the route being read
+    // is not replaced by one that cannot be read.
+    if (typeof text === 'string' ? !text : typeof fetchText !== 'function') return Promise.resolve('failed');
     const routeName = name || 'Shared route';
-    const arrived = text != null ? Promise.resolve(String(text)) : Promise.resolve().then(fetchText);
+    const arrived = typeof text === 'string' ? Promise.resolve(text) : Promise.resolve().then(fetchText);
     arrived.catch(() => {});   // the read reports it; a replaced request never reads
     const status = window.cw.requestRoute({
       source,
       read: async () => {
         const got = await arrived;
         if (!got) throw new Error('no route text');
-        await whenMapReady();
+        await whenMapReady(status);
         return { text: got, name: routeName };
       },
     });
     const importIt = (got) => { if (got) window.cwImportIfRoute(got, routeName); };
-    if (importOn === 'arrival') arrived.then(importIt, () => {});
-    else status.then((s) => { if (s === 'committed') arrived.then(importIt); });
+    const importFailed = (err) => console.warn('[cw] keeping a route from outside failed', err);
+    if (importOn === 'arrival') arrived.then(importIt, () => {}).catch(importFailed);
+    else status.then((s) => { if (s === 'committed') return arrived.then(importIt); }).catch(importFailed);
     return status;
   }
 
@@ -180,11 +182,11 @@
         try { evt.target.result.createObjectStore('files'); } catch(_) {}
       };
       req.onsuccess = (evt) => {
+        const db = evt.target.result;
+        const done = (val) => { try { db.close(); } catch(_) {} ; resolve(val); };
         try {
-          const db = evt.target.result;
           const tx = db.transaction('files', 'readwrite');
           const store = tx.objectStore('files');
-          const done = (val) => { try { db.close(); } catch(_) {} ; resolve(val); };
           tx.onabort = () => done(null);
           const gt = store.get('gpx');
           gt.onsuccess = () => {
@@ -193,7 +195,7 @@
             tx.oncomplete = () => done(val);
           };
           gt.onerror = () => done(null);
-        } catch (err) { resolve(null); }
+        } catch (err) { done(null); }
       };
       req.onerror = () => resolve(null);
     });
@@ -286,7 +288,8 @@
 
   // A route /share keeps for two minutes. Its request is made as the download starts; it is
   // kept among recent routes as soon as its text arrives, whatever the request ends as, and the
-  // server copy is deleted then, without waiting for the answer.
+  // server copy is deleted then, without waiting for the answer. The link is spent by then, so
+  // shared_id leaves the address too, or a reload would ask the server again for nothing.
   function loadSharedIdIfPresent() {
     const sid = new URLSearchParams(window.location.search).get('shared_id');
     if (!sid) return;
@@ -298,6 +301,11 @@
       fetchText: async () => {
         const text = await fetchText(shareUrl, { credentials: 'omit' });
         fetch(shareUrl, { method: 'DELETE' }).catch(() => {});
+        try {
+          const address = new URL(window.location.href);
+          address.searchParams.delete('shared_id');
+          window.history.replaceState(window.history.state, '', address.href);
+        } catch (_) { /* the route still loads */ }
         return text;
       },
     });
@@ -316,8 +324,9 @@
     sessionStorageHandoff();
     // prefer UI module's header localize if available
     try { if (typeof window.localizeHeader === 'function') window.localizeHeader(); } catch(_) {}
-    // Whatever the service worker stored while no page was reading.
-    takeSharedFromServiceWorker();
+    // Whatever the service worker stored while no page was reading. The app has no service
+    // worker, and reading would only create its database there.
+    if (!window.CW_NATIVE) takeSharedFromServiceWorker();
 
     // ?gpx_url= / ?url= — the documented way to open a hosted route.
     loadFromParams();

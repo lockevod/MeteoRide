@@ -3162,11 +3162,16 @@ function init() {
 // Reads a route without touching the screen: a KML is converted, the file sanitised and
 // leaflet-gpx asked for a layer that is not drawn (it keeps its tracks, routes and markers
 // in its own group). Resolves null when the file holds no line to follow.
+// A route is a KML when its name ends in .kml or a <kml element starts within its first 4096
+// characters. Keeping a route and opening it decide this the same way, or a route could be kept
+// that then fails to open, and becomes the recent route the next start-up fails to restore.
+const isKmlRoute = (text, name) => /\.kml$/i.test(name || "") || /<kml[\s>]/i.test(text.slice(0, 4096));
+
 window.cwParseRoute = async function ({ text, name }) {
   if (typeof text !== "string") return null;
   let gpxText = text;
   let fileName = name || "route.gpx";
-  if (/\.kml$/i.test(fileName) || /<kml[\s>]/i.test(text.slice(0, 4096))) {
+  if (isKmlRoute(text, fileName)) {
     const converted = window.cwKmlToGpxText ? window.cwKmlToGpxText(text) : null;
     // A KML with no Placemark still converts into a valid, empty GPX wrapper.
     if (converted && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(converted)) gpxText = converted;
@@ -3266,7 +3271,7 @@ window.cwCommitRoute = function (parsed, requestId) {
 window.cwImportIfRoute = function (text, name) {
   const hasRoute = (s) => typeof s === "string" && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(s);
   let importable = hasRoute(text);
-  if (/<kml[\s>]/i.test(text)) {
+  if (typeof text === "string" && isKmlRoute(text, name)) {
     try { importable = !!window.cwKmlToGpxText && hasRoute(window.cwKmlToGpxText(text)); } catch (_) { importable = false; }
   }
   if (importable) window.cw.importRoute({ text, name });
