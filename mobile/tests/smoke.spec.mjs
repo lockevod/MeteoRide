@@ -1146,7 +1146,7 @@ test('a file with no line to follow leaves the route on screen', async ({ page }
   await expect.poll(() => overlayVisibility(page)).toBe('hidden');
 });
 
-test('a route whose drawing throws halfway is still the one confirmed and computed, once', async ({ page }) => {
+test('a route whose drawing throws halfway is still the one confirmed, named, exported and computed, once', async ({ page }) => {
   await stubProvider(page, { celsius: 21, offline: false });
   await page.goto('/index.html');
   await mapReady(page);
@@ -1158,13 +1158,18 @@ test('a route whose drawing throws halfway is still the one confirmed and comput
     window.replaceGPXMarkers = () => { window.replaceGPXMarkers = real; throw new Error('drawing failed'); };
   });
 
+  const textB = routeAt('Ruta B', 40.42);
   await requestHeld(page, 'B');
-  await openRead(page, 'B', routeAt('Ruta B', 40.42), 'b.gpx');
+  await openRead(page, 'B', textB, 'b.gpx');
   await expect.poll(() => requestStatus(page, 'B')).toBe('committed');
   await expect.poll(() => page.evaluate(() =>
     window.weatherData.length > 0 && window.weatherData.every((s) => s.lat <= 40.42 && s.lat > 40.3))).toBe(true);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => window.__launches.launch)).toBe(1);
+  // The name on screen and what sharing sends are B's too, not the route before it.
+  await expect(routeName(page)).toHaveText('Ruta B');
+  expect(await page.evaluate(async () => ({ name: window.lastGPXFile.name, text: await window.lastGPXFile.text() })))
+    .toEqual({ name: 'b.gpx', text: textB });
 });
 
 test('a speed changed while a route is read is used by its one computation', async ({ page }) => {

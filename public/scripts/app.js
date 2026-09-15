@@ -3167,14 +3167,23 @@ window.cwParseRoute = async function ({ text, name }) {
   };
 };
 
-// Puts a parsed route on screen with no wait anywhere: it becomes the confirmed route, what
-// belonged to the route before goes, and the whole layer is drawn and framed. Confirming
-// comes first, so a step that throws midway never leaves the old route confirmed under the
-// new layer and name. The coordinator launches its computation straight after.
+// Puts a parsed route on screen with no wait anywhere: it becomes the confirmed route, takes
+// the name on screen and the file sharing sends, what belonged to the route before goes, and
+// the whole layer is drawn and framed. Confirming and naming come first, so a drawing step
+// that throws midway never leaves the old route confirmed, named or exported under the new
+// layer. The coordinator launches its computation straight after.
 window.cwCommitRoute = function (parsed, requestId) {
+  const file = new File([parsed.gpxText], parsed.name, { type: "application/gpx+xml" });
   confirmedRoute = {
     requestId, name: parsed.name, fingerprint: parsed.fingerprint, geojson: parsed.geojson, text: parsed.text,
   };
+  window.lastGPXFile = file;
+  const rutaEl = document.getElementById("rutaName");
+  if (rutaEl) {
+    rutaEl.textContent = parsed.displayName;
+    rutaEl.style.color = "";
+    rutaEl.style.fontStyle = "";
+  }
   publishedSnapshot = null;
   weatherData = [];
   window.activeWeatherAlerts = [];
@@ -3199,14 +3208,6 @@ window.cwCommitRoute = function (parsed, requestId) {
   window.replaceGPXMarkers(trackLayer);
   map.fitBounds(trackLayer.getBounds(), { padding: [20, 20], maxZoom: 15 });
   renderWeatherTable();
-
-  const rutaEl = document.getElementById("rutaName");
-  if (rutaEl) {
-    rutaEl.textContent = parsed.displayName;
-    rutaEl.style.color = "";
-    rutaEl.style.fontStyle = "";
-  }
-  window.lastGPXFile = new File([parsed.gpxText], parsed.name, { type: "application/gpx+xml" });
 };
 
 // Routes from outside the page (the share inboxes, ?gpx_url=, shared_id, postMessage) still

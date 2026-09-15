@@ -810,10 +810,12 @@ runtime, because `app.js` and `ui.js` load after it.
   launching another computation does. Nothing of this is stored.
 - **Phases.** `read()` with a 30 s deadline → `cwParseRoute` (KML converted, sanitised,
   leaflet-gpx builds a layer that is never added to the map, `routeLine` must find a line,
-  fingerprint of the text as read) → `cwCommitRoute` (confirms first, then clears the
-  previous route's table, markers and warnings, draws the whole layer, sets the name and
-  `lastGPXFile`) → `startForecast()`, with nothing in between those two. Confirming first
-  means a step that throws midway never leaves the old route confirmed under the new layer.
+  fingerprint of the text as read) → `cwCommitRoute` (confirms first and sets the name and
+  `lastGPXFile`, then clears the previous route's table, markers and warnings and draws the
+  whole layer) → `startForecast()`, with nothing in between those two. Confirming and naming
+  first means a drawing step that throws midway never leaves the old route confirmed, named
+  on screen or sent by sharing under the new layer; the file for sharing is built before
+  anything changes.
   After each wait a request that a later one replaced stops as `'superseded'` and touches
   nothing; one replaced in the same tick never calls `read()`. A failure ends as `'failed'`
   and leaves the confirmed route and its computation alone, with one of two notices:
