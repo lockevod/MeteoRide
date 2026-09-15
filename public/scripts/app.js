@@ -3314,9 +3314,6 @@ try {
   // NEW: expose selection helpers for compare clicks
   window.cw.highlightColumn = (col) => highlightColumn(col);
   window.cw.highlightMapStep = (idx, center = false) => highlightMapStep(idx, center);
-  
-  // Expose weather alerts functions
-  window.revalidateWeatherAlerts = revalidateWeatherAlerts;
 } catch (_) {
   // ignore: hooks are optional
 }
@@ -3516,13 +3513,13 @@ window.debugAlertPosition = function() {
 };
 
 // Check for weather alerts independently of main provider
-// With `sink`, the warnings found are added to it for the computation to keep; without
-// it (revalidateWeatherAlerts, until it goes in phase 4) they are shown straight away.
+// Only a computation looks them up: the warnings found go into its `sink`, with the
+// settings it read, and are shown only if it publishes. Nothing here touches the page.
 async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent) {
   // Only check if alerts are enabled and we have OpenWeather API key
-  if (settings ? !settings.alerts : !document.getElementById("showWeatherAlerts")?.checked) return;
-  
-  const apiKeyOW = settings ? settings.keys.openweather : getVal("apiKeyOW");
+  if (!settings.alerts) return;
+
+  const apiKeyOW = settings.keys.openweather;
   if (!apiKeyOW || apiKeyOW.trim().length < 5) return;
   
   console.log('Checking weather alerts independently...');
@@ -3551,7 +3548,7 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
       const p = steps[i];
       const timeAt = timeSteps[i];
       
-      const tempUnit = settings ? settings.units.temp : getVal("tempUnits");
+      const tempUnit = settings.units.temp;
       const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
       
       // Build OpenWeather URL specifically for alerts (exclude everything else to save bandwidth)
@@ -3561,8 +3558,7 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
       const cached = getCache(cacheKey);
       
       if (cached && cached.alerts) {
-        if (sink) sink.push(...cached.alerts);
-        else processWeatherAlerts(cached.alerts, p, timeAt);
+        sink.push(...cached.alerts);
         continue;
       }
       
@@ -3573,8 +3569,7 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
           const data = await response.json();
           if (isCurrent && !isCurrent()) return;
           if (data.alerts && Array.isArray(data.alerts)) {
-            if (sink) sink.push(...data.alerts);
-            else processWeatherAlerts(data.alerts, p, timeAt);
+            sink.push(...data.alerts);
             setCache(cacheKey, { alerts: data.alerts }, 3600); // Cache for 1 hour
           }
         }
@@ -4003,59 +3998,4 @@ function resetAlertProcessedFlags() {
   window.activeWeatherAlerts.forEach(alert => {
     alert.processed = false;
   });
-}
-
-// Re-validate weather alerts when parameters change (date, speed, etc.)
-async function revalidateWeatherAlerts() {
-  if (!document.getElementById("showWeatherAlerts")?.checked) return;
-  if (!window.weatherData || !window.weatherData.length) return;
-  
-  console.log('Re-validating weather alerts for parameter changes...');
-  
-  // Clear existing alerts
-  window.activeWeatherAlerts = [];
-  
-  // Hide existing alert indicator and container
-  const indicator = document.getElementById('weather-alert-indicator');
-  if (indicator) indicator.style.display = 'none';
-  
-  const container = document.getElementById('weather-alerts-container');
-  if (container) container.style.display = 'none';
-  
-  // Re-check alerts with current parameters
-  const steps = window.weatherData.map(w => ({
-    lat: w.lat,
-    lon: w.lon,
-    time: w.time
-  }));
-  
-  // Generate current time steps
-  const datetimeValue = getVal("datetimeRoute");
-  if (!datetimeValue) return;
-  
-  const startDateTime = getValidatedDateTime();
-  if (isNaN(startDateTime.getTime())) return;
-  
-  const speed = Number(getVal("cyclingSpeed")) || 12;
-  const intervalMinutes = Number(getVal("intervalSelect")) || 15;
-  const totalDistanceM = steps.length > 1 ? 
-    steps.reduce((total, step, i) => {
-      if (i === 0) return 0;
-      return total + haversine(steps[i-1], step);
-    }, 0) * 1000 : 10000;
-  
-  const totalDurationMins = (totalDistanceM / 1000) / speed * 60;
-  const stepsCount = Math.floor(totalDurationMins / intervalMinutes) + 1;
-  
-  const timeSteps = [];
-  for (let i = 0; i < stepsCount; i++) {
-    timeSteps.push(new Date(startDateTime.getTime() + i * intervalMinutes * 60000));
-  }
-  
-  await checkWeatherAlertsIndependent(steps, timeSteps);
-  
-  // Show indicator again if there are active alerts after revalidation
-  if (window.activeWeatherAlerts.length > 0) {
-    showAlertIndicator();
-  }
 }

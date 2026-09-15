@@ -764,10 +764,6 @@
         } else {
           window.cw.settingsChanged();
         }
-        // Re-validate weather alerts when date changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
-        }
       });
     }
 
@@ -906,12 +902,8 @@
             window.cw.runCompareMode();
             return;
           }
+          // Official warnings are looked up by the computation this launches.
           window.cw.settingsChanged();
-          
-          // Re-validate weather alerts when parameters change
-          if (["intervalSelect", "cyclingSpeed", "datetimeRoute"].includes(id) && window.revalidateWeatherAlerts) {
-            window.revalidateWeatherAlerts();
-          }
         });
       }
     });
@@ -1063,10 +1055,6 @@
         } else {
           window.cw.settingsChanged();
         }
-        // Re-validate weather alerts when speed changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
-        }
       });
     }
 
@@ -1087,10 +1075,6 @@
             window.cw.settingsChanged();
           }
         }
-        // Re-validate weather alerts when speed changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
-        }
       });
       cyclingInput.addEventListener("blur", () => {
         const v = Number(cyclingInput.value);
@@ -1107,10 +1091,6 @@
           } else {
             window.cw.settingsChanged();
           }
-        }
-        // Re-validate weather alerts when speed changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
         }
       });
       cyclingInput.addEventListener("input", () => {

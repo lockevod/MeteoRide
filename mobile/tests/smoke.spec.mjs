@@ -614,6 +614,52 @@ test('official warnings found along the route are shown with its forecast', asyn
   await expect(page.locator('#weather-alerts-container')).toContainText('Aviso amarillo por viento');
 });
 
+// revalidateWeatherAlerts looked warnings up again on its own whenever the speed, the
+// interval or the date changed, hid the ones on screen and showed what it found, outside
+// any computation. Warnings now change only when the computation that found them publishes.
+test('official warnings on screen change only when the next forecast publishes', async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000);
+  const control = { event: 'Aviso amarillo por viento', alertRequests: 0, held: null };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    if (control.held) await control.held;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) => {
+    control.alertRequests++;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ alerts: [{
+      sender_name: 'AEMET', event: control.event, start: now, end: now + 12 * 3600, description: 'x' }] }) });
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  const alerts = page.locator('#weather-alerts-container');
+  await expect(alerts).toContainText('Aviso amarillo por viento');
+  await expect(alerts).toBeVisible();
+
+  // The next computation waits at the provider, so it has not looked up its warnings yet.
+  let release;
+  control.held = new Promise((r) => { release = r; });
+  control.event = 'Aviso naranja por lluvia';
+  await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) if (k.includes('alerts_')) localStorage.removeItem(k);
+  });
+  const asked = control.alertRequests;
+  await setSpeed(page, 20);
+  await page.evaluate(() => document.getElementById('cyclingSpeed')
+    .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })));
+  await page.waitForTimeout(800);
+  expect(control.alertRequests, 'warnings looked up outside the computation').toBe(asked);
+  await expect(alerts).toBeVisible();
+  await expect(alerts).toContainText('Aviso amarillo por viento');
+
+  control.held = null;
+  release();
+  await expect(alerts).toContainText('Aviso naranja por lluvia');
+  await expect(alerts).not.toContainText('Aviso amarillo por viento');
+});
+
 // The website's policy comes from public/_headers, a Cloudflare file that is stripped
 // from the bundle. The app carries its own, and it matters more here: script running
 // in the app reaches window.Capacitor.Plugins.
