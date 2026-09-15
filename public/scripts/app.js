@@ -565,6 +565,10 @@ window.cwLaunchComputation = function () {
 };
 
 window.cwHasConfirmedRoute = () => !!confirmedRoute;
+// The confirmed route as its request read it: what preparing stores, to draw it again later.
+window.cwConfirmedRouteText = () => (confirmedRoute
+  ? { name: confirmedRoute.name, text: confirmedRoute.text, fingerprint: confirmedRoute.fingerprint }
+  : null);
 
 // Comparisons (compare.js) compare the snapshot on screen and take their own number when
 // launched. One paints only while that snapshot is still the published one, of the confirmed

@@ -344,44 +344,90 @@
 
   /* ---------- preparing for no coverage ---------- */
 
-  // Running the forecast already fills the cache, and the cache keeps serving it when
-  // the device is offline. What this adds is certainty about the route on screen: how
-  // many of its points have a forecast stored, and protection for exactly those
-  // entries when localStorage runs short. It used to pin every fresh entry, whichever
-  // route it came from, and report success whether or not the pin was written.
-  function prepareForOffline() {
-    const utils = window.cw && window.cw.utils;
-    if (!utils || !utils.cachedWeatherKeys || !utils.makeCacheKey) return log('cache helpers missing');
+  // One prepared route at a time (spec §4.9.2): the snapshot on screen and the route text it was
+  // computed from, in IndexedDB, which is what survives. The copy in memory is what launching a
+  // computation decides with, with no wait; every read and every write replaces it. Neither
+  // identities nor API keys are stored: a replay takes the keys in use then. It used to pin cache
+  // entries and count them as points, and promised what reading without coverage could not find.
+  const PREPARED_DB = 'meteoride_prepared';
+  const PREPARED_STORE = 'snapshot';
+  const PREPARED_KEY = 'current';
+  let preparedRecord = null;
 
-    // The keys app.js looks each step up under. Steps at the same place in the same
-    // quarter hour share an entry, so a point is a distinct key, not a step.
-    const steps = Array.isArray(window.weatherData) ? window.weatherData : [];
-    const unit = (id) => (document.getElementById(id) || {}).value || '';
-    const wanted = new Set(steps
-      .filter((s) => Number.isFinite(new Date(s.time).getTime()))
-      .map((s) => {
-        const at = new Date(s.time);
-        return utils.makeCacheKey(s.provider, at.toISOString().substring(0, 10),
-          unit('tempUnits'), unit('windUnits'), s.lat, s.lon, at);
-      }));
-    const held = utils.cachedWeatherKeys()
-      .filter((e) => wanted.has(e.key) && Date.now() - e.timestamp <= utils.staleMaxAge)
-      .map((e) => e.key);
+  function openPrepared() {
+    return new Promise((resolve) => {
+      let req;
+      try { req = indexedDB.open(PREPARED_DB, 1); } catch (_) { return resolve(null); }
+      req.onupgradeneeded = () => req.result.createObjectStore(PREPARED_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = req.onblocked = () => resolve(null);
+    });
+  }
 
-    if (!held.length) {
+  // Runs `op` on the store in one transaction and resolves true only once it completes: an
+  // abort or an error, like no IndexedDB at all, is false.
+  async function writePrepared(op) {
+    const db = await openPrepared();
+    if (!db) return false;
+    return new Promise((resolve) => {
+      const done = (ok) => { try { db.close(); } catch (_) { /* closed */ } resolve(ok); };
+      try {
+        const tx = db.transaction(PREPARED_STORE, 'readwrite');
+        tx.oncomplete = () => done(true);
+        tx.onabort = tx.onerror = () => done(false);
+        op(tx.objectStore(PREPARED_STORE));
+      } catch (_) { done(false); }
+    });
+  }
+
+  // A record of another version, or one missing what a replay needs, is no record: dropped
+  // without a word (spec §5).
+  const wellFormed = (r) => !!(r && r.version === 1 && r.gpx && typeof r.gpx.text === 'string'
+    && r.snapshot && r.snapshot.route && r.snapshot.settings && Number.isFinite(r.snapshot.settings.start)
+    && Array.isArray(r.snapshot.steps));
+
+  async function loadPreparedRecord() {
+    const db = await openPrepared();
+    let record = null;
+    if (db) {
+      record = await new Promise((resolve) => {
+        try {
+          const get = db.transaction(PREPARED_STORE, 'readonly').objectStore(PREPARED_STORE).get(PREPARED_KEY);
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => resolve(null);
+        } catch (_) { resolve(null); }
+      });
+      try { db.close(); } catch (_) { /* closed */ }
+    }
+    preparedRecord = wellFormed(record) ? record : null;
+    return preparedRecord;
+  }
+
+  async function prepareForOffline() {
+    const snapshot = window.cw.currentSnapshot();
+    const route = window.cwConfirmedRouteText ? window.cwConfirmedRouteText() : null;
+    if (!snapshot || snapshot.origin !== 'live' || !route) {
       notify('prepare_offline_empty', 'Load a route and let the forecast appear first.');
       return;
     }
-    if (!utils.pinCacheKeys(held)) {
-      notify('prepare_offline_failed', 'Could not protect the stored forecast: storage is full.');
+    const { requestId, computationId, ...kept } = snapshot;
+    const { keys, alertsKey, ...settings } = snapshot.settings;
+    const record = { version: 1, snapshot: { ...kept, settings }, gpx: { text: route.text, name: route.name } };
+
+    const before = await loadPreparedRecord();
+    if (!(await writePrepared((store) => store.put(record, PREPARED_KEY)))) {
+      notify('prepare_offline_failed', 'Could not save the prepared route.');
       return;
     }
-    if (held.length < wanted.size) {
-      notify('prepare_offline_partial', 'Route only partly saved: forecast stored for {n} of {total} points.',
-        { n: held.length, total: wanted.size });
-      return;
+    preparedRecord = record;
+    // What a replay can show whatever the start within three hours, not what was downloaded.
+    const { covered, total } = cwForecastRules.preparedCoverage(record.snapshot);
+    const parts = [];
+    if (before && before.snapshot.route.fingerprint !== record.snapshot.route.fingerprint) {
+      parts.push(['prepare_offline_replaced', {}]);
     }
-    notify('prepare_offline_done', 'Route saved for offline ({n} points).', { n: held.length });
+    parts.push(covered === total ? ['prepare_offline_done', { n: total }] : ['prepare_offline_partial', { n: covered, total }]);
+    if (window.setNotice) window.setNotice(parts.map(([key, vars]) => window.t(key, vars)).join(' '), 'warn');
   }
 
   function notify(key, fallback, vars) {
@@ -853,5 +899,7 @@
   window.cwConsumePendingShare = consumePendingShare;
   window.cwShareCurrentRoute = shareCurrentRoute;
   window.cwPrepareForOffline = prepareForOffline;
+  window.cwPreparedRecord = () => preparedRecord;
+  window.cwLoadPreparedRecord = loadPreparedRecord;
   window.cwArmWatch = armWatch;
 })();

@@ -904,111 +904,179 @@ test('a stale forecast is never used while the connection works', async ({ page 
   expect(shown).toContain('5º');
 });
 
-test('preparing a route protects its forecast from being cleared', async ({ page }) => {
-  const control = { celsius: 21, offline: false };
-  await installNativeBridge(page);
-  await stubProvider(page, control);
+/* ---------- preparing for no coverage (spec §4.9.2) ---------- */
 
+// Preparing used to pin cache entries and count them as points; it promised what reading without
+// coverage could not find. It now stores the snapshot on screen, and counts only the points a
+// replay can show for any start within three hours.
+
+/** Open-Meteo as timezone=auto answers, from twelve hours before `now` to `hours` after it: wall-clock
+ *  hours with their offset (UTC, so 0) and a different temperature every hour, its index. */
+function forecastAround(now, hours = 72) {
+  const first = Math.floor(now / 3600000) * 3600000 - 12 * 3600000;
+  const time = [];
+  for (let t = first; t <= first + (12 + hours) * 3600000; t += 3600000) time.push(new Date(t).toISOString().slice(0, 16));
+  const fill = (f) => time.map((_, i) => f(i));
+  return {
+    utc_offset_seconds: 0,
+    hourly: {
+      time, temperature_2m: fill((i) => i), precipitation: fill(() => 0), precipitation_probability: fill(() => 5),
+      relative_humidity_2m: fill(() => 60), wind_speed_10m: fill(() => 12), wind_gusts_10m: fill(() => 20),
+      winddirection_10m: fill(() => 180), weathercode: fill(() => 1), uv_index: fill(() => 3), is_day: fill(() => 1),
+      cloud_cover: fill(() => 20),
+    },
+  };
+}
+
+/** Nothing reachable but Open-Meteo, which answers forecastAround(control.now or the real clock).
+ *  `control.hours(url)` can cut an answer short; `control.fail` answers every forecast with a 500;
+ *  `control.held`, a promise, holds every forecast until it resolves. */
+async function stubAround(page, control = {}) {
+  await goOffline(page);
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('timeformat') === 'unixtime') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(watchForecast(url)) });
+    }
+    if (control.held) await control.held;
+    if (control.fail) return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+    const body = forecastAround(control.now ?? Date.now(), control.hours ? control.hours(url) : 72);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+}
+
+/** The prepared record as IndexedDB holds it, or null. Opens the database the way the app does. */
+const preparedStored = (page) =>
+  page.evaluate(() => new Promise((resolve) => {
+    const req = indexedDB.open('meteoride_prepared', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('snapshot');
+    req.onerror = () => resolve('open failed');
+    req.onsuccess = () => {
+      const db = req.result;
+      const get = db.transaction('snapshot', 'readonly').objectStore('snapshot').get('current');
+      get.onsuccess = () => { db.close(); resolve(get.result ? JSON.parse(JSON.stringify(get.result)) : null); };
+      get.onerror = () => { db.close(); resolve('read failed'); };
+    };
+  }));
+const prepare = (page) => page.locator('#cwPrepareOffline').click();
+const preparedNotice = /Route saved|Ruta preparada/;
+const replacedNotice = /replaces the route|Sustituye a la ruta/;
+
+async function routeWithForecast(page, control = {}) {
+  await installNativeBridge(page);
+  await stubAround(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+}
+
+test('preparing with no forecast on screen says so and stores nothing', async ({ page }) => {
+  let release;
+  const control = { held: new Promise((r) => { release = r; }) };
+  await installNativeBridge(page);
+  await stubAround(page, control);
   await page.goto('/index.html');
   await mapReady(page);
 
-  // Nothing cached yet: it should say so rather than claim success.
-  await page.locator('#cwPrepareOffline').click();
+  // No route at all.
+  await prepare(page);
   await expect(page.locator('.notice')).toContainText(/Load a route|Carga una ruta/);
-  expect(await page.evaluate(() => localStorage.getItem('cw_offline_pinned'))).toBeNull();
 
+  // A route on screen whose forecast has not arrived yet.
+  await page.evaluate(() => { document.querySelectorAll('.notice').forEach((n) => { n.textContent = ''; }); });
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
-
-  await page.locator('#cwPrepareOffline').click();
-  await expect(page.locator('.notice')).toContainText(/Route saved|Ruta preparada/);
-
-  const pinned = await page.evaluate(() => JSON.parse(localStorage.getItem('cw_offline_pinned') || '[]'));
-  expect(pinned.length).toBeGreaterThan(0);
-  expect(pinned.every((k) => k.startsWith('cw_weather_'))).toBe(true);
-});
-
-// Preparing used to pin every fresh forecast in the cache, whichever route it came from,
-// count cache entries as points, and report success even when the pin was not written.
-// It has to speak for the route on screen, and only for what it actually secured.
-const FOREIGN_KEY = 'cw_weather_openmeteo_2026-01-01_celsius_kmh_10.000_10.000_2026-01-01T10:00:00.000Z';
-const plantForeignForecast = (page) =>
-  page.evaluate((key) => {
-    localStorage.setItem(key, JSON.stringify({ data: { hourly: {} }, timestamp: Date.now() }));
-  }, FOREIGN_KEY);
-const cachedKeys = (page) =>
-  page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('cw_weather_')));
-
-test('preparing with no route on screen ignores a forecast left from another route', async ({ page }) => {
-  const control = { celsius: 21, offline: false };
-  await installNativeBridge(page);
-  await stubProvider(page, control);
-  await page.goto('/index.html');
-  await mapReady(page);
-  await plantForeignForecast(page);
-
-  await page.locator('#cwPrepareOffline').click();
+  await expect(routeName(page)).toContainText('Masnou');
+  await prepare(page);
   await expect(page.locator('.notice')).toContainText(/Load a route|Carga una ruta/);
-  expect(await page.evaluate(() => localStorage.getItem('cw_offline_pinned'))).toBeNull();
+  expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+  expect(await preparedStored(page)).toBeNull();
+  release();
 });
 
-test('preparing pins the route on screen, and counts its points', async ({ page }) => {
-  const control = { celsius: 21, offline: false };
+test('preparing stores the forecast on screen with its route as read, and no identity or API key', async ({ page }) => {
   await installNativeBridge(page);
-  await stubProvider(page, control);
+  await stubAround(page);
   await page.goto('/index.html');
   await mapReady(page);
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; });
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
-  // Only this route has run, so every entry held now is one of its points. Steps that
-  // fall in the same quarter hour at the same place share an entry and count once.
-  const routeKeys = await cachedKeys(page);
-  await plantForeignForecast(page);
+  const shown = await page.evaluate(() => {
+    const s = window.cw.currentSnapshot();
+    return { fingerprint: s.route.fingerprint, steps: s.steps.length, alertsKey: s.settings.alertsKey };
+  });
+  expect(shown.alertsKey, 'the snapshot on screen holds the key in memory').toBe('a-valid-looking-key');
 
-  await page.locator('#cwPrepareOffline').click();
-  await expect(page.locator('.notice')).toContainText(new RegExp(`\\(${routeKeys.length} (points|puntos)\\)`));
-  const pinned = await page.evaluate(() => JSON.parse(localStorage.getItem('cw_offline_pinned') || '[]'));
-  expect(pinned.sort()).toEqual(routeKeys.sort());
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  const record = await preparedStored(page);
+  expect(record.version).toBe(1);
+  expect(record.gpx).toEqual({ text: await readFile(FIXTURE, 'utf8'), name: 'route.gpx' });
+  expect(record.snapshot.route.fingerprint).toBe(shown.fingerprint);
+  expect(record.snapshot.origin).toBe('live');
+  expect(record.snapshot.steps).toHaveLength(shown.steps);
+  expect(record.snapshot.settings.speed).toBe(12);
+  expect(Number.isFinite(record.snapshot.settings.start)).toBe(true);
+  expect(record.snapshot).not.toHaveProperty('requestId');
+  expect(record.snapshot).not.toHaveProperty('computationId');
+  expect(record.snapshot.settings).not.toHaveProperty('keys');
+  expect(record.snapshot.settings).not.toHaveProperty('alertsKey');
+  expect(JSON.stringify(record)).not.toContain('a-valid-looking-key');
+  expect(await page.evaluate(() => window.cwPreparedRecord()?.snapshot.route.fingerprint)).toBe(shown.fingerprint);
 });
 
-test('preparing says so when only part of the route has a forecast stored', async ({ page }) => {
-  const control = { celsius: 21, offline: false };
-  await installNativeBridge(page);
-  await stubProvider(page, control);
-  await page.goto('/index.html');
-  await mapReady(page);
-  await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+test('preparing counts the points that keep a forecast for every start within three hours', async ({ page }) => {
+  const control = {};
+  await routeWithForecast(page, control);
+  const total = await page.evaluate(() => window.cw.currentSnapshot().steps.length);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(new RegExp(`all ${total} points|los ${total} puntos`));
 
-  // One point's entry is gone, as a quota clear-out would leave it.
-  const keys = await cachedKeys(page);
-  expect(keys.length).toBeGreaterThan(1);
-  await page.evaluate((key) => localStorage.removeItem(key), keys[0]);
-
-  await page.locator('#cwPrepareOffline').click();
-  await expect(page.locator('.notice')).toContainText(new RegExp(`${keys.length - 1} (of|de) ${keys.length}`));
-  await expect(page.locator('.notice')).not.toContainText(/Route saved|Ruta preparada\./);
+  // The answer for the last point now ends an hour after the start: a start three hours later
+  // reads nothing there.
+  control.hours = (url) => (url.searchParams.get('latitude') === '41.468' ? 1 : 72);
+  await forgetForecasts(page);
+  await setSpeed(page, 13);
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.settings.speed)).toBe(13);
+  const again = await page.evaluate(() => window.cw.currentSnapshot().steps.length);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(new RegExp(`${again - 1} (of|de) ${again}`));
+  await expect(page.locator('.notice')).not.toContainText(/all \d+ points|los \d+ puntos/);
 });
 
-test('preparing says so when the protection could not be written', async ({ page }) => {
-  const control = { celsius: 21, offline: false };
-  await installNativeBridge(page);
-  await stubProvider(page, control);
-  await page.goto('/index.html');
-  await mapReady(page);
-  await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
-
+test('preparing says so when the prepared route cannot be stored, and keeps nothing', async ({ page }) => {
+  await routeWithForecast(page);
   await page.evaluate(() => {
-    const setItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key === 'cw_offline_pinned') throw new DOMException('full', 'QuotaExceededError');
-      return setItem.call(this, key, value);
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) {
+      const request = put.apply(this, args);
+      if (this.name === 'snapshot') request.addEventListener('success', () => request.transaction.abort());
+      return request;
     };
   });
 
-  await page.locator('#cwPrepareOffline').click();
-  await expect(page.locator('.notice')).toContainText(/Could not|No se ha podido/);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(/Could not save the prepared|No se ha podido guardar la ruta preparada/);
+  expect(await page.evaluate(() => window.cwPreparedRecord())).toBeNull();
+  expect(await preparedStored(page)).toBeNull();
+});
+
+test('preparing another route replaces the one prepared before and says so; the same route again does not', async ({ page }) => {
+  await routeWithForecast(page);
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  await expect(page.locator('.notice')).not.toContainText(replacedNotice);
+
+  await pickText(page, 'otra.gpx', routeAt('Otra', 41.40));
+  await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.route.name)).toBe('otra.gpx');
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(replacedNotice);
+  expect((await preparedStored(page)).gpx.name).toBe('otra.gpx');
+
+  await prepare(page);
+  await expect(page.locator('.notice')).toContainText(preparedNotice);
+  await expect(page.locator('.notice')).not.toContainText(replacedNotice);
 });
 
 // Picking a file used to start the forecast three times: bindUIEvents and initUI both
