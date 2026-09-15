@@ -1362,6 +1362,12 @@ const setTempUnits = (page, unit) =>
     el.value = u;
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }, unit);
+const setWindUnits = (page, unit) =>
+  page.evaluate((u) => {
+    const el = document.getElementById('windUnits');
+    el.value = u;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, unit);
 /** The temperature as the table shows it: every cell, the row's unit and the route summary. */
 const shownTemperature = (page) =>
   page.evaluate(() => ({
@@ -3498,6 +3504,72 @@ test('closing compare-by-dates with compare chosen goes back to comparing provid
   expect(await datesShown(page)).toBe(false);
   await page.waitForTimeout(800);
   expect(await comparisonsLaunched(page)).toBe(1);
+});
+
+// The dates table stayed marked as such under the providers table, so a provider row picked was
+// taken for a date row: another row was selected and the map showed the earlier date comparison.
+test('choosing compare over a date comparison on screen compares providers, and a provider row picked shows that provider', async ({ page }) => {
+  await routeInCompareMode(page, {});
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+  await watchComparisons(page);
+
+  await selectProvider(page, 'compare');
+  await expect.poll(() => page.evaluate(() => window.__baselines.length)).toBe(1);
+  await page.evaluate(() => {
+    window.__markers = [];
+    const create = window.cw.createMarkersForData;
+    window.cw.createMarkersForData = function (data, label) {
+      window.__markers.push({ label, providerData: data === window.cw.compareProviderData[label] });
+      return create.apply(this, arguments);
+    };
+  });
+  await page.locator('#weatherTable tr[data-prov="aromehd"] th').click();
+  await expect.poll(() => page.evaluate(() => window.__markers)).toEqual([{ label: 'aromehd', providerData: true }]);
+  expect(await page.locator('#weatherTable tr.selected-row').getAttribute('data-prov')).toBe('aromehd');
+  expect(await datesShown(page)).toBe(false);
+});
+
+/* ---------- the units a comparison reads in ---------- */
+
+/** Forecast in OpenWeather, ºC and m/s on screen, then new units left waiting behind a route
+ *  request: the forecast on screen is still the one computed in ºC and m/s. */
+async function openWeatherUnitsPending(page) {
+  await goOffline(page);
+  await stubOpenWeather(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => shownTemperature(page)).toEqual({ cells: ['21º'], unit: 'ºC', summary: '21ºC' });
+  await requestHeld(page, 'B');
+  await setTempUnits(page, 'F');
+  await setWindUnits(page, 'kmh');
+}
+
+// A comparison asks in the units of the forecast on screen, so it has to read and label the
+// answer in them too. Read in the units selected now, OpenWeather's 3 m/s came out as 1.3.
+test('a comparison launched while new units wait behind a route request reads and labels OpenWeather in the units it asked in', async ({ page }) => {
+  await openWeatherUnitsPending(page);
+  await selectProvider(page, 'compare');
+  const row = page.locator('#weatherTable tr[data-prov="openweather"]');
+  await expect(row.locator('td[data-col] .combined-top').first()).toHaveText('21º');
+  expect(await row.locator('td[data-col] .combined-bottom').first().textContent()).toBe('3.0');
+  await expect(row.locator('.summary-cell')).toContainText('21ºC');
+  await expect(row.locator('.summary-cell')).toContainText('3m/s');
+});
+
+test('a date comparison run while new units wait behind a route request reads and labels OpenWeather in the units it asked in', async ({ page }) => {
+  await openWeatherUnitsPending(page);
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+  const summaryA = page.locator('#weatherTable tr[data-row="1"]');
+  await expect(summaryA.locator('td[data-col] .combined-top').first()).toHaveText('21º');
+  expect(await summaryA.locator('td[data-col] .combined-bottom').first().textContent()).toBe('3.0');
+  await expect(summaryA.locator('th')).toContainText('21ºC');
+  await expect(summaryA.locator('th')).toContainText('3m/s');
 });
 
 /* ---------- what a comparison says, and which hour it reads ---------- */

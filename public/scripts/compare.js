@@ -233,7 +233,7 @@
   const key = mk(effProv, dateStr, units.temp, units.wind, p.lat, p.lon, timeAt);
   const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
-          const s = extractStepMetrics(effProv, cached, p, units.wind);
+          const s = extractStepMetrics(effProv, cached, p, units);
           // Preserve which provider actually supplied the data (effective provider)
           // and keep the originally requested provider as _reqProv for row labeling.
           s._effProv = effProv;
@@ -355,7 +355,7 @@
             }
             if (!current()) return;
             window.cw.setCache && window.cw.setCache(key, json);
-            const s = extractStepMetrics(effProv, json, p, units.wind);
+            const s = extractStepMetrics(effProv, json, p, units);
             // Preserve effective provider and original requested provider separately.
             s._effProv = effProv;
             s._reqProv = prov;
@@ -604,7 +604,7 @@
   const key = mk2(effProv, dateStr2, units.temp, units.wind, p.lat, p.lon, timeAt);
   const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
-          const s = extractStepMetrics(effProv, cached, baseForIndex, units.wind);
+          const s = extractStepMetrics(effProv, cached, baseForIndex, units);
           s.provider = effProv;
           arr.push(s);
           continue;
@@ -619,7 +619,7 @@
             const json = await window.cw.utils.readJson(res, recorder);
             if (!current()) return null;
             window.cw.setCache && window.cw.setCache(key, json);
-            const s = extractStepMetrics(effProv, json, baseForIndex, units.wind);
+            const s = extractStepMetrics(effProv, json, baseForIndex, units);
             s.provider = effProv;
             arr.push(s);
           } else {
@@ -722,8 +722,9 @@
       // Fallback to previous local behavior (shouldn't normally be used)
       return null;
     }
-    const tempUnit = (document.getElementById("tempUnits")?.value || "C").toString();
-    const windUnit = (document.getElementById("windUnits")?.value || "kmh").toString();
+    // Temperature and wind in the units the rows were asked and read in, not the ones selected now.
+    const tempUnit = String(units.temp || "C");
+    const windUnit = String(units.wind || "kmh");
     const precipUnit = (document.getElementById("precipUnits")?.value || "mm").toString().toLowerCase();
     const degSymbol = "º";
     const tempUnitLabel = tempUnit.toLowerCase().startsWith("f") ? `${degSymbol}F` : `${degSymbol}C`;
@@ -1007,7 +1008,9 @@
     };
   }
 
-  function extractStepMetrics(prov, raw, baseStep, windUnit) {
+  // `units` are the comparison's own (its snapshot's): the request was made in them.
+  function extractStepMetrics(prov, raw, baseStep, units) {
+    const windUnit = units.wind;
     const step = { ...baseStep, provider: prov, weather: raw };
     const safeNum = window.cw.safeNum || ((v)=>Number.isFinite(Number(v))?Number(v):null);
     const windToUnits = window.cw.windToUnits || ((v)=>v);
@@ -1075,11 +1078,11 @@
           const pos = SunCalc.getPosition(new Date(timeMs), step.lat, step.lon);
           step.isDaylight = pos.altitude > 0 ? 1 : 0;
         } catch { step.isDaylight = 1; }
-        const tempUnits = (document.getElementById("tempUnits")?.value || "C");
-        const units = String(tempUnits).toLowerCase().startsWith("f") ? "imperial" : "metric";
+        // OpenWeather answers in the system buildProviderUrl asked for from the same temperature unit.
+        const owUnits = String(units.temp || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
         const toKmhFromOW = (ws) => {
           const v = Number(ws) || 0;
-          if (units === "imperial") return v * 1.60934;
+          if (owUnits === "imperial") return v * 1.60934;
           return v * 3.6;
         };
         if (src) {
@@ -1266,8 +1269,10 @@
     const table = document.getElementById("weatherTable");
     if (!table) return;
     table.innerHTML = "";
+    // A date comparison painted before leaves its mode on the table; row clicks read it first.
+    table.classList.remove("compare-dates-mode");
     table.classList.add("compare-mode");
-    
+
     // Also add class to main element for viewport height adjustments on small screens
     const main = document.querySelector('main');
     if (main) {
