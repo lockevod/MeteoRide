@@ -1184,6 +1184,13 @@
       return ('00000000' + h.toString(16)).slice(-8);
     }
 
+    // Senders resend a route until they hear back (the userscript posts at 1, 2 and 4 s), and the
+    // answer waits for the route to be confirmed. A resend was a newer request, so it could replace
+    // a file picked after the first copy was shown. The same text from the same origin within 30 s
+    // of the one that asked is not asked for again: its answer is that request's result.
+    const RESEND_WINDOW_MS = 30000;
+    let lastAsked = null;   // { origin, fingerprint, at, status }
+
     window.addEventListener('message', function (ev) {
       try {
         const msg = ev && ev.data;
@@ -1203,8 +1210,17 @@
         // Shown through its own request, which waits for the map, and kept among recent routes
         // once confirmed. The sender hears what that request ended as, not just that it arrived.
         const reply = (answer) => { try { ev.source && ev.source.postMessage(answer, ev.origin || '*'); } catch(_) {} };
-        window.cwReceiveRoute({ source: 'message', name, text: msg.gpx, importOn: 'commit' })
-          .then((status) => reply({ action: 'loadGPX:ack', ok: status === 'committed', status, name, size }));
+        const fingerprint = typeof msg.gpx === 'string' ? cwForecastRules.fingerprint(msg.gpx) : null;
+        const now = Date.now();
+        let status;
+        if (fingerprint && lastAsked && lastAsked.origin === ev.origin && lastAsked.fingerprint === fingerprint
+            && now - lastAsked.at < RESEND_WINDOW_MS) {
+          status = lastAsked.status;
+        } else {
+          status = window.cwReceiveRoute({ source: 'message', name, text: msg.gpx, importOn: 'commit' });
+          if (fingerprint) lastAsked = { origin: ev.origin, fingerprint, at: now, status };
+        }
+        status.then((s) => reply({ action: 'loadGPX:ack', ok: s === 'committed', status: s, name, size }));
       } catch (e) {
         console.warn('postMessage loadGPX error', e);
         try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: false, reason: 'exception' }, ev.origin || '*'); } catch(_) {}

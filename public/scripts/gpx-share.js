@@ -206,12 +206,16 @@
   // stored meanwhile, whose message found the reader busy, is still taken, and no route is
   // taken twice. Called at start-up (which covers ?shared, where the worker sends the page)
   // and on every cw-shared-gpx message.
+  // `keepOnly`: the route found is kept among recent routes but not asked for. The start-up read
+  // passes it when the address opens a link: its request comes only once IndexedDB answers, after
+  // the link's, and a route left in the slot by an earlier share would replace the link just
+  // opened. A round a message asks for meanwhile asks for its route as usual.
   // ponytail: a slot transaction that never settles stalls the reader for the page's life,
   // like the recent-routes queue; a timeout per read would unstick it.
   let slotRead = null;
   let slotAgain = false;
 
-  function takeSharedFromServiceWorker() {
+  function takeSharedFromServiceWorker(keepOnly = false) {
     if (slotRead) {
       slotAgain = true;
       return slotRead;
@@ -221,9 +225,12 @@
         do {
           slotAgain = false;
           const payload = await readSharedGPXFromIDB();
-          if (payload && payload.text) {
+          if (payload && payload.text && keepOnly) {
+            try { window.cwImportIfRoute(payload.text, payload.name || 'Shared route'); } catch (err) { console.warn('[cw] keeping a route from outside failed', err); }
+          } else if (payload && payload.text) {
             cwReceiveRoute({ source: 'share-sw', name: payload.name, text: payload.text, importOn: 'arrival' });
           }
+          keepOnly = false;
         } while (slotAgain);
       } finally {
         slotRead = null;
@@ -300,6 +307,9 @@
       importOn: 'arrival',
       fetchText: async () => {
         const text = await fetchText(shareUrl, { credentials: 'omit' });
+        // A body with nothing in it is not a route that arrived: the server copy stays and so does
+        // shared_id, so a reload can try again.
+        if (!text.trim()) throw new Error('empty shared route');
         fetch(shareUrl, { method: 'DELETE' }).catch(() => {});
         try {
           const address = new URL(window.location.href);
@@ -324,9 +334,11 @@
     sessionStorageHandoff();
     // prefer UI module's header localize if available
     try { if (typeof window.localizeHeader === 'function') window.localizeHeader(); } catch(_) {}
-    // Whatever the service worker stored while no page was reading. The app has no service
-    // worker, and reading would only create its database there.
-    if (!window.CW_NATIVE) takeSharedFromServiceWorker();
+    // Whatever the service worker stored while no page was reading, only kept when the address
+    // opens a link, which is the route the user asked for. The app has no service worker, and
+    // reading would only create its database there.
+    const opensLink = !!getParams().gpxUrl || new URLSearchParams(window.location.search).has('shared_id');
+    if (!window.CW_NATIVE) takeSharedFromServiceWorker(opensLink);
 
     // ?gpx_url= / ?url= — the documented way to open a hosted route.
     loadFromParams();

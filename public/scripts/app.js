@@ -3266,12 +3266,14 @@ window.cwCommitRoute = function (parsed, requestId) {
 // Keeps a route from outside the page among the recent routes, as it arrived, when it holds
 // one. Text with no sign of a track, a route or waypoints is not kept: a truncated share or a
 // web page would become the newest recent route, and the one the next start-up tries, and
-// fails, to restore. A KML counts only once converted, since one with no Placemark still
-// converts into an empty GPX. Returns whether it was queued for import.
+// fails, to restore. It decides like cwParseRoute: a KML is read through its conversion, but
+// one with no Placemark still converts into an empty GPX, and then the text as it arrived is
+// read instead (a real GPX named .kml). So either of the two holding a route is enough.
+// Returns whether it was queued for import.
 window.cwImportIfRoute = function (text, name) {
   const hasRoute = (s) => typeof s === "string" && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(s);
   let importable = hasRoute(text);
-  if (typeof text === "string" && isKmlRoute(text, name)) {
+  if (!importable && typeof text === "string" && isKmlRoute(text, name)) {
     try { importable = !!window.cwKmlToGpxText && hasRoute(window.cwKmlToGpxText(text)); } catch (_) { importable = false; }
   }
   if (importable) window.cw.importRoute({ text, name });

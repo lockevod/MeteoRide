@@ -484,6 +484,8 @@ test('a real GPX shared under a .kml name is drawn, not emptied', async ({ page 
 
   await expect(trackDrawn(page)).not.toHaveCount(0);
   expect(loaderFailures).toEqual([]);
+  // Keeping it decided on the empty conversion alone, so the route opened but was never kept.
+  await expect.poll(() => storedNames(page), 'shown but not kept among recent routes').toEqual(['route.kml']);
 
   // The KML conversion is rejected (this text isn't KML), but the name still ends in
   // .gpx, and a recompute keeps the track.
@@ -2214,6 +2216,12 @@ test('a shared KML is kept among recent routes only when it would also open as o
   expect(await page.evaluate((t) => window.cwInjectGPXFromText(t, 'Costa.kml'), kml)).toBe('committed');
   await importsDone(page);
   expect(await storedNames(page)).toEqual(['Costa.kml']);
+
+  // A real GPX under a .kml name converts into nothing, and opening it falls back to the text as
+  // it arrived. Keeping it has to fall back the same way.
+  expect(await page.evaluate((t) => window.cwInjectGPXFromText(t, 'route.kml'), routeAt('Real', 41.48))).toBe('committed');
+  await importsDone(page);
+  expect(await storedNames(page)).toEqual(['Costa.kml', 'route.kml']);
 });
 
 /** From now on, the i-th write into recent routes waits for window.__openImport[i](). */
@@ -2427,6 +2435,29 @@ test('a route handed over in sessionStorage is shown, kept among recent routes a
     .toEqual([null, null]);
 });
 
+// The start-up read of the slot asked for its route only once IndexedDB answered, after the link
+// in the address had asked for its own, so a route left in the slot by an earlier share was the
+// later request and replaced the link the user had just opened.
+for (const [what, address] of [['?gpx_url=', '/index.html?gpx_url=/hosted.gpx&name=hosted.gpx'], ['shared_id', '/index.html?shared_id=abc']]) {
+  test(`a route left in the service worker slot does not replace a ${what} opened at start-up, and is still kept`, async ({ page }) => {
+    await goOffline(page);
+    await page.route((url) => url.pathname === '/hosted.gpx' || url.pathname === '/shared/abc', (route) =>
+      (route.request().method() === 'DELETE'
+        ? route.fulfill({ status: 204 })
+        : route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: routeAt('Enlace', 41.48) })));
+    await page.goto('/help.html');
+    await writeSlot(page, routeAt('Antigua', 40.42), 'old.gpx');
+    await page.goto(address);
+    await mapReady(page);
+
+    await expect(routeName(page)).toHaveText('Enlace');
+    await expect.poll(() => storedNames(page)).toEqual([what === 'shared_id' ? 'shared_abc.gpx' : 'hosted.gpx', 'old.gpx'].sort());
+    await page.waitForTimeout(500);
+    await expect(routeName(page)).toHaveText('Enlace');
+    expect(await slotName(page)).toBe(null);
+  });
+}
+
 // The start-up read of the service worker's slot also ran in the app, which has no service
 // worker, and created the slot's database there for nothing.
 test('the app never opens the service worker slot', async ({ page }) => {
@@ -2579,17 +2610,25 @@ test('a shared_id whose route arrived is taken out of the address, so a reload d
   expect(gets).toHaveLength(1);
 });
 
+// A body with no route in it used to count as arrived: the server copy was deleted and shared_id
+// left the address before the empty text was refused, so nothing was shown and a reload could
+// not try again.
 for (const [what, answer] of [
   ['is gone', (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' })],
   ['cannot be reached', (route) => route.abort()],
   ['comes back empty', (route) => route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: '' })],
+  ['comes back blank', (route) => route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: ' \n\t ' })],
 ]) {
-  test(`a shared_id whose server copy ${what} fails with the read notice and keeps nothing`, async ({ page }) => {
+  test(`a shared_id whose server copy ${what} fails with the read notice, keeps nothing and stays in the address`, async ({ page }) => {
     await recordNotices(page);
     await recordStatuses(page);
     await goOffline(page);
-    await page.route((url) => url.pathname === '/shared/abc',
-      (route) => (route.request().method() === 'DELETE' ? route.fulfill({ status: 204 }) : answer(route)));
+    const deletes = [];
+    await page.route((url) => url.pathname === '/shared/abc', (route) => {
+      if (route.request().method() !== 'DELETE') return answer(route);
+      deletes.push(route.request().url());
+      return route.fulfill({ status: 204 });
+    });
     await page.goto('/index.html?shared_id=abc');
     await mapReady(page);
 
@@ -2598,6 +2637,8 @@ for (const [what, answer] of [
     expect(await page.evaluate(() => window.__notices)).toContain(readFailed);
     await importsDone(page);
     expect(await storedRoutes(page)).toEqual([]);
+    expect(deletes, 'deleted a server copy that handed over no route').toEqual([]);
+    expect(await page.evaluate(() => location.search), 'the link can no longer be retried').toBe('?shared_id=abc');
   });
 }
 
@@ -2645,6 +2686,30 @@ test('a shared_id whose text arrived is kept when deleting its server copy fails
   expect(await storedNames(page)).toEqual(['shared_abc.gpx']);
 });
 
+// In the test above the text arrives before the deadline. Here the request has already failed
+// when it arrives, and the route is still kept: keeping does not wait on the request.
+test('a shared_id whose text arrives after its request ran out of time is still kept, and not shown', async ({ page }) => {
+  await page.clock.install();
+  await recordNotices(page);
+  await recordStatuses(page);
+  await goOffline(page);
+  const release = await holdDownload(page, '/shared/abc', routeAt('Servidor', 41.48));
+  await page.goto('/index.html?shared_id=abc');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequests()), 'shared_id asked before its download').toBe(true);
+
+  await page.clock.fastForward(31000);
+  await expect.poll(() => page.evaluate(() => window.__statuses)).toEqual([{ source: 'shared-id', status: 'failed' }]);
+  const readFailed = await page.evaluate(() => window.t('route_read_failed'));
+  expect(await page.evaluate(() => window.__notices)).toContain(readFailed);
+  await importsDone(page);
+  expect(await storedRoutes(page), 'kept before its text arrived').toEqual([]);
+
+  release();
+  await expect.poll(() => storedNames(page)).toEqual(['shared_abc.gpx']);
+  expect(await page.evaluate(() => window.lastGPXFile)).toBe(null);
+});
+
 // On the website nothing can be on screen before the link's request, which is made as the page
 // loads, so "leaves the screen alone" is an empty screen here.
 test('a ?gpx_url= that is not a GPX fails with a notice and puts nothing on screen or among recent routes', async ({ page }) => {
@@ -2661,6 +2726,24 @@ test('a ?gpx_url= that is not a GPX fails with a notice and puts nothing on scre
   await expect(trackDrawn(page)).toHaveCount(0);
   await importsDone(page);
   expect(await storedRoutes(page)).toEqual([]);
+});
+
+// A request replaced in the same tick never reads, and a link is kept only once confirmed, so
+// nothing else waits on its download: one that fails must not surface as an unhandled rejection.
+test('a link replaced before it reads whose download fails leaves nothing unhandled', async ({ page }) => {
+  const crashes = [];
+  page.on('pageerror', (e) => crashes.push(e.message));
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  const statuses = await page.evaluate((text) => Promise.all([
+    window.cwReceiveRoute({ source: 'url', name: 'down.gpx', fetchText: () => Promise.reject(new Error('download failed')) }),
+    window.cwInjectGPXFromText(text, 'shared.gpx'),
+  ]), routeAt('Compartida', 41.48));
+  expect(statuses).toEqual(['superseded', 'committed']);
+  await page.waitForTimeout(300);
+  expect(crashes).toEqual([]);
 });
 
 /** Posts a route to the page as a trusted site would. Every answer lands in __acks, with the
@@ -2693,6 +2776,48 @@ test('a posted route is answered once it is confirmed, with what its request end
   await expect.poll(() => storedNames(page)).toEqual(['posted.gpx']);
 });
 
+// Senders resend: the userscript posts the same route at 1, 2 and 4 s, and the answer waits for
+// the route to be confirmed, so a resend can land after the route is shown. It was a newer
+// request, and replaced a file the user had picked in between.
+test('a posted route sent again within 30 s is answered with the first result and does not replace a file picked since', async ({ page }) => {
+  await page.clock.install();
+  await recordStatuses(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const route = routeAt('Mensaje', 41.48);
+  const messages = () => page.evaluate(() => window.__statuses.filter((s) => s.source === 'message').length);
+  await postRoute(page, route, 'posted.gpx');
+  await expect.poll(() => acks(page)).toEqual([expect.objectContaining({ status: 'committed', onScreen: 'posted.gpx' })]);
+
+  await pickText(page, 'picked.gpx', routeAt('Elegida', 40.42));
+  await expect(routeName(page)).toHaveText('Elegida');
+  await postRoute(page, route, 'posted.gpx');
+  await expect.poll(() => acks(page)).toHaveLength(2);
+  expect((await acks(page))[1]).toEqual(
+    { action: 'loadGPX:ack', ok: true, status: 'committed', name: 'posted.gpx', size: route.length, onScreen: 'picked.gpx' });
+  await page.waitForTimeout(500);
+  await expect(routeName(page)).toHaveText('Elegida');
+  expect(await messages(), 'the resend asked for its route again').toBe(1);
+
+  // Past the window the same route is a request of its own again.
+  await page.clock.fastForward(31000);
+  await postRoute(page, route, 'posted.gpx');
+  await expect.poll(() => acks(page)).toHaveLength(3);
+  await expect(routeName(page)).toHaveText('Mensaje');
+  expect(await messages()).toBe(2);
+
+  // So is the same route from another allowed origin within the window. The browser sets a real
+  // message's origin, so this one is dispatched by hand; its answer goes to an origin this page
+  // is not, and is dropped, so only its request is observable.
+  await pickText(page, 'picked.gpx', routeAt('Elegida', 40.42));
+  await expect(routeName(page)).toHaveText('Elegida');
+  await page.evaluate((g) => window.dispatchEvent(new MessageEvent('message',
+    { data: { action: 'loadGPX', gpx: g, name: 'posted.gpx' }, origin: 'http://localhost:4173', source: window })), route);
+  await expect(routeName(page)).toHaveText('Mensaje');
+  await expect.poll(messages).toBe(3);
+});
+
 test('a posted text with no track is answered as failed and stays out of recent routes', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
@@ -2721,14 +2846,20 @@ test('a posted route replaced by a file picked before the map is ready is answer
   expect(await storedRoutes(page)).toEqual([]);
 });
 
-// The browser sets a message's origin, so the app posts to itself from an address the allowlist
-// does not name: [::1], the same test server over IPv6. A foreign site framing the app does not
-// work here: the app's CSP keeps foreign frames out, and Chromium's local network access checks
-// stop a page on another hostname from framing 127.0.0.1.
-test('a route posted from an origin that is not allowed is refused, asks for nothing and keeps nothing', async ({ page }) => {
-  await page.route('**/*', (route) => (route.request().url().startsWith('http://[::1]:4173/') ? route.continue() : route.abort()));
-  await page.goto('http://[::1]:4173/index.html');
+// The browser sets a message's origin, so the app posts to itself from an origin the allowlist
+// does not name: a made-up https host whose every request the test fetches from the test server.
+// A foreign site framing the app does not work here: the app's CSP keeps foreign frames out, and
+// Chromium's local network access checks stop a page on another hostname from framing 127.0.0.1.
+test('a route posted from an origin that is not allowed is refused, asks for nothing and keeps nothing', async ({ page, baseURL }) => {
+  const foreign = 'https://foreign.example';
+  await page.route('**/*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin !== foreign) return route.abort();
+    return route.fulfill({ response: await route.fetch({ url: new URL(url.pathname + url.search, baseURL).href }) });
+  });
+  await page.goto(`${foreign}/index.html`);
   await mapReady(page);
+  expect(await page.evaluate(() => location.origin)).toBe(foreign);
 
   await postRoute(page, routeAt('Ajena', 41.48), 'foreign.gpx');
   await expect.poll(() => acks(page)).toEqual([{ action: 'loadGPX:ack', ok: false, reason: 'forbidden_origin', onScreen: null }]);
