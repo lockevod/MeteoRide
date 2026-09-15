@@ -1558,8 +1558,8 @@ test('text from outside that holds no route stays out of recent routes; a route 
   await page.goto('/index.html');
   await mapReady(page);
   await page.evaluate((text) => {
-    window.cwLoadGPXFromString('this is not a route', 'x.gpx');
-    window.cwLoadGPXFromString(text, 'ok.gpx');
+    window.cwInjectGPXFromText('this is not a route', 'x.gpx');
+    window.cwInjectGPXFromText(text, 'ok.gpx');
   }, routeAt('Buena', 41.48));
   // Imports run in arrival order, so once this one is stored the two before it are decided.
   expect((await importRecent(page, routeAt('Otra', 40.42), 'after.gpx')).ok).toBe(true);
@@ -1575,11 +1575,11 @@ test('a shared KML with nothing to follow stays out of recent routes; a KML rout
   const importsDone = () => page.evaluate(() => window.cw.enqueueRecents(() => true));
 
   await page.evaluate(() =>
-    window.cwLoadGPXFromString('<kml xmlns="http://www.opengis.net/kml/2.2"><Document/></kml>', 'Empty.kml'));
+    window.cwInjectGPXFromText('<kml xmlns="http://www.opengis.net/kml/2.2"><Document/></kml>', 'Empty.kml'));
   await importsDone();
   expect(await storedRoutes(page)).toEqual([]);
 
-  await page.evaluate((text) => window.cwLoadGPXFromString(text, 'Costa.kml'), `<?xml version="1.0" encoding="UTF-8"?>
+  await page.evaluate((text) => window.cwInjectGPXFromText(text, 'Costa.kml'), `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>Costa</name>
 <LineString><coordinates>2.4120,41.4800,0 2.4200,41.4850,0 2.4300,41.4900,0 2.4400,41.4950,0</coordinates></LineString>
 </Placemark></Document></kml>`);
@@ -2043,6 +2043,72 @@ test('a file picked and still being read when the app restores the last route is
   await page.waitForTimeout(300);
   await expect(routeName(page)).toHaveText('Elegida');
   expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('picked.gpx');
+});
+
+/* ---------- routes from outside ---------- */
+
+/** Holds app.js's start-up, the map first, until the test calls window.__openMap(). */
+async function holdMap(page) {
+  await page.addInitScript(() => {
+    let open;
+    const gate = new Promise((r) => { open = r; });
+    window.__openMap = open;
+    const add = document.addEventListener;
+    document.addEventListener = function (type, fn, ...rest) {
+      const fromApp = /\/scripts\/app\.js$/.test((document.currentScript && document.currentScript.src) || '');
+      return add.call(this, type, type === 'DOMContentLoaded' && fromApp ? () => gate.then(fn) : fn, ...rest);
+    };
+  });
+}
+
+const importsDone = (page) => page.evaluate(() => window.cw.enqueueRecents(() => true));
+
+// A route from outside used to wait for the map before asking for itself, so a file picked
+// during that wait was the earlier request and lost to it.
+test('a route from outside asks for itself before the map exists, and a file picked after it wins', async ({ page }) => {
+  await holdMap(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await page.evaluate((text) => { window.__shared = window.cwInjectGPXFromText(text, 'shared.gpx'); }, routeAt('Compartida', 41.48));
+  expect(await page.evaluate(() => ({ map: !!window.map, asked: window.cw.hasRouteRequests() })))
+    .toEqual({ map: false, asked: true });
+
+  await requestHeld(page, 'pick');
+  await page.evaluate(() => window.__openMap());
+  await mapReady(page);
+  await openRead(page, 'pick', routeAt('Elegida', 40.42), 'picked.gpx');
+  await expect.poll(() => requestStatus(page, 'pick')).toBe('committed');
+  expect(await page.evaluate(() => window.__shared)).toBe('superseded');
+  await page.waitForTimeout(300);
+  await expect(routeName(page)).toHaveText('Elegida');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('picked.gpx');
+});
+
+test('a route from outside imported as it arrives is kept among recent routes even when a later request replaces it', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate((text) => {
+    window.__shared = window.cwInjectGPXFromText(text, 'shared.gpx');
+    window.cw.requestRoute({ source: 'file', read: async () => null });
+  }, routeAt('Compartida', 41.48));
+  expect(await page.evaluate(() => window.__shared)).toBe('superseded');
+  await importsDone(page);
+  expect(await storedNames(page)).toEqual(['shared.gpx']);
+});
+
+test('a route from outside imported on confirming is kept only once it is the route confirmed', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate((text) => {
+    window.__replaced = window.cwLoadGPXFromString(text, 'replaced.gpx');
+    window.cw.requestRoute({ source: 'file', read: async () => null });
+  }, routeAt('Sustituida', 41.48));
+  expect(await page.evaluate(() => window.__replaced)).toBe('superseded');
+  expect(await page.evaluate((text) => window.cwLoadGPXFromString(text, 'kept.gpx'), routeAt('Buena', 40.42))).toBe('committed');
+  await importsDone(page);
+  expect(await storedNames(page)).toEqual(['kept.gpx']);
 });
 
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any

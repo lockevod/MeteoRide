@@ -3258,27 +3258,24 @@ window.cwCommitRoute = function (parsed, requestId) {
   renderWeatherTable();
 };
 
-// Routes from outside the page (the share inboxes, ?gpx_url=, shared_id, postMessage) still
-// arrive here. They are imported into recent routes as they arrive, as before, and shown
-// through the coordinator like any other route.
-window.cwLoadGPXFromString = function loadGPXFromString(gpxText, nameHint = "route.gpx", source = "message") {
-  if (!gpxText || typeof gpxText !== "string") {
-    logDebug("cwLoadGPXFromString: invalid gpxText", true);
-    return Promise.resolve("failed");
-  }
-  logDebug(`cwLoadGPXFromString: len=${gpxText.length}, name=${nameHint}`);
-  // Text with no sign of a track, a route or waypoints is not kept: a truncated share or a web
-  // page would become the newest recent route, and the one the next start-up tries, and
-  // fails, to restore. A KML counts only once converted, since one with no Placemark still
-  // converts into an empty GPX.
+// Keeps a route from outside the page among the recent routes, as it arrived, when it holds
+// one. Text with no sign of a track, a route or waypoints is not kept: a truncated share or a
+// web page would become the newest recent route, and the one the next start-up tries, and
+// fails, to restore. A KML counts only once converted, since one with no Placemark still
+// converts into an empty GPX. Returns whether it was queued for import.
+window.cwImportIfRoute = function (text, name) {
   const hasRoute = (s) => typeof s === "string" && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(s);
-  let importable = hasRoute(gpxText);
-  if (/<kml[\s>]/i.test(gpxText)) {
-    try { importable = !!window.cwKmlToGpxText && hasRoute(window.cwKmlToGpxText(gpxText)); } catch (_) { importable = false; }
+  let importable = hasRoute(text);
+  if (/<kml[\s>]/i.test(text)) {
+    try { importable = !!window.cwKmlToGpxText && hasRoute(window.cwKmlToGpxText(text)); } catch (_) { importable = false; }
   }
-  if (importable) window.cw.importRoute({ text: gpxText, name: nameHint });
-  return window.cw.requestRoute({ source, read: async () => ({ text: gpxText, name: nameHint }) });
+  if (importable) window.cw.importRoute({ text, name });
+  return importable;
 };
+
+// A route handed over by other code, a postMessage by default (gpx-share.js receives it).
+window.cwLoadGPXFromString = (gpxText, nameHint = "route.gpx", source = "message") =>
+  window.cwReceiveRoute({ source, name: nameHint, text: gpxText });
 // --- end routes ---
 
 // NEW: expose minimal hooks for compare.js (no behavior changes)

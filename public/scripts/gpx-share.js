@@ -26,70 +26,51 @@
     }
   }
 
-  // The loader draws the track straight onto the Leaflet map, so both the loader and
-  // the map must exist. Shared routes routinely arrive before the app has booted:
-  // the service worker handoff, ?gpx_url= and the native shell all fire early.
-  function appReady() {
-    return !!window.map && typeof window.cwLoadGPXFromString === 'function';
+  // Confirming a route draws it onto the Leaflet map, and routes from outside routinely
+  // arrive before app.js has built it: the native inbox at boot, the service worker,
+  // sessionStorage, ?gpx_url=. One wait shared by every read that needs it.
+  let mapReady = null;
+  function whenMapReady() {
+    if (!mapReady) {
+      mapReady = new Promise((resolve) => {
+        const ready = () => !!window.map && typeof window.cwParseRoute === 'function';
+        if (ready()) return resolve();
+        const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 100);
+      });
+    }
+    return mapReady;
   }
 
-  function whenAppReady(cb) {
-    if (appReady()) return cb();
-    const deadline = Date.now() + 20000;
-    const timer = setInterval(() => {
-      if (appReady()) {
-        clearInterval(timer);
-        cb();
-      } else if (Date.now() > deadline) {
-        clearInterval(timer);
-        console.warn('[cw] app not ready after 20s; loading the route anyway');
-        cb();
-      }
-    }, 250);
-  }
-
-  // Single entry point for every handoff path: service worker, ?gpx_url=, shared_id
-  // and the native share extension.
-  function cwInjectGPXFromText(gpxText, routeName){
-    let name = routeName || 'Shared route';
-    let text = String(gpxText || '');
-    whenAppReady(() => {
-      try {
-        // The native inboxes accept .kml too; the loader only reads GPX. Detect it by
-        // content (the usual case) or by the file name, since a long comment ahead of
-        // <kml> can push it past the content-sniff window.
-        const looksLikeKml = /<kml[\s>]/i.test(text.slice(0, 4096)) || /\.kml$/i.test(name);
-        if (looksLikeKml && typeof window.cwKmlToGpxText === 'function') {
-          const converted = window.cwKmlToGpxText(text);
-          // A malformed KML, or a real GPX misnamed .kml, converts into a
-          // syntactically valid but track-less GPX wrapper: toGeoJSON.kml() always
-          // returns a FeatureCollection, even with zero Placemarks. Only accept the
-          // conversion when it actually carries a track/route/waypoint; otherwise
-          // keep the original text and name, since the input was likely GPX already.
-          if (converted && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(converted)) {
-            text = converted;
-            // reloadFull() re-reads window.lastGPXFile by its extension on every
-            // recompute; keeping the .kml name would run this already-converted GPX
-            // text back through the KML converter and lose the track.
-            name = /\.kml$/i.test(name) ? name.replace(/\.kml$/i, '.gpx') : `${name}.gpx`;
-          } else if (/\.kml$/i.test(name)) {
-            // The conversion carried no track: this text was never real KML, most
-            // likely a GPX file shared under a .kml name. Keep the original text but
-            // rename it too, or reloadFull() would keep treating it as KML on every
-            // recompute and run this GPX text back through the KML converter.
-            name = name.replace(/\.kml$/i, '.gpx');
-          }
-        }
-        if (typeof window.cwLoadGPXFromString === 'function') {
-          window.cwLoadGPXFromString(text, name);
-        } else {
-          window.postMessage({ type: 'cw-gpx', name, gpx: text }, '*');
-        }
-      } catch(e){
-        console.error('[cw] cwInjectGPXFromText error', e);
-      }
+  // Every route from outside the page arrives here. Its request is made at once, before any
+  // wait; the download and the wait for the map happen inside its read, under its deadline.
+  // Keeping the route among the recent ones is separate from which route ends up on screen:
+  // a share is imported as its text arrives, whatever its request ends as; a link or a
+  // message only once it is the route confirmed. The download starts with the request
+  // rather than in its read, because a request replaced in the same tick never reads, and
+  // its import must not depend on that. Resolves with what the request ends as.
+  function cwReceiveRoute({ source, name, text, fetchText, importOn = source === 'url' || source === 'message' ? 'commit' : 'arrival' }) {
+    const routeName = name || 'Shared route';
+    const arrived = text != null ? Promise.resolve(String(text)) : Promise.resolve().then(fetchText);
+    arrived.catch(() => {});   // the read reports it; a replaced request never reads
+    const status = window.cw.requestRoute({
+      source,
+      read: async () => {
+        const got = await arrived;
+        if (!got) throw new Error('no route text');
+        await whenMapReady();
+        return { text: got, name: routeName };
+      },
     });
-    return true;
+    const importIt = (got) => { if (got) window.cwImportIfRoute(got, routeName); };
+    if (importOn === 'arrival') arrived.then(importIt, () => {});
+    else status.then((s) => { if (s === 'committed') arrived.then(importIt); });
+    return status;
+  }
+
+  window.cwReceiveRoute = cwReceiveRoute;
+
+  function cwInjectGPXFromText(text, name, source = 'share-native') {
+    return cwReceiveRoute({ source, name, text });
   }
 
   // leaflet-gpx builds waypoint popups by concatenating the <name> and <desc> text
