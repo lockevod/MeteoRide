@@ -74,10 +74,11 @@
     }
   }
 
-  // cwInjectGPXFromText (gpx-share.js) already waits for the map and the loader,
-  // which matters here: shared routes arrive while the app is still booting.
+  // cwReceiveRoute (gpx-share.js) asks for the route at once, imports it into recent routes
+  // as it arrives and waits for the map inside its read, which matters here: shared routes
+  // arrive while the app is still booting.
   function injectRoute(text, name) {
-    window.cwInjectGPXFromText(text, name || 'Shared route');
+    window.cwReceiveRoute({ source: 'share-native', name: name || 'Shared route', text, importOn: 'arrival' });
   }
 
   /* ---------- app lifecycle ---------- */
@@ -831,12 +832,12 @@
     setupRideAlerts();
     hideSplash();
 
-    // A route shared from another app takes precedence over the one from last time.
-    const arrived = await consumePendingShare();
-    if (!arrived) {
-      restoreLastRoute();
-      centreOnUser();
-    }
+    // Neither waits for the other. The restore asks for its route at once; a route shared from
+    // another app comes out of the inbox later, so it is the later request and replaces the
+    // restore by identity, even once that has published. The map goes to the phone's position
+    // only when nothing was shared, as before.
+    consumePendingShare().then((arrived) => { if (!arrived) centreOnUser(); });
+    restoreLastRoute();
   }
 
   // Started as early as possible, so the restored values are usually in place before

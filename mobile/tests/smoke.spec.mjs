@@ -1959,11 +1959,10 @@ async function seedRecentRoute(page) {
   await expect.poll(async () => (await storedRoutes(page)).length).toBe(1);
 }
 
-// Spec §6: the recent route is read after the shared one has already published, and the
-// shared one still wins.
-test('a route shared while the last recent route is still being read at start-up wins', async ({ page }) => {
-  await seedRecentRoute(page);
-  await page.addInitScript(() => {
+/** From the next page load, reading a recent route counts in __recentReads and waits for
+ *  window.__openRecentRead(). */
+const holdRecentRead = (page) =>
+  page.addInitScript(() => {
     let open;
     window.__recentRead = new Promise((r) => { open = r; });
     window.__openRecentRead = open;
@@ -1975,6 +1974,12 @@ test('a route shared while the last recent route is still being read at start-up
       get() { return async (route) => { window.__recentReads++; await window.__recentRead; return real(route); }; },
     });
   });
+
+// Spec §6: the recent route is read after the shared one has already published, and the
+// shared one still wins.
+test('a route shared while the last recent route is still being read at start-up wins', async ({ page }) => {
+  await seedRecentRoute(page);
+  await holdRecentRead(page);
   await page.reload();
   await mapReady(page);
   // The restore is already reading the recent route, or this would prove nothing.
@@ -2109,6 +2114,78 @@ test('a route from outside imported on confirming is kept only once it is the ro
   expect(await page.evaluate((text) => window.cwLoadGPXFromString(text, 'kept.gpx'), routeAt('Buena', 40.42))).toBe('committed');
   await importsDone(page);
   expect(await storedNames(page)).toEqual(['kept.gpx']);
+});
+
+/** From now on, the i-th write into recent routes waits for window.__openImport[i](). */
+const holdImports = (page, count) =>
+  page.evaluate((n) => {
+    const gates = Array.from({ length: n }, () => { let open; const held = new Promise((r) => { open = r; }); return { held, open }; });
+    window.__openImport = gates.map((g) => g.open);
+    const real = window.cwIdbImportRoute;
+    let calls = 0;
+    window.cwIdbImportRoute = async (input) => { const gate = gates[calls++]; if (gate) await gate.held; return real(input); };
+  }, count);
+
+// Spec §6. The start-up used to drain the inbox first and restore only when nothing came in.
+// Now the restore asks at once, so a drain that outlasts it hands over a later request.
+test('a route the inbox hands over after the restore has started wins, even when the recent route is read after it', async ({ page }) => {
+  await seedRecentRoute(page);
+  await installNativeBridge(page, { delayMs: 1000, routes: [{ name: 'shared.gpx', gpx: routeAt('Compartida', 40.42) }] });
+  await holdRecentRead(page);
+  await page.reload();
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.__recentReads), 'the restore is reading while the inbox drains').toBe(1);
+
+  await expect(routeName(page)).toHaveText('Compartida');
+  await page.evaluate(() => window.__openRecentRead());
+  await page.waitForTimeout(800);
+  await expect(routeName(page)).toHaveText('Compartida');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('shared.gpx');
+});
+
+// Spec §6: showing and keeping are separate. The recent route tapped later is shown; the shared
+// route read before it is kept, although its import only lands after the tap.
+test('a shared route read before a recent route is tapped, and imported after it, leaves the recent route on screen and is kept', async ({ page }) => {
+  await seedRecentRoute(page);
+  await holdImports(page, 1);
+  await page.evaluate(async (text) => {
+    window.__enqueue({ name: 'shared.gpx', gpx: text });
+    await window.cwConsumePendingShare();
+    window.loadRecentRoute(window.getRecentRoutes()[0]);
+  }, routeAt('Compartida', 40.42));
+
+  await expect(routeName(page)).toContainText('Masnou');
+  await page.evaluate(() => window.__openImport[0]());
+  await expect.poll(() => storedNames(page)).toEqual(['route.gpx', 'shared.gpx']);
+  await page.waitForTimeout(300);
+  await expect(routeName(page)).toContainText('Masnou');
+});
+
+// Spec §6. Imports run one at a time, so the gates cannot really open out of order; opening them
+// last to first still proves the order comes from arrival, not from which write is let through.
+test('four shared routes in a row: the fourth is shown and the last three to arrive are kept, none over another', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await holdImports(page, 4);
+  const routes = [
+    { name: 'a.gpx', gpx: routeAt('Primera', 41.48) },
+    { name: 'Ruta.gpx', gpx: routeAt('Segunda', 41.2) },
+    { name: 'Ruta.gpx', gpx: routeAt('Tercera', 40.9) },
+    { name: 'd.gpx', gpx: routeAt('Cuarta', 40.42) },
+  ];
+  await page.evaluate((all) => { all.forEach((r) => window.__enqueue(r)); return window.cwConsumePendingShare(); }, routes);
+  for (const i of [3, 2, 1, 0]) {
+    await page.evaluate((k) => window.__openImport[k](), i);
+    await page.waitForTimeout(100);
+  }
+
+  await expect.poll(() => storedNames(page)).toEqual(['Ruta (2).gpx', 'Ruta.gpx', 'd.gpx']);
+  const stored = await storedRoutes(page);
+  expect(new Set(stored.map((r) => r.fingerprint)).size).toBe(3);
+  await expect(routeName(page)).toHaveText('Cuarta');
+  expect(await page.evaluate(() => window.lastGPXFile.name)).toBe('d.gpx');
 });
 
 // Two app-only buttons pushed the toolbar onto a second line at phone width. Any
