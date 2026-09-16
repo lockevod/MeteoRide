@@ -195,7 +195,7 @@ protección que el código no da.
 | **H1** (alta, preexistente) | `fetchWeatherForSteps` en `app.js`, que reseteaba, escribía y pintaba `weatherData` | Dos cálculos solapados corrompen el `weatherData` global: el segundo resetea mientras el primero sigue escribiendo, y gana quien termine el último. Toca también las alertas, porque el evento `cw:forecast` (lo emite `publish` en `app.js` y lo escucha `native.js`) consume ese mismo global. Visto al arreglar H2: en la suite, **una sola carga de ruta** deja cada paso tres veces en `weatherData`, intercalado; no hace falta cambiar parámetros deprisa. Causa: `bindUIEvents` e `initUI` escuchaban los dos `#gpxFile` e `initUI` se ejecutaba dos veces (al cargar `ui.js` y en DOMContentLoaded desde `app.js`), así que cada fichero lanzaba tres cálculos. **Corregido ese disparador** (un listener, `initUI` con guarda, test en `smoke.spec.mjs`); **Corregida también la carrera**: cada ejecución de `fetchWeatherForSteps` toma un número (`forecastRun`, que la fase 3 sustituye por `requestId` y `computationId`), acumula en local y solo la última publica tabla, avisos, alertas y `cw:forecast`, y suelta su reclamación del indicador (`forecast:<id>`); `mobile/tests/forecast-runs.test.mjs`. `compare.js` escribía `weatherData` sin número hasta la fase 4, que le da identidad propia (`comparisonId`). |
 | **H2** (alta, código propio) | `native.js:344-358` | `prepareForOffline` coge **todas** las claves de caché frescas, sean de esta ruta o no, ignora el booleano que devuelve `pinCacheKeys` y luego dice "{n} puntos" contando entradas de caché. Siempre informa de éxito. **Corregido**: reconstruye las claves de los pasos pintados con `makeCacheKey` y distingue nada, completo, parcial ("n de total") y fallo al fijar; cuatro tests en `smoke.spec.mjs`. |
 | **H3** (media) | `app.js:993-1007` | La caché de OpenWeather guarda el JSON completo por cada hora: ~49 escrituras del mismo objeto. **Corregido**: la clave de OpenWeather es solo ubicación y unidades (`makeCacheKey`), una escritura por respuesta y la extracción elige la hora por `dt`; las claves antiguas se borran al arrancar. Con `route.gpx` y el stub de los tests, de 147 escrituras y 900 522 caracteres serializados a 3 y 18 378; tres tests en `smoke.spec.mjs`. |
-| **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. **Corregido** (decisión del autor tras medir): la envoltura de `fetch` abandona una petición a los 15 s sin que el servidor empiece a responder o a los 15 s seguidos sin datos al leer el cuerpo (`readText` con `getReader()`); una descarga lenta que sigue recibiendo no se corta. El plazo es por servidor: el que no responde no se vuelve a pedir en ese cálculo o comparación, y el aviso nombra al proveedor. Un paso abandonado solo pasa a otro servidor (OpenWeather → Open-Meteo, nunca AROME); AROME y Open-Meteo comparten servidor y se quedan sin datos. Un cálculo o comparación sustituido aborta sus peticiones sin contarlo como fallo. Once tests nuevos y uno ampliado en `smoke.spec.mjs`, y uno adaptado en `forecast-runs.test.mjs`. |
+| **H4** (media) | bucle de proveedores | Secuencial y sin timeout de aplicación: un proveedor lento cuelga toda la previsión. **Corregido** (decisión del autor tras medir): la envoltura de `fetch` abandona una petición a los 15 s sin que el servidor empiece a responder o a los 15 s seguidos sin datos al leer el cuerpo (`readText` con `getReader()`); una descarga lenta que sigue recibiendo no se corta. El plazo es por servidor: el que no responde no se vuelve a pedir en ese cálculo o comparación, y el aviso nombra al proveedor. Un paso abandonado solo pasa a otro servidor (OpenWeather → Open-Meteo, nunca AROME); AROME y Open-Meteo comparten servidor y se quedan sin datos. Un cálculo o comparación sustituido aborta sus peticiones sin contarlo como fallo. Doce tests nuevos y uno ampliado en `smoke.spec.mjs`, y uno adaptado en `forecast-runs.test.mjs`. |
 | **H5** (media) | `utils.js:34-58` | Los avisos de proveedor usan un temporizador de 1,5 s que nunca se reinicia, así que un aviso nuevo puede desaparecer al instante. **Corregido en la fase 2**: cada cálculo anota en su propio registro (`cwRecorder`) y el aviso se decide al publicar con `decideNotice`; `mobile/tests/forecast-runs.test.mjs` y `mobile/tests/forecast-outcome.test.mjs`. |
 | **H6** (media, seguridad, código propio) | `functions/share.js:20-60` | El límite de tamaño compara `raw.length` (unidades UTF-16, no bytes) y lo hace **después** de leer el cuerpo entero en memoria. Con multibyte pasan ~2,6 MB. **Corregido**: el cuerpo se lee con tope de bytes antes de parsear (`readCapped`), texto y multipart; `mobile/tests/share.test.mjs`. |
 
@@ -382,21 +382,21 @@ en `AGENTS.md → Open work`. Última actualización: tarea 8 del seguimiento, p
   el cuerpo. Quedan:
   - El plazo es por servidor, `api.open-meteo.com` (Open-Meteo y AROME) y `api.openweathermap.org`: el
     que no responde se espera una sola vez por cálculo, así que el peor caso son 30 s con los dos.
-  - Un paso cuyo proveedor se abandona solo pasa a otro servidor: OpenWeather pide Open-Meteo, que es
-    global, y nunca AROME, diga lo que diga la cadena. AROME y Open-Meteo comparten servidor, así que
-    esos pasos y los siguientes del cálculo se quedan sin datos. Ante un error HTTP la cadena no cambia.
+  - Un paso cuyo proveedor se abandona solo pide a otro servidor: OpenWeather pide Open-Meteo, que es
+    global, y nunca AROME, diga lo que diga la cadena. Un paso de AROME o de Open-Meteo no pide nada,
+    pero sí usa la respuesta de Open-Meteo que ya esté en caché para ese paso: la regla es no volver a
+    esperar en ese servidor, no rechazar datos ya descargados. Sin nada guardado, esos pasos y los
+    siguientes se quedan sin datos. Ante un error HTTP la cadena no cambia.
   - Con un proveedor abandonado, el aviso de la tabla lo nombra en lugar de los avisos de fallback, clave
     u horizonte de ese cálculo, también con los avisos detallados apagados. Es lo decidido, no un límite.
-  - **Comprobación en capas.** Que un paso de AROME abandonado no pase a Open-Meteo lo sostienen dos
-    cosas: el salto por servidor, que rechaza la petición al momento, y la condición de `app.js` que ni
-    siquiera lo intenta. Quitar solo la segunda no cambia lo que se pide; lo único que decide es la
-    caché, porque sin ella un paso con una respuesta de Open-Meteo guardada la mostraría. Eso lo fija
-    «AROME given up leaves its steps without data even with an Open-Meteo answer in the cache». Si se
-    prefiere aprovechar esa caché, es un cambio de una línea y del test.
+  - **Comprobación en capas.** Que no salga ninguna petición al servidor abandonado lo sostienen dos
+    cosas: el salto por servidor de la envoltura, que rechaza al momento, y la lectura solo de caché de
+    `app.js`, que ni lo intenta. Quitar solo la segunda no cambia lo que se pide.
   - El cuerpo de una respuesta de error (el fragmento que la tabla anota en el registro) también se corta
     a los 15 s sin datos, pero no cuenta como plazo agotado ni deja de preguntar a ese proveedor.
-  - La consulta independiente de avisos oficiales tiene plazo y aborto con su propia grabadora; si
-    OpenWeather no contesta ahí, no se dice nada.
+  - La consulta independiente de avisos oficiales tiene plazo y aborto con su propia grabadora, y
+    comparte la lista de servidores abandonados del cálculo, así que no vuelve a esperar en uno que los
+    pasos ya abandonaron. Si OpenWeather no contesta ahí, no se dice nada.
   - Las peticiones sin grabadora (la línea base del aviso de ruta, la prueba de la clave) siguen sin plazo.
   - Sin medir fuera de Chromium con reloj falso: `AbortController` y `ReadableStream.getReader()` en
     WKWebView, y una red real lenta, no se han comprobado.

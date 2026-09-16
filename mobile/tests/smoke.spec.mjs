@@ -6534,16 +6534,16 @@ async function stubHosts(page, control) {
 }
 
 /** A route computed with `provider` and an OpenWeather key, on the clock at T0. */
-async function routeWith(page, control, provider) {
+async function routeWith(page, control, provider, { warnings = false } = {}) {
   await startClock(page);
   await stubHosts(page, control);
   await page.goto('/index.html');
   await mapReady(page);
-  await page.evaluate(() => {
+  await page.evaluate((on) => {
     document.getElementById('apiKeyOW').value = 'a-valid-looking-key';
-    // Official warnings are looked up on OpenWeather too, and would wait on a silent host of their own.
-    document.getElementById('showWeatherAlerts').checked = false;
-  });
+    // Official warnings are looked up on OpenWeather too, which is a wait of its own unless a test wants it.
+    document.getElementById('showWeatherAlerts').checked = on;
+  }, warnings);
   await selectProvider(page, provider);
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
 }
@@ -6619,10 +6619,10 @@ test('each silent host is waited on once, not once per step or per provider', as
     'a host that had gone silent was asked again').toEqual([1, 1, 0]);
 });
 
-// The guard that keeps a step on a silent host from falling back is not covered by the host skip alone:
-// what it decides is the cache. AROME goes silent, Open-Meteo has an answer for that step, and it is not
-// used, because the provider asked did not answer (the author's rule).
-test('AROME given up leaves its steps without data even with an Open-Meteo answer in the cache', async ({ page }) => {
+// A host given up is not asked again, but an answer already downloaded is still shown: the rule is not to
+// wait on that host again, not to refuse data already in hand. AROME goes silent and the Open-Meteo answer
+// cached for each step stands in, with no request.
+test('AROME given up shows an Open-Meteo answer already in the cache, without asking the silent host', async ({ page }) => {
   const control = { now: T0 };
   await startClock(page);
   await stubHosts(page, control);
@@ -6640,7 +6640,22 @@ test('AROME given up leaves its steps without data even with an Open-Meteo answe
   await expect.poll(() => control.arome).toBe(1);
   await page.clock.fastForward('00:16');
 
-  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(0);
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
+  const shown = await shownSnapshot(page);
+  expect(shown.usable, 'a step with a cached answer was left empty').toBe(shown.steps);
   expect(control.standard, 'the host that had gone silent was asked again').toBe(cached);
-  await expect(page.locator('.notice')).toContainText(notResponding);
+  expect(control.arome).toBe(1);
+  await expect(page.locator('.notice')).toContainText(/AROME-HD (is not responding|no responde)/);
+});
+
+// The official-warnings lookup asks OpenWeather as well, with a recorder of its own. Once the steps have
+// given that host up, it must not wait its own 15 s on it and hold the publish back.
+test('the official-warnings lookup does not wait again on a host already given up', async ({ page }) => {
+  const control = { now: T0, silent: ['openweather'] };
+  await routeWith(page, control, 'openweather', { warnings: true });
+  await expect.poll(() => control.openweather).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
+  expect(control.openweather, 'the lookup waited on the silent host all over again').toBe(1);
 });

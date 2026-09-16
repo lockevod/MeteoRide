@@ -605,7 +605,9 @@ wants — the wrapper rejects them at once, noted as `timeout` — and a silent 
 worst for the two of them, with a new computation asking again. A step whose provider was given up falls
 back only across hosts: OpenWeather asks Open-Meteo, as an HTTP error already makes it, and never AROME,
 since Open-Meteo is global and AROME covers part of Europe — so that is the stand-in whatever the chain
-says. AROME and Open-Meteo have no stand-in, and those steps, and the later ones, have no data. An HTTP
+says. A step of AROME or Open-Meteo has no stand-in to ask for, but an Open-Meteo
+answer already in the cache still stands in: the rule is not to wait on that host again, not to refuse
+data already downloaded. With nothing cached, those steps and the later ones have no data. An HTTP
 error leaves every chain as it was. The table's outcome names
 the providers given up (`failedProviders`, `{ status: 'timeout' }`): `decideNotice` says
 `provider_unreachable` over an empty table and `provider_not_responding` over a partial one, as a
@@ -614,7 +616,9 @@ its computation (`cwLaunchComputation`) or comparison (`run.signal` from `cwLaun
 Launching a computation aborts the requests of the computation and comparison it replaces; launching or
 cancelling a comparison aborts the earlier comparison's. An aborted request or body notes nothing: being
 replaced is no provider's failure. The official-warnings lookup has a recorder of its own, so it is timed,
-given up and aborted the same way and never reaches the notice. A request without a recorder (the ride
+given up and aborted the same way and never reaches the notice; it shares the computation's list of
+silent hosts, so it never waits its own 15 s on one the steps have already given up, which used to hold
+the publish back. A request without a recorder (the ride
 watch's baseline, the API-key test) has no deadline. In the Playwright suite a test that holds a provider
 while it fast-forwards past 15 s gives that request up, so pass long spans before holding;
 `streamProvider` answers inside the page to send a body in pieces on the page's clock.

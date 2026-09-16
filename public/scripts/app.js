@@ -883,15 +883,18 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
         continue;
       }
 
-      // What a step whose provider was given up for not answering asks instead. Only across hosts:
-      // OpenWeather is another service, and Open-Meteo covers the world, which AROME does not, so it
-      // is the stand-in whatever the chain says. AROME and Open-Meteo share a host, so a step of
-      // theirs has no stand-in at all: that host has just gone silent.
-      const openMeteoInstead = async () => {
+      // What a step whose provider was given up for not answering reads instead. Open-Meteo covers the
+      // world, which AROME does not, so it is the stand-in whatever the chain says. Asking for it is
+      // only allowed across hosts (OpenWeather is another service): with `cacheOnly`, for a step of
+      // AROME or Open-Meteo itself, nothing is asked of the host that has just gone silent, but an
+      // answer already in the cache is still used — the rule is not to wait on that host again, not to
+      // refuse data already downloaded.
+      const openMeteoInstead = async (cacheOnly) => {
         const mkT = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
         const keyT = mkT("openmeteo", timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
         const cachedT = getCache(keyT, recorder);
         if (cachedT) return { ...p, provider: "openmeteo", weather: cachedT };
+        if (cacheOnly) return { ...p, provider: "openmeteo", weather: null };
         const urlT = buildProviderUrl("openmeteo", p, timeAt, '', windUnit, tempUnit, settings.alerts);
         const resT = await fetch(urlT, { cwRecorder: recorder }).catch(() => null);
         if (!isCurrent()) return null;
@@ -910,10 +913,15 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
         try {
           res = await fetch(urlPrim, { cwRecorder: recorder });
         } catch (err) {
-          if (err.name !== "TimeoutError" || prov !== "openweather") throw err;
-          usedFallback = true;
-          usedFallbackError = true;
-          const entry = await openMeteoInstead();
+          if (err.name !== "TimeoutError") throw err;
+          // OpenWeather is on another host, so Open-Meteo can be asked for; a step of AROME or
+          // Open-Meteo reads the cache and nothing else.
+          const sameHost = prov !== "openweather";
+          if (!sameHost) {
+            usedFallback = true;
+            usedFallbackError = true;
+          }
+          const entry = await openMeteoInstead(sameHost);
           if (!entry) return;
           results.push(entry);
           continue;
@@ -1119,7 +1127,7 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
 
   // Check for weather alerts independently if we have OpenWeather API key
   if (!isCurrent()) return;
-  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, isCurrent, signal);
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, isCurrent, signal, recorder.timedOutHosts);
   if (!isCurrent()) return;
 
   const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
@@ -3512,10 +3520,12 @@ window.debugAlertPosition = function() {
 // Check for weather alerts independently of main provider
 // Only a computation looks them up: the warnings found go into its `sink`, with the
 // settings it read, and are shown only if it publishes. Nothing here touches the page.
-async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent, signal) {
+async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent, signal, timedOutHosts) {
   // Its own recorder: its requests are timed, given up on and aborted like the computation's, and never
-  // reach the notice.
+  // reach the notice. It shares the computation's list of hosts given up, so it never waits again on one
+  // the steps have already given up, which would hold the publish back for another 15 s.
   const recorder = window.cw.utils.createRecorder(signal);
+  if (timedOutHosts) recorder.timedOutHosts = timedOutHosts;
   // Only check if alerts are enabled and we have OpenWeather API key
   if (!settings.alerts) return;
 
