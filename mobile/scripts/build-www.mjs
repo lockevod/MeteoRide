@@ -257,21 +257,18 @@ function patchIndexHtml(html) {
     html = html.split(url).join('/' + to);
   }
 
-  // Two additions to the viewport, both app-only:
-  //   viewport-fit=cover  — safe-area insets are only reported when the viewport
-  //                         covers the whole screen.
-  //   user-scalable=no    — iOS zooms the page in when a field smaller than 16px
-  //                         takes focus, and never zooms back out. Forcing 16px on
-  //                         the text inputs fixed that but left them a different
-  //                         size from the selects beside them. Turning off page zoom
-  //                         is the usual answer in a native shell, where the map does
-  //                         its own pinch-zoom and there is no browser chrome; the
-  //                         website keeps pinch-zoom, since this only patches the bundle.
+  // One more addition to the viewport, app-only: user-scalable=no. iOS zooms the page
+  // in when a field smaller than 16px takes focus, and never zooms back out. Forcing
+  // 16px on the text inputs fixed that but left them a different size from the selects
+  // beside them. Turning off page zoom is the usual answer in a native shell, where the
+  // map does its own pinch-zoom and there is no browser chrome; the website keeps
+  // pinch-zoom, since this only patches the bundle.
+  // viewport-fit=cover is already there: patchBundledHtml adds it to every page,
+  // index.html included, before this function ever runs.
   html = html.replace(
     /(<meta name="viewport" content=")([^"]*)(")/,
     (m, a, content, b) => {
       let out = content;
-      if (!out.includes('viewport-fit')) out += ', viewport-fit=cover';
       if (!out.includes('user-scalable')) out += ', maximum-scale=1, user-scalable=no';
 
       return `${a}${out}${b}`;

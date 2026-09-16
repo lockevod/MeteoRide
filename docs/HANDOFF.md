@@ -411,8 +411,15 @@ de la app, y el texto se repasó contra el código en los dos idiomas.
   añade `patchBundledHtml`, solo al paquete.
 - **La paridad entre idiomas la sostiene un test de estructura**
   (`mobile/tests/help-pages.test.mjs`): mismas secciones en el mismo orden y mismo número
-  de encabezados y viñetas. Compara la forma, no la prosa: una traducción que diga otra
-  cosa con el mismo número de viñetas pasaría.
+  de encabezados, párrafos y viñetas. Compara la forma, no la prosa: una traducción que
+  diga otra cosa con el mismo número de viñetas pasaría.
+- **Un `<summary>` sigue respondiendo al teclado en la web.** `pointer-events: none`
+  (`help.html:163`) le quita el clic del ratón, pero no lo saca del orden de tabulación:
+  con foco, Enter o Espacio siguen plegando la sección igual que dentro de la app. Es un
+  lector de teclado o de pantalla, no el común con ratón al que apunta "la web se lee
+  igual que siempre". No hay arreglo de una línea que no dependa de JavaScript también en
+  la web (el `tabindex` no se puede condicionar solo con CSS), así que queda como límite
+  aceptado en vez de tocarlo a ciegas.
 
 ### WebKit en Playwright: la causa de los 55 fallos, resuelta
 

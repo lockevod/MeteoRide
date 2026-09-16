@@ -250,7 +250,7 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
   if (prov === "aromehd") {
     // Open‑Meteo with AROME‑HD model; same hourly variables as standard OM
     // Note: models=meteofrance_arome_hd is the AROME high‑resolution variant.
-    // Decide whether to request higher-resolution minutely_15 for near-term (first 6 hours)
+    // Decide whether to request higher-resolution minutely_15 for near-term (first 5 hours)
     // NOTE: minutely_15 on Open-Meteo expects a comma-separated list of variables
     // (works like `hourly=`). We'll request precipitation and its probability by default.
     const nowMs = Date.now();
@@ -279,7 +279,7 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
     return `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKey}&units=${units}&exclude=${excludeParts}`;
   }
   // openmeteo
-  // For Open-Meteo, enable minutely_15 in near-term to get denser data for the first ~6 hours
+  // For Open-Meteo, enable minutely_15 in near-term to get denser data for the first ~5 hours
   // NOTE: minutely_15 expects a list of variables like hourly; request precipitation + probability
   const nowMs = Date.now();
   const tMs = (timeAt && timeAt.getTime) ? timeAt.getTime() : new Date(timeAt).getTime();
