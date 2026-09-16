@@ -5661,6 +5661,53 @@ test('a comparison names the provider that fails, and nobody when every step got
   expect(await providerNotices(page)).toEqual(['AROME-HD provider error: HTTP 500.']);
 });
 
+// C (I3), compare's own copy of the rule: the request that completes an AROME row from the standard
+// model is best-effort (fetchAnswer, compare.js:128) and carries its own recorder, not the
+// comparison's. A merge that never answers must cost that step's merge alone — no host given up, so
+// AROME keeps being asked every step, and no notice, exactly as the table already guarantees
+// (smoke.spec.mjs, the AROME best-effort merge test above the compare-providers section).
+test('a comparison\'s AROME merge that never answers gives up no host and still shows AROME data', async ({ page }) => {
+  await recordNotices(page);
+  await startClock(page);
+  // The merge is best-effort and shared across the whole computation (bestEffortRecorder): once it
+  // times out once, every later step's merge attempt is skipped without a real request (the host is
+  // remembered as given up on the merge's own recorder, not the comparison's). So only the first
+  // non-AROME request right after an AROME one is ever the merge; later ones are the Open-Meteo row's
+  // own request for the next step and must be answered normally.
+  const control = { afterArome: false, arome: 0, merge: 0 };
+  let mergeHung = false;
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const arome = isArome(new URL(route.request().url()));
+    const merge = !arome && !mergeHung && control.afterArome;
+    control.afterArome = arome;
+    if (arome) {
+      control.arome++;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+    }
+    if (merge) { control.merge++; mergeHung = true; return new Promise(() => {}); } // never answers: the deadline must cut it
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await forgetForecasts(page);
+  await watchComparisons(page);
+
+  await selectProvider(page, 'compare');
+  await expect.poll(() => control.merge).toBeGreaterThan(0);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(() => comparisonsPainted(page)).toBe(1);
+  const rows = await page.evaluate(() => window.cw.compareProviderData.aromehd);
+  expect(rows.length, 'the route needs more than one step to show the host was not given up').toBeGreaterThan(1);
+  expect(rows.every((s) => s.temp != null), 'a timed-out merge left an AROME step without data').toBe(true);
+  expect(control.arome, 'AROME stopped being asked after its own completion request timed out').toBe(rows.length);
+  expect(control.merge, 'the merge was retried on a host already given up on').toBe(1);
+  expect(await providerNotices(page), 'a best-effort merge timeout named a provider').toEqual([]);
+});
+
 // Without an OpenWeather key the comparison leaves OpenWeather out on purpose, and says nothing about the key.
 test('a comparison without an OpenWeather key leaves it out and says nothing about the key', async ({ page }) => {
   await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
