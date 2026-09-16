@@ -17,7 +17,7 @@ const asApp = (page) =>
   });
 
 for (const path of PAGES) {
-  test(`${path}: on the website every section is open and the install recipes are there`, async ({ page }) => {
+  test(`${path}: the bundled page, opened without the app, has every section open and the install recipes there`, async ({ page }) => {
     await page.goto(path);
 
     await expect(page.locator('html')).not.toHaveClass(/cw-native/);

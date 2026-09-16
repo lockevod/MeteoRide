@@ -34,6 +34,7 @@ test('neither page silently loses a heading or a bullet in one language', async 
     ['h2', /<h2\b/g],
     ['h3', /<h3\b/g],
     ['li', /<li\b/g],
+    ['p', /<p\b/g],
     ['summary', /<summary\b/g],
   ]) {
     assert.equal(count(es, re), count(en, re), `${what}: the two pages have drifted apart`);
