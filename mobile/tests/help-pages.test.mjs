@@ -6,13 +6,14 @@
  * here — same sections in the same order, and the same number of headings and
  * bullets inside them. Prose is not compared; a missing paragraph is.
  */
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '../../public');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const PUBLIC = join(ROOT, 'public');
 const read = (name) => readFile(join(PUBLIC, name), 'utf8');
 
 const count = (html, re) => (html.match(re) || []).length;
@@ -61,5 +62,41 @@ test('each page hides the install recipes in the app and the app notes on the we
 test('no page still mentions a provider that was removed', async () => {
   for (const html of await pages()) {
     assert.doesNotMatch(html, /meteoblue/i);
+  }
+});
+
+/* What a reader actually sees: the tags, the script and the stylesheet do not count. */
+const visibleWords = (html) =>
+  html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&[a-z]+;|&#\d+;/gi, ' ')
+    .split(/\s+/)
+    .filter(Boolean).length;
+
+/* The help was 3300 words and unreadable on a phone; it was cut to about 1600 and the
+ * long explanations moved to docs/GUIA.md and docs/GUIDE.md. Nothing stops it growing
+ * back one paragraph at a time, so here is the ceiling. Room to breathe above 1600,
+ * not room for another section: what does not fit belongs in the guide. */
+const WORD_CEILING = 1800;
+
+test('the help stays short enough to read on a phone', async () => {
+  for (const name of ['help.html', 'help_en.html']) {
+    const words = visibleWords(await read(name));
+    assert.ok(
+      words <= WORD_CEILING,
+      `${name} is back to ${words} visible words (ceiling ${WORD_CEILING}); the detail goes in the guide`
+    );
+  }
+});
+
+/* Both halves of that split: the help must hand the reader the guide, and the guide
+ * must exist where the link says. A link to the repository is what a phone can open. */
+test('each help page links to its guide, and the guide is there', async () => {
+  for (const [page, guide] of [['help.html', 'GUIA.md'], ['help_en.html', 'GUIDE.md']]) {
+    const link = `https://github.com/lockevod/MeteoRide/blob/main/docs/${guide}`;
+    assert.ok((await read(page)).includes(link), `${page} does not link to ${guide}`);
+    await access(join(ROOT, 'docs', guide));
   }
 });
