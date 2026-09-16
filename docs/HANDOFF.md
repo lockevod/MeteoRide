@@ -864,13 +864,14 @@ WebKit solo).
   ruta preparada tras cerrar la app y la durabilidad del registro en IndexedDB de WKWebView en un
   iPhone físico.
 
-### Antes de publicar
+### Publicación: resuelto
 
-- **No se despliega la web ni se sube una build hasta fusionar `native-ios-capacitor` a `main`.**
-  Las dos páginas de ayuda enlazan la guía de usuario diez veces como
-  `github.com/lockevod/MeteoRide/blob/main/docs/GUIA.md` (y `GUIDE.md`), y `docs/` todavía no
-  existe en `main`: hoy los diez enlaces dan 404. Se dejan apuntando a `main` a propósito, porque
-  es donde las guías van a vivir; una URL de rama se pudriría en cuanto se fusione. El test
-  comprueba que el enlace está y que el fichero existe en el árbol de trabajo, no que la URL
-  resuelva, así que está verde mientras los enlaces están rotos: el test no es la red de
-  seguridad de esto, esta nota sí.
+Los diez enlaces de la ayuda a la guía apuntan a `blob/main/docs/GUIA.md` (y `GUIDE.md`).
+Estuvieron dando 404 mientras `docs/` solo existía en la rama; el merge del PR #1
+(`baf7f8e`, 2026-09-16) los arregló y ambos responden 200 comprobado por HTTP, no solo por
+la API de contenidos. Ya se puede desplegar la web.
+
+Queda en pie el motivo por el que esto necesitó una nota a mano: el test comprueba que el
+enlace está en la página y que el fichero existe en el árbol de trabajo, no que la URL
+resuelva. Si algún día las guías se mueven de sitio dentro del repositorio, el test seguirá
+verde y los enlaces volverán a romperse.
