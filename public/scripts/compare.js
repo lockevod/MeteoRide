@@ -234,9 +234,12 @@
 
       for (const prov of baseProvs) { // CHANGED: use baseProvs
         // Respect horizons
-        if ((prov === "openweather" && daysAhead > (horizons.OPENWEATHER_MAX_DAYS || 2))  ||
-            (prov === "aromehd"     && hoursAhead > (horizons.AROMEHD_MAX_HOURS   || 48)) ||
-            (daysAhead > (horizons.OPENMETEO_MAX_DAYS || 14))) {
+        // The numbers are window.cw.horizons (app.js). The literals that used to stand in for them
+        // here had gone stale — OpenWeather's said two days where the table keeps four — so there is
+        // no second copy of them any more: with no horizons there is simply no guard.
+        if ((prov === "openweather" && daysAhead > horizons.OPENWEATHER_MAX_DAYS) ||
+            (prov === "aromehd"     && hoursAhead > horizons.AROMEHD_MAX_HOURS) ||
+            (daysAhead > horizons.OPENMETEO_MAX_DAYS)) {
           compareData[prov].push(blankStep(prov, p));
           continue;
         }
@@ -247,7 +250,7 @@
         // For aromehd: use chain resolver to respect 36-hour limit (same as normal mode)
         if (prov === "aromehd") {
           const resolverExternal = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp || null;
-          const resolver = resolverExternal || localChainResolve;
+          const resolver = resolverExternal;
           const chainsExternal = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
           const chainEnabled = chainsExternal[prov] || prov === 'aromehd';
           if (resolver && chainEnabled) {
@@ -316,31 +319,11 @@
       }
     }
 
-    // NEW: local fallback resolver if app-level one missing
-    function localChainResolve(chainId, ts, nowRef, loc) {
-      const diffH = (new Date(ts) - nowRef) / MS_PER_HOUR;
-      
-      // Handle aromehd chain (0-36h aromehd, 36h+ openmeteo)
-      if (chainId === 'aromehd') {
-        if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
-        return 'openmeteo';
-      }
-      
-      // Handle ow2_arome_openmeteo chain (0-1h openweather, 1-36h aromehd, 36h+ openmeteo)
-      if (chainId === 'ow2_arome_openmeteo') {
-        if (diffH <= 2) return 'openweather';
-        if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
-        return 'openmeteo';
-      }
-      
-      return null;
-    }
-
     // NEW: Build chain row (ow2_arome_openmeteo) AFTER base providers fetched (always attempt if present in provs)
     const chainId = 'ow2_arome_openmeteo';
     if (provs.includes(chainId)) {
       const resolverExternal = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp || null;
-      const resolver = resolverExternal || localChainResolve;
+      const resolver = resolverExternal;
       const chainsExternal = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
       const chainEnabled = chainsExternal[chainId] || chainId === 'ow2_arome_openmeteo';
       if (resolver && chainEnabled) {

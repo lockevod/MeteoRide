@@ -74,13 +74,20 @@
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let text = '';
-    for (;;) {
-      let timer;
-      const silence = new Promise((resolve) => { timer = setTimeout(resolve, PROVIDER_SILENCE_MS, null); });
-      const chunk = await Promise.race([reader.read(), silence]).finally(() => clearTimeout(timer));
-      if (!chunk) { w.cut.abort(); throw timeoutError(w.prov); }
-      if (chunk.done) return text + decoder.decode();
-      text += decoder.decode(chunk.value, { stream: true });
+    try {
+      for (;;) {
+        let timer;
+        const silence = new Promise((resolve) => { timer = setTimeout(resolve, PROVIDER_SILENCE_MS, null); });
+        const chunk = await Promise.race([reader.read(), silence]).finally(() => clearTimeout(timer));
+        if (!chunk) { w.cut.abort(); throw timeoutError(w.prov); }
+        if (chunk.done) return text + decoder.decode();
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      // The body is over, one way or another: nothing is left for the computation's signal to cut,
+      // so this request stops listening to it. An answer nobody reads keeps its listener until the
+      // signal itself is collected, which is the end of that computation.
+      if (w.dropAbort) w.dropAbort();
     }
   }
 
@@ -127,26 +134,39 @@
       // This host went silent earlier in this computation: it is not asked again, whichever provider
       // of it the step wants, and the step goes the way a network error takes it.
       if (recorder.timedOutHosts.includes(host)) {
-        noteFailure(recorder, 'timeout');
+        // Counted as this step's failure, but it says nothing about the connection: no request left
+        // the device. noteFailure would ask isOffline() here, and an outcome marked offline stops
+        // decideNotice naming the provider at all — the host went quiet, the network did not.
+        recorder.failed++;
+        recorder.lastFailStatus = 'timeout';
         return Promise.reject(timeoutError(prov));
       }
       const cut = new AbortController();
+      // Dropped once there is nothing left to cut. It cannot go when the headers arrive: the body is
+      // read afterwards and a computation replaced meanwhile must still cut it mid-stream, so the
+      // answer carries this along and readText drops it when the body ends.
+      let dropAbort = () => {};
       if (recorder.signal) {
         if (recorder.signal.aborted) cut.abort();
-        else recorder.signal.addEventListener('abort', () => cut.abort(), { once: true });
+        else {
+          const onAbort = () => cut.abort();
+          recorder.signal.addEventListener('abort', onAbort, { once: true });
+          dropAbort = () => recorder.signal.removeEventListener('abort', onAbort);
+        }
       }
       let silent = false;
       const timer = setTimeout(() => { silent = true; cut.abort(); }, PROVIDER_SILENCE_MS);
       return original(input, { ...init, signal: cut.signal }).then(
         (res) => {
           clearTimeout(timer);
-          watched.set(res, { prov, host, cut });
+          watched.set(res, { prov, host, cut, dropAbort });
           if (res.ok) recorder.ok++;
           else noteFailure(recorder, String(res.status));
           return res;
         },
         (err) => {
           clearTimeout(timer);
+          dropAbort();   // no answer, so no body to cut later
           if (silent) { noteTimeout(recorder, prov, host); throw timeoutError(prov); }
           if (!(recorder.signal && recorder.signal.aborted)) noteFailure(recorder, 'network');
           throw err;

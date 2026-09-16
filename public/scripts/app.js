@@ -888,7 +888,9 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
       // only allowed across hosts (OpenWeather is another service): with `cacheOnly`, for a step of
       // AROME or Open-Meteo itself, nothing is asked of the host that has just gone silent, but an
       // answer already in the cache is still used — the rule is not to wait on that host again, not to
-      // refuse data already downloaded.
+      // refuse data already downloaded. In practice only an AROME step is ever rescued that way: for a
+      // step of Open-Meteo itself this builds the very key that missed a few lines above, so the read
+      // below can only miss again. It is written once for both because the rule is the same.
       const openMeteoInstead = async (cacheOnly) => {
         const mkT = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
         const keyT = mkT("openmeteo", timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
@@ -3549,7 +3551,11 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
   // reach the notice. It shares the computation's list of hosts given up, so it never waits again on one
   // the steps have already given up, which would hold the publish back for another 15 s.
   const recorder = window.cw.utils.createRecorder(signal);
-  if (timedOutHosts) recorder.timedOutHosts = timedOutHosts;
+  // A copy on purpose. Reading which hosts the steps gave up is the point; writing its own back into
+  // the computation's list is not, and noteTimeout pushes into whatever array it is handed. That is
+  // inert today only because this runs after the last step, so the list is never consulted again —
+  // an ordering, not a guarantee. Copying keeps it inert if the lookup is ever run alongside them.
+  if (timedOutHosts) recorder.timedOutHosts = timedOutHosts.slice();
   // Only check if alerts are enabled and we have OpenWeather API key
   if (!settings.alerts) return;
 

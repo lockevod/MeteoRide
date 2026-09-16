@@ -773,7 +773,11 @@
     try {
       // No cwRecorder: a failure here belongs to no computation, so it never becomes a
       // notice over a table that loaded fine.
-      const res = await fetch(rules.forecastUrl(watch.points, Date.now()));
+      // No recorder, so the fetch wrapper gives this no deadline of its own; armWatch awaits it, and
+      // a socket that never answers leaves the status line empty until the page is left. A plain
+      // total deadline, not the wrapper's rule of 15 s without data: this answer is one small
+      // request, so cutting a slow-but-arriving one costs only a baseline the runner seeds instead.
+      const res = await fetch(rules.forecastUrl(watch.points, Date.now()), { signal: AbortSignal.timeout(15000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       watch.baseline = rules.readForecast(await res.json(), watch.points);
       // Stamped with the reading it was made by, so a later version knows its rain is about another
