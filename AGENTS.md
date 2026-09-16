@@ -1607,3 +1607,16 @@ code does and what makes the race reproducible.
   cover more ground than MeteoAlarm alone. And national services such as AEMET or
   Météo-France could be used directly. Nobody has scoped which of these is worth
   building.
+- Xcode prints four warnings, all from third-party Capacitor plugins under
+  `node_modules`, none from code this repo maintains: `authorizationStatus` deprecated
+  since iOS 14 and `summaryArgument` deprecated since iOS 15, in
+  `@capacitor/background-runner` and `@capacitor/local-notifications`; an unused
+  immutable `responseType` in `@capacitor/filesystem`; and a `String?` implicitly
+  coerced to `Any` in `@capacitor/app`. Every one of those plugins is already at its
+  latest published version (app 8.1.1, filesystem 8.1.3, local-notifications 8.3.1,
+  background-runner 3.0.0, core/ios/cli 8.5.2), so no upgrade clears them. They are
+  compile-time noise, not defects here; the real exposure is the day Apple removes
+  those APIs, which upstream has to fix. Deliberately not silenced: extending
+  `scripts/patch-background-runner.mjs` to rewrite someone else's source would buy
+  maintenance on every plugin update in exchange for no change in behaviour. Suppress
+  warnings for dependency targets in Xcode if they get in the way.
