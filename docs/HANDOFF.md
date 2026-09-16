@@ -108,8 +108,9 @@ se ejecutan en el simulador) y firma de release de Android.
 
 ## 6. Verificado / no verificado
 
-Verificado aquí, al cerrar la ronda de correcciones: **487 tests** (259 de Playwright sobre el bundle real con la
-red cortada, respuestas de proveedor simuladas y el bridge nativo simulado; 228 de Node: reglas,
+Verificado aquí, al cerrar la ronda de correcciones: **755 tests** (524 de Playwright sobre el bundle real con la
+red cortada, respuestas de proveedor simuladas y el bridge nativo simulado, 262 en cada motor, Chromium y WebKit,
+con uno que se salta en WebKit porque siembra un registro antiguo que ese motor no puede guardar; 231 de Node: reglas,
 coordinador de rutas, extracción, runner ensamblado con KV/notificaciones/fetch simulados, iconos,
 nombres de plugin y traducciones); Java
 compilado contra stubs; nombres de API de Capacitor 8.5.2 cotejados con las fuentes de
