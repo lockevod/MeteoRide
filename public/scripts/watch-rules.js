@@ -79,6 +79,13 @@ var cwWatchRules = (function () {
     return sample(points, Math.min(ALERT_POINTS, points.length));
   }
 
+  // Same rule the foreground uses to decide a key is usable (app.js, ui.js): under 5
+  // characters is treated as no key at all, not just falsy. The runner has no key field
+  // of its own to validate at save time, so it re-checks here before spending a request.
+  function hasAlertsKey(key) {
+    return !!key && String(key).trim().length >= 5;
+  }
+
   /** Days of forecast needed to cover the last point, from `now`. */
   function forecastDays(points, now) {
     const last = Math.max(...points.map((p) => p.t * 1000));
@@ -345,7 +352,7 @@ var cwWatchRules = (function () {
 
   return {
     RAIN_MM, WIND_KMH, GUST_KMH, MAX_POINTS, BASELINE_VERSION,
-    rainLevel, windLevel, sample, alertPoints, forecastUrl, alertsUrl,
+    rainLevel, windLevel, sample, alertPoints, hasAlertsKey, forecastUrl, alertsUrl,
     readForecast, readAlerts, compare, newAlerts, compose, evaluate, expired, reuse,
   };
 })();

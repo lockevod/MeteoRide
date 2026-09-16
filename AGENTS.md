@@ -983,8 +983,12 @@ forever and never see an alert. `updateWeatherAlertsAvailability` (`ui.js`, next
 `#weatherAlertsKeyHint` below it whenever the key is missing or short, live on every
 `apiKeyOW` input event and again after `loadSettings` restores it, so a stored key or a typed
 one takes effect without a reload. A disabled checkbox is not force-unchecked, so a
-preference set before the key existed survives; `checkWeatherAlertsIndependent`'s own guard
-is what actually keeps a disabled toggle's `alertsKey` from doing anything.
+preference set before the key existed survives, and `readForecastSettings` is not
+`.disabled`-aware: `alertsKey` still carries the raw, too-short key forward when the box is
+checked-but-disabled. Nothing blanks it — both consumers reject it on their own: in the
+foreground `checkWeatherAlertsIndependent`'s own guard no-ops on it, and in the background
+the ride watch's runner (`mobile/runners/watch.js`, via `cwWatchRules.hasAlertsKey`) applies
+the same five-character rule to `owKey` before spending a request.
 
 A replaced run writes nothing once it no longer matters: every `setCache` after an
 `await` — including the AROME standard companion answer — is guarded by the same

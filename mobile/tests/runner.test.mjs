@@ -139,10 +139,10 @@ test('an official warning needs the key, is asked at up to three points, and is 
   const alerts = { alerts: [{ sender_name: 'AEMET', event: 'Aviso amarillo por lluvias', start: t0 - HOUR, end: t0 + 3 * HOUR }] };
   const baseline = points.map(() => ({ rain: 0, wind: 8, gust: 12 }));
   const h = host({ forecast: openMeteo(dry), alerts });
-  h.kv.cw_watch = JSON.stringify(watch({ baseline, owKey: 'k' }));
+  h.kv.cw_watch = JSON.stringify(watch({ baseline, owKey: 'key12' }));
   await h.dispatch('checkWatch');
   assert.equal(h.requests.filter((u) => u.includes('openweathermap')).length, 2, 'two points, two lookups');
-  assert.ok(h.requests.some((u) => u.includes('appid=k')));
+  assert.ok(h.requests.some((u) => u.includes('appid=key12')));
   assert.equal(h.scheduled.length, 1);
   assert.equal(h.scheduled[0].body, 'Aviso oficial: Aviso amarillo por lluvias · AEMET');
 
@@ -154,6 +154,13 @@ test('an official warning needs the key, is asked at up to three points, and is 
   noKey.kv.cw_watch = JSON.stringify(watch({ baseline }));
   await noKey.dispatch('checkWatch');
   assert.equal(noKey.requests.some((u) => u.includes('openweathermap')), false);
+
+  // A key too short to be real (e.g. trimmed down by hand) is truthy but must not
+  // trigger a doomed request, same as the foreground guard treats it as no key.
+  const shortKey = host({ forecast: openMeteo(dry), alerts });
+  shortKey.kv.cw_watch = JSON.stringify(watch({ baseline, owKey: 'abcd' }));
+  await shortKey.dispatch('checkWatch');
+  assert.equal(shortKey.requests.some((u) => u.includes('openweathermap')), false, 'a 4-character key is not a key');
 });
 
 test('the channel id travels with the watch when the app confirmed it', async () => {

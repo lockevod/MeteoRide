@@ -294,6 +294,15 @@ test('the alert lookup asks at the start, middle and end', () => {
   assert.match(rules.alertsUrl(points[0], 'k e y'), /appid=k%20e%20y$/);
 });
 
+test('hasAlertsKey needs 5 characters, the same rule the foreground checkbox uses', () => {
+  assert.equal(rules.hasAlertsKey('abcde'), true);
+  assert.equal(rules.hasAlertsKey('  abcde  '), true, 'trimmed first, like the foreground');
+  assert.equal(rules.hasAlertsKey('abcd'), false, 'four characters is still no key');
+  assert.equal(rules.hasAlertsKey(''), false);
+  assert.equal(rules.hasAlertsKey(undefined), false);
+  assert.equal(rules.hasAlertsKey(null), false);
+});
+
 test('steps already ridden are not reported, official warnings only for what is left', () => {
   const base = reading({ rain: 0, wind: 10, gust: 15 });
   const cur = reading({ rain: 2, wind: 10, gust: 15 });

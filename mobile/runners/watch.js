@@ -99,7 +99,7 @@ addEventListener('checkWatch', function (resolve, reject) {
     .then(function (json) { return cwWatchRules.readForecast(json, watch.points); });
 
   var alerts = Promise.resolve([]);
-  if (watch.owKey) {
+  if (cwWatchRules.hasAlertsKey(watch.owKey)) {
     var lookups = cwWatchRules.alertPoints(watch.points).map(function (p) {
       return getJson(cwWatchRules.alertsUrl(p, watch.owKey))
         .then(cwWatchRules.readAlerts)
