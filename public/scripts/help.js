@@ -10,6 +10,13 @@
     if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
       document.documentElement.classList.add('cw-native');
 
+      // On a phone the whole page is too long to scroll through, so the sections
+      // arrive closed and the reader gets an index. They are written open, which is
+      // what the website shows and what a reader without JavaScript still gets:
+      // closing them is the app's doing and happens nowhere else.
+      document.querySelectorAll('details.section').forEach((section) => {
+        section.open = false;
+      });
     }
   } catch (_) { /* a plain browser: leave the section hidden */ }
 

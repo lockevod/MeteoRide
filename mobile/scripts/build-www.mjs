@@ -209,6 +209,16 @@ function patchBundledHtml(html) {
     `<head>\n<meta http-equiv="Content-Security-Policy" content="${NATIVE_CSP}">`
   );
   html = html.replace(/\s*<meta (?:property|name)="(?:og|twitter):image"[^>]*>/g, '');
+  // Safe-area insets are only reported to a page whose viewport covers the screen,
+  // and `contentInset: "never"` puts the web view under the Dynamic Island. Without
+  // this the help page's env(safe-area-inset-top) is zero and its back button sits
+  // in the notch. The website has no notch to dodge, so this goes on the bundle
+  // alone; unlike index.html, a page of text keeps its pinch-zoom.
+  html = html.replace(
+    /(<meta name="viewport" content=")([^"]*)(")/,
+    (tag, open, content, close) =>
+      content.includes('viewport-fit') ? tag : `${open}${content}, viewport-fit=cover${close}`
+  );
   html = stripDonation(html);
   return html.replace(/<img\b[^>]*\bsrc="https?:\/\/[^"]*"[^>]*>/gi, (tag) => {
     const alt = tag.match(/\balt="([^"]*)"/i);

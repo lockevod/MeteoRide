@@ -71,7 +71,10 @@
         .header {
             background: #1e40af;
             color: white;
-            padding: 1rem;
+            /* The app draws under the Dynamic Island (`contentInset: "never"`), so the
+               notch is paid for here, on top of the padding the page always had. On the
+               website and on a screen without one the inset is zero and nothing moves. */
+            padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
             border-radius: 10px;
             margin-bottom: 2rem;
             text-align: center;
@@ -79,8 +82,11 @@
         }
         .back-button {
             position: absolute;
-            left: 1rem;
-            top: 50%;
+            left: calc(1rem + env(safe-area-inset-left));
+            /* An absolute offset measures from the border box, which the inset just
+               grew, so half of it goes back into the offset: the button stays centred
+               on the header's own text instead of drifting into the notch. */
+            top: calc(50% + env(safe-area-inset-top) / 2);
             transform: translateY(-50%);
             background: rgba(255,255,255,0.2);
             color: white;
@@ -144,6 +150,20 @@
            has none of these buttons, so describing them there would be noise. */
         .app-only { display: none; }
         html.cw-native .app-only { display: block; }
+        /* And the other way round: how to install the web app from a browser is a
+           recipe the app's reader has already followed. */
+        html.cw-native .web-only { display: none; }
+        /* Every section is a <details> written open. The website leaves it open and
+           takes no clicks on the summary, so the page reads exactly as it always did.
+           Inside the app help.js closes them and the reader gets an index to tap
+           instead of a scroll with no end. */
+        summary { list-style: none; }
+        summary::-webkit-details-marker { display: none; }
+        summary h2 { margin-top: 0; }
+        html:not(.cw-native) summary { pointer-events: none; }
+        html.cw-native summary { cursor: pointer; }
+        html.cw-native summary h2::after { content: ' ▾'; font-size: 0.8em; }
+        html.cw-native details:not([open]) summary h2::after { content: ' ▸'; }
         .icon { font-size: 1.2em; margin-right: 0.5em; }
         ul { padding-left: 1.5rem; }
         li { margin: 0.5rem 0; }
@@ -162,16 +182,16 @@
         <p>Planifica tus rutas  con información meteorológica detallada</p>
     </div>
 
-    <div class="section">
-        <h2>🚀 Introducción</h2>
+    <details class="section" open>
+        <summary><h2>🚀 Introducción</h2></summary>
     <p>MeteoRide es una aplicación web diseñada para ciclistas que permite cargar rutas GPX/KML y obtener pronósticos meteorológicos detallados a lo largo del recorrido.</p>
         <p>La app calcula automáticamente los pasos de la ruta basados en la velocidad de ciclismo seleccionada y recupera datos de varios proveedores meteorológicos para mostrar temperatura, viento, precipitaciones, humedad, nubosidad, luminosidad y más.</p>
         <p>Incluye opciones de fallback automático para asegurar datos incluso si un proveedor falla, y permite comparar pronósticos de diferentes fuentes.</p>
         <p>Es ideal para planificar rutas seguras y preparadas para el clima.</p>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🚀 Primeros Pasos</h2>
+    <details class="section" open>
+        <summary><h2>🚀 Primeros Pasos</h2></summary>
         
         <div class="step">
             <h3>1. Cargar una Ruta GPX/KML</h3>
@@ -231,10 +251,10 @@
         </ul>
         </div>
 
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🌤️ Proveedores Meteorológicos y Ventajas</h2>
+    <details class="section" open>
+        <summary><h2>🌤️ Proveedores Meteorológicos y Ventajas</h2></summary>
         
         <h3>Comparación de Proveedores</h3>
         <p>MeteoRide soporta múltiples proveedores meteorológicos, cada uno con fortalezas únicas:</p>
@@ -254,10 +274,10 @@
         <div class="tip">
             <strong>💡 Consejo:</strong> Elige según tus necesidades: precisión en tiempo real (OpenWeather), precisión local (AROME-HD) o planificación a largo plazo (Open-Meteo).
         </div>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🏁 Instalación como App</h2>
+    <details class="section web-only" open>
+        <summary><h2>🏁 Instalación como App</h2></summary>
         <p>MeteoRide se puede instalar como una Aplicación Web Progresiva (PWA) en tu dispositivo para una experiencia similar a una app nativa.</p>
         
         <h3>Android</h3>
@@ -296,10 +316,10 @@
             <li>Ve a Archivo > Agregar al Dock.</li>
             <li>O, haz clic en el botón Compartir y selecciona "Agregar al Dock".</li>
         </ol>
-    </div>
+    </details>
 
-    <div class="section app-only">
-        <h2>📱 En la app de iPhone y Android</h2>
+    <details class="section app-only" open>
+        <summary><h2>📱 En la app de iPhone y Android</h2></summary>
         <p>Esta sección solo aparece dentro de la app nativa: son cosas que un navegador no puede hacer.</p>
 
         <h3>📤 Enviar la ruta a otra app</h3>
@@ -340,10 +360,10 @@
             <li>La app arranca en el idioma del teléfono mientras no elijas uno a mano.</li>
             <li>Las unidades, el idioma y tu clave de API se guardan también fuera del navegador interno, así que no se pierden si el sistema libera espacio.</li>
         </ul>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🛠️ Configuración</h2>
+    <details class="section" open>
+        <summary><h2>🛠️ Configuración</h2></summary>
 
         <h3>🔑 API Keys</h3>
         <p>Para OpenWeather necesitas registrarte y obtener una API key gratuita si quieres usar ese proveedor:</p>
@@ -378,10 +398,10 @@
 
         <h3>🌐 Idiomas</h3>
         <p>La aplicación soporta español e inglés. Selecciona tu idioma preferido en la configuración para cambiar el idioma de la interfaz y los mensajes.</p>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>📊 Interpretando los Datos</h2>
+    <details class="section" open>
+        <summary><h2>📊 Interpretando los Datos</h2></summary>
         
         <h3>🌤️ Tabla Meteorológica</h3>
         <p>La tabla muestra información hora por hora:</p>
@@ -413,10 +433,10 @@
         <div class="tip">
             <strong>💡 Interactividad:</strong> Haz clic en cualquier columna de la tabla o flecha del mapa para ver detalles específicos de ese punto.
         </div>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>📱 Funciones Avanzadas</h2>
+    <details class="section" open>
+        <summary><h2>📱 Funciones Avanzadas</h2></summary>
         
         <h3>🔄 Desplazamiento Horizontal</h3>
         <p>
@@ -468,10 +488,10 @@
             Las respuestas de los proveedores se almacenan en <code>localStorage</code> durante ~30 minutos por paso/hora.
             Esto acelera recargas frecuentes y reduce peticiones a APIs con límites. Puedes borrar la caché desde las herramientas del navegador.
             </p>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>⚠️ Limitaciones y Consejos</h2>
+    <details class="section" open>
+        <summary><h2>⚠️ Limitaciones y Consejos</h2></summary>
         
         <div class="warning">
             <h3>🚨 Limitaciones Importantes</h3>
@@ -492,10 +512,10 @@
                 <li>Lleva equipo de lluvia aunque la probabilidad sea baja</li>
             </ul>
         </div>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🚨 Alertas meteorológicas oficiales</h2>
+    <details class="section" open>
+        <summary><h2>🚨 Alertas meteorológicas oficiales</h2></summary>
         <p>MeteoRide puede mostrar avisos y alertas oficiales que publican los servicios meteorológicos nacionales cuando estos aparecen en las <code>alertas</code> del servicio OpenWeather. Para que las alertas estén disponibles debes introducir tu <strong>OpenWeather API Key</strong> en el panel de configuración y activar la casilla <strong>Mostrar alertas meteorológicas oficiales</strong>.</p>
 
         <ul>
@@ -510,10 +530,10 @@
             <h3>⚠️ Aviso importante</h3>
             <p>Estas alertas se proporcionan solo como información adicional. No confíes exclusivamente en ellas para decisiones de seguridad. Siempre consulta el servicio meteorológico oficial de tu país o las autoridades competentes antes de realizar una actividad que pueda verse afectada por condiciones adversas. OpenWeather puede contener errores, retrasos o no incluir avisos locales específicos; MeteoRide no sustituye a los comunicados oficiales.</p>
         </div>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🐛 Resolución de Problemas</h2>
+    <details class="section" open>
+        <summary><h2>🐛 Resolución de Problemas</h2></summary>
         
         <h3>❌ Problemas Comunes</h3>
         <ul>
@@ -523,10 +543,10 @@
             <li><strong>Tabla vacía:</strong> Asegúrate de que la ruta tiene suficiente longitud</li>
         </ul>
 
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>🔒 Privacidad y Datos</h2>
+    <details class="section" open>
+        <summary><h2>🔒 Privacidad y Datos</h2></summary>
         
         <div class="privacy">
             <h3>🛡️ Protección de tu Privacidad</h3>
@@ -558,10 +578,10 @@
             <li>Preferencias de velocidad e intervalos</li>
             <li>Caché temporal de datos meteorológicos (30 minutos)</li>
         </ul>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>📄 Licencia y Créditos</h2>
+    <details class="section" open>
+        <summary><h2>📄 Licencia y Créditos</h2></summary>
         
         <h3>👨‍💻 Desarrollador</h3>
         <p><strong>MeteoRide</strong> ha sido desarrollado por <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer"><strong>Lockevod</strong></a>.</p>
@@ -598,10 +618,10 @@
 
         <h3>⚖️ Exención de Responsabilidad</h3>
         <p>MeteoRide es una herramienta de planificación. Los datos meteorológicos son estimaciones y pueden no ser completamente precisos. Siempre usa tu criterio y verifica las condiciones antes de salir. El desarrollador no se hace responsable de decisiones basadas en esta información.</p>
-    </div>
+    </details>
 
-    <div class="section">
-        <h2>📞 Soporte y Contribuciones</h2>
+    <details class="section" open>
+        <summary><h2>📞 Soporte y Contribuciones</h2></summary>
         <h3>🐛 Reportar Problemas</h3>
         <ul>
             <li>Visita el <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">repositorio en GitHub</a></li>
@@ -624,7 +644,7 @@
         <h3>💰 Apoya el Proyecto</h3>
         <p>Si encuentras útil MeteoRide, considera apoyar el proyecto con una donación:</p>
         <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
-    </div>
+    </details>
 
     <p class="version-footer" id="cwVersion"></p>
 
