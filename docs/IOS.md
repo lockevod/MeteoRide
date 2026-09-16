@@ -185,6 +185,24 @@ background tasks at all. To exercise the runner on a device, pause in Xcode and 
 e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"cc.meteoride.app.watch"]
 ```
 
+### 7. First run on a physical iPhone
+
+Three things stop the first install, none of them obvious from the Xcode error:
+
+- **Developer Mode.** On iOS 16 and later, Xcode refuses to launch until the phone
+  allows it: *Settings → Privacy & Security → Developer Mode*, turn it on, let the
+  phone restart, then unlock and confirm with the passcode. The menu entry only
+  appears after a Mac has tried to install something, so plug the phone in and run
+  once if you cannot find it.
+- **Trusting the certificate.** A build signed with a personal team (the free option)
+  installs but will not open until *Settings → General → VPN & Device Management* →
+  your developer account → trust. With a paid Apple Developer Program account the
+  device is registered in the portal and normally trusts the build outright, so this
+  step usually does not appear.
+- **How long it lasts.** A free account's build stops opening after seven days and has
+  to be installed again, which also kills the ride alert mid-test; a paid Developer
+  Program account lasts a year, so a week-long ride-alert test only works there.
+
 ## Day-to-day
 
 ```bash
