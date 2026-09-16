@@ -176,7 +176,25 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 ```
 
 An unsigned APK fails that command outright, which is the other way to notice signing
-did not happen.
+did not happen. Only `assembleRelease` has been verified end to end that way;
+`bundleRelease` shares the same `signingConfig`, so it should behave identically, but
+nobody has checked an `.aab` yet.
+
+### From Android Studio
+
+Import `mobile/android` and build as usual — the conditional `signingConfigs` block is
+plain Groovy, evaluated the same way by a Gradle sync as by the command line, and the
+`debug` build type is untouched, so a normal Run changes nothing.
+
+Prefer `mobile/android/keystore.properties` over the environment variables here. An
+Android Studio launched from the Dock or Spotlight does not inherit what a shell
+profile exports, so the four `ANDROID_*` variables may simply not be there, and the
+build would quietly come out unsigned. The properties file has no such problem,
+because Gradle reads it from disk.
+
+The **Build > Generate Signed Bundle / APK** wizard is self-contained: it asks for the
+keystore itself and never reads `android.signingConfigs.release`. It works whether or
+not this block is populated, and it is the other valid route for an existing keystore.
 
 Play Store listings need the same privacy answers as the App Store: no account, no
 analytics, and coordinates sent only to the weather providers. The privacy section of

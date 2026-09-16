@@ -26,6 +26,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - run: npm ci
 
