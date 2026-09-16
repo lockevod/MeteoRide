@@ -98,14 +98,17 @@ The identifier also lives in `MeteoRideShareStore.appGroupId`; all three must ma
 Merge the keys from `mobile/native/ios/Info.plist.additions.xml` into
 `ios/App/App/Info.plist`. They declare the `meteoride://` scheme, register the app
 as a handler for `.gpx`/`.kml`, provide the location usage string, and lock the app
-to portrait — rotating breaks the layout badly, and this is deliberate, not an
-oversight. Both `UISupportedInterfaceOrientations` and its `~ipad` counterpart are
-set, since the template `cap add ios` generates targets iPhone and iPad alike unless
-told otherwise; leaving the iPad key out would have it fall back to the iPhone one
-today, but that fallback is undocumented behaviour, not a guarantee. Merging the file
-is equivalent to unticking every box but Portrait under *General → Deployment Info →
-Device Orientation* for both **App** and **iPad**, the same relationship step 6 below
-has with *Background Modes*.
+**the iPhone** to portrait — rotating breaks the layout badly, and this is
+deliberate, not an oversight. The iPad is left free to rotate, by the author's
+decision: the template `cap add ios` targets iPhone and iPad alike
+(`TARGETED_DEVICE_FAMILY = "1,2"`), and an absent `~ipad` key does **not** mean
+"free" — iOS falls back to the iPhone key, which would lock the iPad too. So
+`UISupportedInterfaceOrientations~ipad` is set explicitly to all four orientations,
+while `UISupportedInterfaceOrientations` keeps Portrait alone. Merging the file is
+equivalent to ticking only Portrait under *General → Deployment Info → Device
+Orientation* for **iPhone**, and leaving every box ticked for **iPad**, the same
+relationship step 6 below has with *Background Modes*. Nobody has looked at the iPad
+layout in landscape; it is untested, not endorsed.
 
 Then replace `ios/App/App/SceneDelegate.swift` with
 `mobile/native/ios/SceneDelegate.swift`, which is the file Capacitor 8.5.2 generates
