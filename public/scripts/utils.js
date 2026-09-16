@@ -284,6 +284,7 @@
       key_network_error: "Error de red: {msg}",
      notices_noncritical_label: "Mostrar avisos no críticos",
      show_weather_alerts_label: "Mostrar alertas meteorológicas oficiales",
+     show_weather_alerts_needs_key: "Requiere una API Key de OpenWeather.",
      show_debug_button_label: "Mostrar botón de debug",
       // Compare-dates UI
       summary_label: "Resumen",
@@ -403,6 +404,7 @@
       key_network_error: "Network error: {msg}",
       notices_noncritical_label: "Show non‑critical notices",
       show_weather_alerts_label: "Show official weather alerts",
+      show_weather_alerts_needs_key: "Requires an OpenWeather API Key.",
       show_debug_button_label: "Show debug button",
       // Compare-dates UI
       summary_label: "Summary",
@@ -565,6 +567,7 @@
     // Apply showWeatherAlerts configuration
     const swa = document.getElementById("showWeatherAlerts");
     if (swa) swa.checked = (s.showWeatherAlerts !== false); // Default to true
+    try { window.updateWeatherAlertsAvailability?.(); } catch (e) { /* ignore */ }
 
     // Ride alerts (app only): on unless switched off
     const ra = document.getElementById("rideAlerts");

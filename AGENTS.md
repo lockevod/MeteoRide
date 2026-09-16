@@ -974,6 +974,18 @@ and shown as soon as each answer arrived. `revalidateWeatherAlerts`, which looke
 again on its own after a speed, interval or date change and showed what it found, is gone:
 those changes compute again, and only `publish` shows warnings.
 
+Official alerts have a single source: OpenWeather. `checkWeatherAlertsIndependent`
+(`app.js`) returns at once with no key or one under five characters, the same threshold
+`readForecastSettings` and every other OpenWeather-key check use. The `#showWeatherAlerts`
+checkbox used to be checked and enabled regardless, so a user with no key could leave it on
+forever and never see an alert. `updateWeatherAlertsAvailability` (`ui.js`, next to
+`updateProviderOptions`, its OpenWeather-key sibling) now disables the checkbox and shows
+`#weatherAlertsKeyHint` below it whenever the key is missing or short, live on every
+`apiKeyOW` input event and again after `loadSettings` restores it, so a stored key or a typed
+one takes effect without a reload. A disabled checkbox is not force-unchecked, so a
+preference set before the key existed survives; `checkWeatherAlertsIndependent`'s own guard
+is what actually keeps a disabled toggle's `alertsKey` from doing anything.
+
 A replaced run writes nothing once it no longer matters: every `setCache` after an
 `await` — including the AROME standard companion answer — is guarded by the same
 `isCurrent()` check as the table, and so is the independent alert lookup, tested before
@@ -1585,3 +1597,13 @@ code does and what makes the race reproducible.
 - The two items the security model leaves open on purpose: self-hosting the libraries
   (which unlocks `script-src 'self'` and Subresource Integrity), and a rate limit on
   `POST /share` at the Cloudflare edge.
+- Idea, not planned work: other sources for official alerts. Today OpenWeather is the
+  only one (task 15). Checked and worth recording so it is not re-checked from scratch:
+  Open-Meteo has no alerts endpoint at all — it is a long-standing open request on their
+  tracker, not something missed here. MeteoAlarm (api.meteoalarm.org) publishes the
+  European national weather services' warnings for free, in CAP format, per country,
+  with geometries and severity levels — mapping those onto route points would be real
+  work, not a drop-in. alert-hub.org aggregates many CAP feeds worldwide, which could
+  cover more ground than MeteoAlarm alone. And national services such as AEMET or
+  Météo-France could be used directly. Nobody has scoped which of these is worth
+  building.

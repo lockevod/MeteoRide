@@ -6952,3 +6952,38 @@ test('the official-warnings lookup does not wait again on a host already given u
   await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
   expect(control.openweather, 'the lookup waited on the silent host all over again').toBe(1);
 });
+
+// Official alerts come only from OpenWeather, and checkWeatherAlertsIndependent (app.js) bails
+// out below a 5-character key just like the rest of the OpenWeather-key checks. Leaving the
+// toggle checked and enabled with no usable key is silently useless, so it must disable itself
+// and say why, live, without a reload.
+test('the alerts toggle is disabled with an explanation when there is no usable OpenWeather key', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#toggleConfig').click();
+
+  await expect(page.locator('#showWeatherAlerts')).toBeDisabled();
+  await expect(page.locator('#weatherAlertsKeyHint')).toBeVisible();
+
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'abcdef'; document.getElementById('apiKeyOW').dispatchEvent(new Event('input')); });
+  await expect(page.locator('#showWeatherAlerts')).toBeEnabled();
+  await expect(page.locator('#weatherAlertsKeyHint')).toBeHidden();
+
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'abc'; document.getElementById('apiKeyOW').dispatchEvent(new Event('input')); });
+  await expect(page.locator('#showWeatherAlerts')).toBeDisabled();
+  await expect(page.locator('#weatherAlertsKeyHint')).toBeVisible();
+});
+
+test('the alerts toggle starts enabled when a usable OpenWeather key was already saved', async ({ page }) => {
+  await goOffline(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('cwSettings', JSON.stringify({ apiKeyOW: 'a-valid-looking-key', showWeatherAlerts: true }));
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#toggleConfig').click();
+
+  await expect(page.locator('#showWeatherAlerts')).toBeEnabled();
+  await expect(page.locator('#weatherAlertsKeyHint')).toBeHidden();
+});

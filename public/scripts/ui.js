@@ -238,6 +238,25 @@
     } catch (e) { console.warn('updateProviderOptions error', e); }
   }
 
+  // Official alerts come only from OpenWeather (checkWeatherAlertsIndependent in app.js
+  // bails out below this same 5-char threshold), so the checkbox is pointless without a
+  // usable key. Disable it and show why, instead of letting it sit checked and silent.
+  function updateWeatherAlertsAvailability() {
+    try {
+      const chk = document.getElementById('showWeatherAlerts');
+      if (!chk) return;
+      const hint = document.getElementById('weatherAlertsKeyHint');
+      const hasKey = ((window.getVal ? window.getVal('apiKeyOW') : '') || '').trim().length >= 5;
+      chk.disabled = !hasKey;
+      if (hint) {
+        hint.hidden = hasKey;
+        // .key-status.warn sets display:inline-block, which beats the [hidden] default
+        // on specificity alone, so the class only goes on together with showing the hint.
+        hint.classList.toggle('warn', !hasKey);
+      }
+    } catch (e) { console.warn('updateWeatherAlertsAvailability error', e); }
+  }
+
   // Inline status helper for API key check. Accept optional element id (defaults to OpenWeather status)
   function setKeyStatus(msg, cls = "", elId = 'apiKeyStatusOW') {
     const el = document.getElementById(elId);
@@ -1012,10 +1031,11 @@
 
     // Update options when the OpenWeather key changes so options can be enabled/disabled live
     const apiKeyOWEl = document.getElementById('apiKeyOW');
-    if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); });
+    if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); updateWeatherAlertsAvailability(); });
 
     // Call update once to inject new options
     updateProviderOptions();
+    updateWeatherAlertsAvailability();
 
     // Floating quick-export-and-save GPX button (single control)
     try {
@@ -1065,6 +1085,7 @@
   window.applyTranslations = applyTranslations;
   window.localizeHeader = localizeHeader;
   window.updateProviderOptions = updateProviderOptions;
+  window.updateWeatherAlertsAvailability = updateWeatherAlertsAvailability;
   window.setKeyStatus = setKeyStatus;
   window.testOpenWeatherKey = testOpenWeatherKey;
   window.bindUIEvents = bindUIEvents;

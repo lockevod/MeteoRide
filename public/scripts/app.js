@@ -3131,6 +3131,7 @@ function init() {
   loadSettings();
   applyTranslations();
   updateProviderOptions();
+  window.updateWeatherAlertsAvailability?.();
   setupDateLimits();
 
   // The start field keeps what loadSettings left in it once the start rule has run
@@ -3363,6 +3364,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSettings();
   applyTranslations();
   updateProviderOptions();
+  window.updateWeatherAlertsAvailability?.();
   setupDateLimits();
 
   // The start field keeps what loadSettings left in it once the start rule has run
