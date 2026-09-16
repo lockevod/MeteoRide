@@ -1490,7 +1490,12 @@ code does and what makes the race reproducible.
 
 ## Open work
 
-- Android release signing config is not set up; `assembleRelease` will not sign.
+- Android release signing is wired (task 12): `app/build.gradle` reads
+  `ANDROID_KEYSTORE_*` env vars, then `mobile/android/keystore.properties` (git-ignored;
+  see `keystore.properties.example`), and signs `assembleRelease`/`bundleRelease` when
+  either is complete. Neither present is not an error — the build still produces an
+  unsigned APK with a console warning. The author still has to point one of those two
+  at their own keystore; nothing here has it.
 - The remote branch `claude/cool-allen-w8evld` is stale — it predates this work and
   nothing on it is wanted. It has to be deleted from the GitHub side by the author;
   an agent session here gets a 403 trying.

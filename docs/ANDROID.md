@@ -139,13 +139,44 @@ both platforms.
 
 ## Release build
 
-Create a keystore, then add the signing config to `android/app/build.gradle` and build:
+`app/build.gradle` already reads the signing config; nothing there needs editing. It
+looks, in this order, for `ANDROID_KEYSTORE_PATH` / `ANDROID_KEYSTORE_PASSWORD` /
+`ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` as environment variables, then for a
+`mobile/android/keystore.properties` file with the same four values under the keys
+`storeFile`, `storePassword`, `keyAlias`, `keyPassword` (see
+`keystore.properties.example` for the shape). Whichever source has all four wins;
+they are not merged. Neither present is not an error: the build still runs and
+produces an **unsigned** APK/AAB, with a console warning, exactly as before this was
+wired up — this is what keeps a fresh clone and CI green without secrets.
+
+Generate a keystore once, keep it forever — **losing it means every future release
+has to ship under a new package identity**, since Play (and a sideloaded upgrade)
+refuses an APK that is not signed by the same key as the one already installed:
+
+```bash
+keytool -genkeypair -v -keystore meteoride-release.jks -alias meteoride \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Put it somewhere outside the repo and either export the four env vars or copy
+`mobile/android/keystore.properties.example` to `mobile/android/keystore.properties`
+(git-ignored) and fill in the real path and passwords. Then:
 
 ```bash
 cd mobile/android
 ./gradlew bundleRelease      # .aab for Play Store
 ./gradlew assembleRelease    # .apk for sideloading
 ```
+
+Confirm a build actually got signed, and by which key, with `apksigner` from the SDK's
+`build-tools`:
+
+```bash
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+
+An unsigned APK fails that command outright, which is the other way to notice signing
+did not happen.
 
 Play Store listings need the same privacy answers as the App Store: no account, no
 analytics, and coordinates sent only to the weather providers. The privacy section of

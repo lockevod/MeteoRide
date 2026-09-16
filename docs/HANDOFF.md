@@ -123,7 +123,17 @@ share extension, parche del plugin, `backgroundRefreshStatus`), la app arranca e
 simulador, carga un GPX desde Archivos, calcula previsión y muestra el toggle de
 alertas con su aviso de límites del sistema.
 
-**No verificado** (no hay Xcode ni SDK Android en el entorno de desarrollo, y el autor
+Verificado aquí en la tarea 12 (firma de release), con SDK de Android disponible en
+esta máquina (`~/Library/Android/sdk`, JDK 21 en
+`~/.gradle/jdks/eclipse_adoptium-21-aarch64-os_x.2`): `assembleRelease` con las cuatro
+`ANDROID_KEYSTORE_*` apuntando a un keystore de prueba generado en el scratchpad
+produce `app-release.apk` firmado (`apksigner verify --print-certs` lo confirma); sin
+esas variables ni `keystore.properties`, produce `app-release-unsigned.apk` sin firmar
+y el aviso por consola. Sigue siendo la única vez que se ha compilado Android más allá
+de `cap sync` en este entorno; todo lo demás de la app (UI, ciclo de vida, background
+runner) sigue sin probarse aquí.
+
+**No verificado** (no hay Xcode en el entorno de desarrollo, y el autor
 aún no ha probado en dispositivo físico):
 - La tarea en segundo plano en dispositivo real (iOS y Android). En el simulador de
   iOS BGTaskScheduler **no se ejecuta nunca**, así que ninguna alerta ha llegado aún
@@ -131,7 +141,9 @@ aún no ha probado en dispositivo físico):
 - Que OpenStreetMap permita leer teselas con `fetch` desde `capacitor://localhost`
   (si no, el mapa funciona igual pero sin caché; hay fallback).
 - La CSP `<meta>` de la app solo se ha validado en Chromium, no en WKWebView.
-- Nada se ha compilado ni ejecutado en Android más allá de `cap sync`.
+- Nada de la app en sí (UI, ciclo de vida, background runner) se ha compilado ni
+  ejecutado en Android más allá de `cap sync`; el único build real hecho aquí es el de
+  la tarea 12, solo para probar la firma de release (ver arriba).
 
 ## 7. Trabajo abierto / ideas
 
@@ -140,7 +152,9 @@ presente para la app nativa:
 
 - Probar en iPhone y Android **físicos**: las tareas en segundo plano no se ejecutan
   en el simulador, así que ninguna alerta ha llegado aún por la vía real.
-- Firma de release de Android sin configurar: `assembleRelease` no firma.
+- Firma de release de Android ya configurada (`app/build.gradle` lee
+  `ANDROID_KEYSTORE_*` o `mobile/android/keystore.properties`, ver `docs/ANDROID.md`);
+  falta que el autor apunte una de las dos fuentes a su propio keystore.
 - Borrar la rama remota obsoleta `claude/cool-allen-w8evld` (desde GitHub, por el
   autor: una sesión de agente recibe 403).
 - La suite corre ya en Chromium y WebKit (`npm test`, tarea 11 + cierre de la

@@ -1,5 +1,45 @@
 apply plugin: 'com.android.application'
 
+// Release signing: env vars take priority, then a local keystore.properties (never
+// committed), in that order — whichever source is complete wins outright, the two
+// are not merged field by field. Neither present -> unsigned release APK, same as
+// before this was wired up, so a clone without secrets (including CI) still builds.
+// See docs/ANDROID.md for how to generate the keystore and keystore.properties.example
+// for the four keys it needs.
+def envKeystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+def envKeystorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+def envKeyAlias = System.getenv('ANDROID_KEY_ALIAS')
+def envKeyPassword = System.getenv('ANDROID_KEY_PASSWORD')
+
+def releaseSigningProps = null
+if (envKeystorePath && envKeystorePassword && envKeyAlias && envKeyPassword) {
+    releaseSigningProps = [
+        storeFile    : envKeystorePath,
+        storePassword: envKeystorePassword,
+        keyAlias     : envKeyAlias,
+        keyPassword  : envKeyPassword,
+    ]
+} else {
+    def keystorePropertiesFile = rootProject.file('keystore.properties')
+    if (keystorePropertiesFile.exists()) {
+        def props = new Properties()
+        keystorePropertiesFile.withInputStream { props.load(it) }
+        if (props.storeFile && props.storePassword && props.keyAlias && props.keyPassword) {
+            releaseSigningProps = [
+                storeFile    : props.storeFile,
+                storePassword: props.storePassword,
+                keyAlias     : props.keyAlias,
+                keyPassword  : props.keyPassword,
+            ]
+        }
+    }
+}
+
+if (releaseSigningProps == null) {
+    logger.warn('MeteoRide: no release signing config found (ANDROID_KEYSTORE_* env vars or ' +
+        'keystore.properties) — assembleRelease/bundleRelease will produce an UNSIGNED build.')
+}
+
 android {
     namespace = "cc.meteoride.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +56,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseSigningProps != null) {
+            release {
+                storeFile file(releaseSigningProps.storeFile)
+                storePassword releaseSigningProps.storePassword
+                keyAlias releaseSigningProps.keyAlias
+                keyPassword releaseSigningProps.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseSigningProps != null) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

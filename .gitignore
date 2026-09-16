@@ -58,3 +58,9 @@ mobile/android/.gradle/
 mobile/android/build/
 mobile/android/app/build/
 mobile/android/local.properties
+
+# Release keystore and its config: real secrets, never committed. See
+# mobile/android/keystore.properties.example and docs/ANDROID.md.
+*.jks
+*.keystore
+mobile/android/keystore.properties
