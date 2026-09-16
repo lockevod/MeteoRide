@@ -776,6 +776,9 @@
       const res = await fetch(rules.forecastUrl(watch.points, Date.now()));
       if (!res.ok) throw new Error('HTTP ' + res.status);
       watch.baseline = rules.readForecast(await res.json(), watch.points);
+      // Stamped with the reading it was made by, so a later version knows its rain is about another
+      // hour and reseeds it instead of comparing against it (watch-rules.js, evaluate).
+      watch.baselineVersion = rules.BASELINE_VERSION;
     } catch (e) {
       log('baseline left to the first background check', e && e.message);
     }

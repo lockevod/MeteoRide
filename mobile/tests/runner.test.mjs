@@ -15,6 +15,9 @@ if (!existsSync(RUNNER)) throw new Error('www/runners/watch.js missing: run `npm
 const src = await readFile(RUNNER, 'utf8');
 
 const HOUR = 3600;
+// Read from the rules the build concatenated in, so a bumped version does not quietly turn every
+// fixture below into a watch stored by an older reading.
+const BASELINE_VERSION = Number(/BASELINE_VERSION = (\d+)/.exec(src)[1]);
 
 /** A fresh runner context, like the plugin makes for every event. */
 function host({ kv = {}, forecast, alerts, fail = false } = {}) {
@@ -62,7 +65,8 @@ const wet = { rain: 2, wind: 8, gust: 12 };
 function watch(extra = {}) {
   return {
     name: 'test.gpx', lang: 'es', start: t0 * 1000, end: (t0 + HOUR) * 1000, horizonMs: 24 * HOUR * 1000,
-    points, baseline: null, notified: [], owKey: '', channelId: '', ...extra,
+    points, baseline: null, notified: [], owKey: '', channelId: '',
+    baselineVersion: BASELINE_VERSION, ...extra,
   };
 }
 
@@ -114,6 +118,21 @@ test('with no baseline the first check only seeds one', async () => {
   await h.dispatch('checkWatch');
   assert.equal(h.scheduled.length, 0);
   assert.equal(JSON.parse(h.kv.cw_watch).baseline[1].rain, 2);
+});
+
+// A watch armed before the app was updated carries a baseline whose rain was read from another hour.
+// The runner is the one place it can still turn up, since nothing re-arms a watch in the background.
+test('a watch stored before the rain hour changed is reseeded instead of waking anyone', async () => {
+  const h = host({ forecast: openMeteo(wet) });
+  const baseline = points.map(() => ({ rain: 0, wind: 8, gust: 12 }));
+  h.kv.cw_watch = JSON.stringify(watch({ baseline, notified: ['AEMET_Lluvia_1_2'], baselineVersion: undefined }));
+  await h.dispatch('checkWatch');
+
+  assert.equal(h.scheduled.length, 0, 'the update itself woke the phone');
+  const stored = JSON.parse(h.kv.cw_watch);
+  assert.equal(stored.baseline[0].rain, 2, 'the rain was not reseeded with the new reading');
+  assert.deepEqual(stored.notified, ['AEMET_Lluvia_1_2'], 'what was already notified is kept');
+  assert.equal(typeof stored.baselineVersion, 'number', 'the reading it was stored by is not recorded');
 });
 
 test('an official warning needs the key, is asked at up to three points, and is reported once', async () => {

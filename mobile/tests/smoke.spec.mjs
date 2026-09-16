@@ -4642,6 +4642,10 @@ test('computing a forecast arms the background watch with the route and a baseli
   // Seeded from the same request the runner will make, not from the table.
   expect(watch.baseline).toHaveLength(watch.points.length);
   expect(watch.baseline[0]).toEqual({ rain: 0, wind: 8, gust: 12 });
+  // Stamped with the reading it was made by: a later version that reads another hour's rain reseeds
+  // it instead of comparing its own reading against it.
+  expect(watch.baselineVersion, 'the baseline is not stamped with the reading it was made by')
+    .toBe(await page.evaluate(() => window.cwWatchRules.BASELINE_VERSION));
   expect(watch.owKey).toBe('');
   expect(await page.evaluate(() => window.__notifAsked)).toBe(true);
   expect(await page.evaluate(() => window.__runnerEvents.every((e) => e.label === 'cc.meteoride.app.watch'))).toBe(true);

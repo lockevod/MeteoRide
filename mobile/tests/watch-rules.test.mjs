@@ -40,9 +40,11 @@ function openMeteo(values, n = points.length) {
 }
 
 const reading = (v) => rules.readForecast(openMeteo(v), points);
+// A watch as this version stores one: its baseline carries the reading it was made by. Pass
+// `baselineVersion: undefined` for one stored before that reading changed.
 const watchWith = (baseline, extra = {}) => ({
   name: 'Collserola', lang: 'es', start: t0 * 1000, end: (t0 + 2 * HOUR) * 1000,
-  points, baseline, notified: [], ...extra,
+  points, baseline, notified: [], baselineVersion: rules.BASELINE_VERSION, ...extra,
 });
 
 test('levels: dry, rain, heavy; calm, moderate, strong, and gusts alone count', () => {
@@ -311,6 +313,23 @@ test('a percent sign in an official warning or a file name cannot become a forma
   assert.match(out.notification.body, /80\uFF05 chance/);
 });
 
+// The rain of a point used to be read from the nearest hourly entry and is now read from the hour
+// being ridden, the entry labelled H+60. A baseline stored by the old reader is about another hour,
+// so comparing the new reading against it reports the change of reader as a change in the weather.
+// The first check after an update reseeds the rain instead, keeping what was already notified.
+test('a baseline stored by an older reading of the rain hour is reseeded, not read as worsening', () => {
+  const dry = points.map(() => ({ rain: 0, wind: 8, gust: 12 }));
+  const stale = watchWith(dry, { notified: ['AEMET_Viento_1_2'], baselineVersion: undefined });
+  const out = rules.evaluate(stale, reading({ rain: 1, wind: 8, gust: 12 }), [], now);
+  assert.equal(out.notification, null, 'the change of reader was announced as a change in the weather');
+  same(out.watch.baseline.map((b) => b.rain), [1, 1, 1], 'the rain was not reseeded from the new reading');
+  same(out.watch.notified, ['AEMET_Viento_1_2'], 'what was already notified is kept');
+  assert.equal(out.watch.baselineVersion, rules.BASELINE_VERSION);
+  // Reseeded once, it watches as always: more rain than the new baseline still speaks.
+  const worse = rules.evaluate(out.watch, reading({ rain: 5, wind: 8, gust: 12 }), [], now);
+  assert.match(worse.notification.body, /Lluvia/, 'after reseeding a real rise went unreported');
+});
+
 /* ---------- arming the same ride again ---------- */
 
 // What the app built from a snapshot, and what the runner had stored from an earlier arm.
@@ -321,13 +340,25 @@ const record = (extra = {}) => ({
 const storedRecord = (extra = {}) => record({
   notified: ['AEMET_Viento_1_2'],
   baseline: [{ rain: 1, wind: 20, gust: 30 }, { rain: 2, wind: 20, gust: 30 }, { rain: 3, wind: 20, gust: 30 }],
+  baselineVersion: rules.BASELINE_VERSION,
   ...extra,
+});
+
+test('reuse: a baseline stored by an older reading of the rain hour is not kept', () => {
+  // The app was updated between arming and arming again: the stored rain means the hour the old
+  // reader picked. Dropping it costs one request in the foreground; keeping it would compare two
+  // different hours and call the difference weather.
+  const old = storedRecord({ baselineVersion: undefined });
+  const out = rules.reuse(old, record());
+  same(out.baseline, null, 'a baseline read another way survived the update');
+  same(out.notified, old.notified, 'what was already notified is still kept');
 });
 
 test('reuse: the same ride over the same points keeps what was notified and the baseline', () => {
   const stored = storedRecord();
   const fresh = record();
-  same(rules.reuse(stored, fresh), { ...fresh, notified: stored.notified, baseline: stored.baseline });
+  same(rules.reuse(stored, fresh),
+    { ...fresh, notified: stored.notified, baseline: stored.baseline, baselineVersion: rules.BASELINE_VERSION });
 });
 
 test('reuse: the same ride with a point elsewhere in time or space keeps what was notified, not the baseline', () => {
@@ -360,7 +391,8 @@ test('reuse: a replay moved to another start keeps what was notified, and the ba
   const moved = record({ start: t0 * 1000 + later * 1000, points: points.map((p) => ({ ...p, t: p.t + later })) });
   same(rules.reuse(stored, moved, true), { ...moved, notified: stored.notified, baseline: null });
   // Put back at the same start, the points are the same and so is the baseline.
-  same(rules.reuse(stored, record(), true), { ...record(), notified: stored.notified, baseline: stored.baseline });
+  same(rules.reuse(stored, record(), true),
+    { ...record(), notified: stored.notified, baseline: stored.baseline, baselineVersion: rules.BASELINE_VERSION });
   // Another route is another route, moved or not.
   same(rules.reuse(storedRecord({ fingerprint: '5120:ffffffff' }), moved, true), moved);
   // A computation for another start still starts afresh.

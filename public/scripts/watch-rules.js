@@ -20,6 +20,13 @@ var cwWatchRules = (function () {
   const WIND_KMH = [20, 35];    // calm | moderate | strong   (sustained)
   const GUST_KMH = [40, 55];    // gusts alone can raise the wind level
 
+  // Which reading of a point a stored baseline was made by. 1 took the rain of the nearest hourly
+  // entry; 2 takes the rain of the hour being ridden, the entry labelled H+60, as the table shows it
+  // (readForecast). A baseline of another version is about another hour, so it cannot be compared
+  // against this reading: evaluate reseeds its rain rather than call the difference weather. Raise
+  // this whenever readForecast changes which entry a magnitude comes from.
+  const BASELINE_VERSION = 2;
+
   // Values sit on a boundary for hours; without a margin a check that lands at 20.1
   // after a baseline of 19.9 would wake the phone for nothing.
   const MARGIN = { rain: 0.1, wind: 3 };
@@ -283,14 +290,24 @@ var cwWatchRules = (function () {
    * (the app was offline when it armed the watch) the first check only seeds one.
    */
   function evaluate(watch, current, alerts, now) {
-    const next = Object.assign({}, watch, { checkedAt: now });
+    const next = Object.assign({}, watch, { checkedAt: now, baselineVersion: BASELINE_VERSION });
     if (!Array.isArray(watch.baseline)) {
       next.baseline = current;
       return { notification: null, watch: next };
     }
-    const changes = compare(watch.baseline, current, watch.points, now);
+    // A baseline stored by an earlier reading holds the rain of another hour (BASELINE_VERSION), and
+    // nothing re-arms a watch in the background, so an app update leaves one behind. Comparing this
+    // reading against it would announce the change of reader as a change in the weather, or hide a
+    // real one. Its rain is taken from this reading instead, so this check reports none; the wind is
+    // read as it always was and keeps its baseline, and the warnings already notified are untouched.
+    const baseline = watch.baselineVersion === BASELINE_VERSION
+      ? watch.baseline
+      : watch.baseline.map((was, i) => (was
+        ? Object.assign({}, was, { rain: current[i] ? current[i].rain : undefined })
+        : was));
+    const changes = compare(baseline, current, watch.points, now);
     const fresh = newAlerts(alerts, watch.notified, Math.max(watch.start, now), watch.end);
-    next.baseline = nextBaseline(watch.baseline, current, changes);
+    next.baseline = nextBaseline(baseline, current, changes);
     if (!changes.length && !fresh.length) return { notification: null, watch: next };
 
     next.notified = (watch.notified || []).concat(fresh.map((a) => a.id));
@@ -317,12 +334,17 @@ var cwWatchRules = (function () {
     const b = fresh.points || [];
     const samePoints = a.length === b.length
       && a.every((p, i) => p.lat === b[i].lat && p.lon === b[i].lon && p.t === b[i].t);
-    if (samePoints && Array.isArray(stored.baseline)) next.baseline = stored.baseline;
+    // A baseline made by an earlier reading is about another hour's rain (BASELINE_VERSION), so it is
+    // not carried over: here in the foreground it is simply read again, which costs one request.
+    if (samePoints && Array.isArray(stored.baseline) && stored.baselineVersion === BASELINE_VERSION) {
+      next.baseline = stored.baseline;
+      next.baselineVersion = BASELINE_VERSION;
+    }
     return next;
   }
 
   return {
-    RAIN_MM, WIND_KMH, GUST_KMH, MAX_POINTS,
+    RAIN_MM, WIND_KMH, GUST_KMH, MAX_POINTS, BASELINE_VERSION,
     rainLevel, windLevel, sample, alertPoints, forecastUrl, alertsUrl,
     readForecast, readAlerts, compare, newAlerts, compose, evaluate, expired, reuse,
   };
