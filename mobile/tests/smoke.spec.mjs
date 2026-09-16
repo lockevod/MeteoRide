@@ -139,7 +139,7 @@ const storedRoutes = (page) =>
           all.onsuccess = () =>
             resolve(
               all.result
-                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : 0, fingerprint: r.fingerprint }))
+                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : (r.content ? r.content.length : 0), fingerprint: r.fingerprint }))
                 .sort((a, b) => a.id - b.id)
             );
         };
@@ -2401,6 +2401,28 @@ const importRecent = (page, text, name) =>
 const storedNames = async (page) => (await storedRoutes(page)).map((r) => r.name).sort();
 const notSavedNotice = /could not be saved|No se ha podido guardar/;
 
+// WebKit's IndexedDB throws UnknownError on a Blob put (Chromium accepts it), so an
+// iPhone kept no recent route at all. A new record must be plain text, never a Blob.
+test('a recent route is stored as text, not a Blob', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  expect(await importRecent(page, routeAt('Uno', 41.48), 'Ruta.gpx')).toEqual({ ok: true, name: 'Ruta.gpx' });
+  const shape = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('meteoride_recent_routes_db');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const all = open.result.transaction('routes').objectStore('routes').getAll();
+      all.onsuccess = () => {
+        const r = all.result[0];
+        resolve({ isBlob: r.content instanceof Blob, contentType: typeof r.content, hasBlobField: 'blob' in r });
+      };
+      all.onerror = () => reject(all.error);
+    };
+  }));
+  expect(shape).toEqual({ isBlob: false, contentType: 'string', hasBlobField: false });
+});
+
 test('two different routes under the same name are both kept', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
@@ -2586,7 +2608,10 @@ test('reimporting a KML kept converted before phase 5 moves it up instead of dup
   const kept = await page.evaluate((id) => new Promise((resolve) => {
     indexedDB.open('meteoride_recent_routes_db').onsuccess = (e) => {
       const get = e.target.result.transaction('routes').objectStore('routes').get(id);
-      get.onsuccess = async () => resolve({ name: get.result.name, text: await get.result.blob.text() });
+      get.onsuccess = async () => {
+        const r = get.result;
+        resolve({ name: r.name, text: r.blob ? await r.blob.text() : r.content });
+      };
     };
   }), legacy.id);
   expect(kept).toEqual({ name: 'Costa.kml', text: kml });
@@ -2646,7 +2671,10 @@ test('a stored route from an older version is never replaced by another of the s
   const kept = await page.evaluate(() => new Promise((resolve) => {
     indexedDB.open('meteoride_recent_routes_db').onsuccess = (e) => {
       const all = e.target.result.transaction('routes').objectStore('routes').getAll();
-      all.onsuccess = async () => resolve(await all.result.find((r) => r.name === 'Ruta.gpx').blob.text());
+      all.onsuccess = async () => {
+        const r = all.result.find((x) => x.name === 'Ruta.gpx');
+        resolve(r.blob ? await r.blob.text() : r.content);
+      };
     };
   }));
   expect(kept).toBe(old);
@@ -2804,8 +2832,7 @@ test('opening the newest recent route survives a later import after the clock ru
       const tx = open.result.transaction('routes', 'readwrite');
       const store = tx.objectStore('routes');
       entries.forEach(([name, text], i) => {
-        const blob = new Blob([text], { type: 'application/gpx+xml' });
-        store.add({ name, size: blob.size, lastModified: base + i, timestamp: base + i, fingerprint: name, blob });
+        store.add({ name, size: text.length, lastModified: base + i, timestamp: base + i, fingerprint: name, content: text });
       });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
@@ -4251,7 +4278,7 @@ test('the tile cache stays bounded across sessions', async ({ page }) => {
     });
     const store = db.transaction('tiles', 'readwrite').objectStore('tiles');
     for (let i = 0; i < 1400; i++) {
-      store.put({ url: `https://x/${i}.png`, blob: new Blob(['t']), ts: 1000 + i });
+      store.put({ url: `https://x/${i}.png`, bytes: new Uint8Array([116]).buffer, type: 'text/plain', ts: 1000 + i });
     }
     await new Promise((res) => { store.transaction.oncomplete = res; });
     db.close();

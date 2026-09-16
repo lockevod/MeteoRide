@@ -377,19 +377,30 @@ revisiones adversariales internas y una revisión adversarial externa).
 
 - Ninguno: los seis están corregidos (§9).
 
-### Pendiente de decisión: WebKit en Playwright
+### WebKit en Playwright: la causa de los 55 fallos, resuelta
 
-Medido, sin arreglar nada (`.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`).
-`playwright.config.mjs` tiene un proyecto `mobile-webkit` (`devices['iPhone
-14']`, el motor que usa WKWebView en iOS), fuera de `npm test`; se lanza con
-`npm run test:webkit`. De 260 tests, 205 pasan y 55 fallan: 51 de esos 55
-vienen de una sola causa, la escritura en IndexedDB de la ruta como `Blob`
-(`meteoride_recent_routes_db`, `cw_tiles`) que no persiste en WebKit, y de ahí
-cae en cascada todo lo que depende de leerla después (recent routes, tile
-cache, restaurar la última ruta). Falta decidir si es un límite real de
-WebKit (que tocaría también a WKWebView en iOS) o del contexto efímero de
-Playwright, antes de marcar tests con `test.skip` o investigarlo como posible
-bug de cara al dispositivo.
+Medido en la tarea 9 sin arreglar nada
+(`.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`):
+de 260 tests en `mobile-webkit` (`devices['iPhone 14']`, el motor que usa
+WKWebView en iOS; se lanza aparte con `npm run test:webkit`, fuera de `npm
+test`), 205 pasaban y 55 fallaban. La tarea 11 probó la causa directamente
+(origen `http` real, navegadores lanzados a mano, no a través de la suite): en
+WebKit, `put` de un `Blob` en IndexedDB falla con `UnknownError`; guardar
+texto o un `ArrayBuffer` funciona. Eso explicaba 54 de los 55 fallos — recent
+routes escribía la ruta como `Blob` (`meteoride_recent_routes_db`) y la caché
+de teselas también (`cw_tiles`), así que en iPhone no se guardaba ninguna
+ruta reciente ni se cacheaba ninguna tesela, y de ahí caía en cascada todo lo
+que dependía de leerlas después; el fallo 55 era una carrera del propio test
+(`page.route` contra `page.goto`), no una diferencia de la app.
+
+Arreglado: recent routes guarda el GPX como texto (`content`, cadena) y la
+caché de teselas guarda los bytes (`bytes`, un `ArrayBuffer`) junto con el
+tipo; crear un `Blob` en memoria para pintar una tesela o para leer una ruta
+sigue funcionando en WebKit, solo falla guardarlo. Un registro de una versión
+anterior de Android o de la web sigue teniendo `blob` directamente y cada
+lectura cae de vuelta a él, así que no hizo falta ninguna migración. Con eso,
+`mobile-webkit` queda en 261/261 (`npm run test:webkit`, tarea 11); sigue
+fuera de `npm test` por decisión, no por ningún fallo pendiente.
 
 ### Límites aceptados (decididos, no se arreglan salvo que se pida)
 
@@ -780,9 +791,13 @@ bug de cara al dispositivo.
 
 - **Tareas en segundo plano.** Nunca se han ejecutado por la vía real ni en iPhone ni en
   Android, así que ninguna alerta de ruta ha llegado todavía.
-- **WKWebView.** Nada de esto se ha probado: la CSP, la red de seguridad del parseo de GPX (un
-  temporizador de 0 ms, probado solo en Chromium), la durabilidad de IndexedDB y la lectura de
-  teselas de OpenStreetMap con `fetch`.
+- **WKWebView.** Nada de esto se ha probado en un iPhone real: la CSP, la red de seguridad del
+  parseo de GPX (un temporizador de 0 ms, probado solo en Chromium), la lectura de teselas de
+  OpenStreetMap con `fetch`, y la durabilidad de IndexedDB entre sesiones. El fallo de guardar un
+  `Blob` en IndexedDB (recent routes, tile cache) está confirmado y arreglado contra el motor
+  WebKit real (tarea 11: prueba directa del controlador, origen `http`, navegador lanzado a mano,
+  y `npm run test:webkit` en 261/261), pero eso sigue siendo WebKit de escritorio, no un iPhone.
 - **Android.** Probado en emulador, no en dispositivo físico.
 - **Uso sin cobertura real.** Sin comprobar en ninguno de los dos, incluida la reproducción de una
-  ruta preparada tras cerrar la app y la durabilidad del registro en IndexedDB de WKWebView.
+  ruta preparada tras cerrar la app y la durabilidad del registro en IndexedDB de WKWebView en un
+  iPhone físico.

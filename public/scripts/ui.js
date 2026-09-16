@@ -1412,10 +1412,9 @@
       // Convert to limited array, newest first
       routes.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       routes = routes.slice(0, MAX_RECENT_ROUTES);
-      // Convert each legacy string entry into a blob record and add
+      // Carry the legacy string straight over as `content`; no need to wrap it in a Blob.
       for (const r of routes) {
-        const blob = new Blob([r.content], { type: 'application/gpx+xml' });
-        const obj = { name: r.name, size: r.size || (r.content ? r.content.length : 0), lastModified: r.lastModified || Date.now(), timestamp: r.timestamp || Date.now(), blob };
+        const obj = { name: r.name, size: r.size || (r.content ? r.content.length : 0), lastModified: r.lastModified || Date.now(), timestamp: r.timestamp || Date.now(), content: r.content };
         try { await idbAddRoute(obj); } catch (e) { /* ignore individual errors */ }
       }
       localStorage.removeItem(RECENT_ROUTES_KEY);
@@ -1754,9 +1753,11 @@
       });
     } catch (e) { return null; }
     return Promise.all(records.map(async (r) => {
-      if (r.fingerprint || !r.blob) return r;
-      try { return Object.assign({}, r, { fingerprint: cwForecastRules.fingerprint(await r.blob.text()) }); }
-      catch (e) { return r; }
+      if (r.fingerprint || (!r.blob && !r.content)) return r;
+      try {
+        const text = r.blob ? await r.blob.text() : r.content;
+        return Object.assign({}, r, { fingerprint: cwForecastRules.fingerprint(text) });
+      } catch (e) { return r; }
     }));
   }
 
@@ -1807,9 +1808,13 @@
         // Stored times can be ahead of this clock (the phone's clock was changed). The route
         // arriving now is still the newest, or the trim below would delete it.
         const at = records.reduce((top, r) => Math.max(top, (Number(r.timestamp) || 0) + 1), arrivedAt);
+        // Stored as text, not a Blob: WebKit's IndexedDB throws UnknownError on a Blob
+        // put (Chromium accepts it), so iOS silently kept no recent route at all. A
+        // record from an older Android/web build still has `blob` instead and every
+        // read path above already falls back to it.
         const record = {
           name: pick.name, size: bytes, lastModified: at, timestamp: at, fingerprint,
-          blob: new Blob([text], { type: 'application/gpx+xml' }),
+          content: text,
         };
         let write;
         if (pick.replaceId != null) {

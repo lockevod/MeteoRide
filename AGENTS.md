@@ -1412,14 +1412,22 @@ node --check public/scripts/<file>.js
 ```
 
 `playwright.config.mjs` also defines a `mobile-webkit` project (`devices['iPhone
-14']`), the same engine WKWebView uses on iOS. It is not part of `npm test` — a
-measurement run against it (see `.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`)
-found 51 of 55 failures traced to one cause: IndexedDB writes that store the
-route as a `Blob` (`ui.js` `meteoride_recent_routes_db`, `cw_tiles`) not
-persisting in WebKit, which cascades into every test that imports a route and
-then checks recent-routes state. That is unresolved, so `mobile-webkit` stays
-out of the default run: `npx playwright install webkit` once, then `npm run
-test:webkit`.
+14']`), the same engine WKWebView uses on iOS. A measurement run against it (see
+`.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`)
+found 51 of 55 failures traced to one cause: IndexedDB writes that stored the
+route as a `Blob` (`ui.js` `meteoride_recent_routes_db`, `cw_tiles`) failing in
+WebKit with `UnknownError` (`put` of a `Blob` throws there; `put` of a string or
+an `ArrayBuffer` does not — confirmed with a direct probe, real `http` origin,
+browsers launched by hand), which cascaded into every test that imports a route
+and then checks recent-routes state. Fixed: recent routes are stored as plain
+text (`content`, a string) and tiles as raw bytes (`bytes`, an `ArrayBuffer`,
+with `type` alongside); a `Blob` is still built in memory to paint a tile or
+hand a route's text to a reader, since only *storing* one fails, not creating
+one. A record written by an older Android/web build still carries `blob`
+directly and every read path falls back to it, so nothing needed migrating.
+`mobile-webkit` is still not part of `npm test` — `npx playwright install
+webkit` once, then `npm run test:webkit` — but the suite is fully green there
+now (261/261, task 11).
 
 `node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
 without a browser, and drives the assembled `www/runners/watch.js` through its three
@@ -1480,10 +1488,10 @@ code does and what makes the race reproducible.
   unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
 - The suite runs on Chromium by default. A `mobile-webkit` project exists
   (`npm run test:webkit`, see «Verifying a change» above) but is not wired into
-  `npm test`: 51 of its 55 failures trace to one cause, IndexedDB `Blob` writes
-  for recent routes and the tile cache not persisting in WebKit — genuine
-  WebKit limitation or an artifact of Playwright's ephemeral storage is still
-  undecided (§10 of `docs/HANDOFF.md`).
+  `npm test`. It used to fail 55 of 260 there; the IndexedDB `Blob`-write cause
+  behind 54 of those is fixed (task 11, §10 of `docs/HANDOFF.md`) and the suite
+  is now 261/261 on WebKit, so nothing is left to explain — whether to wire it
+  into `npm test` by default is still an open call, not a correctness gap.
 - The iOS native code has now been compiled and run in the simulator on the author's
   Mac — the app launches, the app-local plugin registers, the App Group resolves and a
   GPX loads from Files. Nothing here compiles it: everything written in this

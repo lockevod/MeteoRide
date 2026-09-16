@@ -57,7 +57,13 @@
     return new Promise((resolve) => {
       try {
         const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(url);
-        req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+        req.onsuccess = () => {
+          const r = req.result;
+          // A record from an older Android/web build still has `blob` directly; a new
+          // one has the raw bytes, rebuilt into a Blob here (cheap, and creating one in
+          // memory works fine on WebKit — only storing one in IndexedDB does not).
+          resolve(r ? (r.blob || (r.bytes ? new Blob([r.bytes], { type: r.type }) : null)) : null);
+        };
         req.onerror = () => resolve(null);
       } catch (_) { resolve(null); }
     });
@@ -68,11 +74,14 @@
     const db = await openDb();
     if (!db) return;
     try {
+      // Stored as bytes, not a Blob: WebKit's IndexedDB throws UnknownError on a Blob
+      // put (Chromium accepts it), so iOS cached no tile at all.
+      const bytes = await blob.arrayBuffer();
       const tx = db.transaction(STORE, 'readwrite');
       // Running out of storage surfaces on the transaction, not on the call, and an
       // unhandled one is noisy. Nothing to do about it beyond not caching this tile.
       tx.onerror = () => { console.warn('[cw] tile not cached:', tx.error && tx.error.name); };
-      tx.objectStore(STORE).put({ url, blob, ts: Date.now() });
+      tx.objectStore(STORE).put({ url, bytes, type: blob.type, ts: Date.now() });
     } catch (_) { return; }
     // Trimming walks the whole store, so do it occasionally rather than every write.
     if (++writesSinceTrim >= 100) { writesSinceTrim = 0; trim(db); }
