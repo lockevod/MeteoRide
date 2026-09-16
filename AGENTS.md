@@ -788,12 +788,12 @@ Things that were decided rather than discovered:
   value sitting on 20 km/h would otherwise wake the phone every half hour. Rain, and
   wind together with its gust, move to the current reading only when that magnitude was
   the one reported, or when the point had no baseline for it yet — an official alert on
-  its own moves nothing (`nextBaseline`, `watch-rules.js:256-269`). A magnitude with no
+  its own moves nothing (`nextBaseline`, `watch-rules.js:263-276`). A magnitude with no
   baseline compares as level 0 rather than being skipped, so a point that is already
   severe the first time it is read is news, not silence (`compare`,
-  `watch-rules.js:142-166`); wind only counts as missing when both the speed and the
+  `watch-rules.js:149-173`); wind only counts as missing when both the speed and the
   gust are non-finite, since either alone still yields a level (`windLevel`,
-  `watch-rules.js:51-58`). Easing is never reported.
+  `watch-rules.js:58-65`). Easing is never reported.
 - **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
   notification describes the forecast that will actually hold.
 - **Only what is still ahead.** `compare` skips steps whose time has passed (with
@@ -917,7 +917,7 @@ and did not necessarily reach a step near the far end of a multi-day route.
 One thing that looks like a bug is kept, because the table has always worked that way:
 `window.findClosestFutureIndex` was never assigned, so a step reads the nearest hour, not
 the next one. OpenWeather beyond its hourly range now falls back to `daily` instead of
-re-reading a distant hourly entry: `extractOpenWeather` (`forecast-rules.js:98-154`) accepts
+re-reading a distant hourly entry: `extractOpenWeather` (`forecast-rules.js:126-194`) accepts
 an hourly entry only within an hour of the step's time and otherwise picks the `daily`
 entry whose own local date (`dt` plus `timezone_offset`) matches the step's — not the one
 nearest in raw `dt` seconds, which can tie or lose right at local midnight — since daily

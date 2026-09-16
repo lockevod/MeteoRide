@@ -258,8 +258,8 @@
             const resolved = resolver(prov, timeAt, now, { lat: p.lat, lon: p.lon });
             if (resolved) effProv = resolved;
           } else {
-            // Fallback: use horizon check (48 hours) and domain check
-            if (hoursAhead > (horizons.AROMEHD_MAX_HOURS || 48) || !isAromeHdCovered(p.lat, p.lon)) {
+            // Fallback: use horizon check and domain check
+            if (hoursAhead > horizons.AROMEHD_MAX_HOURS || !isAromeHdCovered(p.lat, p.lon)) {
               effProv = "openmeteo";
             }
           }

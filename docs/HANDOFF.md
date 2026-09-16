@@ -362,8 +362,8 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: ronda de correcciones de cierre (revisión de toda la rama, dos pasadas
-adversariales de Claude y la revisión adversarial de Codex).
+en `AGENTS.md → Open work`. Última actualización: ronda de correcciones de cierre (revisión de toda la rama, dos
+revisiones adversariales internas y una revisión adversarial externa).
 
 ### Pendiente por fase del rediseño
 
