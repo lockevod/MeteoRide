@@ -3429,6 +3429,30 @@ html.cw-native #cwMapOffline {
   pointer-events: none;
 }
 
+/* Compare-by-dates, app only: the sticky first column (day + summary) is wide, and
+   following the user right as they scroll to the time steps eats the width the steps
+   need. compare.js toggles this class on the container once the user has actually
+   scrolled away from the start, and removes it again back at the start. The table is
+   table-layout:fixed, so animating the column's width (not display) is what keeps the
+   step columns from jumping. */
+html.cw-native #weatherTable.compare-dates-mode tbody tr th:first-child,
+html.cw-native #weatherTable.compare-dates-mode thead tr th:first-child {
+  transition: width 0.15s ease, min-width 0.15s ease, max-width 0.15s ease;
+}
+html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-dates-mode tbody tr th:first-child,
+html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-dates-mode thead tr th:first-child {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+/* Collapsed, only the day (interval row) and the weather icon (summary row) stay;
+   the numeric summary is what goes away. */
+html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-dates-mode .ds-summary-numbers {
+  display: none;
+}
+
 /* The 16px override that used to live here is gone. It existed to stop iOS zooming
    in when a small field took focus, but it only applied to the inputs that open a
    keyboard, so the speed box ended up visibly larger than the interval select next

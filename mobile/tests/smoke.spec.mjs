@@ -5546,6 +5546,79 @@ const watchDatePaints = (page) =>
     });
   });
 
+/** Long enough (~48km, 12km/h default speed, 15-minute interval) that compare-by-dates always
+ *  has more step columns than any viewport can show at once, so the container reliably overflows. */
+function longRouteGpx() {
+  const pts = Array.from({ length: 30 }, (_, i) =>
+    `<trkpt lat="${(41.5 - i * 0.012).toFixed(4)}" lon="${(2.4 - i * 0.012).toFixed(4)}"/>`
+  ).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Long</name><trkseg>${pts}</trkseg></trk></gpx>`;
+}
+const loadLongRoute = (page) =>
+  page.locator('#gpxFile').setInputFiles({ name: 'long.gpx', mimeType: 'application/gpx+xml', buffer: Buffer.from(longRouteGpx()) });
+
+// The sticky first column (day + summary) is wide; following the user right to the time steps
+// eats the width they need. App only: collapses to the day and the icon once actually scrolled
+// away, restores at the start.
+test('in the app, compare-by-dates collapses the sticky first column once scrolled away, and restores it back at the start', async ({ page }) => {
+  await installNativeBridge(page);
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await loadLongRoute(page);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+
+  const container = page.locator('#weatherTableContainer');
+  await expect.poll(() => container.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+
+  const firstDate = page.locator('#weatherTable .interval-row .date-label').first();
+  const firstIcon = page.locator('#weatherTable .summary-row th i.wi').first();
+  const firstNumbers = page.locator('#weatherTable .ds-summary-numbers').first();
+  await expect(firstDate).toBeVisible();
+  await expect(firstIcon).toBeVisible();
+
+  // At the start: expanded.
+  await expect(container).not.toHaveClass(/dates-col-collapsed/);
+  await expect(firstNumbers).toBeVisible();
+
+  // Scrolled right: collapsed, but the day and the icon stay.
+  await container.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+  await expect(container).toHaveClass(/dates-col-collapsed/);
+  await expect(firstDate).toBeVisible();
+  await expect(firstIcon).toBeVisible();
+  await expect(firstNumbers).toBeHidden();
+
+  // Back at the start: expanded again.
+  await container.evaluate((el) => el.scrollTo({ left: 0 }));
+  await expect(container).not.toHaveClass(/dates-col-collapsed/);
+  await expect(firstNumbers).toBeVisible();
+});
+
+// The website has no toolbar to scroll the table sideways from, but the table itself can still
+// be scrolled (e.g. a trackpad); the column must never collapse there.
+test('on the website, compare-by-dates never collapses the sticky first column', async ({ page }) => {
+  await stubWatchProviders(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  await loadLongRoute(page);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await openCompareDates(page);
+  await runCompareDates(page);
+  await expect.poll(() => datesShown(page)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.className)).not.toContain('cw-native');
+
+  const container = page.locator('#weatherTableContainer');
+  await expect.poll(() => container.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await container.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+  await page.waitForTimeout(200);
+  await expect(container).not.toHaveClass(/dates-col-collapsed/);
+  await expect(page.locator('#weatherTable .ds-summary-numbers').first()).toBeVisible();
+});
+
 test('a date comparison still fetching when another route is confirmed never paints', async ({ page }) => {
   const control = {};
   await stubWatchProviders(page, control);

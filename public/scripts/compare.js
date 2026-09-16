@@ -19,6 +19,20 @@
     // Add our own click handler (selection) with higher priority in compare mode
     const container = document.getElementById("weatherTableContainer");
     if (container) {
+      // App only: in compare-by-dates the sticky first column (day + summary) is wide,
+      // and following the user right as they scroll to the time steps eats the width
+      // the steps need. Bound once here, not per render, since compare-by-dates rebuilds
+      // the table on every run but the container itself never changes. A small threshold
+      // stands in for "scrolled back to the start", since iOS momentum scroll can leave
+      // scrollLeft a fraction above 0 rather than exactly there.
+      const DATES_COL_COLLAPSE_THRESHOLD = 4;
+      container.addEventListener("scroll", () => {
+        if (!document.documentElement.classList.contains("cw-native")) return;
+        const table = document.getElementById("weatherTable");
+        if (!table || !table.classList.contains("compare-dates-mode")) return;
+        container.classList.toggle("dates-col-collapsed", container.scrollLeft > DATES_COL_COLLAPSE_THRESHOLD);
+      }, { passive: true });
+
       container.addEventListener("click", (ev) => {
         // Allow clicks in both compare and compare-dates mode
         const table = document.getElementById("weatherTable");
@@ -608,12 +622,20 @@
     table.innerHTML = "";
     table.classList.remove('compare-mode');
     table.classList.add('compare-dates-mode');
-    
+
     // Also add class to main element for viewport height adjustments on small screens
     const main = document.querySelector('main');
     if (main) {
       main.classList.remove('compare-mode');
       main.classList.add('compare-dates-mode');
+    }
+
+    // Every run rebuilds the table; start the sticky column expanded and let the
+    // scroll listener above collapse it again once the user has actually scrolled.
+    const weatherTableContainer = document.getElementById('weatherTableContainer');
+    if (weatherTableContainer) {
+      weatherTableContainer.classList.remove('dates-col-collapsed');
+      weatherTableContainer.scrollLeft = 0;
     }
 
     // In compare-dates mode, remove any previously injected compact summary bar
@@ -778,7 +800,7 @@
       th.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
           ${iconClassA ? `<i class="wi ${iconClassA}" style="font-size: 24px; color: #29519b; flex-shrink: 0;"></i>` : ''}
-          <div style="flex: 1;">${summaryHTML_A || ''}</div>
+          <div class="ds-summary-numbers" style="flex: 1;">${summaryHTML_A || ''}</div>
         </div>`;
       summaryA.appendChild(th);
     }
@@ -864,7 +886,7 @@
       th.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
           ${iconClassB ? `<i class="wi ${iconClassB}" style="font-size: 24px; color: #29519b; flex-shrink: 0;"></i>` : ''}
-          <div style="flex: 1;">${summaryHTML_B || ''}</div>
+          <div class="ds-summary-numbers" style="flex: 1;">${summaryHTML_B || ''}</div>
         </div>`;
       summaryB.appendChild(th);
     }

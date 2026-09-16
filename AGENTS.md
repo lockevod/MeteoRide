@@ -323,6 +323,25 @@ What is still open, and why it was left:
   for it, so a test that samples it at the end can miss one that appeared and was
   replaced. `recordNotices` in the suite observes the element and keeps every message
   that passed through; assert against that, not against the current text.
+- **Compare-by-dates' sticky first column collapses while scrolled away, app only.**
+  It carries the day and the day's overall figures, and at 170px (140px on a small
+  screen) it is fine at first — but `position: sticky` means it keeps following the
+  user right as they scroll to the time steps, eating width the steps need. A scroll
+  listener on `#weatherTableContainer`, bound once in `compare.js` rather than
+  per-render, toggles `.dates-col-collapsed` on the container once `scrollLeft` is
+  past a small threshold (not exactly 0: iOS momentum scrolling can leave it a
+  fraction above), and clears it again at the start. The CSS this drives is scoped to
+  `html.cw-native #weatherTable.compare-dates-mode`, so it is invisible on the website
+  and in provider-compare mode. Collapsed, the column keeps the day (the interval
+  row's `.date-label`) and the weather icon (the summary row's `<i class="wi …">`) in
+  about 56px; the numeric summary is wrapped in its own `.ds-summary-numbers` and that
+  is what `display:none` hides — there was nothing to keep or hide for "sun times" in
+  this column, since compare-dates mode never renders them there (`sunA`/`sunB` in
+  `renderDateCompareTable` are computed and never used; only provider-compare mode's
+  `renderCompareTable` puts sun times anywhere, in a `#compactSummary` bar above the
+  table, not in the sticky column). Width, not `display`, is what changes on the
+  column itself, since the table is `table-layout: fixed` and toggling `display` on a
+  `<th>` would reflow every step column under it.
 
 ## Gotchas found the hard way
 
