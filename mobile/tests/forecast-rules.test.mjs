@@ -129,6 +129,34 @@ test('OpenWeather: wind comes back in km/h whether the request was metric or imp
   assert.ok(Math.abs(imperial.gust - 31) < 1e-9, `imperial gust ${imperial.gust}`);
 });
 
+// OpenWeather's own precipitation window: (H, H+60 min], H the step's time floored to the hour,
+// same rule as Open-Meteo. Fixture slot i sits at local i:00 on the 20th with rain i/10 (0 when
+// i is a multiple of 5), so slot 11 (1.1 mm) and slot 12 (1.2 mm) are clearly different.
+test('OpenWeather: precipitation is the hourly entry that ends the step\'s hour, other fields stay nearest', () => {
+  const w = openWeather('metric');
+  const at1005 = rules.extractStep(w, { provider: 'openweather', time: at('2026-09-20T08:05:00Z'), payloadUnits: 'metric' });
+  assert.equal(at1005.precipitation, 1.1);       // 10:05 local: hour (10:00, 11:00] → slot 11
+  assert.equal(at1005.temp, 20);                 // nearest dt is still slot 10 (10:00)
+  const at1040 = rules.extractStep(w, { provider: 'openweather', time: at('2026-09-20T08:40:00Z'), payloadUnits: 'metric' });
+  assert.equal(at1040.precipitation, 1.1);       // 10:40 local: same hour → slot 11
+  const at1059 = rules.extractStep(w, { provider: 'openweather', time: at('2026-09-20T08:59:00Z'), payloadUnits: 'metric' });
+  assert.equal(at1059.precipitation, 1.1);       // 10:59 local: still (10:00, 11:00] → slot 11
+  // On the hour: the hour ahead, (11:00, 12:00] → slot 12, though the nearest dt is slot 11 itself.
+  const at1100 = rules.extractStep(w, { provider: 'openweather', time: at('2026-09-20T09:00:00Z'), payloadUnits: 'metric' });
+  assert.equal(at1100.precipitation, 1.2);
+  assert.equal(at1100.temp, 21);                 // slot 11, not the precipitation's slot 12
+});
+
+test('OpenWeather: past the last hourly entry, precipitation is empty but other fields still read the nearest one', () => {
+  // Local 23:10 on the 21st: the nearest entry (slot 47, 23:00 local) is the answer's last, so the
+  // hour after it (slot 48) is not in the answer.
+  const r = rules.extractStep(openWeather('metric'),
+    { provider: 'openweather', time: at('2026-09-21T21:10:00Z'), payloadUnits: 'metric' });
+  assert.equal(r.source, 'hourly');
+  assert.equal(r.temp, 57);
+  assert.equal(r.precipitation, null);
+});
+
 test('OpenWeather falls back to daily only when there are no hourly entries', () => {
   const w = openWeather('metric');
   w.hourly = [];

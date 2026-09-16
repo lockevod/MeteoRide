@@ -587,10 +587,15 @@ WebKit solo).
     que se había separado: sin tope de una hora, así que más allá de las 48 horas que manda One Call
     enseñaba la última hora de la respuesta, de otro día, en la fila de al lado de una de Open-Meteo
     que sí leía el día correcto; el dato diario lo elegía por `dt` crudo en vez de por la fecha local
-    del paso; y una `pop` ausente dejaba la celda vacía donde la tabla pone 0 %. Queda una diferencia,
-    ya conocida: la lluvia de OpenWeather sigue siendo `rain['1h']` de la entrada leída, y si esa hora
-    es la anterior o la siguiente a su `dt` no lo dice el código ni está comprobado, así que esa fila
-    puede cubrir una hora distinta de la que cubren las de Open-Meteo y AROME a su lado.
+    del paso; y una `pop` ausente dejaba la celda vacía donde la tabla pone 0 %. Cerrado: la lluvia de
+    OpenWeather ya lee la misma hora que Open-Meteo y AROME. La documentación del proveedor
+    (`docs.openweather.co.uk/api/one-call-3`, el producto que usa la app) no dice si `rain['1h']` cubre
+    la hora anterior o la siguiente a `dt`; su hermano `docs.openweather.co.uk/api/hourly-forecast`, con
+    los mismos campos, sí lo dice: "Rain volume for last hour", la hora que termina en `dt`. Con esa
+    lectura, `extractOpenWeather` (`forecast-rules.js:126-194`) toma `rain['1h'] + snow['1h']` de la
+    entrada cuyo `dt` es H+60 (H la hora del paso redondeada hacia abajo), nunca de la más cercana; el
+    resto de campos sigue leyendo la más cercana, como antes. Sin esa entrada, o más lejos de
+    `maxGapMs`, la lluvia queda sin valor y el resto del paso no se ve afectado.
   - **Comparar fechas respeta los horizontes.** Pasados los días de OpenWeather el paso pide
     Open-Meteo y pasados los de Open-Meteo se queda sin datos, como en la tabla. Antes no había nada:
     el campo de fecha acepta catorce días y `isProviderOperational` da OpenWeather por operativo a

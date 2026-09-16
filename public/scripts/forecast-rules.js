@@ -160,6 +160,25 @@ var cwForecastRules = (function () {
     const code = (e) => (Array.isArray(e.weather) && e.weather[0] ? e.weather[0].id : null);
     const currentUv = w.current ? w.current.uvi : undefined;
 
+    // Precipitation, unlike every other field, is the hour being ridden, (H, H+60 min], H the
+    // step's time floored to the hour on the answer's own wall clock — the same window
+    // extractOpenMeteo reads, because docs.openweather.co.uk/api/hourly-forecast documents this
+    // vendor's own `rain.1h`/`dt` pair as "Rain volume for last hour" ending at `dt`. The entry
+    // read for every other field (`hourly`, nearest by raw `dt`) is not this one in general; no
+    // H+60 entry in the answer, or one further than `maxGapMs`, leaves precipitation alone with
+    // no value, never a different hour's.
+    const rideHourPrecip = () => {
+      if (!useHourly) return null;
+      const HOUR = 3600000;
+      const offMs = typeof w.timezone_offset === 'number' ? w.timezone_offset * 1000 : -new Date(timeMs).getTimezoneOffset() * 60000;
+      const target = Math.floor((timeMs + offMs) / HOUR) * HOUR - offMs + HOUR;
+      if (Math.abs(target - timeMs) > (maxGapMs != null ? maxGapMs : HOUR)) return null;
+      const pi = w.hourly.findIndex((e) => e && Number(e.dt) * 1000 === target);
+      if (pi === -1) return null;
+      const e = w.hourly[pi];
+      return Number((e.rain && e.rain['1h']) ?? 0) + Number((e.snow && e.snow['1h']) ?? 0);
+    };
+
     if (hourly) {
       return {
         source: 'hourly',
@@ -168,7 +187,7 @@ var cwForecastRules = (function () {
         gust: hourly.wind_gust != null ? toKmh(hourly.wind_gust) : null,
         windDir: Number(hourly.wind_deg || 0),
         humidity: hourly.humidity,
-        precipitation: Number((hourly.rain && hourly.rain['1h']) ?? 0) + Number((hourly.snow && hourly.snow['1h']) ?? 0),
+        precipitation: rideHourPrecip(),
         precipProb: (Number(hourly.pop) || 0) * 100,
         weatherCode: code(hourly),
         uvIndex: hourly.uvi ?? currentUv ?? null,

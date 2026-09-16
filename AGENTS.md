@@ -1344,10 +1344,18 @@ a replay takes the ones in use ("Preparing and replaying").
     its label), never the nearest one. So it means the same within 5 h and beyond. When H+60 is
     not in the answer the step has no rain value; the rest of the step is unaffected. In replay the
     gap rule still decides whether the step has data at all, and H+60 is never more than an hour
-    from the step. OpenWeather keeps its own window: `rain['1h'] + snow['1h']` of the entry read.
-    Whether that `1h` is the hour before or after its
-    `dt` is not stated in the code and is unverified, so its row may cover a different hour from
-    the Open-Meteo row beside it — the one magnitude still not pinned to the hour being ridden.
+    from the step. OpenWeather's precipitation follows the same (H, H+60 min] window now:
+    `docs.openweather.co.uk/api/one-call-3`, the product this app calls, only says `rain['1h']` is
+    "(where available) Precipitation, mm/h" and `dt` is "Time of the forecasted data"; its sibling
+    `docs.openweather.co.uk/api/hourly-forecast`, same fields, spells it out — `rain['1h']` is
+    "Rain volume for last hour", the hour *ending* at `dt`. Read that way, `rain['1h'] + snow['1h']`
+    of the entry whose `dt` is H+60 is the hour being ridden, so `extractOpenWeather`
+    (`forecast-rules.js:126-194`) reads precipitation from that entry — never the nearest one — while
+    every other field (temp, wind, gust, direction, humidity, `pop`, weather code, uv, cloud cover)
+    keeps reading the nearest `dt`, as before. `pop` is per-hour too, but its own alignment isn't
+    the ambiguity the vendor's docs raised for `1h`, so it is left alone on purpose, out of scope
+    for this change. No H+60 entry in the answer, or one further than `maxGapMs`, leaves
+    precipitation alone with no value — the rest of the step unaffected — never a different hour's.
     uv, probability and weather code come from `hourly` when the quarter has none (AROME HD sends
     all three null there). The same unit conversion as the table
     (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from
