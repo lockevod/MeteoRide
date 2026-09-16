@@ -85,7 +85,8 @@ export async function onRequest(context) {
     try{
       const check = await env.SHARED_GPX.get(id);
       if(!check){
-        return new Response('KV write not visible after put', { status: 500, headers: corsHeaders() });
+        console.error('share: KV write not visible after put', id);
+        return new Response('Storage error', { status: 500, headers: corsHeaders() });
       }
     } catch(err){
       console.error('share: KV verify failed', err);

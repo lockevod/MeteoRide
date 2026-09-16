@@ -192,6 +192,18 @@ What is still open, and why it was left:
   app's CSP keeps foreign frames out of the app, and a page on another hostname framing 127.0.0.1
   is blocked by Chromium's local network access checks (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`).
 
+### What the Android FileProvider may serve
+
+`mobile/android/app/src/main/res/xml/file_paths.xml` is Capacitor boilerplate, and the
+boilerplate declares `<external-path path="."/>` — the whole external storage root. Nothing
+here needs it: the one file the share sheet ever hands to another app is written with
+`directory: 'CACHE'` (`native.js:186`), so `<cache-path>` covers it, there is no external
+storage permission in the manifest, and nothing calls `getUriForFile` outside the plugins.
+The `external-path` line was removed to keep the shared surface as small as what is used.
+
+Regenerating the Android project (`npx cap add android`) writes the boilerplate back. If a
+plugin ever genuinely needs external storage, add the narrowest path it needs, not `.`.
+
 ## Behaving like an app rather than a page
 
 - **iOS zooms in when a field smaller than 16px takes focus, and does not zoom back.**
