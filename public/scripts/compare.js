@@ -115,16 +115,22 @@
   // Null when the provider does not answer 200, or AROME is unusable and Open-Meteo does not either;
   // `effProv` is the provider the answer comes from, the one to file it under.
   async function fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init = {}) {
-    const ask = (prov, key) =>
-      fetch(window.cw.buildProviderUrl(prov, p, timeAt, key, units.wind, units.temp), { ...init, cwRecorder: recorder });
+    const ask = (prov, key, rec = recorder) =>
+      fetch(window.cw.buildProviderUrl(prov, p, timeAt, key, units.wind, units.temp), { ...init, cwRecorder: rec });
     const res = await ask(effProv, apiKey);
     if (!res.ok) return null;
     let json = await window.cw.utils.readJson(res, recorder);
     if (effProv === "aromehd") {
       try {
-        const std = await ask("openmeteo", "");
-        if (std.ok) cwForecastRules.mergeAromeWithStandard(json, await window.cw.utils.readJson(std, recorder));
+        // Best-effort, as in the table: this only completes AROME from the standard model and its
+        // failure is swallowed right here, so it gives up no host — AROME is served by that same
+        // host and has just answered this step. Its own recorder carries the deadline and the abort.
+        const bestEffort = window.cw.utils.bestEffortRecorder(recorder);
+        const std = await ask("openmeteo", "", bestEffort);
+        if (std.ok) cwForecastRules.mergeAromeWithStandard(json, await window.cw.utils.readJson(std, bestEffort));
       } catch {}
+      // The Open-Meteo answer that stands in for an unusable AROME one is this step's real answer,
+      // not a completion: it keeps the comparison's recorder, and its failure is the row's to name.
       if (aromeResponseLooksInvalid(json)) {
         const r3 = await ask("openmeteo", "");
         if (!r3.ok) return null;

@@ -73,6 +73,14 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     cw: {
       utils: {
         createRecorder: (signal) => ({ ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [], signal }),
+        // As utils.js: one per computation, kept on the recorder, notes taken nowhere. The AROME
+        // standard companion hands this to fetch so a silent host never reaches the real recorder.
+        bestEffortRecorder: (rec) => {
+          if (!rec.bestEffort) {
+            rec.bestEffort = { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [], signal: rec.signal };
+          }
+          return rec.bestEffort;
+        },
         isOffline: () => s.offline,
         // As utils.js reads a body, without its deadline (the browser suite holds that).
         readJson: (res, rec) => res.json().catch((err) => {

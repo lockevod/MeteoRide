@@ -974,12 +974,17 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
           }
           if (prov === "aromehd") {
             try {
+              // Best-effort: the catch below swallows whatever this throws, and it raises no flag
+              // and no notice. So it gives up no host either — AROME is served by that same host
+              // and has just answered this very step. Its own recorder keeps the deadline and the
+              // abort; a silent standard model only costs this step its merge.
+              const bestEffort = window.cw.utils.bestEffortRecorder(recorder);
               const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
               if (!isCurrent()) return;
-              const resStd = await fetch(urlStd, { cwRecorder: recorder });
+              const resStd = await fetch(urlStd, { cwRecorder: bestEffort });
               if (!isCurrent()) return;
               if (resStd.ok) {
-                const std = await readJson(resStd);
+                const std = await window.cw.utils.readJson(resStd, bestEffort);
                 if (!isCurrent()) return;
                 try {
                   // Cache the standard Open‑Meteo response so future Open‑Meteo-only requests

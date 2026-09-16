@@ -6661,20 +6661,27 @@ test('AROME given up for not answering asks Open-Meteo for nothing, since it is 
   await expect(page.locator('.notice')).toContainText(notResponding);
 });
 
-// The standard answer AROME is completed from is on the same host: once it goes silent, the AROME
-// requests of that computation stop too. Tracking the deadline per provider would ask AROME again.
-test('a standard Open-Meteo request given up stops that computation asking AROME again', async ({ page }) => {
+// The standard request that completes an AROME answer is best-effort: its failure is swallowed on
+// purpose and raises no flag. Under the per-host rule it stopped being inert — going silent marked
+// api.open-meteo.com as given up, so every later request of that computation, AROME's own included,
+// was rejected at once, and the notice painted "Open-Meteo is not responding" over a table the user
+// had asked AROME for. A best-effort request gives up no host: the merge is skipped for that step,
+// and AROME, whose own answer proves the host is alive, keeps being asked.
+test('the standard request that completes AROME, given up, blanks no later step and names nobody', async ({ page }) => {
   const control = { now: T0, silent: ['standard'] };
+  await recordNotices(page);
   await routeWith(page, control, 'aromehd');
   await expect.poll(() => control.standard).toBe(1);
   await page.clock.fastForward('00:16');
 
-  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(1);
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(1);
   const shown = await shownSnapshot(page);
   expect(shown.steps, 'the route has later steps to leave without data').toBeGreaterThan(1);
-  expect(control.arome, 'AROME was asked again on the host that had gone silent').toBe(1);
-  expect(control.standard).toBe(1);
-  await expect(page.locator('.notice')).toContainText(/Open-Meteo (is not responding|no responde)/);
+  expect(shown.usable, 'a silent best-effort merge left later steps without data').toBe(shown.steps);
+  expect(control.arome, 'AROME stopped being asked on the host its own answers prove is alive').toBe(shown.steps);
+  expect(control.standard, 'the silent host was waited on once per step instead of once').toBe(1);
+  expect((await page.evaluate(() => window.__notices)).filter((n) => notResponding.test(n)),
+    'a best-effort failure named a provider the user never chose').toEqual([]);
 });
 
 test('with the OpenWeather chain, OpenWeather given up goes straight to Open-Meteo and asks AROME for nothing', async ({ page }) => {

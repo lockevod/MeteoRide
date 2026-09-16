@@ -39,6 +39,17 @@
     return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [], signal };
   }
 
+  // The recorder a best-effort secondary request hands to fetch: the deadline and the abort of the
+  // computation it belongs to, and its notes taken nowhere. Completing an AROME answer from the
+  // standard model is the one such request, and its failure is swallowed by design, so it must give
+  // up no host — the answer it completes came from that same host and has just arrived — and must
+  // never count as a failure or name a provider in the notice. One per computation, kept on the
+  // recorder, so a host that does go silent still costs a single wait and not one per step.
+  function bestEffortRecorder(recorder) {
+    if (!recorder.bestEffort) recorder.bestEffort = createRecorder(recorder.signal);
+    return recorder.bestEffort;
+  }
+
   // Whether a failure happened without connection is noted as it happens: by the time the
   // computation publishes, the connection may be back.
   function noteFailure(recorder, status) {
@@ -1015,6 +1026,7 @@
        getCache,
        setCache,
        createRecorder,
+       bestEffortRecorder,
        readJson,
        readText,
        staleMaxAge,
