@@ -1439,6 +1439,14 @@ Playwright time instead of 40 s; accepted because the WebKit-only IndexedDB
 bug stayed invisible for the whole project life under a Chromium-only gate.
 Run WebKit alone with `npm run test:webkit`.
 
+`.github/workflows/tests.yml` runs this same `npm test` on every pull request and on
+push to `main`/`native-ios-capacitor` (Ubuntu, Node 22, no secrets — Android signing
+from task 12 stays out of CI, since it is optional and an unsigned APK is not built
+here anyway). Read the result from the PR's checks list or the Actions tab: a red
+`Tests` run means either engine failed, and the step's log names the failing test the
+same way a local `npm test` does. `~/.npm` and the Playwright browser cache are cached
+between runs, so only a `package-lock.json` change re-downloads anything.
+
 `node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
 without a browser, and drives the assembled `www/runners/watch.js` through its three
 events with the host objects mocked (`tests/runner.test.mjs`, needs a build first),
@@ -1541,8 +1549,6 @@ code does and what makes the race reproducible.
   H2 (offline preparation), H1 (overlapping forecasts), H5 (notices by time window, for the
   computation in phase 2 and the comparisons in phase 4), H3 (OpenWeather cached per location) and
   H4 (provider deadlines and aborts). `docs/HANDOFF.md` §9 has the table and §10 what remains.
-- Nothing runs the tests automatically. A GitHub Actions job on pull requests would
-  cost a few lines.
 - The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
   confirmation would be friendlier.
 - The share extension reaches the host app by walking the responder chain to

@@ -160,8 +160,10 @@ presente para la app nativa:
 - La suite corre ya en Chromium y WebKit (`npm test`, tarea 11 + cierre de la
   tarea 9/10), pero solo en el WebKit de escritorio de Playwright; sigue sin
   probarse en un iPhone físico.
-- Nada ejecuta los tests automáticamente: un job de GitHub Actions en los PR cuesta
-  unas pocas líneas.
+- `.github/workflows/tests.yml` (tarea 13) ejecuta `npm test` (Chromium y WebKit) en
+  cada PR y en cada push a `main`/`native-ios-capacitor`, sin secretos. El resultado se
+  lee en la lista de checks del PR o en la pestaña Actions: un run en rojo señala qué
+  test falló, igual que en local.
 - Ideas, no pendientes: tip jar (en iOS solo como compra in-app), conexión con Strava
   vía OAuth (Komoot y Hammerhead no tienen API pública), notificación en primer plano
   al reabrir la app.
@@ -388,6 +390,8 @@ revisiones adversariales internas y una revisión adversarial externa).
     arrancar y el vaciado por cuota trata igual todas las entradas de caché.
   - Hecho: repaso final de `AGENTS.md` y de este documento contra el código (recuentos de tests y
     cobertura de la suite al día). El rediseño no tiene más fases pendientes.
+  - Hecho (tarea 13): `.github/workflows/tests.yml` ejecuta la suite completa en cada PR
+    y en cada push a `main`/`native-ios-capacitor`; ver §7.
 
 ### Hallazgos de la revisión del 14/09 aún abiertos
 
