@@ -436,6 +436,8 @@
       distance: document.getElementById("distanceUnits")?.value || "km",
     };
     const keys = snapshot.settings.keys || {};
+    const horizons = window.cw.horizons || {};
+    const MS_PER_DAY = horizons.MS_PER_DAY || (24 * 60 * 60 * 1000);
   // The provider the snapshot was computed with; 'compare' compares dates with Open-Meteo
   let provider = snapshot.settings.provider || 'openmeteo';
   if (provider === 'compare') provider = 'openmeteo';
@@ -535,6 +537,17 @@
         let effProv = missingKey ? 'openmeteo' : (resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider);
         // A chain that reaches OpenWeather without a usable key asks Open-Meteo too, as the table does.
         if (effProv === 'openweather' && (keys.openweather || '').trim().length < 5) effProv = 'openmeteo';
+        // The horizons the table (app.js) and compare-providers both keep, which this mode had
+        // none of: the date field accepts fourteen days, OpenWeather is trusted for four and its
+        // answer only holds 48 hours, so beyond that the step asks Open-Meteo, and beyond
+        // Open-Meteo's own horizon it has no data. The numbers come from window.cw.horizons; with
+        // none there is no guard, as before, rather than a second copy of them here.
+        const daysAhead = (timeAt.getTime() - Date.now()) / MS_PER_DAY;
+        if (effProv === 'openweather' && daysAhead > horizons.OPENWEATHER_MAX_DAYS) effProv = 'openmeteo';
+        if (daysAhead > horizons.OPENMETEO_MAX_DAYS) {
+          arr.push(blankStep(effProv, baseForIndex));
+          continue;
+        }
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
   const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;

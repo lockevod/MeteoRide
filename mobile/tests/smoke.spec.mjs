@@ -5812,6 +5812,48 @@ test('a date comparison with OpenWeather and no key asks Open-Meteo, not AROME, 
 test('a date comparison with a short OpenWeather key asks Open-Meteo, not OpenWeather, and says so as the table does',
   ({ page }) => dateComparisonWithOpenWeatherKey(page, 'abc'));
 
+// Compare-by-dates had no provider horizon guard: it asked OpenWeather for any date the field
+// accepts, and One Call answers 48 hours. The table falls back to Open-Meteo past
+// OPENWEATHER_MAX_DAYS and compare-providers blanks the row; only this mode did neither, and with
+// the date-less OpenWeather key it read date A's cached answer without even asking.
+test('a date comparison past the days OpenWeather covers asks Open-Meteo, as the table does', async ({ page }) => {
+  await startClock(page);
+  await goOffline(page);
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) => {
+    const base = Math.floor(T0 / 3600000) * 3600;
+    const hourly = Array.from({ length: 48 }, (_, i) => ({
+      dt: base + i * 3600, temp: 21, wind_speed: 3, wind_deg: 180, humidity: 60,
+      pop: 0.05, weather: [{ id: 800 }], uvi: 3, clouds: 20,
+    }));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ timezone_offset: 0, hourly, daily: [] }) });
+  });
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAround(T0, 24 * 14)) }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('showWeatherAlerts').checked = false; });
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  expect(await page.evaluate(() => [...new Set(window.weatherData.map((s) => s.provider))]),
+    'today is inside the days OpenWeather covers').toEqual(['openweather']);
+
+  await openCompareDates(page);
+  await setDateB(page, 10);
+  await forgetForecasts(page);
+  await watchDatePaints(page);
+  await runCompareDates(page);
+  await expect.poll(() => page.evaluate(() => window.__datePaints.length)).toBe(1);
+  await expect.poll(() => datesShown(page)).toBe(true);
+
+  expect(await page.evaluate(() => [...new Set(window.cw.weatherDataA.map((s) => s.provider))]),
+    'date A is today and stays on OpenWeather').toEqual(['openweather']);
+  expect(await page.evaluate(() => [...new Set(window.cw.weatherDataB.map((s) => s.provider))]),
+    'date B, ten days out, was asked of OpenWeather, which answers 48 hours').toEqual(['openmeteo']);
+  expect(await page.evaluate(() => window.cw.weatherDataB.every((s) => s.temp != null)),
+    'the row past the horizon came out empty').toBe(true);
+});
+
 test('a replaced comparison whose requests failed leaves no notice over the comparison that replaced it', async ({ page }) => {
   await recordNotices(page);
   // While `failing`, every request fails, and the one numbered `holdAt` only once `gate` opens.
