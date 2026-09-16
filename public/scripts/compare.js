@@ -949,6 +949,21 @@
     const step = { ...baseStep, provider: prov, weather: raw };
     const safeNum = window.cw.safeNum || ((v)=>Number.isFinite(Number(v))?Number(v):null);
     const windToUnits = window.cw.windToUnits || ((v)=>v);
+    // What extractStep read, in the units the rows are drawn in. Its wind is km/h whatever the
+    // answer was asked in, so every provider goes through windToUnits the same way.
+    const apply = (r) => {
+      if (!r) return;
+      step.temp = safeNum(r.temp);
+      step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+      step.windDir = r.windDir;
+      step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
+      step.humidity = safeNum(r.humidity);
+      step.precipitation = safeNum(r.precipitation);
+      step.precipProb = safeNum(r.precipProb);
+      step.weatherCode = r.weatherCode;
+      step.uvindex = safeNum(r.uvIndex);
+      step.cloudCover = safeNum(r.cloudCover);
+    };
     try {
       if (!raw) return blankStep(prov, baseStep);
 
@@ -958,67 +973,23 @@
         // from hourly when the quarter has none. Precipitation is the hour being ridden, (H, H+60 min].
         const r = cwForecastRules.extractStep(raw, { provider: prov, time: step.time });
         if (r) {
-          step.temp = safeNum(r.temp);
-          step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
-          step.windDir = r.windDir;
-          step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
-          step.humidity = safeNum(r.humidity);
-          step.precipitation = safeNum(r.precipitation);
-          step.precipProb = safeNum(r.precipProb);
-          step.weatherCode = r.weatherCode;
-          step.uvindex = safeNum(r.uvIndex);
+          apply(r);
           step.isDaylight = r.isDay;
-          step.cloudCover = safeNum(r.cloudCover);
           if (prov === "aromehd") window.cw.aromeCodeAndDay(step);
         }
       } else if (prov === "openweather") {
+        // The table's own reading here too (extractStep): an hourly entry only within an hour of the
+        // step, otherwise the daily entry of the step's own local date — not the nearest in raw `dt`,
+        // which past the 48 hours One Call sends showed the last hour of the answer, a different day.
+        // Daylight stays SunCalc's, as the table's does: OpenWeather sends no is_day.
         const timeMs = (step.time instanceof Date ? step.time : new Date(step.time)).getTime();
-        const closestByDt = (arr) => {
-          if (!Array.isArray(arr) || !arr.length) return -1;
-          let best = -1, bestDiff = Infinity;
-          for (let i = 0; i < arr.length; i++) {
-            const t = Number(arr[i]?.dt) * 1000;
-            const df = Math.abs(t - timeMs);
-            if (df < bestDiff) { bestDiff = df; best = i; }
-          }
-          return best;
-        };
-        const useHourly = Array.isArray(raw.hourly) && raw.hourly.length > 0;
-        const hi = useHourly ? closestByDt(raw.hourly) : -1;
-        const di = (!useHourly || hi === -1) ? closestByDt(raw.daily) : -1;
-        const src = (useHourly && hi !== -1) ? raw.hourly[hi] : ((Array.isArray(raw.daily) && di !== -1) ? raw.daily[di] : null);
         try {
           const pos = SunCalc.getPosition(new Date(timeMs), step.lat, step.lon);
           step.isDaylight = pos.altitude > 0 ? 1 : 0;
         } catch { step.isDaylight = 1; }
         // OpenWeather answers in the system buildProviderUrl asked for from the same temperature unit.
         const owUnits = String(units.temp || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
-        const toKmhFromOW = (ws) => {
-          const v = Number(ws) || 0;
-          if (owUnits === "imperial") return v * 1.60934;
-          return v * 3.6;
-        };
-        if (src) {
-          step.temp = safeNum(useHourly ? src.temp : (src.temp?.day ?? src.temp?.max ?? src.temp?.min));
-          step.windSpeed = safeNum(windToUnits(toKmhFromOW(src.wind_speed), windUnit));
-          step.windDir = Number(src.wind_deg || 0);
-          step.windGust = safeNum(src.wind_gust != null ? windToUnits(toKmhFromOW(src.wind_gust), windUnit) : null);
-          step.humidity = safeNum(src.humidity);
-          const rain = Number(useHourly ? (src.rain?.["1h"] ?? 0) : (src.rain ?? 0));
-          const snow = Number(useHourly ? (src.snow?.["1h"] ?? 0) : (src.snow ?? 0));
-          step.precipitation = safeNum(rain + snow);
-          // OpenWeather 'pop' is 0..1 -> convert to percent
-          if (useHourly && src && (src.pop != null)) {
-            step.precipProb = safeNum(Number(src.pop) * 100);
-          } else if (src && src.pop != null) {
-            step.precipProb = safeNum(Number(src.pop) * 100);
-          } else {
-            step.precipProb = null;
-          }
-          step.weatherCode = Array.isArray(src.weather) && src.weather[0] ? src.weather[0].id : null;
-          step.uvindex = safeNum(src.uvi ?? raw.current?.uvi ?? null);
-          step.cloudCover = safeNum(src.clouds);
-        }
+        apply(cwForecastRules.extractStep(raw, { provider: prov, time: step.time, payloadUnits: owUnits }));
       }
 
       if (step.precipitation != null && Number(step.precipitation) === 0) {

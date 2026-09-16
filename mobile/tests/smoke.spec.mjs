@@ -5974,6 +5974,51 @@ test('within five hours the AROME row of the comparison reads and reconciles the
   await expect.poll(() => page.evaluate(`(${readRows})(window.cw.compareProviderData?.aromehd ?? [])`)).toEqual(table);
 });
 
+/** OpenWeather One Call: 48 hourly entries from the hour `now` falls in, 10 + i degrees and 4.7 mm
+ *  each, and 8 daily ones at 18:00 UTC, 20 + d degrees and 2 mm. A step past the hourly range can
+ *  only be read from `daily`; reading the nearest hour instead shows the last hour of the answer. */
+function openWeatherHourlyAndDaily(now) {
+  const base = Math.floor(now / 3600000) * 3600;
+  const hourly = Array.from({ length: 48 }, (_, i) => ({
+    dt: base + i * 3600, temp: 10 + i, wind_speed: (5 + i) / 3.6, wind_gust: (15 + i) / 3.6,
+    wind_deg: 180, humidity: 60, rain: { '1h': 4.7 }, pop: 0.9, weather: [{ id: 800 }], uvi: 3, clouds: 20,
+  }));
+  const daily = Array.from({ length: 8 }, (_, d) => ({
+    dt: base + d * 86400 + 12 * 3600, temp: { day: 20 + d }, wind_speed: 10 / 3.6, wind_gust: 20 / 3.6,
+    wind_deg: 90, humidity: 70, rain: 2, snow: 0, pop: 0.1, weather: [{ id: 500 }], uvi: 1, clouds: 10,
+  }));
+  return { timezone_offset: 0, hourly, daily };
+}
+
+// Compare kept a hand-written OpenWeather reading. It had no one-hour cap on the hourly match, so
+// past the 48 hours One Call sends it showed the last hour of the answer — a different day — while
+// the table beside it read the daily entry. Both go through extractStep now.
+test('beyond the 48 hours OpenWeather sends, the comparison reads the day the table reads', async ({ page }) => {
+  await startClock(page);
+  await goOffline(page);
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(openWeatherHourlyAndDaily(T0)) }));
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAround(T0, 24 * 7)) }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('showWeatherAlerts').checked = false; });
+  await chooseStart(page, localAt(T0 + 3 * 24 * 3600000));
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+
+  const readOw = (rows) => rows.map((s) => [s.temp, s.windSpeed, s.precipitation, s.precipProb]);
+  const table = await page.evaluate(`(${readOw})(window.weatherData)`);
+  expect(table[0][0], 'the table read an hourly entry: the fixture no longer exercises the daily one').toBe(23);
+  expect(table[0][2], 'the daily entry carries 2 mm, an hourly one 4.7').toBe(2);
+
+  await forgetForecasts(page);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+  await expect.poll(() => page.evaluate(`(${readOw})(window.cw.compareProviderData?.openweather ?? [])`)).toEqual(table);
+});
+
 // Compare-by-dates stored AROME's answer without the standard model's variables, under the key the
 // table reads, so the next table computed from it lost its probability, uv and cloud cover.
 async function dateComparisonFeedsTheTable(page, now = Date.now()) {
