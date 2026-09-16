@@ -204,7 +204,7 @@
             <h3>1. Load a GPX/KML Route</h3>
             <p>Click the <strong>📁</strong> button to select your GPX or KML file. MeteoRide supports standard tracks, routes and waypoints.</p>
             <div class="tip">
-                <strong>💡 Tip:</strong> You can also use direct URLs with parameters like <code>?gpx_url=</code> to load routes automatically. For details about sharing routes from iOS or Android check the project page on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>.
+                <strong>💡 Tip:</strong> You can also load a route automatically from a link: the parameters are in <strong>Advanced Features → URLs with Parameters</strong>. For details about sharing routes from iOS or Android check the project page on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </div>
             <div class="tip">
                 <strong>🔗 Export from Komoot/Bikemap/Hammerhead:</strong> There is a Tampermonkey userscript that adds a button on Komoot and Bikemap to open the current route directly in MeteoRide. Note that GPX downloads on Komoot require a <strong>Premium</strong> account. See the README for installation instructions.
@@ -231,17 +231,10 @@
         </div>
         <div class="step">
             <h3>5. Choose Weather Provider</h3>
-            <p>Select the weather provider you want to use to obtain the data.</p>
+            <p>Select the weather provider you want to use to obtain the data. Each one, the chains that combine them and when to pick which are in <strong>Weather Providers &amp; Advantages</strong>; what happens when the one you picked fails is in <strong>Advanced Features → Smart Fallbacks</strong>.</p>
             <ul>
-                <li><strong>Open-Meteo:</strong> Free, no API key required, up to 14 days forecast</li>
-                <li><strong>OpenWeather:</strong> Requires API key, up to 4 days, detailed data</li>
-                <li><strong>AromeHD:</strong> High-resolution model from MeteoFrance, available via Open-Meteo. Only available for parts of Europe (~39-52°N, 10.5°W-16.5°E) and within 48 hours; otherwise the app falls back to the best provider available through Open-Meteo. Especially useful for wind and short-term precipitation.</li>
-                <li><strong>OpenWeather - AromeHD:</strong> Use OpenWeather for the first hour, then AromeHD up to 48 hours. Routes outside this period are calculated with Open-Meteo. Only available if you provide an OpenWeather API key. This chain leverages real-time OpenWeather data for immediate planning and hyper-local AROME precision for wind and precipitation forecasting.</li>
                 <li><strong>Compare (Comp.):</strong> Enable comparison mode to evaluate differences between providers. It reads Open-Meteo and AROME exactly like the table, including quarter-hour data within the first 5 hours, and its notices name the provider when one fails to answer.</li>
             </ul>
-            <div class="tip">
-                <strong>💡 Automatic Fallback:</strong> If your primary provider fails or has no data, MeteoRide automatically switches to Open-Meteo. MeteoRide will notify you with a brief message about the situation (if notifications are enabled in Settings).
-            </div>
         </div>
         <div class="step">
             <h3>6. Compare Dates Mode</h3>
@@ -270,7 +263,7 @@
         <ul>
             <li><strong>Open-Meteo:</strong> Free, no API key required, global coverage, up to 14 days. OpenMeteo uses its best model for your track, recommended for any situation, the best for long-term planning and global routes.</li>
             <li><strong>OpenWeather:</strong> Requires API key, up to 4 days, excellent real-time data and official weather alerts. Perfect for immediate departures and urban areas.</li>
-            <li><strong>AROME-HD:</strong> High-resolution model (~1-2km) from MeteoFrance, available for Europe within 48 hours. Superior for wind forecasting and short-term precipitation in France and nearby countries.</li>
+            <li><strong>AROME-HD:</strong> High-resolution model (~1-2km) from MeteoFrance, reached through Open-Meteo. Only available for parts of Europe (~39-52°N, 10.5°W-16.5°E) and within 48 hours; outside that area or that window it switches straight to the best model Open-Meteo has for that location. Superior for wind forecasting and short-term precipitation in France and nearby countries.</li>
         </ul>
         
         <h3>Provider Chains</h3>
@@ -366,9 +359,8 @@
         <ul>
             <li>With no route loaded, the map opens where you are rather than in Barcelona.</li>
             <li>The app starts in the phone's language until you pick one by hand.</li>
-            <li>Units, language and your API key are also kept outside the internal browser, so they survive the system reclaiming space.</li>
+            <li>Units, language, your API key, recent routes and the tiles you have already looked at are kept outside the internal browser, in a form WebKit does keep: they survive the system reclaiming space and on iPhone they are still there when you open the app again. They were not before.</li>
             <li>The first time the map looks for you, the system asks for location permission in MeteoRide's name.</li>
-            <li>Recent routes and the tiles you have already looked at are stored in a form WebKit does keep, so on iPhone they are still there when you open the app again. They were not before.</li>
             <li>The phone stays in portrait, because turning it breaks the layout. The iPad does rotate.</li>
         </ul>
     </details>
@@ -381,17 +373,11 @@
         <ul>
             <li><strong>OpenWeather (One Call API):</strong> <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a></li>
         </ul>
-        <p>Use the <strong>🔍 Check</strong> button to verify your API key works correctly.</p>
+        <p>Use the <strong>🔍 Check</strong> button next to the field to verify your key: the app makes a simple request and shows the status beside it (valid / invalid / quota / HTTP).</p>
 
-        <h3>🔑 API Key Tests and Notices</h3>
+        <h3>🔔 Non-critical notices</h3>
         <p>
-            In the settings panel there is a <code>Check</code> button for OpenWeather. When pressed the app makes a simple request and the status is shown next to the field (valid / invalid / quota / HTTP).
-        </p>
-        <p>
-            There is also a checkbox <strong>Show non-critical notices</strong> that controls notification verbosity: if enabled you will see informational banners when fallbacks occur due to horizon limits, quota or API errors; if disabled only critical errors are shown.
-        </p>
-        <p class="small">
-            When a provider exceeds its horizon or fails repeatedly, the app falls back to Open‑Meteo only for the affected steps. This is indicated with a brief notice in the header.
+            The checkbox <strong>Show non-critical notices</strong> controls notification verbosity: if enabled you will see informational banners when fallbacks occur due to horizon limits, quota or API errors; if disabled only critical errors are shown.
         </p>
         <h3>📏 Units</h3>
         <ul>
@@ -435,9 +421,6 @@
             <li><strong>Green/Red markers:</strong> Route start and end</li>
         </ul>
 
-        <div class="tip">
-            <strong>💡 Interactivity:</strong> Click any table column or a wind arrow on the map to see details for that point.
-        </div>
     </details>
 
     <details class="section" open>
@@ -466,9 +449,9 @@
         <h3>🎯 Smart Fallbacks</h3>
         <p>MeteoRide handles automatically:</p>
         <ul>
-            <li>Switching to Open-Meteo if your provider exceeds its time horizon</li>
+            <li>Switching to Open-Meteo, only for the affected steps, if your provider exceeds its time horizon, fails repeatedly or has no data</li>
             <li>Retries when there are temporary errors</li>
-            <li>Clear notifications about data limitations</li>
+            <li>A brief notice in the header when that happens, if you leave non-critical notices on in Settings</li>
             <li>Every request has a deadline: 15 seconds for the server to start answering, and 15 more seconds without receiving data while it downloads. A provider that goes silent is not asked again during that same calculation.</li>
         </ul>
 
@@ -480,7 +463,7 @@
             <li><code>?speed=25</code></li>
         </ul>
         <h3>🗺️ Recent routes (stored locally)</h3>
-        <p>MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. This is a local-only feature — <strong>no</strong> routes are sent to any server.</p>
+        <p>MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading.</p>
         <ul>
             <li><strong>How to use:</strong> next to the file upload button (📁) you'll find a compact dropdown with your recent routes. Choosing one loads it exactly as if you had uploaded the file now.</li>
             <li><strong>Limit:</strong> the app stores the last <strong>5</strong> routes by default. Re-loading a route that is already saved moves it to the top instead of duplicating it.</li>
@@ -616,10 +599,6 @@
         <p>This code and the webapp are designed with "zero trust" type security in mind, but they are not commercial code or a commercial service. The code and the webapp are provided as-is, without any warranty or liability. You accept this if you download this repository, use the code, or use the webapp.</p>
 
         <p>Updated information about this app is always on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. You accept all updated information, liabilities and restrictions on the linked GitHub page if you use this app.</p>
-
-   <div class="tip">
-            <strong>📋 Source Code:</strong> The complete code is available on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>. Contributions are welcome!
-        </div>
 
         <h3>⚖️ Disclaimer</h3>
         <p>MeteoRide is a planning tool. Weather forecasts are estimates and may not be fully accurate. Always use your judgement and verify conditions before heading out. The developer is not responsible for decisions based on this information.</p>
