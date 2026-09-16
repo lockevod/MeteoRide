@@ -113,7 +113,6 @@ const PROB_MIN   = 20;   // muestra gota si prob >= 20%
 
 // NEW: provider horizons and day-to-ms constant
 const OPENMETEO_MAX_DAYS = 14;
-const METEOBLUE_MAX_DAYS = 7;
 const OPENWEATHER_MAX_DAYS = 4;
 // Match providerChains (ow2_arome_openmeteo uses OpenWeather for 0..1 hour)
 const OPENWEATHER_MAX_HOURS = 1; 
@@ -139,60 +138,12 @@ function aromeResponseLooksInvalid(j) {
   return !temp.some(v => v != null && !Number.isNaN(Number(v)));
 }
 
-// NEW: MeteoBlue hourly pictocode -> internal category
-const MB_PICTO_TO_KEY = {
-  1: 'clearsky',
-
-  // Clear with some low/cirrus clouds -> partlycloudy
-  2: 'partlycloudy', 3: 'partlycloudy', 4: 'partlycloudy',
-  5: 'partlycloudy', 6: 'partlycloudy',
-
-  // Partly cloudy (variants)
-  7: 'partlycloudy', 8: 'partlycloudy', 9: 'partlycloudy',
-
-  // Variable with possible storm clouds -> thunderstorm (identification purpose)
-  10: 'thunderstorm', 11: 'thunderstorm', 12: 'thunderstorm',
-
-  // Hazy/nebula -> fog
-  13: 'fog', 14: 'fog', 15: 'fog',
-
-  // Fog/low stratus (with/without cirrus)
-  16: 'fog', 17: 'fog', 18: 'fog',
-
-  // Mostly cloudy / overcast group
-  19: 'overcast', 20: 'overcast', 21: 'overcast', 22: 'overcast',
-
-  // Precip with cloudiness
-  23: 'rain',          // cloudy with rain
-  24: 'snow',          // cloudy with snow
-  25: 'rain_heavy',    // cloudy with heavy rain
-  26: 'snow_heavy',    // cloudy with heavy snow
-
-  // Thunder-probable variants
-  27: 'thunderstorm',          // rain, thunderstorms probable
-  28: 'thunderstorm',          // light rain, thunderstorms probable
-  29: 'thunderstorm',          // storm with heavy snow
-  30: 'thunderstorm',          // heavy rain, thunderstorms probable
-
-  // Mixed/transition types
-  31: 'drizzle',       // mixed with drizzle
-  32: 'snow',          // variable with snow
-  33: 'rain_light',    // cloudy with light rain
-  34: 'snow_light',    // cloudy with light snow
-  35: 'sleet',         // mixed snow/rain
-
-  // Not used
-  36: 'default',
-  37: 'default'
-};
-
 
 // NEW: restored helpers (translation, logs, settings, cache, dates, math, conversions)
 function getWeatherCategoryForStep(step) {
   const prov = step?.provider || apiSource;
   const code = step?.weatherCode;
   if (code == null) return "default";
-  if (prov === "meteoblue") return getDetailedCategoryMeteoBlue(Number(code));
   if (prov === "openweather") return getDetailedCategoryOpenWeather(Number(code));
   return getDetailedCategoryOpenMeteo(Number(code));
 }
@@ -280,12 +231,6 @@ function computeLuminance(step) {
 
 // Helper: classify common provider errors (reusable)
 function classifyProviderError(prov, status, bodyText = "") {
-  if (prov === "meteoblue") {
-    // Treat 401 and most 403 as invalid key; keep quota/limit as quota
-    if (status === 401) return "invalid_key";
-    if (status === 403) return /quota|limit/i.test(bodyText) ? "quota" : "invalid_key";
-    if (status === 429) return "quota";
-  }
   if (prov === "openweather") {
     if (status === 401) return "invalid_key";
     if (status === 403) return "forbidden";
@@ -299,11 +244,13 @@ function classifyProviderError(prov, status, bodyText = "") {
 }
 
 // Build URL per provider (add OpenWeather One Call 3.0)
-function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
+function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit, alerts) {
+  // Open-Meteo answers in °C unless asked otherwise; like OpenWeather, it is asked for the unit chosen.
+  const omTemp = String(tempUnit || "").toLowerCase().startsWith("f") ? "&temperature_unit=fahrenheit" : "";
   if (prov === "aromehd") {
     // Open‑Meteo with AROME‑HD model; same hourly variables as standard OM
     // Note: models=meteofrance_arome_hd is the AROME high‑resolution variant.
-    // Decide whether to request higher-resolution minutely_15 for near-term (first 6 hours)
+    // Decide whether to request higher-resolution minutely_15 for near-term (first 5 hours)
     // NOTE: minutely_15 on Open-Meteo expects a comma-separated list of variables
     // (works like `hourly=`). We'll request precipitation and its probability by default.
     const nowMs = Date.now();
@@ -312,26 +259,27 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   const wantMinutely = (typeof hoursFromNow === 'number' && hoursFromNow >= - (1/60) && hoursFromNow <= 5);
     const hourlyVars = 'temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover';
     const minutelyVars = hourlyVars; // request same variables in minutely_15 as in hourly
+    // Open-Meteo ignores `start=`; ask for the day range around the step instead
+    // (one day each side, to cover any timezone offset at the location).
+    const day = (n) => new Date(tMs + n * 86400000).toISOString().slice(0, 10);
     return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}` +
       // CHANGED: ask for a full hourly variable set (model may not fill everything)
       `&hourly=${hourlyVars}` +
       `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
-      `&start=${timeAt.toISOString()}&timezone=auto&models=arome_france_hd`;
-  }
-  if (prov === "meteoblue") {
-    return `https://my.meteoblue.com/packages/basic-1h,clouds-1h?lat=${p.lat}&lon=${p.lon}&apikey=${apiKey}&time=${timeAt.toISOString()}&tz=auto`;
+      `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto&models=arome_france_hd${omTemp}`;
   }
   if (prov === "openweather") {
     // Units: metric (°C, m/s), imperial (°F, mph). We normalize later.
     const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
-    // Check if weather alerts are enabled
-    const showAlerts = getVal("showWeatherAlerts") !== false; // Default to true if not set
+    // The computation passes the checkbox it read. A caller that says nothing (compare.js)
+    // asks for alerts, as it always has.
+    const showAlerts = alerts !== false;
     const excludeParts = showAlerts ? "minutely" : "minutely,alerts";
     // Hourly is limited (~48h). We include daily to allow fallback.
     return `https://api.openweathermap.org/data/3.0/onecall?lat=${p.lat}&lon=${p.lon}&appid=${apiKey}&units=${units}&exclude=${excludeParts}`;
   }
   // openmeteo
-  // For Open-Meteo, enable minutely_15 in near-term to get denser data for the first ~6 hours
+  // For Open-Meteo, enable minutely_15 in near-term to get denser data for the first ~5 hours
   // NOTE: minutely_15 expects a list of variables like hourly; request precipitation + probability
   const nowMs = Date.now();
   const tMs = (timeAt && timeAt.getTime) ? timeAt.getTime() : new Date(timeAt).getTime();
@@ -339,9 +287,12 @@ function buildProviderUrl(prov, p, timeAt, apiKey, windUnit, tempUnit) {
   const wantMinutely = (typeof hoursFromNow === 'number' && hoursFromNow >= - (1/60) && hoursFromNow <= 5);
   const hourlyVars = 'temperature_2m,precipitation,precipitation_probability,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,winddirection_10m,weathercode,uv_index,is_day,cloud_cover';
   const minutelyVars = hourlyVars;
+  // Open-Meteo ignores `start=`; ask for the day range around the step instead
+  // (one day each side, to cover any timezone offset at the location).
+  const day = (n) => new Date(tMs + n * 86400000).toISOString().slice(0, 10);
   return `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=${hourlyVars}` +
     `${wantMinutely ? `&minutely_15=${minutelyVars}` : ''}` +
-    `&start=${timeAt.toISOString()}&timezone=auto`;
+    `&start_date=${day(-1)}&end_date=${day(1)}&timezone=auto${omTemp}`;
 }
 
 
@@ -375,43 +326,50 @@ function reconcileAromeVsOmCode(omCode, precip, prob, cloud) {
   return code;
 }
 
+// An AROME step as the table and the comparison show it: day or night from the sun when the answer
+// says nothing, the weather code synthesised from rain and cloud when missing, or else reconciled
+// with them, and a probability under 10 % dropped when AROME gives 0 mm or no rain value.
+function aromeCodeAndDay(step) {
+  if (step.isDaylight == null) {
+    try {
+      const pos = SunCalc.getPosition(new Date(step.time), step.lat, step.lon);
+      step.isDaylight = pos.altitude > 0 ? 1 : 0;
+    } catch { /* ignore */ }
+  }
+  step.weatherCode = step.weatherCode == null
+    ? fallbackWmoFromBasics(step.precipitation, step.cloudCover)
+    : reconcileAromeVsOmCode(step.weatherCode, step.precipitation, step.precipProb, step.cloudCover);
+  if (Number(step.precipitation) === 0 && (step.precipProb == null || Number(step.precipProb) < 10)) {
+    step.precipProb = null;
+  }
+}
 
-function segmentRouteByTime(geojson) {
-  if (!geojson || !geojson.features.length) {
+
+// The steps of a route at the speed, interval and start of the settings a computation read
+// (readForecastSettings), or null when it cannot be segmented (logged, and a start out of
+// range also says so).
+function segmentRouteByTime(geojson, settings) {
+  if (!geojson || !Array.isArray(geojson.features) || !geojson.features.length) {
     logDebug(t("geojson_invalid"), true);
-    return;
+    return null;
   }
-  const coords = geojson.features[0].geometry.coordinates.map((c) => ({
-    lat: c[1],
-    lon: c[0],
-  }));
-
-  if (coords.length < 2) {
+  // The same line the route's validation will use: never a marker, never a stray point.
+  const coords = cwForecastRules.routeLine(geojson);
+  if (!coords) {
     logDebug(t("track_too_short"), true);
-    return;
+    return null;
   }
 
-  const speed = Number(getVal("cyclingSpeed")) || 12;
-  const intervalMinutes = Number(getVal("intervalSelect")) || 15;
-  const datetimeValue = getVal("datetimeRoute");
-  if (!datetimeValue) {
-    logDebug(t("route_date_empty"), true);
-    return;
-  }
-
-  let startDateTime = getValidatedDateTime();
-
-  if (isNaN(startDateTime.getTime())) {
-    logDebug(t("route_date_invalid", { val: datetimeValue }), true);
-    return;
-  }
+  const speed = settings.speed;
+  const intervalMinutes = settings.interval;
+  const startDateTime = new Date(settings.start);
 
   // Validate date range (today to today + 14 days)
-  const dateValidation = window.validateDateRange(datetimeValue, 'fecha de salida');
+  const dateValidation = window.validateDateRange(startDateTime, 'fecha de salida');
   if (!dateValidation.valid) {
     logDebug(dateValidation.error, true);
     if (window.setNotice) window.setNotice(dateValidation.error, 'error');
-    return;
+    return null;
   }
 
   let totalDistance = 0;
@@ -508,26 +466,298 @@ function segmentRouteByTime(geojson) {
   //console.log("steps ejemplo:", steps[0]);
   // console.log("weatherData ejemplo:", weatherData[0]);
 
-  fetchWeatherForSteps(steps, timeSteps);
+  return { steps, timeSteps };
 }
 
-async function fetchWeatherForSteps(steps, timeSteps) {
-  weatherData = [];
-  clearNotice(); // reset UI notice at the start
+// Identities (spec §4.2). The confirmed route is the one the last request to confirm put
+// on screen, with that request's number; every computation takes the next number when it
+// is launched. Only a snapshot carrying both, and matching both, may publish, so neither a
+// computation replaced by another nor one of a route no longer on screen reaches the
+// screen. Nothing here is stored.
+let confirmedRoute = null;        // { requestId, name, fingerprint, geojson, text }
+let lastComputationId = 0;
+let runningComputationId = null;
+let publishedSnapshot = null;
+// Aborted when a newer computation, or comparison, replaces the one running (H4).
+let computationAbort = null;
+let comparisonAbort = null;
+// The settings the last launch read, or a change refused since. A change over a replay without
+// coverage is compared with these, not with the replayed record's: a setting changed after preparing,
+// or a change refused before, would otherwise make every later start look like a change of settings.
+let launchedSettings = null;
+// The latest computation when a route last failed to open and said so. That computation
+// publishing with nothing to say leaves the failure up instead of clearing it.
+let routeFailureComputationId = null;
 
-  let apiKeyFinal = ""
-  if (apiSource === "meteoblue") {
-    apiKeyFinal = getVal("apiKey");
-  } else if (apiSource === "openweather") {
-    apiKeyFinal= getVal("apiKeyOW");
-  } 
-  const date = getVal("datetimeRoute").substring(0, 10);
-  const tempUnit = getVal("tempUnits");
-  const windUnit = getVal("windUnits");
+window.cwNotifyRouteFailure = function (message) {
+  routeFailureComputationId = lastComputationId;
+  setNotice(message, "error");
+};
+
+function publishState() {
+  return { confirmedRequestId: confirmedRoute ? confirmedRoute.requestId : null, lastComputationId };
+}
+
+// Launches a computation of the confirmed route. The number is taken, and the previous
+// computation's claim on the indicator dropped, before anything is read: the computation
+// it replaces cannot publish over it, even when this one stops at once on its start date.
+// One that stops or throws before it fetches lets go here, or it would stay current forever.
+window.cwLaunchComputation = function () {
+  if (!confirmedRoute) return null;
+  // Without coverage, with a replayed snapshot on screen (spec §4.9.3, step 6), a change other than
+  // the start cannot be computed: nothing is launched, so that snapshot stays the current forecast,
+  // and the user is told. A change of start replays it again below, within the margin or not.
+  const shown = window.cw.currentSnapshot();
+  const replayShown = !!shown && shown.origin === "prepared" && window.cw.utils.isOffline();
+  if (replayShown) {
+    let latest = null;
+    try { latest = readForecastSettings(); } catch (_) { /* the launch below says so */ }
+    // Refused only when it differs from both the last launch and the replay on screen (its settings carry
+    // the keys in use): going back to what it shows, or leaving compare chosen at the last launch, replays.
+    if (latest && launchedSettings && !sameButStart(launchedSettings, latest) && !sameButStart(shown.settings, latest)) {
+      launchedSettings = latest;
+      setNotice(t("offline_cannot_recalculate"), "warn");
+      return lastComputationId;
+    }
+  }
+  const cid = ++lastComputationId;
+  // The computation and any comparison this one replaces stop asking: their requests are aborted, and
+  // that is no provider's failure (utils.js).
+  if (computationAbort) computationAbort.abort();
+  if (comparisonAbort) comparisonAbort.abort();
+  computationAbort = new AbortController();
+  window.cw.releaseLoadingPrefix("forecast:");
+  // A comparison of the snapshot this computation replaces will not paint, so it lets go too.
+  window.cw.releaseLoadingPrefix("compare:");
+  window.cw.claimLoading("forecast:" + cid);
+  runningComputationId = cid;
+  let failure = null;
+  try {
+    // Read once: the steps and the requests of this computation follow the same settings.
+    const settings = readForecastSettings();
+    launchedSettings = settings;
+    const ids = { requestId: confirmedRoute.requestId, computationId: cid };
+    // Without coverage, a prepared snapshot of this route within three hours of the start is put
+    // back instead, and nothing is asked for; with a replay already on screen, whatever the start
+    // (app only: only native.js prepares).
+    const prepared = !window.cw.utils.isOffline() ? null
+      : replayShown ? preparedRecordOfRoute() : usablePreparedRecord(settings);
+    if (prepared) {
+      replay(prepared, ids, settings);
+      return cid;
+    }
+    const segmented = segmentRouteByTime(confirmedRoute.geojson, settings);
+    if (segmented) {
+      fetchWeatherForSteps(segmented.steps, segmented.timeSteps, settings, ids, computationAbort.signal);
+      return cid;
+    }
+  } catch (err) {
+    failure = err;
+  }
+  // Let go before saying anything, so a notice that throws cannot keep the indicator on.
+  window.cw.releaseLoading("forecast:" + cid);
+  runningComputationId = null;
+  if (failure) {
+    logDebug(t("error_api", { msg: failure.message }), true);
+    setNotice(t("error_api", { msg: failure.message }), "error");
+  }
+  return cid;
+};
+
+window.cwHasConfirmedRoute = () => !!confirmedRoute;
+// The confirmed route as its request read it: what preparing stores, to draw it again later.
+window.cwConfirmedRouteText = () => (confirmedRoute
+  ? { name: confirmedRoute.name, text: confirmedRoute.text, fingerprint: confirmedRoute.fingerprint }
+  : null);
+
+// The prepared record (native.js) that can stand in for the confirmed route at this start: the
+// same route, prepared for a start at most three hours away. Always null on the website.
+function usablePreparedRecord(settings) {
+  const record = preparedRecordOfRoute();
+  return cwForecastRules.usablePrepared(record, { fingerprint: confirmedRoute.fingerprint, startMs: settings.start })
+    ? record : null;
+}
+
+// The prepared record of the confirmed route, whatever start it was prepared for.
+function preparedRecordOfRoute() {
+  const record = window.cwPreparedRecord ? window.cwPreparedRecord() : null;
+  return record && record.snapshot.route.fingerprint === confirmedRoute.fingerprint ? record : null;
+}
+
+// Two readings of the settings that would compute the same forecast but for its start. Choosing
+// compare computes nothing of its own (it computes as Open-Meteo, see prov above); language and
+// notices only change how it looks. So compare on either side is never a change of provider.
+function sameButStart(a, b) {
+  const computed = (s) => JSON.stringify([s.units && s.units.temp, s.units && s.units.wind, s.speed, s.interval,
+    s.alerts, s.keys && s.keys.openweather]);
+  return computed(a) === computed(b)
+    && (a.provider === "compare" || b.provider === "compare" || a.provider === b.provider);
+}
+
+// Puts a prepared snapshot back on screen, moved to this computation's start (spec §4.9.3). It is a
+// computation like any other: it carries the identities it was launched with and publishes only
+// while they are current. The answers are the stored ones; the keys are the ones in use now, since
+// the record holds none. A start more than three hours away (changed by hand with a replay on
+// screen) shows every step without data and says so; the record itself is kept (spec §4.9.3,
+// step 6). Returns whether it published.
+function replay(record, ids, settings) {
+  const stored = record.snapshot;
+  const snapshot = cwForecastRules.retime(stored, settings.start - stored.settings.start);
+  const inRange = cwForecastRules.usablePrepared(record, { fingerprint: stored.route.fingerprint, startMs: settings.start });
+  if (!inRange) snapshot.steps = snapshot.steps.map((s) => ({ ...s, payload: null }));
+  snapshot.requestId = ids.requestId;
+  snapshot.computationId = ids.computationId;
+  snapshot.settings = { ...snapshot.settings, keys: settings.keys, alertsKey: settings.alertsKey };
+  // Official warnings follow the setting in use now, as a live computation would: none when they are off.
+  if (!settings.alerts) snapshot.alerts = [];
+  // The outcome is the stored one, with when and for what start it was prepared; usable steps are
+  // not counted again for the new start.
+  snapshot.outcome = { ...stored.outcome, preparedAt: stored.createdAt, preparedFor: stored.settings.start };
+  const published = publish(snapshot);
+  if (published && !inRange) setNotice(t("prepared_out_of_range"), "warn");
+  if (runningComputationId === ids.computationId) runningComputationId = null;
+  return published;
+}
+
+// Comparisons (compare.js) compare the snapshot on screen and take their own number when
+// launched. One paints only while that snapshot is still the published one, of the confirmed
+// route and of the latest computation, and no comparison was launched after it. Launching one
+// launches no computation: reconciling and preparing still see the normal snapshot.
+let lastComparisonId = 0;
+
+// No comparison runs over a replayed snapshot, nor without coverage in the app.
+function comparisonHeldBack(snapshot) {
+  return snapshot.origin === "prepared" || !!(window.CW_NATIVE && window.cw.utils.isOffline());
+}
+
+// Compare is chosen and a comparison can paint over the published snapshot: the normal table and
+// markers keep out of its way. Over a snapshot no comparison can run over, they are what shows (spec
+// §4.6), or a replay would leave an empty table or the one before it on screen.
+function compareOwnsTable() {
+  return document.getElementById("apiSource")?.value === "compare"
+    && !(publishedSnapshot && comparisonHeldBack(publishedSnapshot));
+}
+window.cwCompareOwnsTable = compareOwnsTable;
+
+window.cwLaunchComparison = function (kind) {
+  const snapshot = window.cw.currentSnapshot();
+  // A computation still running replaces that snapshot; its publish launches the comparison.
+  if (!snapshot || snapshot.computationId !== lastComputationId) return null;
+  // Comparing asks every provider again: never over a replayed snapshot, nor without coverage in the
+  // app, where the forecast on screen stays instead (spec §4.6). Only a missing connection is said: a
+  // replay with coverage is there because every provider failed, and its own notice (how old, for
+  // what start) stays up.
+  if (comparisonHeldBack(snapshot)) {
+    if (window.cw.utils.isOffline()) setNotice(t("compare_needs_coverage"), "warn");
+    return null;
+  }
+  const comparisonId = ++lastComparisonId;
+  if (comparisonAbort) comparisonAbort.abort();
+  comparisonAbort = new AbortController();
+  window.cw.releaseLoadingPrefix("compare:");
+  window.cw.claimLoading("compare:" + comparisonId);
+  return { kind, requestId: snapshot.requestId, computationId: snapshot.computationId, comparisonId, snapshot,
+    signal: comparisonAbort.signal };
+};
+
+window.cwIsComparisonCurrent = (run) => cwForecastRules.shouldPublishComparison(run, {
+  confirmedRequestId: confirmedRoute ? confirmedRoute.requestId : null,
+  lastComputationId,
+  publishedComputationId: publishedSnapshot ? publishedSnapshot.computationId : null,
+  lastComparisonId,
+});
+
+// Leaving compare mode: no comparison still running paints, and none keeps the indicator on.
+window.cwCancelComparisons = function () {
+  ++lastComparisonId;
+  if (comparisonAbort) comparisonAbort.abort();
+  window.cw.releaseLoadingPrefix("compare:");
+};
+
+// The confirmed route has a forecast of its latest computation on screen, or that
+// computation is still running. A request ending recomputes a route without either.
+window.cwHasCurrentForecast = () => !!confirmedRoute && (
+  (!!publishedSnapshot && publishedSnapshot.computationId === lastComputationId
+    && publishedSnapshot.requestId === confirmedRoute.requestId)
+  || runningComputationId === lastComputationId);
+// The latest computation launched is still running (coming back to the app leaves it be, native.js).
+window.cwIsComputing = () => runningComputationId !== null && runningComputationId === lastComputationId;
+// The start time rule (spec §4.8): the time chosen while it is still ahead, otherwise now
+// rounded up to the next quarter hour, and an empty or unreadable field counts as passed.
+// Whatever it gives is written back into the field. Returns the start in ms.
+function applyStartRule() {
+  const value = getVal("datetimeRoute");
+  const start = cwForecastRules.effectiveStart(Date.now(), value ? new Date(value).getTime() : NaN,
+    (ms) => roundUpToNextQuarterDate(new Date(ms)).getTime());
+  const local = new Date(start - new Date(start).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const field = document.getElementById("datetimeRoute");
+  if (field && value !== local) field.value = local;
+  return start;
+}
+
+// The same rule after every loadSettings (utils.js) and when the app comes back (native.js).
+// True when the field had to move.
+window.cwApplyStartRule = function () {
+  const before = getVal("datetimeRoute");
+  applyStartRule();
+  return getVal("datetimeRoute") !== before;
+};
+
+// Everything a computation depends on, read once when it starts. A setting changed while
+// it is still fetching belongs to the next computation, never to the rest of this one.
+function readForecastSettings() {
+  const keys = { openweather: getVal("apiKeyOW") || "" };
+  const alerts = !!document.getElementById("showWeatherAlerts")?.checked;
+  return {
+    start: applyStartRule(),
+    speed: Number(getVal("cyclingSpeed")) || 12,
+    provider: apiSource,
+    units: { temp: getVal("tempUnits"), wind: getVal("windUnits") },
+    keys,
+    noticeAll: !!document.getElementById("noticeAll")?.checked,
+    alerts,
+    interval: Number(getVal("intervalSelect")) || 15,
+    lang: getVal("language") === "es" ? "es" : "en",
+    // What the ride watch needs to look up official warnings in the background, and only
+    // when the user shows them. Kept in memory with the snapshot, never stored.
+    alertsKey: alerts ? keys.openweather : "",
+  };
+}
+
+// The published snapshot while it still belongs to the confirmed route, or null. What the
+// ride watch and the comparison work from: a route still being read changes nothing here.
+window.cw.currentSnapshot = () =>
+  (publishedSnapshot && confirmedRoute && publishedSnapshot.requestId === confirmedRoute.requestId
+    ? publishedSnapshot : null);
+
+async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
+  // Still the latest computation launched, of the route last confirmed. Checked after
+  // every wait: a computation that is not stops without writing or asking for anything.
+  const isCurrent = () => cwForecastRules.shouldPublish(ids, publishState());
+  // Anything thrown from here on ends in the catch below, which lets go of the claim.
+  try {
+  const route = confirmedRoute
+    ? { name: confirmedRoute.name, fingerprint: confirmedRoute.fingerprint }
+    : { name: "", fingerprint: "" };
+  const results = [];
+  // What this computation's requests and cache reads saw; the notice is decided from it.
+  const recorder = window.cw.utils.createRecorder(signal);
+  // Official warnings found along the way. They belong to this computation and are shown
+  // only if it is published.
+  const alertsSeen = [];
+
+  // A body that cannot be read, or goes silent for 15 s, is a failed answer (utils.js).
+  const readJson = (response) => window.cw.utils.readJson(response, recorder);
+
+  let apiKeyFinal = "";
+  if (settings.provider === "openweather") {
+    apiKeyFinal = settings.keys.openweather;
+  }
+  const tempUnit = settings.units.temp;
+  const windUnit = settings.units.wind;
   const now = new Date();
 
-  showLoading();
-  const showAllNotices = !!document.getElementById("noticeAll")?.checked;
+  const showAllNotices = settings.noticeAll;
   // Notice flags
   let warnedFallback = false;
   let warnedBeyondOM = false;
@@ -536,23 +766,14 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   let usedFallbackError = false;   // NEW
   let beyondHorizon = false;
   let missingKeyFallback = false;
-  let invalidKeyOnce = false;
-  let quotaOnce = false;
-  let httpErrOnce = false;
-  // NEW: keep last MB HTTP status for the banner
-  let lastHttpStatusMB = null;
-
-  // NEW: provider fail-fast state
-  let providerHardFailCode = null;      // "invalid_key" | "quota" | "http" | "forbidden"
-  let providerFailCount = 0;
-  const providerFailLimit = 3;
-  let hardFailLogged = false;
 
   // NEW: flags for OpenWeather provider notices
   let invalidKeyOnceOWM = false;
   let quotaOnceOWM = false;
   let httpErrOnceOWM = false;
   let lastHttpStatusOWM = null;
+  let httpErrOnceOM = false;
+  let lastHttpStatusOM = null;
 
   // NEW: fail-fast state for OpenWeather
   let providerHardFailCodeOWM = null;
@@ -563,52 +784,43 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   let horizonDaysUsed = null;
 
   // If provider requires key but not provided (MB or OWM), fallback to Open‑Meteo
-  const providerNeedsKey = (apiSource === "meteoblue" || apiSource === "openweather");
+  const providerNeedsKey = (settings.provider === "openweather");
   const hasKey = (apiKeyFinal || "").trim().length >= 5;
-  try {
     for (let i = 0; i < steps.length; i++) {
+      if (!isCurrent()) return;
       const p = steps[i];
       const timeAt = timeSteps[i];
 
       const daysAhead = (timeAt - now) / MS_PER_DAY;
       const hoursAhead = (timeAt - now) / MS_PER_HOUR;   // NEW
 
-      let prov = apiSource;
+      // Compare is a choice, not a provider: the normal forecast asks Open-Meteo (as compare.js does) and
+      // its steps say so, or none would count as usable and a prepared snapshot would replay over them.
+      let prov = settings.provider === "compare" ? "openmeteo" : settings.provider;
 
       // NEW: resolve chain provider (e.g. ow2_arome_openmeteo) per timestamp
       let isChain = false;
       try {
         const chains = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
-        isChain = !!chains[String(apiSource || '').toLowerCase()];
+        isChain = !!chains[String(settings.provider || '').toLowerCase()];
         if (isChain) {
           const resolver = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp;
           if (typeof resolver === 'function') {
-            const eff = resolver(apiSource, timeAt, now, { lat: p.lat, lon: p.lon });
+            const eff = resolver(settings.provider, timeAt, now, { lat: p.lat, lon: p.lon });
             if (eff) prov = eff;
           }
         }
       } catch(e){ console.warn('chain resolve error', e); }
 
       // Determine API key for this effective provider (chain-aware)
-      const stepApiKey = (prov === 'meteoblue') ? (getVal('apiKey') || '') : (prov === 'openweather') ? (getVal('apiKeyOW') || '') : '';
+      const stepApiKey = (prov === 'openweather') ? settings.keys.openweather : '';
       const hasKeyProv = stepApiKey.trim().length >= 5;
 
       // store provider on step so later processing knows real source (may still change if fallback)
       p.provider = prov;
-      if (i === 0) logDebug(`chainMode=${apiSource} -> first provider=${prov}`);
+      if (i === 0) logDebug(`chainMode=${settings.provider} -> first provider=${prov}`);
       logDebug(`step ${i+1}/${steps.length} effectiveProv(pre)=${prov} t=${timeAt.toISOString()}`);
 
-      // Hard-fail skip for MB
-      if (prov === "meteoblue" && providerHardFailCode) {
-        prov = "openmeteo";
-        p.provider = prov;
-        usedFallback = true;
-        usedFallbackError = true;
-        if (!hardFailLogged) {
-          logDebug(t("provider_disabled_after_errors", { prov: "MeteoBlue" }), true);
-          hardFailLogged = true;
-        }
-      }
       // Hard-fail skip for OWM
       if (prov === "openweather" && providerHardFailCodeOWM) {
         prov = "openmeteo";
@@ -619,7 +831,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       }
 
       // Missing key fallback (chain-aware)
-      if ((prov === "meteoblue" || prov === "openweather") && !hasKeyProv) {
+      if (prov === "openweather" && !hasKeyProv) {
         prov = "openmeteo";
         p.provider = prov;
         missingKeyFallback = true;
@@ -634,17 +846,6 @@ async function fetchWeatherForSteps(steps, timeSteps) {
       }
 
       // Horizon checks
-      if (prov === "meteoblue" && daysAhead > METEOBLUE_MAX_DAYS) {
-        prov = "openmeteo";
-        p.provider = prov;
-        usedFallback = true;
-        usedFallbackHorizon = true;
-        horizonDaysUsed = METEOBLUE_MAX_DAYS;
-        if (!warnedFallback) {
-          logDebug(`MeteoBlue excede ${METEOBLUE_MAX_DAYS} días; usando Open‑Meteo como fallback.`);
-          warnedFallback = true;
-        }
-      }
       if (prov === "openweather" && ((isChain && hoursAhead > OPENWEATHER_MAX_HOURS) || (!isChain && daysAhead > OPENWEATHER_MAX_DAYS))) {
         prov = "openmeteo";
         p.provider = prov;
@@ -665,7 +866,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           logDebug(`Fecha fuera de horizonte (${OPENMETEO_MAX_DAYS} días) para Open‑Meteo. Algunos pasos no tendrán datos.`, true);
           warnedBeyondOM = true;
         }
-        weatherData.push({ ...p, provider: "openmeteo", weather: null });
+        results.push({ ...p, provider: "openmeteo", weather: null });
         continue;
       }
 
@@ -675,18 +876,65 @@ async function fetchWeatherForSteps(steps, timeSteps) {
   const mkPrim = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
   const keyPrim = mkPrim(prov, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
   try { window.logDebug && window.logDebug(`cache lookup key=${keyPrim} provider=${prov}`); } catch(e){}
-  const cachedPrim = getCache(keyPrim);
+  const cachedPrim = getCache(keyPrim, recorder);
       if (cachedPrim) {
-        weatherData.push({ ...p, provider: prov, weather: cachedPrim });
+        results.push({ ...p, provider: prov, weather: cachedPrim });
         logDebug(`Cache usado paso ${i + 1} (${prov})`);
         continue;
       }
 
+      // What a step whose provider was given up for not answering reads instead. Open-Meteo covers the
+      // world, which AROME does not, so it is the stand-in whatever the chain says. Asking for it is
+      // only allowed across hosts (OpenWeather is another service): with `cacheOnly`, for a step of
+      // AROME or Open-Meteo itself, nothing is asked of the host that has just gone silent, but an
+      // answer already in the cache is still used — the rule is not to wait on that host again, not to
+      // refuse data already downloaded. In practice only an AROME step is ever rescued that way: for a
+      // step of Open-Meteo itself this builds the very key that missed a few lines above, so the read
+      // below can only miss again. It is written once for both because the rule is the same.
+      const openMeteoInstead = async (cacheOnly) => {
+        const mkT = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+        const keyT = mkT("openmeteo", timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
+        const cachedT = getCache(keyT, recorder);
+        if (cachedT) return { ...p, provider: "openmeteo", weather: cachedT };
+        if (cacheOnly) return { ...p, provider: "openmeteo", weather: null };
+        const urlT = buildProviderUrl("openmeteo", p, timeAt, '', windUnit, tempUnit, settings.alerts);
+        const resT = await fetch(urlT, { cwRecorder: recorder }).catch(() => null);
+        if (!isCurrent()) return null;
+        if (!resT || !resT.ok) return { ...p, provider: "openmeteo", weather: null };
+        const jsonT = await readJson(resT).catch(() => null);
+        if (!isCurrent()) return null;
+        if (!jsonT) return { ...p, provider: "openmeteo", weather: null };
+        try { setCache(keyT, jsonT); } catch (e) { /* ignore cache set errors */ }
+        return { ...p, provider: "openmeteo", weather: jsonT };
+      };
+
       let res, json, ok = false;
 
+      // Where a request given up leaves this step, whether the server never started answering or its
+      // body went silent halfway: the way a network error takes it. OpenWeather is on another host,
+      // so Open-Meteo can be asked for; a step of AROME or Open-Meteo reads the cache and nothing
+      // else, its own host being the one that has just gone quiet. Null when this computation has
+      // been replaced, and then nothing more is pushed.
+      const afterTimeout = () => {
+        const sameHost = prov !== "openweather";
+        if (!sameHost) {
+          usedFallback = true;
+          usedFallbackError = true;
+        }
+        return openMeteoInstead(sameHost);
+      };
+
       try {
-        const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit);
-        res = await fetch(urlPrim);
+        const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
+        try {
+          res = await fetch(urlPrim, { cwRecorder: recorder });
+        } catch (err) {
+          if (err.name !== "TimeoutError") throw err;
+          const entry = await afterTimeout();
+          if (!entry) return;
+          results.push(entry);
+          continue;
+        }
         // Diagnostic logging for OpenWeather: record status and masked URL (hide appid)
         if (prov === "openweather") {
           try {
@@ -695,7 +943,20 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           } catch (e) { /* ignore logging errors */ }
         }
         if (res.ok) {
-          json = await res.json();
+          try {
+            json = await readJson(res);
+          } catch (err) {
+            // The body of the primary answer went silent. Handled here and not in the computation's
+            // own catch further down, which would leave this step with no data while a server that
+            // never answered at all fell back: it is the same failure and takes the same road. Only
+            // the primary answer — the AROME merge below is best-effort and its own catch keeps it.
+            if (err.name !== "TimeoutError") throw err;
+            const entry = await afterTimeout();
+            if (!entry) return;
+            results.push(entry);
+            continue;
+          }
+          if (!isCurrent()) return;
           // Sanity-check / normalize payload shape for OpenWeather
           if (prov === "openweather") {
             try {
@@ -734,10 +995,18 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           }
           if (prov === "aromehd") {
             try {
-              const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit);
-              const resStd = await fetch(urlStd);
+              // Best-effort: the catch below swallows whatever this throws, and it raises no flag
+              // and no notice. So it gives up no host either — AROME is served by that same host
+              // and has just answered this very step. Its own recorder keeps the deadline and the
+              // abort; a silent standard model only costs this step its merge.
+              const bestEffort = window.cw.utils.bestEffortRecorder(recorder);
+              const urlStd = buildProviderUrl("openmeteo", p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
+              if (!isCurrent()) return;
+              const resStd = await fetch(urlStd, { cwRecorder: bestEffort });
+              if (!isCurrent()) return;
               if (resStd.ok) {
-                const std = await resStd.json();
+                const std = await window.cw.utils.readJson(resStd, bestEffort);
+                if (!isCurrent()) return;
                 try {
                   // Cache the standard Open‑Meteo response so future Open‑Meteo-only requests
                   // for the same step/time/coords can reuse it instead of re-fetching.
@@ -745,104 +1014,25 @@ async function fetchWeatherForSteps(steps, timeSteps) {
                   const keyStd = mkStd('openmeteo', timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
                   try { setCache(keyStd, std); } catch (e) { /* ignore cache set errors */ }
                 } catch (e) { /* ignore cache instrumentation errors */ }
-                const stdH = std?.hourly || {};
-                const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
-                json.hourly = json.hourly || {};
-                try {
-                  const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
-                  const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
-                  let stdIndexByTime = null;
-                  if (aromeTimes && stdTimes) {
-                    stdIndexByTime = Object.create(null);
-                    for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
-                  }
-                  mergeKeys.forEach(k => {
-                      const aVal = json.hourly[k];
-                      // Accept common variants in standard payload (uv_index, uvindex, uvi)
-                      let sVal = stdH[k];
-                      if (!Array.isArray(sVal)) {
-                        if (k === 'uv_index') {
-                          sVal = stdH['uv_index'] || stdH['uvindex'] || stdH['uvi'] || stdH['uv'] || null;
-                          if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object' && (std.current.uvi != null)) {
-                            try {
-                              const v = Number(std.current.uvi);
-                              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
-                            } catch (_) { /* ignore */ }
-                          }
-                        } else if (k === 'cloud_cover') {
-                          sVal = stdH['cloud_cover'] || stdH['cloudcover'] || null;
-                        } else if (k === 'precipitation_probability') {
-                          sVal = stdH['precipitation_probability'] || stdH['pop'] || null;
-                        }
-                      }
-                      if (!Array.isArray(aVal) && Array.isArray(sVal)) {
-                        // AROME lacks the array, copy OM's array
-                        json.hourly[k] = sVal.slice();
-                      } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
-                        const merged = aVal.slice();
-                        if (stdIndexByTime) {
-                          for (let i = 0; i < aromeTimes.length; i++) {
-                            if (merged[i] == null) {
-                              const t = String(aromeTimes[i]);
-                              const si = stdIndexByTime[t];
-                              if (si != null && sVal[si] != null) merged[i] = sVal[si];
-                            }
-                          }
-                        } else {
-                          // Fallback: fill missing positions by index when OM array longer
-                          for (let mi = 0; mi < sVal.length; mi++) {
-                            if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
-                          }
-                        }
-                        json.hourly[k] = merged;
-                      }
-                    });
-                  if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                  if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
-                    json.minutely_15 = std.minutely_15;
-                  }
-                  } catch (mergeErr) {
-                  mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-                  if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                }
-                // Debug: log uv_index presence after merge when enabled
-                try {
-                  if (window.cw && window.cw.DEBUG_MERGE) {
-                    console.debug('[merge][app] stdH.time=', Array.isArray(stdH.time) ? stdH.time.length : null, 'json.hourly.uv_index=', Array.isArray(json.hourly.uv_index) ? json.hourly.uv_index.slice(0,5) : json.hourly.uv_index);
-                  }
-                } catch(_) {}
-                // Special handling: normalize/copy precipitation_probability variants into json.hourly.precipitation_probability
-                try {
-                  if (!Array.isArray(json.hourly.precipitation_probability)) {
-                    const candNames = ['precipitation_probability','precipitationProbability','precip_prob','pop','probability_of_precipitation'];
-                    for (const n of candNames) {
-                      if (Array.isArray(stdH[n])) {
-                        const arr = stdH[n].slice();
-                        const nums = arr.filter(v => v != null && !Number.isNaN(Number(v))).map(Number);
-                        const max = nums.length ? Math.max(...nums) : null;
-                        const normalized = (max != null && max <= 1) ? arr.map(v => v == null ? null : Number(v) * 100) : arr;
-                        json.hourly.precipitation_probability = normalized;
-                        break;
-                      }
-                    }
-                  }
-                } catch (_) {}
+                cwForecastRules.mergeAromeWithStandard(json, std);
               }
             } catch (_) {}
             if (aromeResponseLooksInvalid(json)) {
               const prov2 = "openmeteo";
               const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
               const key2 = mk2(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-              const cached2 = getCache(key2);
-              if (cached2) { weatherData.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
-              const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit);
-              const res2 = await fetch(url2);
-              if (res2.ok) { const json2 = await res2.json();
-                weatherData.push({ ...p, provider: prov2, weather: json2 });
+              const cached2 = getCache(key2, recorder);
+              if (cached2) { results.push({ ...p, provider: prov2, weather: cached2 }); logDebug(`AROME invalido paso ${i+1}, cache OM`); continue; }
+              const url2 = buildProviderUrl(prov2, p, timeAt, '', windUnit, tempUnit, settings.alerts);
+              if (!isCurrent()) return;
+              const res2 = await fetch(url2, { cwRecorder: recorder });
+              if (res2.ok) { const json2 = await readJson(res2);
+                if (!isCurrent()) return;
+                results.push({ ...p, provider: prov2, weather: json2 });
                 setCache(key2, json2);
                 continue;
               } else {
-                weatherData.push({ ...p, provider: prov2, weather: null });
+                results.push({ ...p, provider: prov2, weather: null });
                 continue;
               }
             }
@@ -850,7 +1040,7 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           ok = true;
         } else {
           // existing error handling left unchanged
-          const bodyText = await res.text().catch(() => "");
+          const bodyText = await window.cw.utils.readText(res).catch(() => "");
           // Additional diagnostic for OpenWeather: include small snippet of body when error
           if (prov === "openweather") {
             try {
@@ -860,52 +1050,8 @@ async function fetchWeatherForSteps(steps, timeSteps) {
           }
           const code = classifyProviderError(prov, res.status, bodyText);
 
-          if (prov === "meteoblue") {
-            // Count MB failures and consider hard-fail
-            providerFailCount++;
-            // NEW: remember status for final banner
-            lastHttpStatusMB = res.status;
-
-            if (code === "invalid_key" && !invalidKeyOnce) {
-              invalidKeyOnce = true;
-              logDebug(t("provider_key_invalid", { prov: "MeteoBlue" }), true);
-            } else if (code === "quota" && !quotaOnce) {
-              quotaOnce = true;
-              logDebug(t("provider_quota_exceeded", { prov: "MeteoBlue" }), true);
-            } else if (!httpErrOnce && code === "http") {
-              httpErrOnce = true;
-              logDebug(t("provider_http_error", { prov: "MeteoBlue", status: res.status }), true);
-            }
-
-            if (providerFailCount >= providerFailLimit) {
-              providerHardFailCode = code;
-            }
-
-            // Fallback to OM for this step
-            const prov2 = "openmeteo";
-            const mk3 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            const key2 = mk3(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2);
-            usedFallback = true;
-            usedFallbackError = true;
-
-            if (cached2) {
-              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
-              continue;
-            }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            const res2 = await fetch(url2);
-            if (res2.ok) {
-              const json2 = await res2.json();
-              weatherData.push({ ...p, provider: prov2, weather: json2 });
-              setCache(key2, json2);
-              continue;
-            } else {
-              weatherData.push({ ...p, provider: prov2, weather: null });
-              continue;
-            }
-          } else if (prov === "openweather") {
-            // Mirror MB error handling for OWM
+          if (prov === "openweather") {
+            // Provider error handling for OWM
             providerFailCountOWM++;
             lastHttpStatusOWM = res.status;
 
@@ -928,23 +1074,25 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const prov2 = "openmeteo";
             const mk4 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
             const key2 = mk4(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2);
+            const cached2 = getCache(key2, recorder);
             usedFallback = true;
             usedFallbackError = true;
 
             if (cached2) {
-              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            const res2 = await fetch(url2);
+            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit, settings.alerts);
+            if (!isCurrent()) return;
+            const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
-              const json2 = await res2.json();
-              weatherData.push({ ...p, provider: prov2, weather: json2 });
+              const json2 = await readJson(res2);
+              if (!isCurrent()) return;
+              results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
             } else {
-              weatherData.push({ ...p, provider: prov2, weather: null });
+              results.push({ ...p, provider: prov2, weather: null });
               continue;
             }
           } else if (prov === "aromehd") {
@@ -952,26 +1100,29 @@ async function fetchWeatherForSteps(steps, timeSteps) {
             const prov2 = "openmeteo";
             const mk5 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
             const key2 = mk5(prov2, timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
-            const cached2 = getCache(key2);
+            const cached2 = getCache(key2, recorder);
             if (cached2) {
-              weatherData.push({ ...p, provider: cached2.provider, weather: cached2 });
+              results.push({ ...p, provider: prov2, weather: cached2 });
               continue;
             }
-            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit);
-            const res2 = await fetch(url2);
+            const url2 = buildProviderUrl(prov2, p, timeAt, apiKeyFinal, windUnit, tempUnit, settings.alerts);
+            if (!isCurrent()) return;
+            const res2 = await fetch(url2, { cwRecorder: recorder });
             if (res2.ok) {
-              const json2 = await res2.json();
-              weatherData.push({ ...p, provider: prov2, weather: json2 });
+              const json2 = await readJson(res2);
+              if (!isCurrent()) return;
+              results.push({ ...p, provider: prov2, weather: json2 });
               setCache(key2, json2);
               continue;
             } else {
-              weatherData.push({ ...p, provider: prov2, weather: null });
+              results.push({ ...p, provider: prov2, weather: null });
               continue;
             }
           } else {
-            // Non-recoverable or non-meteoblue error -> blank step but keep going
-            if (!httpErrOnce) {
-              httpErrOnce = true;
+            // Non-recoverable error -> blank step but keep going
+            lastHttpStatusOM = res.status;
+            if (!httpErrOnceOM) {
+              httpErrOnceOM = true;
               logDebug(t("provider_http_error", { prov: "Open‑Meteo", status: res.status }), true);
             }
           }
@@ -980,121 +1131,192 @@ async function fetchWeatherForSteps(steps, timeSteps) {
         logDebug(t("error_api_step", { step: i + 1, msg: err.message }), true);
       }
 
+      if (!isCurrent()) return;
       if (ok && json) {
         // Check for weather alerts if using OpenWeather and alerts are enabled
-        if (prov === "openweather" && json.alerts && Array.isArray(json.alerts) && getVal("showWeatherAlerts") !== false) {
-          processWeatherAlerts(json.alerts, p, timeAt);
+        if (prov === "openweather" && Array.isArray(json.alerts) && settings.alerts) {
+          alertsSeen.push(...json.alerts);
         }
         
-        // For OpenWeather: the response contains an array of hourly entries. Cache
-        // the entire payload under the primary key, but also cache per-hour payload
-        // entries so later lookups for a different step/time find a cached value.
-        if (prov === 'openweather' && Array.isArray(json.hourly) && json.hourly.length) {
-          try {
-            const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-            // Cache the full payload under the original primary key too
-            setCache(keyPrim, json);
-            window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`);
-            // Iterate hourly list and store each hour under its own canonical key
-            for (let hi = 0; hi < json.hourly.length; hi++) {
-              const h = json.hourly[hi];
-              // openweather hourly entries may use 'dt' (seconds) or 'time' (ISO)
-              let ht = null;
-              if (h && h.dt) ht = new Date(Number(h.dt) * 1000);
-              else if (h && h.time) ht = new Date(h.time);
-              if (!ht || isNaN(ht.getTime())) continue;
-              const keyH = mk('openweather', ht.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, ht);
-              try { setCache(keyH, json); window.logDebug && window.logDebug(`setCache key=${keyH} provider=openweather (hourly)`); } catch (e) { /* ignore */ }
-            }
-          } catch (e) { /* ignore per-hour cache failures */ }
-        } else {
-          try { setCache(keyPrim, json); window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`); } catch(e) {}
-        }
-        weatherData.push({ ...p, provider: prov, weather: json });
+        // One write per answer. OpenWeather's key has no hour (makeCacheKey), so every step at
+        // this location reads this same answer.
+        try { setCache(keyPrim, json); window.logDebug && window.logDebug(`setCache key=${keyPrim} provider=${prov}`); } catch(e) {}
+        results.push({ ...p, provider: prov, weather: json });
         logDebug(`Datos recibidos paso ${i + 1} (${prov})`);
         await new Promise(r => setTimeout(r, 70));
       } else {
-        weatherData.push({ ...p, provider: prov, weather: null });
+        results.push({ ...p, provider: prov, weather: null });
       }
 
       logDebug(`step ${i+1}/${steps.length} effectiveProv(final)=${prov}`);
     }
 
   // Check for weather alerts independently if we have OpenWeather API key
-  await checkWeatherAlertsIndependent(steps, timeSteps);
+  if (!isCurrent()) return;
+  await checkWeatherAlertsIndependent(steps, timeSteps, alertsSeen, settings, isCurrent, signal, recorder.timedOutHosts);
+  if (!isCurrent()) return;
 
-  if (!showAllNotices) {
-     // Only show notices when fallback is due to key/provider errors (or missing key)
-     if (missingKeyFallback && providerNeedsKey) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_missing", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((invalidKeyOnce || invalidKeyOnceOWM) && usedFallbackError) {
-       const provName = invalidKeyOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_invalid", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((quotaOnce || quotaOnceOWM) && usedFallbackError) {
-       const provName = quotaOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_quota_exceeded", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((httpErrOnce || httpErrOnceOWM) && usedFallbackError) {
-       const provName = httpErrOnceOWM ? "OpenWeather" : "MeteoBlue";
-       const st = httpErrOnceOWM
-         ? (lastHttpStatusOWM != null ? String(lastHttpStatusOWM) : "…")
-         : (lastHttpStatusMB != null ? String(lastHttpStatusMB) : "…");
-       setNotice(t("provider_http_error", { prov: provName, status: st }) + " " + t("fallback_short"), "error");
-     } else if (usedFallbackError) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("fallback_due_error", { prov: provName }), "warn");
-     } else {
-       clearNotice(); // suppress horizon/other non-critical notices
-     }
-   } else {
-     // Original verbose notice policy
-     if (beyondHorizon) {
-       setNotice(t("horizon_exceeded", { days: OPENMETEO_MAX_DAYS }), "warn");
-     } else if (usedFallbackHorizon) {
-       setNotice(t("fallback_to_openmeteo", { days: horizonDaysUsed ?? METEOBLUE_MAX_DAYS }), "warn");
-     } else if (missingKeyFallback && providerNeedsKey) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_missing", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((invalidKeyOnce || invalidKeyOnceOWM) && usedFallbackError) {
-       const provName = invalidKeyOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_invalid", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((quotaOnce || quotaOnceOWM) && usedFallbackError) {
-       const provName = quotaOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_quota_exceeded", { prov: provName }) + " " + t("fallback_short"), "error");
-     } else if ((httpErrOnce || httpErrOnceOWM) && usedFallbackError) {
-       const provName = httpErrOnceOWM ? "OpenWeather" : "MeteoBlue";
-       const st = httpErrOnceOWM
-         ? (lastHttpStatusOWM != null ? String(lastHttpStatusOWM) : "…")
-         : (lastHttpStatusMB != null ? String(lastHttpStatusMB) : "…");
-       setNotice(t("provider_http_error", { prov: provName, status: st }) + " " + t("fallback_short"), "error");
-     } else if (invalidKeyOnce || invalidKeyOnceOWM) {
-       const provName = invalidKeyOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_key_invalid", { prov: provName }), "error");
-     } else if (quotaOnce || quotaOnceOWM) {
-       const provName = quotaOnceOWM ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("provider_quota_exceeded", { prov: provName }), "error");
-     } else if (httpErrOnce || httpErrOnceOWM) {
-       const provName = httpErrOnceOWM ? "OpenWeather" : "MeteoBlue";
-       const st = httpErrOnceOWM
-         ? (lastHttpStatusOWM != null ? String(lastHttpStatusOWM) : "…")
-         : (lastHttpStatusMB != null ? String(lastHttpStatusMB) : "…");
-       setNotice(t("provider_http_error", { prov: provName, status: st }), "error");
-     } else if (usedFallbackError) {
-       const provName = (apiSource === "openweather") ? "OpenWeather" : "MeteoBlue";
-       setNotice(t("fallback_due_error", { prov: provName }), "warn");
-     } else {
-       clearNotice();
-     }
-  }
-  // Always render after computing notices
-  processWeatherData();
+  const owUnits = String(tempUnit || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
+  const snapshotSteps = results.map((r) => ({
+    lat: r.lat, lon: r.lon, time: r.time, distanceM: r.distanceM, provider: r.provider,
+    payloadUnits: r.provider === "openweather" ? owUnits : null,
+    payload: r.weather,
+  }));
+  const snapshot = {
+    version: 1,
+    requestId: ids.requestId,
+    computationId: ids.computationId,
+    route,
+    settings: {
+      start: settings.start, speed: settings.speed,
+      provider: settings.provider, units: settings.units, noticeAll: settings.noticeAll, alerts: settings.alerts,
+      interval: settings.interval, lang: settings.lang, alertsKey: settings.alertsKey,
+      keys: settings.keys,   // what a comparison of this snapshot asks with; memory only
+    },
+    steps: snapshotSteps,
+    // Providers only report warnings active when asked; keep those near the ride.
+    alerts: timeSteps.length
+      ? cwForecastRules.alertsInWindow(alertsSeen,
+          timeSteps[0].getTime() / 1000 - 4 * 3600,
+          timeSteps[timeSteps.length - 1].getTime() / 1000 + 4 * 3600)
+      : [],
+    outcome: {
+      requestedProvider: settings.provider,
+      usableSteps: cwForecastRules.usableSteps(snapshotSteps),
+      transportFailures: recorder.failed,
+      lastFailStatus: recorder.lastFailStatus,
+      offline: recorder.offline,
+      staleAgeMs: recorder.staleAgeMs,
+      beyondHorizon,
+      openMeteoMaxDays: OPENMETEO_MAX_DAYS,
+      usedFallback,
+      usedFallbackError,
+      usedFallbackHorizon,
+      horizonDays: horizonDaysUsed,
+      missingKey: missingKeyFallback && providerNeedsKey,
+      // Providers given up on for not answering in time: the table names them, as a comparison does.
+      failedProviders: Object.fromEntries(recorder.timedOut.map((id) => [id, { status: "timeout" }])),
+      providers: {
+        openweather: { invalidKey: invalidKeyOnceOWM, quota: quotaOnceOWM, httpError: httpErrOnceOWM, httpStatus: lastHttpStatusOWM },
+        openmeteo: { httpError: httpErrOnceOM, httpStatus: lastHttpStatusOM },
+      },
+    },
+    origin: "live",
+    createdAt: Date.now(),
+  };
+  // Nothing usable for any step, with a prepared snapshot of this route within three hours of the
+  // start: that is shown instead of an empty table (spec §4.9.1).
+  const prepared = snapshot.outcome.usableSteps === 0 ? usablePreparedRecord(settings) : null;
+  if (prepared) replay(prepared, ids, settings);
+  else publish(snapshot);
   } catch (err) {
+    // Let go first, so a notice that throws cannot keep the indicator on.
+    const current = isCurrent();
+    if (current) window.cw.releaseLoading("forecast:" + ids.computationId);
     logDebug(t("error_api", { msg: err.message }), true);
-    setNotice(t("error_api", { msg: err.message }), "error");
+    if (current) setNotice(t("error_api", { msg: err.message }), "error");
   } finally {
-    hideLoading();
+    if (runningComputationId === ids.computationId) runningComputationId = null;
   }
 }
+
+/**
+ * The published computation's official warnings that still matter, from now or the
+ * start of the ride, whichever is later, to its end. Replaces whatever was shown.
+ */
+function showOfficialAlerts(snapshot) {
+  const steps = snapshot.steps || [];
+  const startSec = steps.length ? new Date(steps[0].time).getTime() / 1000 : 0;
+  const endSec = steps.length ? new Date(steps[steps.length - 1].time).getTime() / 1000 : 0;
+  const shown = cwForecastRules.alertsInWindow(snapshot.alerts, Math.max(Date.now() / 1000, startSec), endSec);
+  window.activeWeatherAlerts = shown.map((a) => ({
+    id: cwForecastRules.alertId(a),
+    senderName: a.sender_name,
+    event: a.event,
+    start: a.start,
+    end: a.end,
+    description: a.description,
+    tags: a.tags || [],
+    processed: false,
+  }));
+  const container = document.getElementById("weather-alerts-container");
+  if (container) {
+    container.style.display = "none";
+    container.querySelectorAll(".weather-alert").forEach((el) => el.remove());
+  }
+  hideAndCleanupAlertIndicator();
+  if (window.activeWeatherAlerts.length) showWeatherAlerts();
+}
+
+/**
+ * Puts a finished computation on screen, and nothing else may. Every effect happens
+ * here in one go, with no wait between checking that the computation is still the
+ * latest and the last effect: the table, the notice, `cw:forecast` and the indicator.
+ */
+function publish(snapshot) {
+  if (!cwForecastRules.shouldPublish(snapshot, publishState())) return false;
+  publishedSnapshot = snapshot;
+  weatherData = mirrorSteps(snapshot);
+  processWeatherData();
+  showOfficialAlerts(snapshot);
+  showNotice(snapshot.outcome, snapshot.settings.noticeAll, routeFailureComputationId === snapshot.computationId,
+    snapshot.origin);
+  try {
+    document.dispatchEvent(new CustomEvent("cw:forecast", { detail: { snapshot, steps: weatherData } }));
+  } catch (e) { /* ignore */ }
+  window.cw.releaseLoading("forecast:" + snapshot.computationId);
+  // With compare chosen, the providers comparison of this snapshot starts here; over a replayed one,
+  // or without coverage in the app, cwLaunchComparison says it needs coverage instead.
+  if (document.getElementById("apiSource")?.value === "compare") {
+    window.cw.runCompareMode?.();
+  }
+  return true;
+}
+
+// The steps of a snapshot in the shape the table and the markers read (window.weatherData).
+// tempUnit is the temperature unit the snapshot was computed in; the table labels the
+// temperature with it, not with the selector, which may have changed since.
+function mirrorSteps(snapshot) {
+  return snapshot.steps.map((s) => ({
+    lat: s.lat, lon: s.lon, time: s.time, distanceM: s.distanceM,
+    provider: s.provider, payloadUnits: s.payloadUnits, weather: s.payload,
+    tempUnit: snapshot.settings.units.temp,
+    replay: snapshot.origin === "prepared",   // read in replay mode (processWeatherData)
+  }));
+}
+
+// keepFailure: a route failed to open while this computation ran and said so. With nothing
+// of its own to say, the computation leaves that notice up; a notice of its own replaces it.
+// Once replaced or cleared, the failure is forgotten: a later comparison of the same
+// computation with nothing to say clears whatever notice is up then.
+function showNotice(outcome, noticeAll, keepFailure = false, origin = "live") {
+  const notice = cwForecastRules.decideNotice(outcome, {
+    noticeAll, origin, preparedAt: outcome?.preparedAt, preparedFor: outcome?.preparedFor, now: Date.now(),
+  });
+  if (notice) setNotice(notice.parts.map(([key, params]) => t(key, params)).join(" "), notice.type);
+  else if (keepFailure) return;
+  else clearNotice();
+  routeFailureComputationId = null;
+}
+// A comparison (compare.js) decides and shows its notice the same way, and leaves up the notice
+// of a route that failed to open while the computation it compares was the latest.
+window.cwShowForecastNotice = (outcome, noticeAll, run) =>
+  showNotice(outcome, noticeAll, routeFailureComputationId === run.computationId);
+
+// Paints the published snapshot again for a setting that only changes how it looks
+// (language, detailed notices): the table from the answers it holds, and its notice
+// decided with the checkbox as it is now. Nothing is fetched, cw:forecast is not sent
+// and the indicator is left alone.
+window.cwRepaintPublished = function () {
+  if (!publishedSnapshot) return false;
+  weatherData = mirrorSteps(publishedSnapshot);
+  processWeatherData();
+  // A failure still recorded was said over this snapshot, or over the computation that is
+  // replacing it (every publish after it forgets it), so the repaint leaves it up too.
+  showNotice(publishedSnapshot.outcome, !!document.getElementById("noticeAll")?.checked,
+    routeFailureComputationId !== null, publishedSnapshot.origin);
+  return true;
+};
 
 function processWeatherData() {
   const tempUnit = getVal("tempUnits");
@@ -1118,123 +1340,40 @@ function processWeatherData() {
       return;
     }
     const w = step.weather;
-    let idx = -1;
+    let extracted = null;
     if (prov === "openmeteo" || prov === "aromehd") {
       // Ensure we have at least hourly data shape to work with
       if (!w.hourly || !w.hourly.time) return;
-
-      // Compute closest hourly index (existing behaviour)
-      try {
-        const dt = step.time instanceof Date ? step.time : new Date(step.time);
-        const minute = dt.getMinutes();
-        if (minute >= 30) {
-          idx = (window.findClosestFutureIndex ? window.findClosestFutureIndex(w.hourly.time, step.time) : findClosestIndex(w.hourly.time, step.time));
-        } else {
-          idx = findClosestIndex(w.hourly.time, step.time);
-        }
-      } catch (e) {
-        idx = findClosestIndex(w.hourly.time, step.time);
-      }
-
-      // If provider returned minutely_15 data, prefer it for this step when the
-      // step timestamp falls within the minutely_15 time range (near-term).
-      // minutely_15 has its own `.time` array and variable arrays mirroring hourly.
-      step.__useMinutely = false; // debug flag
-      let minIdx = -1;
-      if (w.minutely_15 && Array.isArray(w.minutely_15.time)) {
-        try {
-          const mTimes = w.minutely_15.time;
-          minIdx = (window.findClosestFutureIndex ? window.findClosestFutureIndex(mTimes, step.time) : findClosestIndex(mTimes, step.time));
-          const firstM = new Date(mTimes[0]).getTime();
-          const lastM = new Date(mTimes[mTimes.length - 1]).getTime();
-          const stepMs = (step.time instanceof Date ? step.time.getTime() : new Date(step.time).getTime());
-          if (stepMs >= firstM && stepMs <= lastM && minIdx !== -1) {
-            step.__useMinutely = true;
-            step.__minutelyIndex = minIdx;
-          }
-        } catch (e) {
-          /* ignore minutely parsing errors and fall back to hourly */
-        }
-      }
+      // A replayed step reads only an hour close enough to it (spec §4.4); otherwise it has no data.
+      extracted = cwForecastRules.extractStep(w,
+        { provider: prov, time: step.time, ...(step.replay ? cwForecastRules.REPLAY : {}) });
+      step.__useMinutely = !!(extracted && extracted.useMinutely);
+      if (step.__useMinutely) step.__minutelyIndex = extracted.minutelyIndex;
     }
     // NEW: OpenWeather extraction (prefer hourly, fallback to daily)
     if (prov === "openweather") {
-      const timeMs = (step.time instanceof Date ? step.time : new Date(step.time)).getTime();
-
-      // Helper: pick closest index in OWM arrays by dt (seconds)
-      const closestByDt = (arr) => {
-        if (!Array.isArray(arr) || !arr.length) return -1;
-        let best = -1, bestDiff = Infinity;
-        for (let i = 0; i < arr.length; i++) {
-          const t = Number(arr[i]?.dt) * 1000;
-          const df = Math.abs(t - timeMs);
-          if (df < bestDiff) { bestDiff = df; best = i; }
-        }
-        return best;
-      };
-
-      let useHourly = Array.isArray(w.hourly) && w.hourly.length > 0;
-      let hi = useHourly ? closestByDt(w.hourly) : -1;
-      let di = (!useHourly || hi === -1) ? closestByDt(w.daily) : -1;
-
-      const hourly = (useHourly && hi !== -1) ? w.hourly[hi] : null;
-      const daily = (!hourly && Array.isArray(w.daily) && di !== -1) ? w.daily[di] : null;
-
       // isDaylight via SunCalc (robust for icons/luminance)
       try {
-        const pos = SunCalc.getPosition(new Date(timeMs), step.lat, step.lon);
+        const pos = SunCalc.getPosition(new Date(step.time), step.lat, step.lon);
         step.isDaylight = pos.altitude > 0 ? 1 : 0;
       } catch { step.isDaylight = 1; }
 
-      // Units normalization: derive km/h from API units
-      const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
-      const toKmhFromOW = (ws) => {
-        const v = Number(ws) || 0;
-        if (units === "imperial") return v * 1.60934; // mph -> km/h
-        return v * 3.6; // metric/standard m/s -> km/h
-      };
-
-      if (hourly) {
-        step.temp = safeNum(hourly.temp);
-        step.windSpeed = safeNum(windToUnits(toKmhFromOW(hourly.wind_speed), windUnit));
-        step.windDir = Number(hourly.wind_deg || 0);
-        step.windGust = safeNum(
-          hourly.wind_gust != null
-            ? windToUnits(toKmhFromOW(hourly.wind_gust), windUnit)
-            : null
-        );
-        step.humidity = safeNum(hourly.humidity);
-        const rainH = Number(hourly.rain?.["1h"] ?? 0);
-        const snowH = Number(hourly.snow?.["1h"] ?? 0);
-        step.precipitation = safeNum(rainH + snowH);
-        step.timeLabel = formatTime(step.time);
-        // Populate additional hourly fields: weather code, UV, cloud cover, precip probability, luminance
-        step.weatherCode = Array.isArray(hourly.weather) && hourly.weather[0] ? hourly.weather[0].id : null;
-        step.uvindex = safeNum(hourly.uvi ?? w.current?.uvi ?? null);
-        // OpenWeather hourly uses 'clouds' percent; accept alternative names defensively
-        step.cloudCover = safeNum(hourly.clouds ?? hourly.cloud_cover ?? null);
-        // 'pop' is probability of precipitation (0..1) in hourly; convert to percentage
-        step.precipProb = safeNum((Number(hourly.pop) || 0) * 100);
-        step.luminance = computeLuminance(step);
-      } else if (daily) {
-        // Approximate from daily if beyond hourly range
-        const dtemp = (daily.temp && (daily.temp.day ?? daily.temp.max ?? daily.temp.min)) || null;
-        step.temp = safeNum(dtemp);
-        step.windSpeed = safeNum(windToUnits(toKmhFromOW(daily.wind_speed), windUnit));
-        step.windDir = Number(daily.wind_deg || 0);
-        step.windGust = safeNum(
-          daily.wind_gust != null
-            ? windToUnits(toKmhFromOW(daily.wind_gust), windUnit)
-            : null
-        );
-        step.humidity = safeNum(daily.humidity);
-        const rainD = Number(daily.rain ?? 0);
-        const snowD = Number(daily.snow ?? 0);
-        step.precipitation = safeNum(rainD + snowD);
-        step.precipProb = safeNum((Number(daily.pop) || 0) * 100);
-        step.weatherCode = Array.isArray(daily.weather) && daily.weather[0] ? daily.weather[0].id : null;
-        step.uvindex = safeNum(daily.uvi ?? w.current?.uvi ?? null);
-        step.cloudCover = safeNum(daily.clouds);
+      // The units the answer was requested in travel with the step; the current setting
+      // is only a guess for a step that does not carry them.
+      const payloadUnits = step.payloadUnits || ((String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric");
+      const r = cwForecastRules.extractStep(w,
+        { provider: prov, time: step.time, payloadUnits, ...(step.replay ? cwForecastRules.REPLAY : {}) });
+      if (r) {
+        step.temp = safeNum(r.temp);
+        step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+        step.windDir = r.windDir;
+        step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
+        step.humidity = safeNum(r.humidity);
+        step.precipitation = safeNum(r.precipitation);
+        step.precipProb = safeNum(r.precipProb);
+        step.weatherCode = r.weatherCode;
+        step.uvindex = safeNum(r.uvIndex);
+        step.cloudCover = safeNum(r.cloudCover);
         step.luminance = computeLuminance(step);
         step.timeLabel = formatTime(step.time);
       } else {
@@ -1267,118 +1406,26 @@ function processWeatherData() {
       return; // handled OpenWeather branch
     }
 
-    if (prov === "meteoblue") {
-      step.temp = safeNum(w.temperature_2m);
-      step.windSpeed = safeNum(w.wind_speed_10m);
-      step.windDir = w.wind_direction_10m || 0;
-      step.windGust = safeNum(w.wind_gust_10m);
-      step.humidity = safeNum(w.relative_humidity_2m);
-      step.precipitation = safeNum(w.precipitation);
-      step.precipProb = safeNum(w.precipitation_probability);
-      step.weatherCode = w.pictocode[idx];
-      step.uvindex = safeNum((w.uvindex?.[idx] ?? w.uv_index?.[idx]));
-      step.isDaylight = w.isdaylight;
-      step.cloudCover = safeNum(w.total_cloud_cover?.[idx] ?? w.cloudcover?.[idx]);
-      step.luminance = computeLuminance(step);
-
-    } else if ((prov === "openmeteo" || prov === "aromehd") && (idx !== -1 || step.__useMinutely)) {
-      // Prefer minutely_15 values when available for this step
-      const useMin = !!step.__useMinutely && w.minutely_15 && Array.isArray(w.minutely_15.time);
-      const hIdx = idx;
-      const mIdx = step.__minutelyIndex || -1;
-
-      const getVar = (varName) => {
-        // Special case for fields that may be null in minutely_15 but available in hourly (merged from fallback)
-        if (varName === 'uv_index' || varName === 'precipitation_probability') {
-          if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx && w.minutely_15[varName][mIdx] != null) {
-            return w.minutely_15[varName][mIdx];
-          }
-          // Fall back to hourly
-          if (w.hourly && w.hourly[varName] && Array.isArray(w.hourly[varName])) {
-            if (w.hourly[varName].length > hIdx) return w.hourly[varName][hIdx];
-            // Fallback: try to find closest hourly index by matching times array
-            try {
-              const times = Array.isArray(w.hourly.time) ? w.hourly.time : null;
-              const finder = (window.findClosestIndex || (window.cw && window.cw.findClosestIndex));
-              if (times && typeof finder === 'function') {
-                const alt = finder(times, step.time);
-                if (alt != null && alt >= 0 && w.hourly[varName].length > alt) return w.hourly[varName][alt];
-              }
-            } catch (_) {}
-          }
-          return null;
-        }
-        // For other variables, use minutely if available, else hourly
-        if (useMin && w.minutely_15 && w.minutely_15[varName] && Array.isArray(w.minutely_15[varName]) && w.minutely_15[varName].length > mIdx) {
-          return w.minutely_15[varName][mIdx];
-        }
-        if (w.hourly && w.hourly[varName] && Array.isArray(w.hourly[varName])) {
-          if (w.hourly[varName].length > hIdx) return w.hourly[varName][hIdx];
-          // Fallback: try to find closest hourly index by matching times array
-          try {
-            const times = Array.isArray(w.hourly.time) ? w.hourly.time : null;
-            const finder = (window.findClosestIndex || (window.cw && window.cw.findClosestIndex));
-            if (times && typeof finder === 'function') {
-              const alt = finder(times, step.time);
-              if (alt != null && alt >= 0 && w.hourly[varName].length > alt) return w.hourly[varName][alt];
-            }
-          } catch (_) {}
-        }
-        return null;
-      };
-
-      step.temp = safeNum(getVar('temperature_2m'));
-      step.windSpeed = safeNum(windToUnits(getVar('wind_speed_10m'), windUnit));
-      step.windDir = getVar('winddirection_10m') || 0;
-      step.windGust = safeNum(windToUnits(getVar('wind_gusts_10m'), windUnit));
-      step.humidity = safeNum(getVar('relative_humidity_2m'));
-      step.precipitation = safeNum(getVar('precipitation'));
+    if ((prov === "openmeteo" || prov === "aromehd") && extracted) {
+      const r = extracted;
+      step.temp = safeNum(r.temp);
+      step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+      step.windDir = r.windDir || 0;
+      step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
+      step.humidity = safeNum(r.humidity);
+      step.precipitation = safeNum(r.precipitation);
       // AROME may lack precipitation_probability; merged earlier when available
-      step.precipProb = safeNum(getVar('precipitation_probability'));
-      step.weatherCode = getVar('weathercode');
-      // Debug: when in AROME processing, show whether uv_index array exists and what getVar returns
-      try {
-        if (window.cw && window.cw.DEBUG_MERGE && prov === 'aromehd') {
-          const uvArr = (w && w.hourly && Array.isArray(w.hourly.uv_index)) ? (w.hourly.uv_index.slice(0,5)) : null;
-          console.debug('[proc][app] prov=aromehd idx=', idx, 'getVar(uv_index)=', getVar('uv_index'), 'hourly.uv_index_sample=', uvArr, 'useMin=', !!useMin, 'minutely_present=', !!(w && w.minutely_15));
-        }
-      } catch (_) {}
-      step.uvindex = (getVar('uv_index') != null) ? safeNum(getVar('uv_index')) : null;
-      step.isDaylight = getVar('is_day');
-      step.cloudCover = safeNum(w.hourly.cloud_cover?.[idx]); // 0–100
+      step.precipProb = safeNum(r.precipProb);
+      step.weatherCode = r.weatherCode;
+      step.uvindex = (r.uvIndex != null) ? safeNum(r.uvIndex) : null;
+      step.isDaylight = r.isDay;
+      step.cloudCover = safeNum(r.cloudCover); // 0–100
       step.luminance = computeLuminance(step);
 
       // NEW: AROME fallbacks and selective reconciliation
       if (prov === "aromehd") {
-        if (step.isDaylight == null) {
-          try {
-            const pos = SunCalc.getPosition(new Date(step.time), step.lat, step.lon);
-            step.isDaylight = pos.altitude > 0 ? 1 : 0;
-          } catch { /* ignore */ }
-        }
-        // If still missing, synthesize
-        if (step.weatherCode == null) {
-          step.weatherCode = fallbackWmoFromBasics(step.precipitation, step.cloudCover);
-        } else {
-          // Reconcile AROME vs Open-Meteo: prefer forward index values; then adjust
-          step.weatherCode = reconcileAromeVsOmCode(
-            step.weatherCode,
-            step.precipitation,
-            step.precipProb,
-            step.cloudCover
-          );
-        }
-
-        // Policy: prefer AROME precipitation as authoritative for icon decisions.
-        // If AROME reports precipitation == 0 for this (future-aligned) step, don't show probability
-        // and avoid displaying a rain icon even if the reconciled weatherCode suggests rain.
-        if (Number(step.precipitation) === 0) {
-          // If AROME reports 0 precipitation, prefer not to show small probabilities.
-          // Keep precipProb when it's meaningful (>=10%) so users see isolated/spotty chances.
-          if (step.precipProb == null || Number(step.precipProb) < 10) {
-            step.precipProb = null;
-          }
-        }
+        // AROME's rain is authoritative: with 0 mm or none, a probability under 10 % is dropped there.
+        aromeCodeAndDay(step);
       }
     }
 
@@ -1400,8 +1447,7 @@ function processWeatherData() {
   renderWeatherTable();
   // Ensure wind/rain markers are rendered in normal mode (do not run in compare mode)
   try {
-    const isCompareMode = (document.getElementById('apiSource')?.value || '').toLowerCase() === 'compare';
-    if (!isCompareMode && window.cw && typeof window.cw.renderWindMarkers === 'function') {
+    if (!compareOwnsTable() && window.cw && typeof window.cw.renderWindMarkers === 'function') {
       window.cw.renderWindMarkers();
     }
   } catch (e) { /* tolerate any DOM errors */ }
@@ -1419,7 +1465,6 @@ function processWeatherData() {
   // Invalidate size first (in case container resized)
   if (map) map.invalidateSize();
   [120, 300, 700].forEach((delay, idx) => setTimeout(() => fitRouteOnce(idx === 0 ? [6,6] : [9,9]), delay));
-
 }
 
 function buildSunHeaderCell(lat, lon, dateLike) {
@@ -1438,9 +1483,7 @@ function buildSunHeaderCell(lat, lon, dateLike) {
   const ck = fmtSafe(times.dusk || times.civilDusk);
 
   // In compare mode show only sunrise/sunset (compact)
-  const isCompare =
-    (document.getElementById("apiSource")?.value || "").toLowerCase() === "compare";
-  if (isCompare) {
+  if (compareOwnsTable()) {
     return `
       <div class="sunHeaderBox">
         <div class="sunCol">
@@ -1516,12 +1559,6 @@ function getWeatherIconClassOpenMeteo(code, isDay) {
     default: key = "default";
   }
   const dayOrNight = isDay === 1 ? "day" : "night";
-  return (weatherIconsMap[key] || weatherIconsMap.default)[dayOrNight];
-}
-
-function getWeatherIconClassMeteoBlue(pictocode, isdaylight) {
-  const dayOrNight = isdaylight === 1 ? "day" : "night";
-  const key = MB_PICTO_TO_KEY[Number(pictocode)] || "default";
   return (weatherIconsMap[key] || weatherIconsMap.default)[dayOrNight];
 }
 
@@ -1684,10 +1721,6 @@ function getDetailedCategoryOpenMeteo(code) {
     default: return "default";
   }
 }
-function getDetailedCategoryMeteoBlue(pictocode) {
-  return MB_PICTO_TO_KEY[Number(pictocode)] || "default";
-}
-
 // Helper: mediana de un array numérico
 function median(arr = []) {
   const vals = arr
@@ -1766,8 +1799,7 @@ function computeRouteSummaryFromArray(srcArr) {
     }
 
     let cat = "default";
-    if (prov === "meteoblue") cat = getDetailedCategoryMeteoBlue(presentationCode);
-    else if (prov === "openweather") cat = getDetailedCategoryOpenWeather(presentationCode);
+    if (prov === "openweather") cat = getDetailedCategoryOpenWeather(presentationCode);
     else cat = getDetailedCategoryOpenMeteo(presentationCode);
 
     // Ajuste por nubosidad alta
@@ -1898,26 +1930,8 @@ function renderWeatherTable() {
     return;
   }
 
-  // Check for pending compare mode restoration after reload
-  if (window._pendingCompareRestore) {
-    window._pendingCompareRestore = false;
-    // Set apiSource back to compare mode
-    const sel = document.getElementById("apiSource");
-    if (sel) sel.value = "compare";
-    window.apiSource = "compare";
-    // Trigger compare mode
-    if (window.cw?.runCompareMode) {
-      setTimeout(() => window.cw.runCompareMode(), 0);
-      return;
-    }
-  }
-
-  // If in compare mode, trigger compare render instead  
-  const sel = document.getElementById("apiSource");
-  if (sel && sel.value === "compare") {
-    if (window.cw?.runCompareMode) window.cw.runCompareMode();
-    return;
-  }
+  // In compare mode the comparison table stays until the next comparison paints over it.
+  if (compareOwnsTable()) return;
 
   // Leave compare mode: remove body flag so compact summary shows metrics again
   try { document.body.classList.remove("compare-active"); } catch {}
@@ -1933,7 +1947,10 @@ function renderWeatherTable() {
   let row;
 
   // Unidades seleccionadas (precipUnits opcional, por defecto 'mm')
-  const tempUnit = getVal("tempUnits"); // 'C' o 'F'
+  // A published forecast's temperature is labelled with the units it was computed in, which a
+  // repaint or a units change still waiting can differ from. Steps without them (a comparison)
+  // follow the selector.
+  const tempUnit = weatherData.find((s) => s && s.tempUnit)?.tempUnit || getVal("tempUnits"); // 'C' o 'F'
   const windUnit = getVal("windUnits"); // ej. 'ms', 'kmh', 'mph'
   const precipUnit = (getVal("precipUnits") || "mm").toLowerCase();
   const distanceUnit = getVal("distanceUnits") || "km";
@@ -2079,8 +2096,8 @@ function renderWeatherTable() {
       }
     }
 
-    const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
-    const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
+    const startIconUrl = "/icons/marker-icon-green.png";
+    const endIconUrl = "/icons/marker-icon-red.png";
     let iconHtml = "";
     if (Number.isFinite(m)) {
       if (Math.round(m) === 0) iconHtml = `<img src="${startIconUrl}" class="start-icon" alt="" />`;
@@ -2106,8 +2123,7 @@ function renderWeatherTable() {
   // Provider abbreviations for change indicators
   const providerAbbreviations = {
     'openmeteo': 'OPM',
-    'aromehd': 'ARM', 
-    'meteoblue': 'MB',
+    'aromehd': 'ARM',
     'openweather': 'OPW'
   };
 
@@ -2159,9 +2175,7 @@ function renderWeatherTable() {
     }
 
     let iconClass =
-      prov === "meteoblue"
-        ? getWeatherIconClassMeteoBlue(presentationCode, w.isDaylight)
-        : prov === "openweather"
+      prov === "openweather"
         ? getWeatherIconClassOpenWeather(presentationCode, w.isDaylight)
         : getWeatherIconClassOpenMeteo(presentationCode, w.isDaylight);
   const icon = document.createElement("i");
@@ -2653,9 +2667,8 @@ function selectByOriginalIdx(originalIdx, centerMap = false) {
 function renderWindMarkers() {
   // Compare mode: when compare is active we must not clear or re-render
   // markers here because compare-specific markers are created elsewhere
-  const sel = document.getElementById("apiSource");
   const table = document.getElementById("weatherTable");
-  const isCompareActive = sel && (sel.value === "compare") || table?.classList.contains('compare-dates-mode');
+  const isCompareActive = compareOwnsTable() || table?.classList.contains('compare-dates-mode');
   if (isCompareActive) {
     // If compare is active and a row is selected, markers are managed by compare handlers
     // If no row is selected, nothing should be shown. In both cases we skip clearing/rendering here.
@@ -2838,9 +2851,20 @@ function initMap() {
     attributionControl: true  // Ensure attribution control is enabled
   }).setView([41.3874, 2.1686], 14);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const tileOptions = {
     attribution: '<span class="map-provider">| © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>',
-  }).addTo(map);
+  };
+  // In the app, tiles are kept as they are viewed so the map still has a background
+  // after losing coverage. On the website nothing changes: the plain layer is used,
+  // because the caching one reads tiles with fetch and that depends on the tile
+  // server allowing cross-origin reads, which has not been verified in production.
+  const tileLayer = (window.CW_NATIVE && window.cwCreateTileLayer
+    && window.cwCreateTileLayer(tileUrl, tileOptions)) || L.tileLayer(tileUrl, tileOptions);
+  tileLayer.addTo(map);
+  // Exposed so the shell can tell a map with no background from one that simply
+  // came out of the cache.
+  window.cwTileLayer = tileLayer;
 
   // Move the built-in attribution control to the bottom-right
   if (map.attributionControl && typeof map.attributionControl.setPosition === 'function') {
@@ -3107,15 +3131,11 @@ function init() {
   loadSettings();
   applyTranslations();
   updateProviderOptions();
+  window.updateWeatherAlertsAvailability?.();
   setupDateLimits();
 
-  // Ajuste del selector de hora: pasos 15 min y valor inicial redondeado hacia arriba
-  const dt = document.getElementById("datetimeRoute");
-  if (dt) {
-    dt.step = 900; // 15 minutos
-    const rounded = roundToNextQuarterISO(new Date());
-    dt.value = rounded;
-  }
+  // The start field keeps what loadSettings left in it once the start rule has run
+  // (cwApplyStartRule); setupDateLimits gives it its step and minimum.
   // Defensive fallback: if some other script cleared the value, set it after a short delay
   // so the input always contains a sensible rounded default on page load.
   setTimeout(() => {
@@ -3137,154 +3157,136 @@ function init() {
   window.addEventListener("resize", scheduleMapResizeRecenter, { passive: true });
   window.addEventListener("orientationchange", scheduleMapResizeRecenter, { passive: true });
 
-  hideLoading();
   logDebug(t("app_started"));
 }
 
-// --- GPX public loader: logging + error handling ---
-// Helper: comprobar si hay algo parseable (track/route/waypoint)
-function hasParsableGpxText(txt) {
-  if (typeof txt !== "string") return false;
-  const s = txt.slice(0, 200000); // evita regex sobre ficheros enormes (no usamos el resto)
-  return /<trkpt\b/i.test(s) || /<rtept\b/i.test(s) || /<wpt\b/i.test(s) || /<trk\b/i.test(s) || /<rte\b/i.test(s);
-}
+// --- Routes: read off the map, confirm, and the loader for routes from outside ---
 
-// Nota: si ya existía, se sobrescribe con más logging y validación.
-window.cwLoadGPXFromString = async function loadGPXFromString(gpxText, nameHint = "route.gpx") {
-  try {
-    const head = (typeof gpxText === "string") ? gpxText.slice(0,  120) : String(gpxText);
-    logDebug(`cwLoadGPXFromString: called, len=${(gpxText && gpxText.length) || 0}, name=${nameHint}`);
-    console.debug("[cw] loader input head:", head);
+// Reads a route without touching the screen: a KML is converted, the file sanitised and
+// leaflet-gpx asked for a layer that is not drawn (it keeps its tracks, routes and markers
+// in its own group). Resolves null when the file holds no line to follow.
+// A route is a KML when its name ends in .kml or a <kml element starts within its first 4096
+// characters. Keeping a route and opening it decide this the same way, or a route could be kept
+// that then fails to open, and becomes the recent route the next start-up fails to restore.
+const isKmlRoute = (text, name) => /\.kml$/i.test(name || "") || /<kml[\s>]/i.test(text.slice(0, 4096));
 
-    if (!gpxText || typeof gpxText !== "string") {
-      logDebug("cwLoadGPXFromString: invalid gpxText", true);
-      return;
-    }
-    // Validación rápida: si no hay trk/rte/wpt, avisar y abortar
-    if (!hasParsableGpxText(gpxText)) {
-      const bytes = gpxText.length;
-      const hint = "El GPX recibido no contiene tracks/rutas/puntos o está truncado.";
-      console.warn("[cw] GPX pre-parse failed (no trk/rte/wpt). size:", bytes);
-      logDebug(`${hint} Tamaño=${bytes}B. Prueba con gpx_url o revisa el Atajo (debe codificar el archivo completo a Base64).`, true);
-      alert(`${hint}\n\nTamaño=${bytes}B.\n\nSugerencias:\n• Usa la variante gpx_url (enlace directo al .gpx).\n• En el Atajo, asegúrate de que “Codificar (Base64)” se aplique al archivo completo (no al nombre) y que el resultado se usa en la URL.`);
-      return;
-    }
-    if (typeof L === "undefined" || !L.GPX) {
-      console.error("[cw] Leaflet/leaflet-gpx not ready");
-      logDebug("Leaflet/leaflet-gpx no está listo", true);
-      return;
-    }
-    if (!map) {
-      console.warn("[cw] map not initialized yet");
-    }
+window.cwParseRoute = async function ({ text, name }) {
+  if (typeof text !== "string") return null;
+  let gpxText = text;
+  let fileName = name || "route.gpx";
+  if (isKmlRoute(text, fileName)) {
+    const converted = window.cwKmlToGpxText ? window.cwKmlToGpxText(text) : null;
+    // A KML with no Placemark still converts into a valid, empty GPX wrapper.
+    if (converted && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(converted)) gpxText = converted;
+    fileName = fileName.replace(/\.kml$/i, ".gpx");
+  }
+  const source = (window.cwSanitizeGPXText ? window.cwSanitizeGPXText(gpxText) : gpxText).replace(/^[﻿\s]+/, "");
+  // leaflet-gpx takes anything that does not start with "<" for a URL, and fetches it.
+  if (!source.startsWith("<")) return null;
 
-    // Ensure reloadFull() (which reads window.lastGPXFile) works when GPX is injected
-    // programmatically (POST/service-worker flow). Create a File-like object so
-    // the existing file-based reload path can reparse the same GPX on parameter
-    // changes triggered by the UI.
+  const layer = await new Promise((resolve) => {
+    let gpx;
     try {
-      // File constructor is available in browsers; fallback to a simple object if not.
-      window.lastGPXFile = typeof File === 'function'
-        ? new File([gpxText], nameHint || 'route.gpx', { type: 'application/gpx+xml' })
-        : { name: nameHint || 'route.gpx', _text: gpxText };
-    } catch (e) {
-      // Do not block loading if File creation fails; just log.
-      console.warn('[cw] could not create File for lastGPXFile fallback', e);
-      window.lastGPXFile = { name: nameHint || 'route.gpx', _text: gpxText };
-    }
-
-    // Save programmatically loaded routes to recent routes for consistency
-    if (typeof window.saveRecentRoute === 'function' && window.lastGPXFile) {
-      try {
-        window.saveRecentRoute(window.lastGPXFile);
-      } catch (e) {
-        console.warn('[cw] failed to save recent route', e);
-      }
-    }
-
-    if (trackLayer) {
-      try {
-        map.removeLayer(trackLayer);
-        logDebug("cwLoadGPXFromString: removed previous track layer");
-      } catch (_) {}
-    }
-
-    let loadedFired = false;
-    let errorFired = false;
-
-    let gpxLayer;
-    try {
-      gpxLayer = new L.GPX(gpxText, {
+      gpx = new L.GPX(source, {
         async: true,
-        polyline_options: { color: 'blue' },
+        polyline_options: { color: "blue" },
         marker_options: {
-          startIconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
-          endIconUrl:   "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-          shadowUrl:    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-          wptIconUrl: null
-        }
+          startIconUrl: "/icons/marker-icon-green.png",
+          endIconUrl: "/icons/marker-icon-red.png",
+          shadowUrl: "/icons/marker-shadow.png",
+          wptIconUrl: null,
+        },
       });
     } catch (e) {
-      console.error("[cw] L.GPX constructor error:", e);
       logDebug("Error creando L.GPX: " + e.message, true);
-      return;
+      return resolve(null);
     }
-
-    trackLayer = gpxLayer;
-
-    gpxLayer.on("loaded", async (evt) => {
-      loadedFired = true;
-      try {
-        console.debug("[cw] GPX loaded event; bounds:", evt.target.getBounds());
-        map.fitBounds(evt.target.getBounds());
-        await segmentRouteByTime(evt.target.toGeoJSON());
-
-        const baseName = (nameHint || "route").replace(/\.[^/.]+$/,"");
-        const metaName = (evt.target.get_name && evt.target.get_name()) || baseName;
-        const rutaEl = document.getElementById("rutaName");
-        if (rutaEl) rutaEl.textContent =  (metaName || baseName);
-
-        map.fitBounds(evt.target.getBounds(), { padding: [20, 20], maxZoom: 15 });
-        logDebug("GPX cargado desde ingest ✓");
-      } catch (e) {
-        console.error("[cw] on loaded processing error:", e);
-        logDebug("Error procesando GPX: " + e.message, true);
-      }
+    gpx.on("loaded", () => resolve(gpx));
+    gpx.on("error", (e) => {
+      logDebug("Evento error al cargar GPX: " + ((e && e.err) || "unknown"), true);
+      resolve(null);
     });
+    // leaflet-gpx parses in a zero-delay timer it has just scheduled, so this one runs
+    // after it: by then it has fired loaded or error, or it threw and never will.
+    setTimeout(() => resolve(null), 0);
+  });
+  if (!layer) return null;
 
-    gpxLayer.on("error", (e) => {
-      errorFired = true;
-      const detail = (e && (e.err || e.error || e.message)) || "unknown";
-      console.error("[cw] GPX error event:", detail, e);
-      logDebug("Evento error al cargar GPX: " + detail, true);
-      console.debug("[cw] GPX head snippet:", head);
-      // Mensaje más claro para el caso típico de “No parseable layers…”
-      if (String(detail).includes("No parseable layers")) {
-        alert("El GPX no contiene ningún track/ruta/punto parseable.\n\nRevisa que el archivo no esté vacío o truncado.\nSugerencia: usa gpx_url en el atajo o verifica que la codificación Base64 incluya todo el archivo.");
-      }
-    });
-
-    gpxLayer.on("add", () => {
-      console.debug("[cw] GPX layer added to map");
-    });
-
-    gpxLayer.addTo(map);
-    console.debug("[cw] GPX layer addTo(map) called");
-
-    // Watchdog: si no dispara loaded ni error en 5s, informar
-    setTimeout(() => {
-      if (!loadedFired && !errorFired) {
-        console.warn("[cw] GPX neither loaded nor error after 5s");
-        logDebug("GPX no terminó de cargar en 5s (ni loaded ni error). Revisa el GPX o la consola.", true);
-      }
-    }, 5000);
-  } catch (err) {
-    console.error("[cw] loader outer error:", err);
-    logDebug("Error cargando GPX: " + err.message, true);
-    alert(t("error_reading_gpx", { msg: err.message }));
-  }
+  const geojson = layer.toGeoJSON();
+  if (!cwForecastRules.routeLine(geojson)) return null;
+  return {
+    layer, geojson, text, gpxText, name: fileName,
+    displayName: (layer.get_name && layer.get_name()) || fileName.replace(/\.[^/.]+$/, ""),
+    fingerprint: cwForecastRules.fingerprint(text),
+  };
 };
-// --- end GPX public loader ---
+
+// Puts a parsed route on screen with no wait anywhere: it becomes the confirmed route, takes
+// the name on screen and the file sharing sends, what belonged to the route before goes, and
+// the whole layer is drawn and framed. Confirming and naming come first, so a drawing step
+// that throws midway never leaves the old route confirmed, named or exported under the new
+// layer. The coordinator launches its computation straight after.
+window.cwCommitRoute = function (parsed, requestId) {
+  const file = new File([parsed.gpxText], parsed.name, { type: "application/gpx+xml" });
+  confirmedRoute = {
+    requestId, name: parsed.name, fingerprint: parsed.fingerprint, geojson: parsed.geojson, text: parsed.text,
+  };
+  // The ride watch of another route is disarmed now, through its queue, with no wait here.
+  try { window.cwDisarmWatchFor?.(parsed.fingerprint); } catch (_) { /* never stops a confirmation */ }
+  window.lastGPXFile = file;
+  const rutaEl = document.getElementById("rutaName");
+  if (rutaEl) {
+    rutaEl.textContent = parsed.displayName;
+    rutaEl.style.color = "";
+    rutaEl.style.fontStyle = "";
+  }
+  publishedSnapshot = null;
+  weatherData = [];
+  window.activeWeatherAlerts = [];
+  const alertContainer = document.getElementById("weather-alerts-container");
+  if (alertContainer) {
+    alertContainer.style.display = "none";
+    alertContainer.querySelectorAll(".weather-alert").forEach((el) => el.remove());
+  }
+  hideAndCleanupAlertIndicator();
+  windMarkers.forEach((m) => map.removeLayer(m));
+  windMarkers = [];
+  rainMarkers.forEach((m) => map.removeLayer(m));
+  rainMarkers = [];
+  selectedOriginalIdx = null;
+  viewOriginalIndexMap = [];
+  colIndexByOriginal = {};
+  lastAppliedSpeed = null;
+
+  if (trackLayer) map.removeLayer(trackLayer);
+  trackLayer = parsed.layer;
+  trackLayer.addTo(map);
+  window.replaceGPXMarkers(trackLayer);
+  map.fitBounds(trackLayer.getBounds(), { padding: [20, 20], maxZoom: 15 });
+  renderWeatherTable();
+};
+
+// Keeps a route from outside the page among the recent routes, as it arrived, when it holds
+// one. Text with no sign of a track, a route or waypoints is not kept: a truncated share or a
+// web page would become the newest recent route, and the one the next start-up tries, and
+// fails, to restore. It decides like cwParseRoute: a KML is read through its conversion, but
+// one with no Placemark still converts into an empty GPX, and then the text as it arrived is
+// read instead (a real GPX named .kml). So either of the two holding a route is enough.
+// Returns whether it was queued for import.
+window.cwImportIfRoute = function (text, name) {
+  const hasRoute = (s) => typeof s === "string" && /<trkpt\b|<rtept\b|<wpt\b|<trk\b|<rte\b/i.test(s);
+  let importable = hasRoute(text);
+  if (!importable && typeof text === "string" && isKmlRoute(text, name)) {
+    try { importable = !!window.cwKmlToGpxText && hasRoute(window.cwKmlToGpxText(text)); } catch (_) { importable = false; }
+  }
+  if (importable) window.cw.importRoute({ text, name });
+  return importable;
+};
+
+// A route handed over by other code, a postMessage by default (gpx-share.js receives it).
+window.cwLoadGPXFromString = (gpxText, nameHint = "route.gpx", source = "message") =>
+  window.cwReceiveRoute({ source, name: nameHint, text: gpxText });
+// --- end routes ---
 
 // NEW: expose minimal hooks for compare.js (no behavior changes)
 try {
@@ -3303,7 +3305,6 @@ try {
   });
   window.cw.horizons = {
     OPENMETEO_MAX_DAYS,
-    METEOBLUE_MAX_DAYS,
     OPENWEATHER_MAX_DAYS,
     AROMEHD_MAX_HOURS,
     MS_PER_DAY,
@@ -3317,10 +3318,10 @@ try {
   window.cw.windToUnits = windToUnits;
   window.cw.safeNum = safeNum;
   window.cw.computeLuminance = computeLuminance;
+  window.cw.aromeCodeAndDay = aromeCodeAndDay;
   // Icons per provider
   window.cw.icons = {
     om: getWeatherIconClassOpenMeteo,
-    mb: getWeatherIconClassMeteoBlue,
     ow: getWeatherIconClassOpenWeather,
   };
   // Summary/header builders and time formatter
@@ -3333,7 +3334,6 @@ try {
   };
   window.cw.getDetailedCategoryOpenMeteo = getDetailedCategoryOpenMeteo;
   window.cw.getDetailedCategoryOpenWeather = getDetailedCategoryOpenWeather;
-  window.cw.getDetailedCategoryMeteoBlue = getDetailedCategoryMeteoBlue;
   window.cw.formatTime = formatTime;
   // Allow compare.js to set a baseline and re-render markers
   window.cw.setWeatherData = (arr) => { weatherData = Array.isArray(arr) ? arr.slice() : []; };
@@ -3351,9 +3351,6 @@ try {
   // NEW: expose selection helpers for compare clicks
   window.cw.highlightColumn = (col) => highlightColumn(col);
   window.cw.highlightMapStep = (idx, center = false) => highlightMapStep(idx, center);
-  
-  // Expose weather alerts functions
-  window.revalidateWeatherAlerts = revalidateWeatherAlerts;
 } catch (_) {
   // ignore: hooks are optional
 }
@@ -3367,15 +3364,11 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSettings();
   applyTranslations();
   updateProviderOptions();
+  window.updateWeatherAlertsAvailability?.();
   setupDateLimits();
 
-  // Ajuste del selector de hora: pasos 15 min y valor inicial redondeado hacia arriba
-  const dt = document.getElementById("datetimeRoute");
-  if (dt) {
-    dt.step = 900; // 15 minutos
-    const rounded = roundToNextQuarterISO(new Date());
-    dt.value = rounded;
-  }
+  // The start field keeps what loadSettings left in it once the start rule has run
+  // (cwApplyStartRule); setupDateLimits gives it its step and minimum.
 
   // Observe map container size changes and window resizes to keep track centered
   const mapEl = document.getElementById("map");
@@ -3386,7 +3379,6 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("resize", scheduleMapResizeRecenter, { passive: true });
   window.addEventListener("orientationchange", scheduleMapResizeRecenter, { passive: true });
 
-  hideLoading();
   logDebug(t("app_started"));
 });
 
@@ -3554,12 +3546,24 @@ window.debugAlertPosition = function() {
 };
 
 // Check for weather alerts independently of main provider
-async function checkWeatherAlertsIndependent(steps, timeSteps) {
+// Only a computation looks them up: the warnings found go into its `sink`, with the
+// settings it read, and are shown only if it publishes. Nothing here touches the page.
+async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, isCurrent, signal, timedOutHosts) {
+  // Its own recorder: its requests are timed, given up on and aborted like the computation's, and never
+  // reach the notice. It shares the computation's list of hosts given up, so it never waits again on one
+  // the steps have already given up, which would hold the publish back for another 15 s.
+  const recorder = window.cw.utils.createRecorder(signal);
+  // A copy on purpose. Reading which hosts the steps gave up is the point; writing its own back into
+  // the computation's list is not, and noteTimeout pushes into whatever array it is handed. That is
+  // inert today only because this runs after the last step, so the list is never consulted again —
+  // an ordering, not a guarantee. Copying keeps it inert if the lookup is ever run alongside them.
+  if (timedOutHosts) recorder.timedOutHosts = timedOutHosts.slice();
   // Only check if alerts are enabled and we have OpenWeather API key
-  if (getVal("showWeatherAlerts") === false) return;
-  
-  const apiKeyOW = getVal("apiKeyOW");
-  if (!apiKeyOW || apiKeyOW.trim().length < 5) return;
+  if (!settings.alerts) return;
+
+  const apiKeyOW = settings.keys.openweather;
+  // watch-rules.js carries the rule and loads before this file.
+  if (!window.cwWatchRules.hasAlertsKey(apiKeyOW)) return;
   
   console.log('Checking weather alerts independently...');
   
@@ -3583,10 +3587,11 @@ async function checkWeatherAlertsIndependent(steps, timeSteps) {
     console.log(`Weather alerts sampling: ${sampleCount}/${totalSteps} points (~67%, indices: ${sampleIndices.join(', ')})`)
     
     for (const i of sampleIndices) {
+      if (isCurrent && !isCurrent()) return;
       const p = steps[i];
       const timeAt = timeSteps[i];
       
-      const tempUnit = getVal("tempUnits");
+      const tempUnit = settings.units.temp;
       const units = (String(tempUnit || "").toLowerCase().startsWith("f")) ? "imperial" : "metric";
       
       // Build OpenWeather URL specifically for alerts (exclude everything else to save bandwidth)
@@ -3596,16 +3601,18 @@ async function checkWeatherAlertsIndependent(steps, timeSteps) {
       const cached = getCache(cacheKey);
       
       if (cached && cached.alerts) {
-        processWeatherAlerts(cached.alerts, p, timeAt);
+        sink.push(...cached.alerts);
         continue;
       }
       
       try {
-        const response = await fetch(alertsUrl);
+        const response = await fetch(alertsUrl, { cwRecorder: recorder });
+        if (isCurrent && !isCurrent()) return;
         if (response.ok) {
-          const data = await response.json();
+          const data = await window.cw.utils.readJson(response, recorder);
+          if (isCurrent && !isCurrent()) return;
           if (data.alerts && Array.isArray(data.alerts)) {
-            processWeatherAlerts(data.alerts, p, timeAt);
+            sink.push(...data.alerts);
             setCache(cacheKey, { alerts: data.alerts }, 3600); // Cache for 1 hour
           }
         }
@@ -3764,17 +3771,21 @@ function createAlertsContainer() {
   return container;
 }
 
-// Create individual alert element
+// Create individual alert element.
+// Every string here comes from a weather provider relaying a national met service,
+// so it is built with textContent: the alert text is data, never markup.
 function createAlertElement(alert) {
   const alertDiv = document.createElement('div');
   alertDiv.className = 'weather-alert';
-  
+
   // Determine alert severity class
   const severityClass = getSeverityClass(alert.event);
-  
+  const severityColor = getSeverityColor(severityClass);
+
   alertDiv.style.cssText = `
+    position: relative;
     background: #fff;
-    border-left: 4px solid ${getSeverityColor(severityClass)};
+    border-left: 4px solid ${severityColor};
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     margin-bottom: 10px;
     padding: 12px 16px;
@@ -3784,43 +3795,45 @@ function createAlertElement(alert) {
     max-height: 120px;
     overflow-y: auto;
   `;
-  
+
+  const line = (text, css) => {
+    const el = document.createElement('div');
+    el.style.cssText = css;
+    el.textContent = text;
+    alertDiv.appendChild(el);
+  };
+
+  const description = String(alert.description || '');
   const startDate = new Date(alert.start * 1000).toLocaleString();
   const endDate = new Date(alert.end * 1000).toLocaleString();
-  
-  alertDiv.innerHTML = `
-    <div style="font-weight: bold; color: ${getSeverityColor(severityClass)}; margin-bottom: 4px;">
-      ⚠️ ${alert.event}
-    </div>
-    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
-      ${alert.senderName}
-    </div>
-    <div style="color: #333; margin-bottom: 6px;">
-      ${alert.description.substring(0, 200)}${alert.description.length > 200 ? '...' : ''}
-    </div>
-    <div style="font-size: 11px; color: #888;">
-      ${startDate} - ${endDate}
-    </div>
-    <button onclick="this.parentElement.remove()" style="
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: none;
-      border: none;
-      font-size: 16px;
-      cursor: pointer;
-      color: #999;
-      width: 20px;
-      height: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    ">×</button>
+
+  line(`⚠️ ${alert.event || ''}`, `font-weight: bold; color: ${severityColor}; margin-bottom: 4px;`);
+  line(String(alert.senderName || ''), 'font-size: 12px; color: #666; margin-bottom: 8px;');
+  line(description.length > 200 ? description.substring(0, 200) + '...' : description, 'color: #333; margin-bottom: 6px;');
+  line(`${startDate} - ${endDate}`, 'font-size: 11px; color: #888;');
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '×';
+  close.setAttribute('aria-label', 'Close');
+  close.style.cssText = `
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    color: #999;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   `;
-  
-  // Make position relative for close button
-  alertDiv.style.position = 'relative';
-  
+  close.addEventListener('click', () => alertDiv.remove());
+  alertDiv.appendChild(close);
+
   return alertDiv;
 }
 
@@ -4028,59 +4041,4 @@ function resetAlertProcessedFlags() {
   window.activeWeatherAlerts.forEach(alert => {
     alert.processed = false;
   });
-}
-
-// Re-validate weather alerts when parameters change (date, speed, etc.)
-async function revalidateWeatherAlerts() {
-  if (getVal("showWeatherAlerts") === false) return;
-  if (!window.weatherData || !window.weatherData.length) return;
-  
-  console.log('Re-validating weather alerts for parameter changes...');
-  
-  // Clear existing alerts
-  window.activeWeatherAlerts = [];
-  
-  // Hide existing alert indicator and container
-  const indicator = document.getElementById('weather-alert-indicator');
-  if (indicator) indicator.style.display = 'none';
-  
-  const container = document.getElementById('weather-alerts-container');
-  if (container) container.style.display = 'none';
-  
-  // Re-check alerts with current parameters
-  const steps = window.weatherData.map(w => ({
-    lat: w.lat,
-    lon: w.lon,
-    time: w.time
-  }));
-  
-  // Generate current time steps
-  const datetimeValue = getVal("datetimeRoute");
-  if (!datetimeValue) return;
-  
-  const startDateTime = getValidatedDateTime();
-  if (isNaN(startDateTime.getTime())) return;
-  
-  const speed = Number(getVal("cyclingSpeed")) || 12;
-  const intervalMinutes = Number(getVal("intervalSelect")) || 15;
-  const totalDistanceM = steps.length > 1 ? 
-    steps.reduce((total, step, i) => {
-      if (i === 0) return 0;
-      return total + haversine(steps[i-1], step);
-    }, 0) * 1000 : 10000;
-  
-  const totalDurationMins = (totalDistanceM / 1000) / speed * 60;
-  const stepsCount = Math.floor(totalDurationMins / intervalMinutes) + 1;
-  
-  const timeSteps = [];
-  for (let i = 0; i < stepsCount; i++) {
-    timeSteps.push(new Date(startDateTime.getTime() + i * intervalMinutes * 60000));
-  }
-  
-  await checkWeatherAlertsIndependent(steps, timeSteps);
-  
-  // Show indicator again if there are active alerts after revalidation
-  if (window.activeWeatherAlerts.length > 0) {
-    showAlertIndicator();
-  }
 }

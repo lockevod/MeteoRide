@@ -48,17 +48,25 @@ export async function onRequest(context) {
       try { context.waitUntil(env.SHARED_GPX.delete(id)); } catch(_) { /* ignore */ }
     }
 
+    // Whatever was uploaded comes back on this origin, so it must never be rendered
+    // as a document: a browser given XML will run script it finds in an XHTML or SVG
+    // namespace inside it. The app reads this with fetch(), the Shortcut with "Get
+    // contents of URL", and Hammerhead from its own servers; none of them render it.
     return new Response(data, {
       status: 200,
       headers: {
         ...corsHeaders(),
         'Content-Type': 'application/gpx+xml',
+        'Content-Disposition': `attachment; filename="${id}.gpx"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
         'Cache-Control': 'no-store',
         'X-Shared-Exists': '1'
       }
     });
   } catch (err) {
-    return new Response('Function error: ' + String(err), { status: 500, headers: corsHeaders() });
+    console.error('shared/[id] failed', err);
+    return new Response('Function error', { status: 500, headers: corsHeaders() });
   }
 }
 

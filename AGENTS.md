@@ -1,0 +1,1702 @@
+# Working notes for agents
+
+Context for anyone (human or AI) picking this repository up. It records how the
+project is put together and, more usefully, *why* the non-obvious parts are the way
+they are. Keep it current when you change the shape of things.
+
+## What this is
+
+MeteoRide forecasts weather along a GPX/KML route for cyclists. It is a plain
+client-side web app: no framework, no bundler, no build step for the website. Files in
+`public/` are served as-is. Since September 2026 the same code also ships as a native
+iOS/Android app through Capacitor.
+
+```
+public/            the web app — the single source of truth for all platforms
+  index.html       one page; scripts are plain <script> tags, order matters
+  scripts/
+    utils.js       shared helpers, defines window.cw.utils
+    gpx-share.js   every way a route can arrive (share, URL params, handoff)
+    ui.js          DOM wiring, settings, i18n
+    app.js         map, providers, forecast fetching, the weather table
+    compare.js     provider and date comparison modes
+    ui_weather.js  weather table rendering helpers
+    native.js      native shell bridge; inert in a browser
+    service-worker.js  POST handoff for iOS Shortcuts (web only)
+    version.js     generated, committed — window.CW_VERSION for the help pages
+functions/         Cloudflare Pages functions for the /share endpoint
+tools/             local dev server, icon scripts, Tampermonkey userscripts
+mobile/            Capacitor project (see below)
+docs/IOS.md        iOS build and Xcode setup
+docs/ANDROID.md    Android build
+```
+
+## Conventions
+
+- Vanilla ES2020, no transpiling. Globals on `window` are the integration surface
+  between scripts; there are no modules.
+- Script order in `index.html` is load-bearing. `native.js` must come before the
+  others so `window.CW_NATIVE` is set when they run.
+- Libraries come from CDNs on the website and from `mobile/www/vendor/` in the app.
+  Do not add a CDN reference without also adding it to `VENDOR` in
+  `mobile/scripts/build-www.mjs`; the build fails otherwise, on purpose.
+- User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
+- **The help pages are the short version; `docs/GUIA.md` and `docs/GUIDE.md` are the
+  long one.** `public/help.html` and `public/help_en.html` answer "what do I do" in
+  about 1600 visible words, because inside the app they are one scroll on a phone; the
+  why, the edge cases and the exact numbers live in the two guides, which the help links
+  to on GitHub so a phone can open them. `mobile/tests/help-pages.test.mjs` holds an
+  1800-word ceiling and checks that link resolves to a file that exists, and the same
+  file compares the two pages' tag counts — so every edit lands in both languages, and
+  anything that no longer fits goes into the guide rather than being dropped. `README.md`
+  is presentation plus links: the install recipes, the Cloudflare deployment and the
+  userscripts are annexes (`docs/INSTALL.md`, `docs/DEPLOY.md`, `docs/USERSCRIPTS.md`).
+- **The version has one source: `mobile/package.json`'s `version`.** Android's
+  `versionName` is kept equal to it by hand (only `versionCode`/`CURRENT_PROJECT_VERSION`
+  are free to move as their own increasing integers). iOS's `MARKETING_VERSION` cannot be
+  kept by hand at all: `mobile/ios/` is fully gitignored and Capacitor regenerates it
+  (`cap add ios`, `cap sync`), so a hand-edit there lives only in the working tree and is
+  gone on the next regeneration. `mobile/scripts/build-www.mjs`'s `main()` realigns it
+  instead, the same way it does `version.js` below: an `existsSync`-guarded step rewrites
+  every `MARKETING_VERSION` in `mobile/ios/App/App.xcodeproj/project.pbxproj` from
+  `package.json` on every build (a no-op before `cap add ios` has run). `public/scripts/version.js`
+  (`window.CW_VERSION`, read by the help pages' footer) is generated from the same field by
+  the same script — but it is also committed, because the website serves `public/` directly
+  and never runs that build. Run `npm run build` in `mobile/` after bumping the version so the committed
+  copy stays in sync; `mobile/tests/version.test.mjs` checks all three agree.
+
+## The native shell
+
+`mobile/` wraps `public/` with Capacitor 8. There is no second codebase and no code
+is duplicated: `mobile/scripts/build-www.mjs` copies `public/` into `mobile/www/`,
+swaps the CDN references for local copies, and that becomes the app bundle.
+
+Two rules that are easy to break:
+
+1. **No remote code in the app.** App Store review objects to it and the app would be
+   useless offline. `build-www.mjs` asserts `index.html` loads nothing over http(s)
+   and fails the build if it does.
+2. **`public/` is never modified by the build.** Anything the app needs must be inert
+   in a browser. `native.js` returns immediately when `Capacitor.isNativePlatform()`
+   is absent, and the native CSS rules are scoped to `html.cw-native`.
+
+### Shared-route contract
+
+Both platforms implement the same tiny plugin, `MeteoRideShare`, with two methods:
+
+- `consumePending()` → `{name, gpx}` for the oldest waiting route, or `{}` when drained.
+- `pendingCount()` → `{count}`.
+
+A route arriving from another app is written to an on-disk inbox by native code, then
+`native.js` drains it and hands each route to `cwReceiveRoute` ("Routes from outside"). It is
+on disk rather than in
+memory because the process can be recreated between the share and the moment
+JavaScript asks for it, and on iOS the share extension is a separate process
+altogether (hence the App Group).
+
+| | iOS | Android |
+|---|---|---|
+| Receives the file | Share extension, `mobile/native/ios/ShareExtension/` | `MainActivity` intent filters |
+| Inbox | App Group container | app private files dir |
+| Wakes the web layer | `meteoride://shared` → `appUrlOpen` | `sharedRouteAvailable` plugin event |
+
+### Why the two platforms are stored differently
+
+`mobile/android/` is committed; `mobile/ios/` is not. The Android project generated by
+`cap add android` is plain Gradle and the share handling lives in files that survive
+`cap sync`, so committing it means the app just works after a clone. The iOS project
+needs a share-extension target and App Group capabilities that only exist inside the
+`.pbxproj`, and those cannot be produced reliably outside Xcode. So the iOS Swift
+sources live in `mobile/native/ios/` and `docs/IOS.md` lists the five one-time steps
+to wire them up. If you find a dependable way to script the Xcode target, committing
+`mobile/ios/` would remove that friction.
+
+## Security model
+
+Threats worth designing against here are concrete: a route file is untrusted input
+that arrives from links, share sheets and other apps; the provider API key sits in
+`localStorage`; and `/share` on the website stores anything anyone POSTs, then serves
+it back from the app's own origin for two minutes. Script running on that origin
+reads the key, and in the app reaches the Capacitor bridge.
+
+Rules that follow from that, all enforced somewhere:
+
+- **Anything from outside is text, never markup.** Route names, waypoint popups and
+  provider alert cards are built with `textContent` or escaped before a library turns
+  them into HTML. `cwSanitizeGPXText` covers the file; `createAlertElement` covers
+  OpenWeather. Adding `innerHTML` with external data anywhere reopens the door.
+- **The app ships its own Content-Security-Policy, in a meta tag.** `public/_headers`
+  is a Cloudflare Pages file: it is stripped from the bundle and would mean nothing to
+  a web view. The app needs one more than the website does, because script running
+  there reaches `window.Capacitor.Plugins`. Placement is load-bearing: Capacitor's
+  Android bridge is injected as an inline `<script>` immediately after `<head>`, which
+  pushes the meta below it, and a meta policy does not govern script parsed before it —
+  so the bridge runs and everything after it, including runtime injections, is covered.
+  On iOS the bridge is a WKUserScript, which bypasses CSP entirely. Both the survival
+  of the bridge and the blocking of an injected handler were verified in Chromium, the
+  engine Android's web view uses. The policy names no CDN because the bundle carries
+  every library, and its `connect-src` is a closed list of the forecast hosts because
+  the app cannot reach `?gpx_url=` — verified by stubbing a provider and watching the
+  forecast succeed while a fetch to another host was blocked.
+- **The website ships a Content-Security-Policy** (`public/_headers`): script only
+  from our files and the three pinned CDNs, nothing inline, no eval. The bundle was
+  driven under the same policy with the hosts collapsed to `'self'` and produced no
+  script or style violation through boot, route load, settings, an alert and the help
+  page — which is why the help pages' script had to move into `scripts/help.js`.
+  `connect-src` is deliberately open to `https:` because `?gpx_url=` fetches a route
+  from wherever the user hosts it. `_headers` does not apply to Functions responses;
+  those set their own headers.
+- **`/shared/{id}` is served as an attachment, `nosniff`, with a sandboxing CSP.**
+  A browser handed XML renders it, and runs script it finds in an XHTML or SVG
+  namespace inside — so stored content must never come back as a viewable document.
+  Every legitimate consumer (the app's `fetch`, the Shortcut, Hammerhead's servers)
+  reads bytes and is unaffected. IDs are `crypto.randomUUID()`; the id is the only
+  guard on `GET` and `DELETE`, so it must not be guessable.
+- **`POST /share` counts bytes while it reads, not after.** `Content-Length` is
+  optional, so it cannot be the limit; and checking the parsed string compared UTF-16
+  units, which let 2.6 MB of `é` through after reading the whole body into memory.
+  `readCapped` stops the stream at 2.5 MB plus a 64 KB multipart envelope, and the
+  file inside a multipart body is then held to 2.5 MB itself. The counted bytes are
+  decoded strictly: `Blob.text()` swaps each invalid byte for a three-byte U+FFFD, so
+  2.5 MB of `0xFF` used to be stored as 7.5 MB. Anything not UTF-8 gets a 400.
+  `tests/share.test.mjs`.
+- **The Android activity accepts `content://` only.** No app has been able to hand out
+  a `file://` URI since Android 7, and accepting one would let any app point MeteoRide
+  at its own private files. Both stores still sniff content and cap size.
+- **Error responses say nothing about internals.** The Functions log the exception
+  and return a fixed string.
+
+What is still open, and why it was left:
+
+- The CDN scripts carry no Subresource Integrity hashes. The CDNs are unreachable
+  from the environment this was reviewed in, so the hashes could not be computed
+  against the bytes actually served, and a wrong hash takes the site down. The better
+  fix is to serve the libraries from `public/vendor/` — the build already produces
+  exactly that set — which also allows `script-src 'self'` and removes three third
+  parties from a site whose README promises no data goes anywhere else. It is a
+  deploy-shape change and a deliberate decision, not a review fix.
+- `/share` has no rate limiting. Anyone can write 2.5 MB into KV as often as they
+  like for two minutes of storage; KV writes cost money. A Cloudflare rate-limiting
+  rule on `POST /share` is the right tool, outside this repository.
+- `android:allowBackup` is left at its default. Android backups have been end-to-end
+  encrypted since 9, so the key and routes are protected; flipping it to `false`
+  trades that residual exposure for losing settings on a new phone.
+- The `postMessage` route importer accepts an empty origin (`isAllowedOrigin` in
+  `ui.js`), meant for userscript contexts. A browser page always has an origin, so
+  this is not reachable from the web, but it is a hole to remember if that listener
+  grows. The allowlist itself is pinned by a test that loads the app from
+  `https://foreign.example`, a made-up host whose every request the test answers with
+  `route.fetch` from the test server, and posts to itself, since the browser sets the origin. It
+  used to load the app from `http://[::1]:4173`, which failed outright wherever IPv6 loopback does
+  not answer. Framing the app inside a foreign page does not work in the tests: the
+  app's CSP keeps foreign frames out of the app, and a page on another hostname framing 127.0.0.1
+  is blocked by Chromium's local network access checks (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`).
+
+### What the Android FileProvider may serve
+
+`mobile/android/app/src/main/res/xml/file_paths.xml` is Capacitor boilerplate, and the
+boilerplate declares `<external-path path="."/>` — the whole external storage root. Nothing
+here needs it: the one file the share sheet ever hands to another app is written with
+`directory: 'CACHE'` (`native.js:186`), so `<cache-path>` covers it, there is no external
+storage permission in the manifest, and nothing calls `getUriForFile` outside the plugins.
+The `external-path` line was removed to keep the shared surface as small as what is used.
+
+Regenerating the Android project (`npx cap add android`) writes the boilerplate back. If a
+plugin ever genuinely needs external storage, add the narrowest path it needs, not `.`.
+
+## Behaving like an app rather than a page
+
+- **iOS zooms in when a field smaller than 16px takes focus, and does not zoom back.**
+  The first answer was to raise those fields to 16px in the app, but only the ones
+  that open a keyboard — raising `<select>` and the datetime picker clipped the time
+  and overflowed the provider box. That left the speed box visibly larger than the
+  interval select beside it. The app's viewport carries `user-scalable=no` instead
+  (added in `build-www.mjs`, so the website keeps pinch-zoom), which removes the cause
+  rather than working around it, and every control keeps the size the website gives it.
+- **An app is resumed, not reloaded.** Come back hours later and the table would still be the
+  one computed for a departure that has passed. On `appStateChange` the start rule runs again
+  (`cwApplyStartRule` in `app.js`: the time chosen while it is still ahead, otherwise now
+  rounded up to the next quarter hour), and the forecast is computed again when that moved the
+  start or the snapshot on screen is more than thirty minutes old. Two exceptions
+  (`refreshOnResume` in `native.js`): with the start unchanged and the latest computation still
+  running (`cwIsComputing`), nothing is launched again; and without coverage, unless the prepared
+  record can replay the confirmed route at the start now in the field, nothing is computed: the table
+  stays and `offline_cannot_recalculate` says so, except over a replay on screen (out of range, or
+  expired and said so), whose own notice stays. Computing without coverage read the cache under keys
+  the moved start had shifted, and put an empty table over one with data. A deliberately chosen future
+  time is never overwritten. The same rule runs after every `loadSettings` (also the one
+  `restoreSettings` repeats, which then calls `cw.settingsChanged()` so a forecast already computed
+  follows the restored fields) and whenever a computation reads its settings, and changing the
+  field saves it. Rounding up is done in epoch milliseconds (`roundUpToNextQuarterDate`,
+  `roundToNextQuarterISO` in `utils.js`): the seconds count, so at 10:00:30 the start is 10:15, and
+  setting wall-clock hours can no longer land an hour off on the day the clocks go back. The Playwright
+  tests install their fake clock a minute before the quarter they name (`startClock`), because that
+  clock keeps running: each test has 60 s of real time (besides its `fastForward`) before now rounds to
+  the next quarter. Pausing it would stop the page's own timers. Both boot blocks in `app.js` used to overwrite the field with now, so a saved
+  time never survived a reload; only the `DOMContentLoaded` one runs (`init()` is never called),
+  and neither overwrites it any more.
+- **localStorage inside a web view is not durable.** iOS reclaims WebKit storage when
+  the device runs short of space, which would wipe the units, the language and the API
+  key. Settings are mirrored to Preferences (UserDefaults, SharedPreferences) on every
+  save and restored at startup when the web view comes up empty. The web view stays
+  authoritative while it still has them, so a stale native copy never overwrites what
+  is in use. Changing `server.iosScheme` would change the origin and orphan
+  localStorage the same way; the default scheme is deliberate.
+- **Safe-area insets are added to the page's padding, not put in its place.** The
+  first version set `main`'s side padding to `env(safe-area-inset-left)` alone, which
+  is zero in portrait, and the text sat on the edge of the screen. The website's
+  0.5rem stays and the inset goes on top.
+- **With no route the map opens where the phone is.** The website centres on
+  Barcelona, a hard-coded default. `centreOnUser` in `native.js` asks for the
+  position through the `@capacitor/geolocation` plugin when it is there, `navigator.geolocation`
+  otherwise (the web build has no plugin, so it keeps working exactly as before). The plugin
+  is why it exists at all: `navigator.geolocation` runs inside the WKWebView, so iOS
+  attributes the permission prompt to the page's origin — "localhost" under Capacitor
+  — instead of the app, and `NSLocationWhenInUseUsageDescription` in the plist was never
+  shown. Android was never affected (its permission dialog is already tied to the app,
+  not the page origin), and the plugin adds nothing to its manifest — the two
+  `ACCESS_*_LOCATION` permissions were already declared for the old web-view path. It
+  runs alongside the route restore, not after it, because on a first run the restore
+  waits seconds for routes that do not exist; a position is only applied while the map
+  is still unclaimed, and a route fits itself afterwards regardless.
+- **The root `.gitignore` ignores every nested `.gitignore`** (line 6). So the one
+  `cap add android` generates never reaches a clone, and on a fresh checkout the
+  files `cap sync android` writes — `app/src/main/assets/`, `res/xml/config.xml`,
+  `capacitor-cordova-android-plugins/` — turn up as untracked with nothing to catch
+  them. Rules for generated Android paths go in the root file, which is tracked.
+- **The help pages carry an app-only section**, hidden behind `.app-only` and shown
+  when `html.cw-native` is set. `help.js` sets that class itself: the help page does
+  not load `native.js` (that one wires up the toolbar and route handling, none of
+  which belongs on a help page), but Capacitor injects its bridge into every page in
+  the web view, so the same check works. Anything added to the shell that a reader
+  cannot work out from a button belongs in both languages there.
+- **There is a `.web-only` counterpart, and the sections collapse.** The recipes for
+  installing the PWA are noise to a reader already inside the app, so
+  `html.cw-native .web-only` hides that section. Every section is a `<details>`
+  written `open`: that is what the website shows and what a reader without JavaScript
+  gets, and only `help.js` closes them, only under `cw-native`, so the phone gets an
+  index to tap instead of 600 lines to scroll. The website takes no clicks on a
+  `<summary>` (`pointer-events: none`), so it reads exactly as it did before.
+  `mobile/tests/help-pages.test.mjs` compares the two languages section by section —
+  same sections in the same order, same count of headings and bullets — because the
+  failure mode here has always been an edit landing in one language only.
+- **The help pages' back button pays for the notch itself.** `.header` adds
+  `env(safe-area-inset-top)` to its padding, and the absolutely positioned button adds
+  half of it back to its own offset, because an absolute offset measures from the
+  border box the inset just grew. Insets are only reported to a page whose viewport
+  covers the screen, which is why `patchBundledHtml` adds `viewport-fit=cover` to the
+  bundled pages: without it `env()` is zero and the rule does nothing. The website
+  keeps its own viewport, having no notch to dodge.
+- **The icon set holds two different drawings.** Every PNG in `public/icons/` shares
+  one artwork with a 9% transparent margin — except `icon-ios.png`, which is the one
+  `<link rel="apple-touch-icon">` points at, so it is what iOS actually shows for the
+  installed web app. It was made by `tools/scripts/fix_icon_ios.py` (crop, scale to
+  fill, centre on `#1E5F8F`), and it carries a dark fringe the others do not: PIL
+  resamples RGBA without premultiplying, so the black behind the transparent pixels
+  bleeds into the edges. Measured, not guessed — the fringe pixels average `0,38,65`,
+  which is the background blue at about 45% over black. `install-icons.mjs` follows
+  the same recipe but composites before averaging, so it reproduces the framing
+  without the fringe.
+- **Android gets that icon three ways, and `npm run icons` writes all of them.** A
+  square and a round PNG for launchers before Android 8, and an adaptive icon for the
+  rest: `#1E5F8F` behind a transparent 108dp foreground with the whole drawing in its
+  middle 72dp. That is the part every launcher mask shows; spreading the drawing over
+  the full canvas lets a circular mask cut the wheel off. `android/` is in git, so the
+  generated PNGs are committed. The template's vector drawables are gone: nothing
+  referenced them once the adaptive icon pointed at the mipmap and the colour.
+- **`accept=".gpx"` greys out every file in the iOS picker.** iOS turns `accept`
+  into a list of UTIs, and GPX has no system UTI, so the one file type the app
+  exists to read becomes unselectable. `relaxFilePicker` in `native.js` widens the
+  attribute inside the app only — the website keeps the tight list, where extensions
+  work as written. Declaring `cc.meteoride.gpx` in `Info.plist` covers "Open in
+  MeteoRide" from other apps; it does not help the web view's own picker.
+- **The starting language follows the device, not a hardcoded `'en'`.** Only when
+  nothing is stored: the in-app selector wins the moment it is touched. Catalan and
+  Galician map to Spanish, which is far closer than English for those readers. This
+  changes the website too — a Spanish-speaking visitor now lands in Spanish. iOS
+  cannot offer its own per-app language row for this app: that appears only when the
+  bundle declares several localizations, and the translations live in JavaScript.
+- **`t()` returns the key when it is missing**, so a forgotten entry reaches the
+  user as `no_route_for_export` rather than a sentence, and the `|| 'fallback'`
+  written around several calls never fires because the key is truthy. Two keys had
+  been missing on the website for a long time without anyone noticing.
+  `tests/translations.test.mjs` collects every `t('x')` in the scripts and every
+  `data-i18n` in the pages and fails on any key absent from either dictionary, and
+  separately fails when the two dictionaries drift apart.
+- **A plugin's bridge name is not its npm export.** `@capacitor/background-runner`
+  exports `BackgroundRunner` but registers as `CapacitorBackgroundRunner`, on both
+  platforms, and `Capacitor.Plugins` is keyed by the registered name. Reaching for
+  the wrong one costs nothing at build time — the key is simply `undefined` — and
+  the ride-alerts toggle silently never appeared on a device, while the suite stayed
+  green because the stub mirrored the same mistake. `tests/plugin-names.test.mjs`
+  now reads every installed package's `registerPlugin()` call and fails on a name
+  `native.js` uses that nothing registers. A stub is only evidence when something
+  independent pins it to the real contract.
+- **`main` is sized by flex, not by `calc(100vh - 3rem)`.** That calc takes the
+  header to be exactly 3rem, and in the app it is taller by the safe-area inset —
+  about 60px on a phone with a notch — so `main` ran off the bottom of the screen.
+  `body` is a flex column of `100dvh` under `html.cw-native` and `main` takes what is
+  left; `#configMenu` and `#debugSection` are positioned out of the flow, so nothing
+  else becomes a flex item. The map's `min-height: 300px` is lowered too, so a notice
+  appearing takes space from the map instead of pushing the table off the bottom.
+- **`loadSettings` used to blank every field with nothing stored**, throwing away the
+  defaults written in `index.html`: the speed came up empty and the interval select,
+  handed an invalid value, showed nothing at all. The markup holds the default now
+  and the loader only overwrites what it actually has — **including empty strings**,
+  which is the part that took two goes. `saveSettings` had already persisted the
+  blanks to real devices, so a loader that ignored only `null` read `""` back and put
+  it straight in again, for ever. No field carrying a default in the markup can
+  legitimately be blank, so `""` counts as nothing stored.
+- **Two CSS rules that cover for each other cannot be mutation-tested one at a time.**
+  Removing the body flex left `height: auto` on main, which alone prevented the
+  overflow, and removing only the height left flex-shrink to do the same — the layout
+  test passed both times and looked like it proved something. It only fails with both
+  reverted, which is what the original state was.
+- **`hidden` loses to `display: flex`.** `#configMenu .config-row` is a flex row, and
+  an element's own display rule beats the user-agent `[hidden] { display: none }`,
+  so the app-only ride-alerts row was visible on the website with the panel open. A
+  `.config-row[hidden] { display: none }` rule restores the attribute; the smoke
+  suite opens the panel and checks visibility, because checking the attribute alone
+  proved nothing.
+- **There is one notice slot and the last writer wins.** Several messages now compete
+  for it, so a test that samples it at the end can miss one that appeared and was
+  replaced. `recordNotices` in the suite observes the element and keeps every message
+  that passed through; assert against that, not against the current text.
+- **Compare-by-dates' sticky first column collapses while scrolled away, app only.**
+  It carries the day and the day's overall figures, and at 170px (140px on a small
+  screen) it is fine at first — but `position: sticky` means it keeps following the
+  user right as they scroll to the time steps, eating width the steps need. A scroll
+  listener on `#weatherTableContainer`, bound once in `compare.js` rather than
+  per-render, toggles `.dates-col-collapsed` on the container once `scrollLeft` is
+  past a small threshold (not exactly 0: iOS momentum scrolling can leave it a
+  fraction above), and clears it again at the start. The CSS this drives is scoped to
+  `html.cw-native #weatherTable.compare-dates-mode`, so it is invisible on the website
+  and in provider-compare mode. Collapsed, the column keeps the day (the interval
+  row's `.date-label`) and the weather icon (the summary row's `<i class="wi …">`) in
+  about 56px; the numeric summary is wrapped in its own `.ds-summary-numbers` and that
+  is what `display:none` hides — there was nothing to keep or hide for "sun times" in
+  this column, since compare-dates mode never renders them there (`sunA`/`sunB` in
+  `renderDateCompareTable` are computed and never used; only provider-compare mode's
+  `renderCompareTable` puts sun times anywhere, in a `#compactSummary` bar above the
+  table, not in the sticky column). Width, not `display`, is what changes on the
+  column itself, since the table is `table-layout: fixed` and toggling `display` on a
+  `<th>` would reflow every step column under it.
+- **The phone is locked to portrait, deliberately: rotating breaks the layout badly.
+  The iPad is not** — the author chose to let it rotate, and nobody has looked at that
+  layout in landscape, so it is untested rather than endorsed. Native configuration
+  only, on both platforms — nothing in `public/` changed, so the website still rotates
+  freely. iOS: `UISupportedInterfaceOrientations` holds Portrait alone, and
+  `UISupportedInterfaceOrientations~ipad` lists all four explicitly, because an absent
+  `~ipad` key falls back to the iPhone one and would lock the iPad as well
+  in `mobile/native/ios/Info.plist.additions.xml`, merged into `ios/App/App/Info.plist`
+  by hand as `docs/IOS.md` step 4 already describes — `mobile/ios/` is gitignored and
+  regenerated, so this is a one-time step per checkout, not something `npm run sync`
+  repeats. Android: `android:screenOrientation="portrait"` on `.MainActivity` in the
+  committed `AndroidManifest.xml`; there is only the one activity, and the share sheet
+  and file-open intent filters are on it too, so nothing else needs the same line.
+
+## Gotchas found the hard way
+
+- **Capacitor does not auto-register a plugin that lives in the app target.** On iOS
+  it registers exactly what the CLI wrote into the generated `capacitor.config.json`
+  `packageClassList`, which is rebuilt from the installed npm packages on every
+  `cap sync` — editing it by hand is pointless. `MeteoRideViewController` overrides
+  `capacitorDidLoad` and calls `bridge?.registerPluginInstance(...)`, which is the
+  only hook that runs after the bridge exists and before the web view loads.
+  (`registerPluginType` looks right and is not: it returns early whenever
+  `autoRegisterPlugins` is on, which is the default.) On Android the equivalent is
+  `registerPlugin(...)` in `MainActivity.onCreate`, before `super.onCreate`.
+- **`env(safe-area-inset-*)` is the right thing to use on both platforms**, despite
+  Capacitor's Android side also injecting `--safe-area-inset-*` custom properties.
+  On a recent WebView with `viewport-fit=cover` it passes the real insets through, so
+  `env()` works; on an older one it pads the decor view itself and injects zeroes.
+  Using the custom properties as well would double-pad on old devices. The build adds
+  `viewport-fit=cover` to the bundle's `index.html`, which is what switches that on.
+- **Do not run two suites at once.** They share port 4173 and rebuild `www` under each
+  other, which produces a cluster of tests failing in a couple of hundred milliseconds
+  each. That looks like a product bug and is not one.
+- **`npx playwright test` does not rebuild the bundle; `npm test` does.** A test that
+  fails right after an edit is probably running the previous build. This cost a long
+  debugging detour into code that was already correct.
+- **The in-memory recent-routes cache holds metadata only; never write it back to
+  IndexedDB.** The GPX lives only in each stored record's `content` (a string; a record
+  from an older build still carries `blob`, and every read falls back to it). Opening an older
+  recent route used to clear the store and re-add the cache, which wiped every stored
+  route and renumbered them, so the menu and the native cold-start restore found
+  nothing. Reordering now rewrites just the opened record with a new `timestamp`.
+- **A route file is executable content.** leaflet-gpx builds waypoint popups by
+  concatenating `<name>` and `<desc>` straight into an HTML string. `cwSanitizeGPXText`
+  escapes those text nodes before the library sees them, and both loaders call it. It
+  only re-serialises when something needed escaping, so ordinary routes reach the
+  parser untouched. See the security model above for the rest of that family.
+- **A map tile is network content rendered into the page.** It is fetched, stored and
+  shown through an object URL, so it was checked the same way a route was: an `<img>`
+  does not execute script inside an SVG, confirmed live and from the cache, and the
+  policy limits where tiles can come from at all. Any future change that renders tile
+  bytes through anything other than `<img>` reopens the question.
+- **Nothing in the bundle may be fetched from another site.** Not just the tags in
+  `index.html`: marker icons were hardcoded in three scripts and the help pages carried
+  a donation button from a CDN. `findRemoteAssets` in the build scans every first-party
+  HTML, JS and CSS file and fails the build; a URL containing `{` is skipped, which is
+  how the map tile template stays legal. Remote `<img>` tags in bundled pages are
+  replaced by their alt text.
+- **No payment link inside the app.** The help pages' "support the project" section
+  links to buymeacoffee. App Store guideline 3.1.1 rejects any link to a purchase
+  outside in-app purchase, and 3.2.1 allows in-app donations only to approved
+  non-profits; Google Play tolerates external donation links without promising to.
+  `stripDonation` in the build removes the section from every bundled page and
+  `ensureNoDonationLink` fails the build if the host is still mentioned, so moving
+  the section in `help.html` cannot quietly put it back. The website keeps it.
+- **`t()` substitutes placeholders itself and blanks out any it is not given.** So
+  `t('offline_stale_forecast')` followed by a `.replace('{age}', …)` silently produces
+  "Forecast is  old." Pass the values to `t`, never patch its result.
+- **Two drains can overlap.** `consumePendingShare` in `native.js` refuses to run
+  twice at once, but a route can land in the inbox while a call is already in flight,
+  and the answer to that call was decided before it arrived. A request that turns up
+  mid-drain therefore sets a flag and the drain repeats, rather than being dropped
+  until the app is next activated.
+- **Route injection races the app boot.** A route is parsed off the map, but confirming
+  it (`cwCommitRoute`) draws onto the Leaflet map, so `window.map` must exist by then, and
+  routes from outside regularly arrive before `initMap` has run: `initGpxShare()` is called
+  while `app.js` loads, and the native boot drain runs on `DOMContentLoaded` ahead of
+  `app.js`'s own handler. Every one of them goes through `cwReceiveRoute` in `gpx-share.js`,
+  which asks for its route at once and waits for the map inside the request's `read`, under
+  its deadline ("Routes from outside"). Do not wait for the map, a download or IndexedDB
+  before calling it: a wait outside the request has no identity, and a route picked
+  meanwhile loses to the older one. That is how a file picked while `?gpx_url=` downloaded
+  used to lose to the link.
+- **A shared `.kml` reaches the coordinator as it arrived.** The injector used to convert it
+  and rename it `.gpx`; now `cwParseRoute` converts by name or by content and names the
+  confirmed route `.gpx`, and the import keeps the text and name as they came.
+  `cwKmlToGpxText` always returns a syntactically valid GPX wrapper, even for a malformed KML
+  or a real GPX misnamed `.kml`, because `toGeoJSON.kml()` never refuses to return an empty
+  `FeatureCollection`, so the converted text is used only when it carries a track, route or
+  waypoint. `geojsonToGpx`
+  (`ui.js:370-417`) also recurses into a `GeometryCollection`, which is what `togeojson`
+  turns a KML `<MultiGeometry>` with more than one child geometry into, rather than one of
+  the geometry types it otherwise switches on: every line in it is drawn on the map, but
+  `cwForecastRules.routeLine` — the line the forecast follows — only reads the first
+  `LineString`/`MultiLineString` feature with at least two valid points, so the forecast
+  only follows that first line, the same as a GPX carrying several `<trk>` tracks.
+- **`cwLoadGPXFromString` and `cwInjectGPXFromText` are thin wrappers of `cwReceiveRoute`,**
+  with `message` and `share-native` as their default sources. The receiver lives in
+  `gpx-share.js`, which loads before `app.js`, so the entries started by `initGpxShare()`
+  can call it at once; what it needs from `app.js` (`cwImportIfRoute`, `cwParseRoute`) is
+  only looked up once a text has arrived, after `app.js` has finished loading.
+- **The iOS share sheet hands over web URLs too.** The activation rule accepts any
+  `public.data` attachment, and a link shared from Strava, Komoot or a browser arrives
+  as a URL item. `Data(contentsOf:)` accepts an https URL and performs a blocking,
+  untimed download, so the store now refuses anything that is not a file URL. Android
+  has no equivalent exposure: it reads only `EXTRA_STREAM` and its manifest does not
+  accept `text/plain`, so a shared link never reaches it.
+- **An Android intent can be read twice, two different ways.** A rotation or a restore
+  recreates the activity with the same intent still attached, so `onCreate` would ingest
+  the same route again; `MainActivity` guards on `savedInstanceState == null` and marks
+  the intent with an extra once its route has been taken (`MainActivity.java:29-38,52-57`).
+  Reopening the task from Recent Apps is a second path to the same bug: it also calls
+  `onCreate(null)`, with the original intent Android stored for the task, carrying
+  `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`. `ingest()` checks for that flag and returns
+  before marking or reading anything, since this is not a genuine new share
+  (`MainActivity.java:56`).
+- **Android reads a shared file off the main thread.** A cloud-backed provider can
+  stall the stream, and the 25 MB cap bounds size, not time. `MainActivity` hands the
+  URIs to a single-thread executor, which then fires `sharedRouteAvailable` with
+  `retainUntilConsumed`, because on a launch the boot drain may already have run and
+  JavaScript may not be listening yet. Since the drain can now run while a file is
+  being written, `store` writes to the cache directory and renames into the inbox:
+  `next()` deletes what it reads, so it must never see half a file.
+- **iOS reads a shared file in chunks and stops at the cap.** `Data(contentsOf:)`
+  loaded the whole file before the 25 MB check, and the share extension has a small
+  memory budget. The extension also ingests its attachments one at a time.
+- **Two shares landing in the same millisecond need a tiebreaker, and an atomic write
+  needs a name filter.** Both inboxes name a stored file
+  `<13-digit-millis>-<4-digit-sequence>__<name>` (`MeteoRideShareStore.swift:150-158`,
+  `MeteoRideShareStore.java:203-206`), so arrival order survives a plain sort by name even
+  when two routes share a millisecond. On iOS that name also has to be filtered on the way
+  back out: `Data.write(to:options:.atomic)` leaves a `<name>.sb-XXXX` sibling in the same
+  directory for the instant of the rename, and `isInboxName`
+  (`MeteoRideShareStore.swift`) skips it rather than having `pendingURLs()` read and
+  delete it half-written. The filter accepts either that current pattern or the legacy
+  pre-update one (`<millis>__<name>`, no padding, no sequence) case-insensitively — `sanitize`
+  only checks the extension case-insensitively and keeps whatever case the sender used, so a
+  stored name can legitimately end in `.GPX`/`.KML`, and a route shared moments before an app
+  update must not sit unread until the 24-hour prune sweeps it. `sanitize` also replaces any
+  C0 control character (a scalar below U+0020, e.g. a stray `\n`, `\r`, `\t`) in the shared
+  name with `-` before writing,
+  and `isInboxName`'s regex spans line separators (`.dotMatchesLineSeparators`) so a name
+  stored by an older build, before that replacement existed, is still delivered rather than
+  silently pruned after 24 hours.
+- **A naive UTF-8 decode does not throw, so a Latin-1 exporter's bytes have to be caught
+  going in, not read back out.** Swift's `String(data:encoding: .utf8)` already returns
+  `nil` on invalid bytes, so it needs no extra care; the actual trap is `new String(bytes,
+  UTF_8)` in Java (and JavaScript's own lenient decoding) — both substitute U+FFFD and
+  hand back a corrupted but well-formed string instead of failing, the same trap
+  `/share`'s `readCapped` works around (see the security model), which is why Android's
+  decoder needs `REPORT` on malformed input and unmappable characters, catching the
+  resulting exception to fall back to `ISO_8859_1` (`MeteoRideShareStore.java:190-201`).
+  iOS just tries `.utf8` first, then falls back to `.isoLatin1`
+  (`MeteoRideShareStore.swift`'s `decode`).
+- **Share types are a mess.** Plenty of apps hand a `.gpx` over as
+  `application/octet-stream` with no usable name, so both stores accept an item whose
+  name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
+  implementations in step: same 25 MB cap, same UTF-8 with Latin-1 fallback, same
+  24-hour prune of anything the web layer never collected.
+- **The web view origin in the app is `capacitor://localhost`.** Weather providers
+  must send permissive CORS headers. Open-Meteo and OpenWeather do.
+- **The share extension cannot call `UIApplication.open`.** It tries
+  `extensionContext.open` and falls back to walking the responder chain. If Apple
+  closes that off, nothing is lost: the route waits in the inbox until the app is
+  opened normally.
+
+## Passing routes between apps
+
+This is the reason the native build exists at all: plan in Komoot, check the weather in
+MeteoRide, send it to a head unit. Both directions go through the system share sheet,
+so they work with any app rather than a hardcoded list.
+
+- **In**: the share extension on iOS, the intent filters on Android. Whatever the other
+  app exports as a `.gpx`/`.kml` file, we accept. A shared *link* is refused on purpose
+  — those services gate their downloads behind a session, so a URL would fetch a login
+  page, and on iOS it also caused a blocking download inside the extension. Whatever the
+  entry (native inbox, service worker, `?gpx_url=`, `postMessage`…), the route enters the page
+  through `cwReceiveRoute` in `gpx-share.js` ("Routes from outside").
+- **Out**: `shareCurrentRoute` in `native.js` writes the loaded route to the cache
+  directory and hands the file to `Share`. It shares the file that was loaded, not a
+  re-rendering of it, falling back to `cw.exportRouteToGpx` when the route was built
+  rather than opened. The button is created by `native.js`, so the website never grows
+  a control that depends on plugins it does not have.
+
+## Riding without coverage
+
+Opening the app cold with no coverage used to show nothing at all: no route, no
+forecast, no explanation, just a grey map. Everything needed was already on the
+device. `restoreLastRoute` in `native.js` puts a route back on screen: the prepared route
+while its start is within three hours of the one in use ("Preparing and replaying" below),
+otherwise the most recent route, with the cached forecast behind it. Native only, so the
+website's opening behaviour is unchanged.
+
+A first run out of coverage has nothing to restore and no way to fetch anything, so
+it says that rather than sitting blank. The wait for the recent-route list is five
+seconds: generous for an IndexedDB read, short enough that an empty install is not left
+in silence. Both directions are tested, including that a first run *with* coverage
+stays quiet. A restore replaced by a route picked during that wait (its request resolves
+`'superseded'`) says nothing either: the screen and the notice belong to that request.
+
+The map background is kept too, by `scripts/tile-cache.js`. Do not count on the web
+view's own HTTP cache for it: serving tiles from a real server, loading a route, taking
+the server away and reopening produced zero tiles from cache. It has also been seen
+doing the opposite, keeping tiles across a reload in another setup, so treat it as
+unpredictable rather than absent — asserting either way in a test makes the test flaky,
+which is exactly how one of them behaved until the assertion was removed. Tiles are
+therefore stored in IndexedDB as they are viewed, capped at 1200 and trimmed
+oldest-first, and trimmed again whenever the database is opened: a session that views
+fewer tiles than the write counter's threshold would otherwise never trim at all, and
+the store would grow without bound across sessions.
+
+Only what the user looked at is stored, never fetched ahead. That is the line
+OpenStreetMap's tile policy draws: caching what you requested is fine, bulk downloading
+is not. Do not add prefetching.
+
+Reading a tile's bytes needs a cross-origin `fetch`, which is why `connect-src` names
+the tile host as well as `img-src`. Whether the real tile servers allow that read has
+**not been verified**, because the host is unreachable from the environment this was
+built in. So a failed fetch falls back to a plain `<img>`, exactly how the map worked
+before, and the layer remembers to stop trying — but only when the `<img>` then
+succeeds, since a request that fails both ways is a network problem and must not
+disable caching for good. For the same reason the caching layer is used **only in the
+app** (`window.CW_NATIVE`); the website keeps `L.tileLayer` untouched. Verify on a
+device, then flip it on for the web if you want it there.
+
+The offline badge follows the tiles rather than the connection, and reads their state
+from the DOM rather than counting events: the first tile load finishes before there is
+a layer to attach a listener to. A MutationObserver on the map container backs that up,
+since Leaflet marks a loaded tile by adding a class to it and an event fired before we
+were listening is otherwise lost. With tiles from anywhere — the cache, the web view,
+the network — there is nothing to apologise for, so it stays hidden.
+
+What that leaves missing is only the map tiles. Screenshot the offline state before
+deciding the map matters: the route line, the wind arrows, the rain markers, the whole
+table and the sunrise times are all drawn client-side and all present without tiles.
+A preloaded map would add the beige background and nothing else.
+
+A route arriving from a share wins by identity, not by waiting: `boot` launches the inbox
+drain and then the restore, without awaiting either. `restoreLastRoute` asks the route
+coordinator for its route *before* reading the prepared record or waiting for the recent routes
+(both are inside the request's `read`), and a shared route only comes out of the inbox after that, so it is the
+later request and replaces the restore, even once the restore has published. The restore
+still steps aside when anything asked for a route first (a `sessionStorage` handoff, say)
+or the URL carries a route. The map goes to the phone's position only when the drain
+brought nothing, so that waits for the drain. Three tests pin the order: a share that
+publishes while the recent route is still being read wins; a share still being read when
+the recent routes turn up is not replaced; and a drain that outlasts the restore still wins,
+which fails against the old order (restore only after the drain). While it waits, the
+restore holds the loading indicator — up to five seconds on a first run.
+
+## The forecast cache without coverage
+
+The forecast cannot be invented, but throwing away the one already downloaded was a
+choice, not a necessity. `getCache` holds a 30 minute lifetime; past that it used to
+return null even with no network to fetch anything better, so the table came out empty
+and said nothing about why.
+
+Now, and only when `navigator.onLine` is false, it keeps serving what it has up to 12
+hours old and `setNotice` says how old it is. Two rules matter and each has a test that
+fails without it: **stale data is shown when there is no connection**, and **stale data
+is never shown when there is one**. The second is the one to be careful about. Showing
+an old forecast as if it were current is worse than showing nothing.
+
+`navigator.onLine` is only trusted when it says false, which is the case that matters —
+out of coverage, rather than behind a captive portal.
+
+**OpenWeather is filed by location, not by hour** (review 14/09, H3). Its request carries
+location, units and the alerts switch, never a time, and one answer holds 48 hourly entries and
+8 daily ones. So `makeCacheKey('openweather', …)` ignores date and time:
+`cw_weather_openweather_<temp>_<wind>_<lat>_<lon>`, and every step, start and comparison at that
+location reads the same answer, the extraction picking the hour by `dt`. The table used to write the
+answer under the step's quarter-hour key and again under a key for each hourly entry: for
+`route.gpx` with the test stub, 147 writes and 900 522 serialized characters for 3 requests; now 3
+writes and 18 378. Those copies only helped a step on the hour exactly. Keys in the old shape (they
+end in the ISO `Z`) are never read and are deleted at start-up in `utils.js` — a scan of the whole of
+`localStorage` on every start, not once ever; the cost is negligible and nothing tracks that it ran. Both units stay in
+the key, so ºF never reads a ºC answer. The key does not say whether the answer came with alerts,
+as it did not before; the table only takes alerts from a network answer.
+
+A computation where no provider answered says so instead of leaving an empty table, and
+only the computation on screen may say anything. Each computation makes a recorder
+(`cw.utils.createRecorder()`) and hands it to every provider request as
+`fetch(url, { cwRecorder })` and to `getCache(key, recorder)`. The single `fetch` wrapper
+in `utils.js` notes each provider answer in that recorder and nowhere else, and `getCache`
+notes the age of an old entry it serves without connection. Both also note that it happened
+offline, when it happens (`recorder.offline`): by the time the computation publishes the
+connection may be back, and the notice would blame the provider instead. A request without a recorder
+is not watched: the ride-watch baseline and the API-key test never produce a provider notice. A
+comparison carries a recorder of its own ("Consumers of the snapshot"). The notice is
+`cwForecastRules.decideNotice(outcome, { noticeAll })`, decided in `publish()`: an empty
+table whose requests failed says offline, rejected (401/403, usually a bad API key) or not
+responding; otherwise data read from the cache without connection says how old it is;
+otherwise the provider policy that used to sit at the end of `fetchWeatherForSteps` (key,
+quota and HTTP errors that forced a fallback, and with `noticeAll` the rest). A chain that
+recovered is a working computation and says nothing. This replaces two timers (1.5 s and
+400 ms) shared by every request, which let a replaced computation put its notice over the
+next one (H5 in the review).
+
+**Deadlines and aborts** (review 14/09, H4). The wrapper gives every request it watches two deadlines,
+the author's decision after measuring: Open-Meteo and AROME start answering in about 0.3 s, and on poor
+coverage what is slow is the download (22 KB take ~2.6 s at 50 kbps, ~30 s at 16 kbps). So a request is
+given up after **15 s without the server starting to answer**, or **15 s in a row without any data while
+its body is read**; a slow download that keeps arriving is never cut. The body is read chunk by chunk
+with `getReader()` in `cw.utils.readText`, which `readJson` goes through and which stays the one place a
+watched body is read (the table's error snippet uses it too). A request given up notes `timeout`, its provider in
+`recorder.timedOut` — told by the URL (`openweather`; `aromehd` for `models=arome_france_hd`; otherwise
+`openmeteo`), and what a notice names — and its **host** in `recorder.timedOutHosts`. The step then goes
+the way a network error takes it: no data in the table (its `catch`), a named gap in a comparison.
+A deadline that falls while the body is being read takes the step down that same road: it used to
+throw past the fallback into the computation's generic `catch`, leaving that one step with no data
+while a server that never answered at all fell back cleanly.
+**The deadline is per host, not per provider**, because AROME is Open-Meteo asked for another model:
+falling back from AROME to Open-Meteo would only wait again on a host that has just gone silent. So no
+later request of that computation or comparison reaches that host, whichever of its providers a step
+wants — the wrapper rejects them at once, noted as `timeout`, counted as that step's failure but never as a
+sign of the connection, since nothing was sent — and a silent host costs 15 s once, 30 s at
+worst for the two of them, with a new computation asking again. A step whose provider was given up falls
+back only across hosts: OpenWeather asks Open-Meteo, as an HTTP error already makes it, and never AROME,
+since Open-Meteo is global and AROME covers part of Europe — so that is the stand-in whatever the chain
+says. A step of AROME or Open-Meteo has no stand-in to ask for, but an Open-Meteo
+answer already in the cache still stands in: the rule is not to wait on that host again, not to refuse
+data already downloaded. With nothing cached, those steps and the later ones have no data. An HTTP
+error leaves every chain as it was. The standard request that completes an AROME answer is
+best-effort — its failure is swallowed and raises no flag — so it gives up no host either:
+`cw.utils.bestEffortRecorder` hands it a recorder carrying the computation's signal and deadline
+whose notes go nowhere, one per computation so a host that does go silent still costs a single
+wait. Without that, one silent completion blanked every later step of a route AROME was answering
+perfectly and painted "Open-Meteo is not responding" over a table asked of AROME-HD. The table's outcome names
+the providers given up (`failedProviders`, `{ status: 'timeout' }`): `decideNotice` says
+`provider_unreachable` over an empty table and `provider_not_responding` over a partial one, as a
+comparison does, in place of that computation's fallback notices. Each recorder carries the signal of
+its computation (`cwLaunchComputation`) or comparison (`run.signal` from `cwLaunchComparison`).
+Launching a computation aborts the requests of the computation and comparison it replaces; launching or
+cancelling a comparison aborts the earlier comparison's. An aborted request or body notes nothing: being
+replaced is no provider's failure. The official-warnings lookup has a recorder of its own, so it is timed,
+given up and aborted the same way and never reaches the notice; it shares the computation's list of
+silent hosts, so it never waits its own 15 s on one the steps have already given up, which used to hold
+the publish back. A request without a recorder gets no deadline from the wrapper: the ride watch's
+baseline now sets a plain 15 s total one of its own (`AbortSignal.timeout`, not the wrapper's rule,
+which measures silence), so the API-key test is the only provider request left without any. In the Playwright suite a test that holds a provider
+while it fast-forwards past 15 s gives that request up, so pass long spans before holding;
+`streamProvider` answers inside the page to send a body in pieces on the page's clock.
+
+The stale reading above is for routes that were never prepared. A prepared route does not depend
+on the cache at all.
+
+### Preparing and replaying
+
+The header's 📴 button prepares the route on screen for riding without coverage. It used to pin
+cache entries and count them as points, which promised what reading without coverage could not
+find: the keys depend on the step times, and a cold start computes those again from now.
+`prepareForOffline` now stores the published snapshot itself, with the route text its request read,
+in IndexedDB (`meteoride_prepared`, store `snapshot`, key `current`): `{ version: 1, snapshot,
+gpx: { text, name } }`. Only a snapshot of origin `live` can be prepared; without one it says to
+load a route and wait for the forecast. The record carries no identities and no API keys
+(`settings.keys`, `settings.alertsKey`). It counts as saved only on `oncomplete`; an abort says it
+could not be saved and keeps nothing. There is one prepared route: preparing another replaces it
+and says so. The coverage is counted before anything is written: the points a replay can show for every
+start within three hours, in quarter hours (`cwForecastRules.preparedCoverage`). With none covered nothing
+is written, `prepare_offline_uncovered` says so, and a route prepared before stays (every provider failed,
+say); otherwise the notice says all of them, or "n of
+total". The cache-pinning of older versions (`pinCacheKeys`, `cachedWeatherKeys`) is gone: a quota
+clear-out treats every cache entry alike, and `utils.js` removes the `cw_offline_pinned` list an older
+version left behind once at start-up.
+
+`native.js` keeps the last record read or written in memory (`cwPreparedRecord()`), and launching a
+computation decides with that copy, with no wait; `cwLoadPreparedRecord()` reads IndexedDB again. A
+record of another version, or one missing what a replay, the table and the ride alert read (a string
+route fingerprint, `settings.units.temp`/`wind`, an `outcome` object, alerts as a list, and every step an
+object with a finite latitude and longitude and a readable time), counts as none and is deleted, without a
+word (`wellFormed`). The delete runs in a transaction that finds the record still ill-formed, so a route
+prepared meanwhile stays; what a provider answer holds inside is not checked. Before, such a record
+replayed, threw, and stayed stored. A read that fails, or a database that does not open, leaves the copy in
+memory as it was. `usablePrepared` never takes two missing fingerprints for the same route.
+
+**Replaying.** `cwLaunchComputation` puts the prepared snapshot back instead of computing when
+`navigator.onLine` is false and the record belongs to the confirmed route (same fingerprint), with its
+start at most three hours from the one in use (`cwForecastRules.usablePrepared`). A computation that
+ends current with no usable step (every provider failing while there is coverage, say) replays it
+too, instead of publishing an empty table; a provider that never answers holds that back for its 15 s
+deadline ("Deadlines and aborts" above).
+`replay()` is a computation: it runs under the identities it was launched with and publishes only
+while they are current, so reconciling never launches another one after it. It moves every step and
+the start by the difference (`retime`), keeps the stored answers, sets the keys in use now, and
+publishes with `origin: 'prepared'` and the record's `createdAt`. Its outcome is the stored one with
+`preparedAt` and `preparedFor`: usable steps are not counted again for the new start. Official warnings
+follow the setting in use now: with them off, the stored ones are not shown. Its steps are read in replay mode
+(`mirrorSteps` marks them and `processWeatherData` passes `cwForecastRules.REPLAY`): the nearest
+hour must be within an hour, a quarter of `minutely_15` within fifteen minutes, and OpenWeather never
+reads a day, so a step moved past its answer shows no data instead of a distant hour. Official warnings
+are clipped from now, as for any snapshot, so those already over are gone. The notice
+(`prepared_replayed`, decided after an empty table and before stale data) says how old the snapshot is
+and for what start it was prepared. Comparing is never launched over a replayed snapshot, nor without
+coverage in the app (`comparisonHeldBack`). Over such a snapshot the normal table and its markers are
+painted even with compare chosen (`compareOwnsTable`, read by `renderWeatherTable`, the marker guards and
+the sun cell, spec §4.6): before, a cold start without coverage and compare saved showed an empty table,
+and coming back left the old one while the snapshot and the ride alert were the replay. With compare
+chosen the normal computation asks Open-Meteo and labels its steps `openmeteo` (`settings.provider` stays
+`compare`): labelled `compare`, working answers never counted as usable, a usable prepared snapshot
+replayed over them and compare stayed off for up to three hours, and preparing in compare mode saved
+nothing. `cwLaunchComparison` says it needs coverage only when there is none: a replay with
+coverage is there because every provider failed, and its own notice stays up. On the website, where
+nothing prepares, comparing without connection still runs and says so (phase 4). A replay moved to another
+start arms the ride alert as the same ride ("Ride alerts", reuse). Nothing computes again when coverage
+comes back with the app in the foreground: only coming back to the app, a setting that computes, or
+another route do. A language or detailed-notices change repaints instead of computing, unless the table on
+screen is the compare one; that check is `window.cwCompareOwnsTable` (exposing `compareOwnsTable`), not a
+bare `apiSource === "compare"` read, since compare chosen over a snapshot it cannot own (a replay, or no
+coverage) still paints the normal table and must still repaint in the new language.
+
+**Opening and expiry.** The restore at start-up asks for its route before any wait, and its `read`
+loads the record first: until it has expired it opens the prepared GPX, whichever recent route is newest
+(the request keeps its `source: 'recent'` label, fixed before the read; nothing reads it). A route shared
+at start-up still wins by identity. A record expires only once it can never stand in again: now rounded up
+to the quarter hour is more than three hours past the start it was prepared for (`expireIfPast`). The start
+in the field plays no part, so a time moved by hand, however far, never deletes it, moved back within three
+hours it replays, and a record prepared for a start still ahead is kept. Expiry follows the distance between
+the starts, not the age of the snapshot: prepared twelve hours ahead and opened half an hour after that
+start, it replays. Expired, at start-up and when the app comes back, it is deleted from memory and from
+IndexedDB and, without coverage, the user is told the forecast needs coverage
+(`prepared_expired_needs_coverage`): at start-up once the restore's request has ended, and not at all when
+a later request (a share) replaced it. A prepared GPX that does not parse is deleted and the restore opens
+the last recent route instead (`openLastRoute`), so it cannot stand in the way of every start for three
+hours. That second attempt is made once, only when the delete succeeded (a failed delete opened the broken
+record again, forever) and only while no route has been asked for since the restore's own request
+(`cw.lastRouteRequestId()`, read right after asking): it is a new request, and made after the wait it
+replaced a route picked during the delete. `route_load_failed` stays up. When the restore asks for nothing
+(a link, the sessionStorage handoff, a route already asked for), the record is still loaded for the
+session, and dropped without a word if it has expired. The route that arrived may have been computed
+before that read and found nothing, so once it is read, a record that can replay the confirmed route at the
+start in the field launches the forecast once more, which replays it, but only over a live table with no
+usable step, or with nothing published and nothing running, and only when no route request is still being
+read (`replayIfComputedWithout`; that request will commit and compute on its own, this launch would only race it).
+
+**Changes with a replay on screen and no coverage.** A change that needs computing other than the start
+(units, provider, speed, interval, keys, warnings) is refused before any identity is taken, with
+`offline_cannot_recalculate` and the snapshot kept current, only when the settings differ both from those
+the last launch read (`launchedSettings` in `app.js`) and from the replayed snapshot's, which carry the
+keys in use (`sameButStart`; compare on either side counts as no change, since it computes as Open-Meteo
+regardless of which one was launched or is shown). A refused change becomes the launch
+reference too; the second comparison is what accepts going back to what the replay shows, and leaving
+compare after a launch made with it chosen. Comparing with the replayed record's settings alone, as in the
+first version, refused every later start once a setting had changed after preparing or a change had been
+refused; comparing with the launch alone refused going back. A new start replays again: within
+the margin it moves; beyond it every step shows no data with `prepared_out_of_range`, and the record is
+kept (only expiry deletes it). Language and notices repaint as before. With coverage, a change over a replay
+is computed like any other.
+
+## Ride alerts
+
+The forecast is a plan; this watches whether it still holds. Four pieces:
+
+- `public/scripts/watch-rules.js` — every decision, pure, in one plain script:
+  levels (`rainLevel`, `windLevel`), the Open-Meteo request (`forecastUrl`, one
+  request with every point, `timeformat=unixtime`, km/h), `readForecast` (the hour the
+  rider passes each point: wind and gust from the nearest hourly entry, rain from the same hour
+  the table shows, (H, H+60 min], the entry labelled H+60; the request is in UTC unix time, so H
+  is the UTC hour, the table's hour in any whole-hour zone; no H+60 entry, no rain value), `compare` (a step that moved *up* a level), `newAlerts`
+  (official warnings overlapping the ride, once), `compose` (one notification, es/en)
+  and `evaluate`, which ties them together and returns the watch as it should be
+  stored next. `mobile/tests/watch-rules.test.mjs` runs it in a bare `vm` context,
+  which is closer to the runner than Node's globals are.
+- `mobile/runners/watch.js` — the wiring for `@capacitor/background-runner`: three
+  events, `saveWatch`, `loadWatch` and `checkWatch`. The build concatenates the rules
+  in front of it into `www/runners/watch.js`, the path `capacitor.config.json` names,
+  and refuses `import`/`export` in either file because the runner has no loader.
+- `native.js`, "ride alerts": `publish()` in `app.js` dispatches `cw:forecast` with the
+  snapshot and its rendered steps; `buildWatch` samples the snapshot's steps to twelve points
+  with a clock label and a km mark (the runner has no trustworthy locale or timezone, so labels
+  are made here), `seedBaseline` reads the baseline from the same request the runner will
+  make, and `saveWatch` hands it to the runner through `dispatchEvent`, in a queue ("Consumers
+  of the snapshot"), whose KV store
+  (UserDefaults / SharedPreferences under the runner's label) is the only thing the
+  background task can read. Preferences is a different store with a different prefix;
+  do not try to share.
+- The toggle `#rideAlerts` in the settings panel, hidden unless the runner plugin
+  exists, on by default, persisted in `cwSettings.rideAlerts`. Off clears the watch.
+
+Things that were decided rather than discovered:
+
+- **The baseline is Open-Meteo, whatever the table shows.** Comparing the table
+  (OpenWeather, AROME) against a later Open-Meteo reading would report the
+  difference between providers as a change in the weather. So the web view reads the
+  baseline from the runner's own request when it arms the watch, and offline the
+  runner seeds it on its first run and stays silent that time.
+- **A baseline records which reading made it** (`BASELINE_VERSION`). Nothing re-arms a watch in the
+  background, so an app update that changes which entry `readForecast` takes leaves behind stored
+  baselines about another hour: comparing the new reading against one of them announces the change
+  of reader as a change in the weather, or hides a real one. `evaluate` reseeds the rain of a
+  baseline whose version does not match — that check reports no rain, the wind is read as it always
+  was and keeps its baseline, and the warnings already notified are untouched — and `reuse` drops
+  such a baseline in the foreground, where `seedBaseline` simply reads it again and stamps it.
+  Raise the number whenever `readForecast` changes which entry a magnitude comes from.
+- **Levels with a margin, and each point's rain and wind keep their own baseline.** A
+  value sitting on 20 km/h would otherwise wake the phone every half hour. Rain, and
+  wind together with its gust, move to the current reading only when that magnitude was
+  the one reported, or when the point had no baseline for it yet — an official alert on
+  its own moves nothing (`nextBaseline`, `watch-rules.js:263-276`). A magnitude with no
+  baseline compares as level 0 rather than being skipped, so a point that is already
+  severe the first time it is read is news, not silence (`compare`,
+  `watch-rules.js:149-173`); wind only counts as missing when both the speed and the
+  gust are non-finite, since either alone still yields a level (`windLevel`,
+  `watch-rules.js:58-65`). Easing is never reported.
+- **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
+  notification describes the forecast that will actually hold.
+- **Only what is still ahead.** `compare` skips steps whose time has passed (with
+  fifteen minutes of slack) and `evaluate` clips the official-warning window to
+  `max(start, now)`: a check during the ride must not announce rain at a place the
+  rider left an hour ago.
+- **Two plugin patches on install** (`mobile/scripts/patch-background-runner.mjs`):
+  the runner's iOS notifications ignore `interruptionLevel`, and its Android side
+  parses `scheduleAt` (an ISO string ending in Z) with a formatter that treats the
+  time as local, so east of Greenwich the alarm is in the past and fires at once,
+  which hides the bug, and west of it the alert is hours late. Each patch is
+  idempotent and fails the install if the plugin source no longer matches, rather
+  than silently losing itself on an upgrade. The runner also schedules five seconds
+  out rather than "now": the iOS plugin clamps a past date to now and then builds a
+  `DateInterval` whose end is before its start, a precondition failure that kills
+  the runner. `timeSensitive` also needs the capability in Xcode. On Android
+  loudness is the channel's: the web view creates a high-importance channel with
+  `@capacitor/local-notifications` and the runner posts to it by id, but only when the
+  app confirmed the channel exists — Android drops a notification whose channel does
+  not, so `channelId` is left out of the watch otherwise.
+- **The OS can refuse to run the task, and nothing in JavaScript can see that.**
+  Background App Refresh off on iOS, a vendor battery manager on Android.
+  `MeteoRideShare.backgroundRefreshStatus()` (app-local plugin, both platforms) reports
+  what the platform exposes, and the toggle shows a hint. It is the difference between
+  a feature that is off and one that looks on and never fires.
+- **Notification text is a format string on iOS.** The runner's `schedule` passes
+  title and body through `localizedUserNotificationString(forKey:arguments:)`, so a
+  `%` from an official warning ("80% ...") or a route file name would be read as a
+  specifier with no arguments. `compose` swaps `%` for the full-width `％` in every
+  string that comes from outside; its own texts carry none.
+- **The baseline request carries no recorder.** Provider notices come only from the
+  recorder of the computation on screen, and the seed is read after the table has
+  loaded; a request without a recorder is never noted, so its failure cannot put a
+  notice over a table that is fine.
+- **Notification permission is asked when the first forecast is computed**, not at
+  start-up, and a refusal switches the toggle off and says so; the user has to grant
+  it in the system settings and tick it again. iOS background tasks never run in the
+  simulator; `docs/IOS.md` has the lldb command that fakes one on a device.
+
+Unverified, like the rest of the iOS code: none of it has run on a device. The Swift
+patch was written against the plugin's source, not compiled.
+
+## What the app still needs from the network
+
+Self-contained means the code: every library, font, icon and marker image is in the
+bundle, and the build fails if anything else creeps in. It does not mean the app works
+without a connection. Three things are fetched at runtime and cannot be bundled:
+
+| | Host | Without it |
+|---|---|---|
+| Map tiles | `*.tile.openstreetmap.org` | grey map, route and table still drawn |
+| Forecasts | `api.open-meteo.com`, `api.openweathermap.org` | no weather data, which is the point of the app |
+| `?gpx_url=` | wherever the user hosts the route | website only, see below |
+
+Everything else — loading a GPX from the share sheet or the file picker, parsing it,
+drawing it, the settings, the help pages — runs offline. That is what the "boots with
+no network at all" test pins down.
+
+`?gpx_url=` is unreachable in the app. The web view opens `index.html` with no query
+string and nothing ever navigates it to one: `appUrlOpen` only drains the share inbox,
+and external links are handed to the system browser. So the app's route entry points
+are the share sheet, the file picker and "Open in MeteoRide" — all of which are better
+on a phone anyway. That is why the app's `connect-src` can name the three forecast
+hosts instead of allowing `https:` wholesale, which is what stops script that somehow
+ran there from posting the stored API key to an attacker. **Adding a deep link that
+opens a route by URL means widening that list again, on purpose.**
+
+## Reading a provider answer
+
+`public/scripts/forecast-rules.js` holds the pure rules behind the table, the way
+`watch-rules.js` holds the ride-watch rules: a plain script the page loads and Node tests
+run in a bare `vm` context. `processWeatherData` asks it which values a provider answer
+holds for a step (`extractStep`), `segmentRouteByTime` asks it which line of a file to
+follow (`routeLine`), and `fetchWeatherForSteps` asks it to complete an AROME answer from
+the standard Open-Meteo one (`mergeAromeWithStandard`). Presentation stays in
+`processWeatherData`: display units, daylight from SunCalc, the AROME weather-code
+reconciliation and luminance.
+
+Four things changed on purpose when the extraction moved, each in its own commit:
+
+- **The first quarter of `minutely_15` came out empty.** `index || -1` turned index 0 into
+  -1, so a step on that quarter had no temperature, wind or weather code.
+- **Open-Meteo times are read in the answer's offset.** With `timezone=auto` they arrive as
+  wall-clock times with `utc_offset_seconds` beside them, and they were read in the phone's
+  zone: a phone in another zone than the route read other hours. Without that field the old
+  reading stays. The table does it through `processWeatherData` → `extractStep`; since phase 4
+  the comparison (`extractStepMetrics` in `compare.js`) picks its Open-Meteo and AROME hours
+  with the same `cwForecastRules.nearestIndex` and offset, and since the closing round its
+  OpenWeather reading goes through `extractStep` as well, so no provider is extracted twice
+  anywhere any more.
+- **AROME is completed hour by hour.** A variable AROME lacks was copied from Open-Meteo slot
+  by slot even when the two time axes differed. A value is now taken only for an hour both
+  answers have; with no standard time axis nothing is copied onto AROME hours.
+- **`segmentRouteByTime` follows the route's first usable line.** With `routeLine` it takes
+  the first LineString with two valid points, or the first MultiLineString joined in order,
+  instead of always `features[0]`. A file whose first feature is a marker, a one-point
+  track or a MultiLineString now gets a forecast along the right line, or logs
+  `track_too_short`, instead of producing NaN steps.
+
+**Daylight-saving changes need no fix; do not "correct" them.** Open-Meteo's `timezone=auto`
+labels are not local wall-clock time. An answer carries one `utc_offset_seconds`, the location's
+offset when the request is made (a January date asked in September still says +2 for Madrid), and
+every hourly and `minutely_15` label is the UTC instant plus that offset, with no repeated or missing
+hour across a change. So `parseProviderTime(label, utc_offset_seconds)` is exact on both sides of a
+change, and the precipitation hour H is floored in that same fixed offset. Checked on 2026-09-15
+against the same requests with `timeformat=unixtime`: Madrid 25–27 Oct 2025, Auckland 26–28 Sep 2026,
+Santiago 5–7 Sep 2026 and Paris with AROME HD, zero mismatches. Reading a label in the real local
+offset of its date picks the wrong entry after the change; asking in UTC would pick the same entries
+and only cost a cache-key and prepared-record version. `forecast-rules-tz.test.mjs` pins it on a
+trimmed real Madrid answer (`fixtures/open-meteo-madrid-dst.json`). The AROME merge matches the two
+answers by label, which holds because both callers fetch the standard answer right after AROME's,
+never from cache, so both carry the same offset. What does differ is the ride watch in half-hour
+and 45-minute zones: it floors rain in UTC and the table in the answer's offset (HANDOFF §10).
+
+Open-Meteo and AROME are asked with `start_date`/`end_date`, one UTC day either side of the
+step, instead of `start=`/`end=` (`buildProviderUrl`, `app.js:315-322` for AROME,
+`app.js:345-350` for standard Open-Meteo): with `timezone=auto`, `start=` is silently
+ignored and the API answered with its default window from today, which was seven days long
+and did not necessarily reach a step near the far end of a multi-day route.
+
+One thing that looks like a bug is kept, because the table has always worked that way:
+`window.findClosestFutureIndex` was never assigned, so a step reads the nearest hour, not
+the next one. OpenWeather beyond its hourly range now falls back to `daily` instead of
+re-reading a distant hourly entry: `extractOpenWeather` (`forecast-rules.js:126-194`) accepts
+an hourly entry only within an hour of the step's time and otherwise picks the `daily`
+entry whose own local date (`dt` plus `timezone_offset`) matches the step's — not the one
+nearest in raw `dt` seconds, which can tie or lose right at local midnight — since daily
+entries are a day apart by nature and carry no such cap. Both comparisons read it that way too
+since the closing round. Until then `compare.js` kept a copy of this with no cap at all, so for a
+ride two to four days out it showed the last hour the answer holds, of another day, in the row
+right under an Open-Meteo one reading the correct day.
+
+`mobile/tests/extraction.test.mjs` and `mobile/tests/aromehd-merge.test.mjs` compare against
+golden files in `mobile/tests/fixtures/`, built from synthetic answers
+(`fixtures/providers.mjs`; no real answers are captured in the repository). Regenerate a
+golden only for a change you mean to make, with `UPDATE_GOLDEN=1`, and read its diff before
+committing: a diff wider than that change is a regression.
+
+## Publishing a forecast
+
+`fetchWeatherForSteps` computes; `publish(snapshot)` in `app.js` is the only thing that
+puts a forecast on screen. A computation reads its settings once (`readForecastSettings`:
+start, speed, provider, units, API keys, `noticeAll`, `showWeatherAlerts`, interval, language) and segments the
+route with those same settings rather than the page, so a setting changed while it
+is still fetching reaches the next computation, never its later steps. It ends with a
+snapshot: its steps as the provider answered them (`payload`, plus `payloadUnits` for
+OpenWeather), the official warnings it found and an `outcome` for the notice. `publish`
+checks that the snapshot belongs to the current computation (`cwForecastRules.shouldPublish`,
+see "Route requests" below) and then, with no wait in between, mirrors the steps into
+`window.weatherData`, repaints, shows the warnings, decides the notice, dispatches
+`cw:forecast` with `{ snapshot, steps }` and lets go of the computation's claim on the
+loading indicator. `processWeatherData` only paints: a repaint for a language or notice
+change is not a new forecast and does not arm the ride watch again. A notice now
+stays on screen while the next computation fetches, until that computation publishes: the
+old `clearNotice()` at the start of a computation is gone, so a notice always describes the
+forecast currently on screen.
+
+Official warnings are collected during the computation, from the OpenWeather forecast
+answers and from `checkWeatherAlertsIndependent`, kept when they overlap the ride with four
+hours either side, and shown from now or the start, whichever is later, to the end
+(`cwForecastRules.alertsInWindow`). They used to be filtered to an hour around each step
+and shown as soon as each answer arrived. `revalidateWeatherAlerts`, which looked them up
+again on its own after a speed, interval or date change and showed what it found, is gone:
+those changes compute again, and only `publish` shows warnings.
+
+Official alerts have a single source: OpenWeather. `checkWeatherAlertsIndependent`
+(`app.js`) returns at once with no key or one under five characters, the same threshold
+`readForecastSettings` and every other OpenWeather-key check use. The `#showWeatherAlerts`
+checkbox used to be checked and enabled regardless, so a user with no key could leave it on
+forever and never see an alert. `updateWeatherAlertsAvailability` (`ui.js`, next to
+`updateProviderOptions`, its OpenWeather-key sibling) now disables the checkbox and shows
+`#weatherAlertsKeyHint` below it whenever the key is missing or short, live on every
+`apiKeyOW` input event and again after `loadSettings` restores it, so a stored key or a typed
+one takes effect without a reload. A disabled checkbox is not force-unchecked, so a
+preference set before the key existed survives, and `readForecastSettings` is not
+`.disabled`-aware: `alertsKey` still carries the raw, too-short key forward when the box is
+checked-but-disabled. Nothing blanks it — both consumers reject it on their own: in the
+foreground `checkWeatherAlertsIndependent`'s own guard no-ops on it, and in the background
+the ride watch's runner (`mobile/runners/watch.js`, via `cwWatchRules.hasAlertsKey`) applies
+the same five-character rule to `owKey` before spending a request.
+
+A replaced run writes nothing once it no longer matters: every `setCache` after an
+`await` — including the AROME standard companion answer — is guarded by the same
+`isCurrent()` check as the table, and so is the independent alert lookup, tested before
+each of its fetches, after each fetch resolves, after its body is read and again after the
+delay between requests (`checkWeatherAlertsIndependent`). The companion request can also
+reject instead of resolving — offline, CORS, an abort — and the empty `catch` around it
+used to let that path fall straight through to the primary write with no fresh check; a
+guard placed right before that write now covers it too, whichever way the companion
+request ends.
+
+A response body that fails to parse counts as a transport failure
+rather than a success with no data: `readJson` catches it and sets
+`recorder.lastFailStatus = 'body'` (and `recorder.offline` when it happened without
+connection, as the fetch wrapper does) before rethrowing, so `decideNotice`
+treats it the same as offline or rejected instead of a working computation that says
+nothing.
+
+A computation that stops or throws before it fetches lets go at once: `cwLaunchComputation`
+catches what segmenting throws, and the `try` of `fetchWeatherForSteps` starts on its first
+line. Before, a throw there kept `forecast:<id>` claimed and `runningComputationId` set, so
+`cwHasCurrentForecast()` stayed true and no request ending ever recomputed the route. Since
+phase 6 an empty or unreadable start date counts as one that has passed: the computation uses
+now, rounded up, and writes it into the field without a notice. A start out of range still says so.
+
+Two corrections went in with this, each in its own commit. The "show weather alerts"
+checkbox was read with `getVal`, which returns `"on"` whatever its state, so unticking it
+never kept warnings out. And a repaint read a cached OpenWeather answer in the units shown
+now rather than the ones it was requested in, so a metric answer repainted in °F had its
+wind read as mph.
+
+The table labels the temperature with the unit its snapshot was computed in, not with the
+selector: `mirrorSteps` copies `settings.units.temp` onto every step as `tempUnit`, and
+`renderWeatherTable` takes it from the first step that has one, for the row and the route
+summary. The two differ while a units change is computed and something repaints (language,
+detailed notices), and when a units change waits behind a route request and the older
+computation publishes; both used to show 21 ºC as 21 ºF. Nothing is converted: every provider
+is asked for the unit chosen (OpenWeather `units=imperial`, Open-Meteo and AROME
+`temperature_unit=fahrenheit`), and the cache key carries the unit, so °C and °F answers never
+mix. Until phase 7 Open-Meteo and AROME were always asked in °C and showed °C under °F; a record
+prepared before that still does until it expires. The ride alert's runner keeps its own °C request. Steps with no unit
+(the comparison's `cw.setWeatherData`) follow the selector as before. Wind needs none of
+this: it is kept in km/h and converted with the selected unit on every paint, so its label
+always matches.
+
+## Route requests
+
+`public/scripts/route-requests.js` decides which route is on screen, and nothing else
+does. Every way a route gets in calls `cw.requestRoute({ source, read })`: the file
+picker, a recent route, the restore at start-up, and every route from outside the page
+through `cwReceiveRoute` ("Routes from outside" below). The coordinator is built by
+`cwCreateRouteCoordinator(deps)` so Node tests can give it fake dependencies; the page's
+instance looks up `cwParseRoute`, `cwCommitRoute`, `cwLaunchComputation` and the rest at
+runtime, because `app.js` and `ui.js` load after it.
+
+- **Identities.** A request takes its `requestId` the moment it is made, before any wait.
+  A computation takes its `computationId` when it is launched (`cwLaunchComputation`). A
+  snapshot publishes only if it matches both the confirmed route's request and the latest
+  computation. A request still in flight invalidates nothing; confirming another route or
+  launching another computation does. Nothing of this is stored.
+- **Phases.** `read()` with a 30 s deadline → `cwParseRoute` (KML converted, sanitised,
+  leaflet-gpx builds a layer that is never added to the map, `routeLine` must find a line,
+  fingerprint of the text as read) → `cwCommitRoute` (confirms first and sets the name and
+  `lastGPXFile`, then clears the previous route's table, markers and warnings and draws the
+  whole layer) → `startForecast()`, with nothing in between those two. Confirming and naming
+  first means a drawing step that throws midway never leaves the old route confirmed, named
+  on screen or sent by sharing under the new layer; the file for sharing is built before
+  anything changes.
+  After each wait a request that a later one replaced stops as `'superseded'` and touches
+  nothing; one replaced in the same tick never calls `read()`. A failure ends as `'failed'`
+  and leaves the confirmed route and its computation alone, with one of two notices:
+  `route_load_failed` when the text holds no usable route, `route_read_failed` when `read()`
+  rejected or missed its deadline. A `read` that resolves `null` (nothing to open) fails
+  quietly. The notice is shown only after the request has reconciled, because a computation
+  relaunched there can show a notice of its own (a start date out of range) that would cover
+  it. It goes through `cwNotifyRouteFailure`, which records the latest computation at that
+  moment. When that computation publishes with nothing to say, it leaves the failure up
+  instead of clearing it; a notice of its own still replaces it. Whatever `showNotice` shows or
+  clears (a publish, a comparison, a repaint) forgets the failure, so a second comparison of the
+  same computation with nothing to say clears the notice of the first. A repaint of the published
+  snapshot keeps a failure still recorded: nothing published after it, so it was said over that
+  snapshot or over the computation replacing it. A notice set directly with `setNotice` covers
+  the failure without forgetting it.
+- **Asked for, not yet on screen.** `lastGPXFile` is set only when a route is confirmed, so it
+  cannot tell whether a route is on its way. `cw.hasRouteRequests()` can: the restore at
+  start-up returns on it, so a file picked and still being read is not replaced by the last
+  recent route. `cw.lastRouteRequestId()` is the identity of the last request made; read right
+  after asking, it is that request's own, and a later change says another route was asked for. A tap in the recent-routes menu closes the menu and makes its request at
+  once with the listed metadata; `cwReadRecentRoute` finds the text by id, then by name, then
+  in the old localStorage list.
+- **A request never rejects.** Whatever `commit`, `launch`, `paintLoading` or a notice
+  throws is logged and swallowed, so `requestRoute` always resolves to `'committed'`,
+  `'superseded'` or `'failed'` and lets go of its claim. A commit that throws still counts
+  as `'committed'` and its computation is launched once: the route may already be half on
+  screen.
+- **leaflet-gpx off the map**, verified in Chromium: with `async: true` it fires `loaded`
+  without ever being added to a map, and draws nothing. Text that does not start with `<`
+  it takes for a URL and fetches, so `cwParseRoute` refuses that first. It parses in a
+  zero-delay timer of its own; a zero-delay timer scheduled right after constructing the
+  layer runs after that one, and ends the parse as failed if the library threw instead of
+  firing `loaded` or `error` — otherwise the request would hang with the indicator on.
+- **Settings.** One that needs a new computation (units, provider, speed, interval, date,
+  keys, `showWeatherAlerts`) calls `cw.settingsChanged()`: settings are marked pending and
+  a computation is launched at once unless a request is in flight. Launching clears the
+  mark, so a request that confirms uses the settings changed while it was read, in its one
+  computation. When the latest request ends any other way it reconciles: a confirmed route
+  with pending settings, or with neither a published snapshot of its latest computation
+  nor that computation running, is computed again. A request that confirms reconciles only
+  settings marked since its launch (a change made from inside that launch, say), never a
+  missing forecast — it has just launched — which is also what keeps a start date out of
+  range from being tried twice. The confirm-and-launch path is guarded twice (the mark cleared,
+  no reconcile after confirming), so the browser test only fails with both removed; the
+  Node tests catch each one. Language and detailed notices only repaint the published
+  snapshot (`cwRepaintPublished`: no request, no `cw:forecast`); the debug button and ride
+  alerts do neither. `updateUnits` is no longer called; a unit change computes again.
+- **Loading indicator.** On while anyone holds a claim: `request:<id>`, `forecast:<id>`,
+  `compare:<id>`, `share-upload`, and `legacy`, which is what `showLoading`/`hideLoading`
+  claim now for `createDiscreteLoadingIndicator`. A comparison ending cannot switch off a
+  computation's indicator.
+- **Recent routes** are written through their own queue, `cw.importRoute({ text, name })`:
+  one at a time in arrival order, with `arrivedAt` fixed on arrival (one millisecond after
+  the previous one on a tie) and stored as the timestamp, so trimming to five keeps the
+  last five to arrive. `cwIdbImportRoute` does it in one `readwrite` transaction: read the
+  store, pick the name (`cwForecastRules.uniqueRouteName`: the same content moves the
+  existing record up in place instead of duplicating it, different content gets ` (2)`,
+  ` (3)`… even when the name already carries a suffix, and the part before the extension
+  never passes 64 characters — once a suffix is added the base gives up exactly the
+  suffix's length, never the suffix, trimmed by Unicode code point (`Array.from`) rather
+  than UTF-16 unit, so a base ending in an emoji or another character outside the Basic
+  Multilingual Plane never gets its surrogate pair split into one lone, unpaired unit, and a
+  collision an earlier version stored *without* that trimming — the base whole, a name this walk no
+  longer builds — is claimed by fingerprint too and moves to the bounded name instead of being kept
+  a second time),
+  write, trim. It is saved only on `oncomplete`; an
+  abort, no IndexedDB or a route over 750 KB is reported with `route_not_saved`. **Nothing
+  falls back to localStorage on write any more**; reading and migrating old localStorage
+  entries stay. A record from before fingerprints existed (phase 3) has none stored: before
+  matching, `idbImportRoute` reads once, outside the write transaction, every such record's
+  stored text (`content`, or `blob` on a record from an older build) and computes its
+  fingerprint from it, so a route already kept under one of
+  these is still recognised and moved up rather than duplicated. That computed fingerprint
+  is not written back, so it is recomputed on every import while the record stays
+  unmatched (ponytail: negligible at five records; persist it the first time if this ever
+  shows up as slow). It is still never matched by name and size alone: changing one digit
+  of a coordinate keeps the size, and a different route must not silently replace the
+  stored one.
+  The file picker imports only a route that was confirmed, under the file's name. A route
+  from outside is imported when its entry says ("Routes from outside"), whether or not it
+  ends up on screen, and only if (`cwImportIfRoute`) its text carries `<trk`, `<trkpt`, `<rte`, `<rtept` or `<wpt`, or it is a KML whose
+  conversion (`cwKmlToGpxText`) does: a KML with no Placemark converts into an empty GPX, so
+  `<kml` alone is not enough. Without that check a
+  truncated share or a web page became the newest recent route, and the next cold start
+  tried to restore it and restored nothing. The import stores the later of `arrivedAt` and
+  one millisecond past the newest stored timestamp. Stored times can be ahead of the clock
+  after the phone's clock changes, and the trim would otherwise delete the new route in its
+  own transaction while still reporting `{ ok: true }`. Loading the list at start-up
+  (migration, read, duplicate cleanup) is a job in the same queue (`cw.enqueueRecents`), so
+  it can neither overwrite a boot-time import with the older list it read nor race it. A
+  job in the queue must never wait on the queue. Opening a recent route moves it to the top
+  as a job in the same queue (`cw.touchRecent`). That job is one `readwrite` transaction: it
+  rewrites the whole record with a timestamp above every other stored route's — not just the
+  arrival stamp, since a clock set back after the others were imported would otherwise make
+  the opened route the oldest and the next import would trim it — and writes nothing if an
+  import trimmed the route first. Only when that move succeeds is the menu's list read back
+  from the store.
+  The move used to read and then put the record outside the queue, which dropped its
+  fingerprint and could write a trimmed route back. The name on
+  screen no longer decides the stored name: while a new route is read it is the old one's.
+
+### Routes from outside
+
+`cwReceiveRoute({ source, name, text, fetchText, importOn })` in `gpx-share.js` is the one way
+in for a route that comes neither from the file picker nor from recent routes. In the same call
+it asks the coordinator for its route; a download (`fetchText`) starts right after, and `read`
+awaits the text and then the map (`window.map` and `cwParseRoute`), all under the request's
+30 s deadline. A rejected download or an empty text ends the request as `'failed'` with
+`route_read_failed`. It resolves with what the request ended as. Given no text (or a text that
+is not a non-empty string) and no `fetchText`, it resolves `'failed'` without asking, so it
+replaces nothing. Each read polls for the map on its own and stops when its request ends,
+whatever it ends as; an import that throws is logged, never left as an unhandled rejection.
+
+Keeping the route among the recent ones is separate from showing it, and when it happens
+depends on the entry:
+
+| Entry | Source | Imported into recent routes |
+|---|---|---|
+| Native inbox (`native.js`, `injectRoute`) | `share-native` | as it arrives |
+| Service worker slot | `share-sw` | as it arrives |
+| `sessionStorage` (`cw_gpx_text`, `cw_gpx_name`) | `share-session` | as it arrives |
+| `?shared_id=` | `shared-id` | as its text arrives; the server copy is deleted then, unawaited, and `shared_id` leaves the address |
+| `?gpx_url=` / `?url=` | `url` | once confirmed; text without `<gpx` fails the request |
+| `postMessage` (`ui.js`, trusted origins) | `message` | once confirmed |
+
+The import and the download start on arrival, not inside `read`, on purpose: the coordinator
+never calls `read` for a request replaced in the same tick, and a share replaced that way must
+still be kept. `postMessage` answers with the result, not on arrival:
+`{ action: 'loadGPX:ack', ok: status === 'committed', status, name, size }`. A message from an
+origin not allowed is still refused with `forbidden_origin`, and one that throws synchronously
+with `exception`. `ok: true` means the route was shown (its request confirmed), not that it was
+saved: the import into recent routes runs after the answer and can still fail with
+`route_not_saved`.
+
+**Resent messages.** Senders resend until they hear back: `tools/userscripts/tamper_meteoride.user.js`
+posts at 1, 2 and 4 s, and since the answer waits for the route to be confirmed, a resend often
+lands after the route is shown. Each resend used to be a newer request, so it replaced a file the
+user had picked in between. The listener in `ui.js` remembers the last message that asked for a
+route as `{ origin, fingerprint, at, status }` (`cwForecastRules.fingerprint` of the text). A
+message with the same origin and the same fingerprint within 30 s of that one asks for nothing:
+its answer carries that request's status. Past 30 s, or with another text or origin, a message
+asks as usual. The window runs from the message that asked, not from the latest resend. The cost:
+an identical route deliberately sent again within 30 s is not shown again. The origin check runs
+before any of this. The userscript also stops its pending resends on the first answer for its own
+send (same `name` and `size`, from the tab it opened), whatever the status: a resend would get the
+same answer.
+
+A used `shared_id` link is spent: once its text arrives, `history.replaceState` takes
+`shared_id` out of the address, keeping the other parameters and the hash, so a reload does not
+ask the server again for a copy already deleted (and show `route_read_failed` over an empty page).
+A GET that fails (HTTP error, network) or brings an empty or whitespace-only body leaves it in
+place and deletes nothing: the body is checked before the DELETE and the address rewrite. It used
+to be checked after, so an empty answer deleted the server copy and took away the retry.
+
+**Downloads and the deadline.** A `?gpx_url=` or `shared_id` download runs under its request's
+30 s deadline; before phase 5 `loadFromParams` had none. A slow download fails the request with
+`route_read_failed`, and the fetch is not aborted. When its text comes after that, a `url` link is
+neither shown nor kept (it is kept only once confirmed), while a `shared_id` is still kept.
+
+**KML.** Keeping a route and opening it decide whether it is a KML the same way, `isKmlRoute` in
+`app.js`: the name ends in `.kml`, or a `<kml` element starts within the first 4096 characters.
+They used to disagree (the import looked anywhere in the text), so a KML with a long comment
+first and no `.kml` name was kept, failed to open, and became the recent route the next start-up
+failed to restore. They also have to agree when the conversion comes out empty: opening then
+reads the text as it arrived, so a real GPX named `.kml` opens, and keeping counts a route if
+either the text or its conversion holds one (`cwImportIfRoute`). Keeping used to go by the
+conversion alone, so such a file was shown and silently left out of recent routes. A KML with
+nothing to follow still stays out, since neither holds a route.
+A shared KML is kept as it arrived, under its own name (`Name.kml`) and with
+its raw KML text. Before phase 5 it was kept as `Name.gpx` with the converted GPX text. Unlike
+the plain no-fingerprint case above, that record's name never matches what a `.kml` reimport
+walks (`Name.kml`, `Name (2).kml`…), so `uniqueRouteName`'s own candidate walk never reaches it.
+But `cwKmlToGpxText` is deterministic, so converting the same KML today hashes exactly what that
+old record stored: `idbImportRoute`, for a `.kml` import only, also checks a second candidate —
+name `${base}.gpx`, fingerprint of `cwKmlToGpxText(text)` — once the normal walk finds no exact
+match by name, and reuses that record's id if it matches, so it moves up under today's raw-KML
+name and content instead of duplicating. An unrelated `.gpx` record whose converted content
+happens to differ is left alone; only a real content match reuses it. Forecast caches and
+ride-watch fingerprints computed from the old converted text still never match a route now kept
+under the new one — that part is unrelated to recents and not fixed here. A collision on a long
+name that an earlier version stored untrimmed is the same shape of mismatch for a different reason,
+and `uniqueRouteName` settles that one itself ("Recent routes" above).
+
+**The service worker slot has one reader.** `service-worker.js` stores one route in IndexedDB
+(`cw_shared_db`, store `files`, key `gpx`) and posts `cw-shared-gpx`.
+`takeSharedFromServiceWorker` reads and deletes in one `readwrite` transaction, settled on
+`oncomplete`, one read at a time; a call while a read runs makes that read go round once more.
+It runs at start-up, which covers `?shared` (where the worker sends the page), and on every
+message, from a listener attached before the worker is registered. When the address opens a link
+(`gpx_url`, `url` or `shared_id` with a non-empty value — an empty `?shared_id=` opens nothing, so
+it must not trip keep-only either, or a route left in the slot is only kept and the screen stays
+empty), the start-up read only keeps what it finds among recent routes
+and asks for nothing: its request would come once IndexedDB answers, after the link's, and a route
+left in the slot by an earlier share replaced the link just opened. A round a message asks for
+meanwhile asks as usual. Neither runs in the app
+(`CW_NATIVE`), which has no service worker; reading there only created `cw_shared_db`. A
+transaction that cannot even start closes the database before resolving `null`. There used to be three
+readers, one of them reading and deleting in separate transactions, so a message could delete
+a route written in between or take the same route twice. The tests hold the slot's transactions
+and opens to force both orders; the first version of the "received once" test released them in
+a way the old code survived, which is why it answers the held opens one at a time.
+
+Phase 6 added the start-time rule and replaying a prepared snapshot ("Behaving like an app rather
+than a page" and "Preparing and replaying").
+
+## Consumers of the snapshot
+
+Three things work from the published snapshot and from nothing else: the comparisons, the ride
+watch and the official warnings. Each checks, right before every effect, that what it works from
+is still what is on screen, so none can write, paint, notify or store anything of a route or a
+computation already replaced.
+
+`cw.currentSnapshot()` (`app.js`) is the published snapshot while it belongs to the confirmed
+route, or null; a route still being read changes nothing there. The snapshot's settings carry
+what the consumers need beyond its steps: `interval`, `lang`, `alertsKey` (the OpenWeather key
+when official warnings are shown, `''` otherwise) and `keys`, and since phase 6 `start` and
+`speed`. The keys live in memory only: the prepared record leaves `keys` and `alertsKey` out, and
+a replay takes the ones in use ("Preparing and replaying").
+
+- **Comparisons.** `cwLaunchComparison(kind)` returns a run `{ requestId, computationId,
+  comparisonId, snapshot }`, or null with no current snapshot or while a computation of the
+  route is still running (its publish launches the comparison instead). It takes the next
+  `comparisonId`, aborts the earlier comparison's requests, drops earlier comparisons' claims and
+  claims `compare:<id>`. That drop matters while an earlier run's provider has not answered: without
+  it the indicator stays on after the newer comparison painted, until that run ends. A test holds the
+  never-answering case, and that its request is aborted.
+  `cwIsComparisonCurrent(run)` (`cwForecastRules.shouldPublishComparison`) holds while the route
+  is the confirmed one, the run's computation is both the latest launched and the one published,
+  and no comparison was launched after it. Launching one launches no computation, so reconciling
+  and preparing still see the normal snapshot.
+  - **Launched once**, from `publish` (step 7: the providers comparison when compare is chosen),
+    from choosing compare in the selector, and from the dates row's run button. The observer on
+    the table, `compare.js`'s own listeners and control refresh, the launch from
+    `renderWeatherTable`, the `window.reloadFull` alias, the automatic date relaunch from
+    `publish` and the `_pendingCompareRestore` flag are gone. A setting that computes again goes
+    through `cw.settingsChanged()`, also while compare-by-dates is open: the toggle always opens
+    it in explicit mode, so that repaints the normal table and the run button brings the date
+    comparison back. The unreachable automatic date-B branches (relaunching on date B or a control
+    change) are gone from `ui.js` along with the `explicitCompareActive` flag that gated them;
+    date B is rounded on change and nothing else. Closing the dates row with compare chosen
+    computes again, and that publish compares providers.
+  - **Leaving compare.** Choosing any other provider, or closing the dates row, calls
+    `cwCancelComparisons()`, which takes the next `comparisonId` and drops every `compare:*`
+    claim. Without it, a comparison still fetching while a route request holds the recomputation
+    back (the change is only pending) stays current and paints its table under the new provider,
+    or the dates table with the row closed. Its claim drop has no test that fails alone: both
+    callers then go through `settingsChanged`, whose computation drops those claims too.
+  - **Input.** Steps, temperature and wind units, keys, interval and (for dates) provider come
+    from `run.snapshot`. Rain and distance units, and dates A and B, are still read from the page:
+    they only change how it looks, or are what the comparison is asked for. The answers are read and
+    labelled in the run's units too (`extractStepMetrics(prov, raw, step, units)`, both tables'
+    temperature and wind labels): OpenWeather answers in the system asked for, and new units can
+    wait behind a route request while the old snapshot is still compared. Read in the selected
+    units, its 3 m/s came out as 1.3.
+  - **One mode on the table.** Each comparison table removes the other's class
+    (`compare-mode`, `compare-dates-mode`). Row clicks check dates mode first, so a providers table
+    painted over a date comparison, with the row still open, used to select date rows and show the
+    old `weatherDataA`/`B` on the map.
+  - **Checks** at every step, before every cache write and right before painting (markers,
+    `setWeatherData`, the table, `compareProviderData`, `weatherDataA`/`B`). The `finally` lets
+    go of its own claim only: a replaced run that finishes while the next one fetches leaves the
+    indicator on, and a test holds exactly that. Only the providers comparison's paint check has a
+    test of its own; the others are covered in layers (a replaced run stops at the step after its
+    request).
+  - **Notice.** Each run has its own recorder, passed to every provider request and cache read.
+    When it paints it decides its notice with `decideNotice` (`cwShowForecastNotice`) on an
+    outcome with `usableSteps` (steps with a temperature or wind in any painted row), the
+    recorder's failures, offline flag and stale age, and `requestedProvider: 'compare'`. It also
+    names the providers that failed (`failedProviders`, id → `{ status, code }`). `fetchAnswerNoting`
+    compares `recorder.failed` before and after `fetchAnswer` and, when the step got nothing, files
+    the recorder's `lastFailStatus` under the provider whose row shows the gap: in the providers
+    comparison that row, so an AROME row that asked Open-Meteo outside AROME's area is named AROME-HD;
+    in a date comparison, whose rows are dates, the provider asked. For OpenWeather it adds
+    `classifyProviderError`'s reading, as the table does: 401 is `provider_key_invalid`, 429
+    `provider_quota_exceeded`, and 403 stays an HTTP error. The run's requests go one at a time, so
+    the difference is its own, and a failure the step recovered from (AROME's merge request) names
+    nobody; a test holds both. `decideNotice` makes any other numeric status `provider_http_error`
+    and anything else (`network`, `body`, `timeout`)
+    `provider_not_responding`, one part per provider, after the empty-table and stale rules and
+    never without connection. They show with detailed notices off too: a failed provider leaves gaps
+    or loses its row, where the table falls back. The missing OpenWeather key goes first, its parts
+    built once in `decideNotice`. A date comparison with OpenWeather chosen and a key under five
+    characters asks Open-Meteo for every step, decided before `resolveProviderForTimestamp`, which
+    reads the page's key field and would pick AROME-HD or OpenWeather; it then says
+    `provider_key_missing` and `fallback_short`, the table's rule. The providers comparison leaves
+    OpenWeather out without such a key (`getCompareProviders`), with no row and no notice: that is
+    the author's decision, not a limit. `cwShowForecastNotice(outcome, noticeAll, run)` takes the run so that, as in
+    `publish`, a comparison with nothing to say leaves up the notice of a route that failed to
+    open while the run's computation was the latest. A 200 whose body cannot be read counts as a
+    failed answer (`cw.utils.readJson`, the same rule as the computation's own `readJson`).
+  - **Hours.** `extractStepMetrics` reads Open-Meteo and AROME with `cwForecastRules.extractStep`,
+    the table's own function, for both comparisons: the hour by the answer's `utc_offset_seconds`,
+    and the quarter of `minutely_15` whenever the answer carries one for the step, which it does
+    when it was requested within 5 h (`buildProviderUrl` asks for quarters only then, but the
+    answer then covers its whole date range, so a cached one keeps them). Precipitation is the
+    exception: it is the hour being ridden, (H, H+60 min] with H the step's time floored to the
+    hour in the answer's own wall clock, so a step at 10:05, 10:40 or 10:00 all show 10:00–11:00.
+    From `minutely_15` it is the sum of the quarters labelled H+15, H+30, H+45 and H+60 (each
+    quarter is the 15 minutes before its label); with any of them missing or null, and beyond the
+    quarters, it is the hourly entry labelled H+60 (Open-Meteo's hourly value is the hour before
+    its label), never the nearest one. So it means the same within 5 h and beyond. When H+60 is
+    not in the answer the step has no rain value; the rest of the step is unaffected. In replay the
+    gap rule still decides whether the step has data at all, and H+60 is never more than an hour
+    from the step. OpenWeather's precipitation follows the same (H, H+60 min] window now:
+    `docs.openweather.co.uk/api/one-call-3`, the product this app calls, only says `rain['1h']` is
+    "(where available) Precipitation, mm/h" and `dt` is "Time of the forecasted data"; its sibling
+    `docs.openweather.co.uk/api/hourly-forecast`, same fields, spells it out — `rain['1h']` is
+    "Rain volume for last hour", the hour *ending* at `dt`. Read that way, `rain['1h'] + snow['1h']`
+    of the entry whose `dt` is H+60 is the hour being ridden, so `extractOpenWeather`
+    (`forecast-rules.js:126-194`) reads precipitation from that entry — never the nearest one — while
+    every other field (temp, wind, gust, direction, humidity, `pop`, weather code, uv, cloud cover)
+    keeps reading the nearest `dt`, as before. `pop` is per-hour too, but its own alignment isn't
+    the ambiguity the vendor's docs raised for `1h`, so it is left alone on purpose, out of scope
+    for this change. No H+60 entry in the answer, or one further than `maxGapMs`, leaves
+    precipitation alone with no value — the rest of the step unaffected — never a different hour's.
+    uv, probability and weather code come from `hourly` when the quarter has none (AROME HD sends
+    all three null there). The same unit conversion as the table
+    (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from
+    the sun when missing, the code synthesised or reconciled with rain and cloud, and a probability
+    under 10 % dropped when the rain is 0 mm or missing (the table's rule, so compare now drops it
+    too when H+60 is not in the answer). Since the closing round OpenWeather goes through
+    `extractStep` here too, so which entry it reads — an hourly one within the hour of the step,
+    otherwise the daily entry of the step's own local date — is the table's rule rather than a
+    second copy of it that had drifted. The comparison tables are unchanged (spec §2).
+  - **Horizons.** Both comparisons keep the table's, out of `window.cw.horizons`: past
+    `OPENWEATHER_MAX_DAYS` the step asks Open-Meteo, past `OPENMETEO_MAX_DAYS` it has no data.
+    Compare-by-dates had none of it and asked OpenWeather for any date its field accepts, which is
+    fourteen days, so a date beyond the 48 hours One Call answers showed the last hour the answer
+    holds under a date OpenWeather does not cover; with the date-less OpenWeather key it read date
+    A's cached answer and issued no request at all, so nothing in the network log hinted at it.
+    `resolveProviderForTimestamp` is no help there: `isProviderOperational` calls OpenWeather
+    operational at any horizon.
+  - **AROME answers.** Both comparisons get them through `fetchAnswer`, as the table does: the
+    standard Open-Meteo answer merged in with `cwForecastRules.mergeAromeWithStandard`, and
+    Open-Meteo instead when AROME's answer is unusable, before caching; if that fallback fails too
+    there is no answer and nothing is cached, as in the table. Compare-by-dates used to
+    cache AROME unmerged under the key the table reads.
+  - **Cache keys.** Both comparisons file and read answers under `makeCacheKey` with each step's
+    UTC date (`timeAt.toISOString()`), exactly as the table does, and store an answer under the provider it came from, so an
+    Open-Meteo fallback for an unusable AROME answer is filed as Open-Meteo, not under the AROME key
+    built before asking. They used the local date of
+    the ride's first step, so from 00:00 to 02:00 in Spain neither read the other's answers.
+    OpenWeather's key has no date or time at all ("The forecast cache without coverage").
+- **The ride watch** (`native.js`). `armWatch(snapshot)` builds the record from the snapshot:
+  name and `fingerprint` from its route (the runner ignores the fingerprint), language, interval
+  and `owKey = alertsKey` from its settings. After the permission prompt and after the baseline
+  it checks that it is still the latest arm (`armToken`) and that the snapshot is still
+  `cw.currentSnapshot()`, and only then touches the toggle, says anything or goes on.
+  - **One queue** carries every save, every disarm and the read of what the runner holds, each
+    once the runner has answered the one before. A save checks token and snapshot again when its
+    turn comes and is dropped if either changed, so the save of a replaced forecast never lands
+    after the disarm that followed it. The status line changes only after a save that ran.
+  - **Reuse.** `cwWatchRules.reuse(stored, fresh, moved)`: the same route (fingerprint) with the same
+    start keeps what was already notified, so arming it again does not announce a warning twice;
+    the baseline is kept only over identical points (count, latitude, longitude and time), since
+    `compare` reads it by index. A new speed keeps `notified` and reads the baseline again. `moved`
+    is true when the snapshot is a replay (`origin: 'prepared'`, spec §4.6): moved to another start it
+    is still the same ride, so it keeps `notified` whatever the start, and its points have other hours,
+    so the baseline is read again. A live computation for another start still arms afresh. The flag is
+    an argument, never stored, so the runner's record does not change.
+  - **Disarm on confirm.** `cwCommitRoute` calls `cwDisarmWatchFor(fingerprint)`: a watch sent
+    or stored for another route is disarmed through the queue, the same route keeps its own.
+    `watchFingerprint` is set only inside a queued save or disarm. A save names its watch before
+    the runner call, so it names the last watch sent even while an earlier answer is still on its
+    way; set after the answer, a late disarm nulled a newer save and the next route confirmed left
+    the old one armed. A disarm clears it only once the runner has accepted: cleared before, a
+    disarm the runner refused left it null while the runner still held the old route, and the
+    next route confirmed disarmed nothing. The start-up read is the first operation in the queue. A confirmation before it
+    answers (fingerprint still `undefined`) queues a disarm that decides at its turn, so a
+    restored route keeps its stored watch and what it notified. If that read fails, the first
+    confirmation disarms; a stored watch from before fingerprints counts as another route.
+  - **A read that fails** while arming counts as nothing stored: the route arms afresh.
+  - The toggle arms with `cw.currentSnapshot()`; `cw:forecast` arms with `detail.snapshot`.
+- **Official warnings** are looked up only by a computation (`checkWeatherAlertsIndependent`
+  requires its sink and settings and touches nothing on the page) and shown only by `publish`.
+
+## Verifying a change
+
+```bash
+cd mobile
+npm install                     # once; plus `npx playwright install chromium webkit`
+npm test                        # builds the bundle, then runs the smoke suite on both engines
+node --check public/scripts/<file>.js
+```
+
+`playwright.config.mjs` also defines a `mobile-webkit` project (`devices['iPhone
+14']`), the same engine WKWebView uses on iOS. A measurement run against it (see
+`.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`)
+found 51 of 55 failures traced to one cause: IndexedDB writes that stored the
+route as a `Blob` (`ui.js` `meteoride_recent_routes_db`, `cw_tiles`) failing in
+WebKit with `UnknownError` (`put` of a `Blob` throws there; `put` of a string or
+an `ArrayBuffer` does not — confirmed with a direct probe, real `http` origin,
+browsers launched by hand), which cascaded into every test that imports a route
+and then checks recent-routes state. Fixed: recent routes are stored as plain
+text (`content`, a string) and tiles as raw bytes (`bytes`, an `ArrayBuffer`,
+with `type` alongside); a `Blob` is still built in memory to paint a tile or
+hand a route's text to a reader, since only *storing* one fails, not creating
+one. A record written by an older Android/web build still carries `blob`
+directly and every read path falls back to it, so nothing needed migrating.
+`mobile-webkit` is now part of the default `npm test` gate, alongside
+`mobile-chromium` — the suite is fully green on both (task 11 fixed the last
+failures). Each engine takes roughly 40 s, so `npm test` costs about 80 s of
+Playwright time instead of 40 s; accepted because the WebKit-only IndexedDB
+bug stayed invisible for the whole project life under a Chromium-only gate.
+Run WebKit alone with `npm run test:webkit`.
+
+`.github/workflows/tests.yml` runs this same `npm test` on every pull request and on
+push to `main`/`native-ios-capacitor` (Ubuntu, Node 22, no secrets — Android signing
+from task 12 stays out of CI, since it is optional and an unsigned APK is not built
+here anyway). Read the result from the PR's checks list or the Actions tab: a red
+`Tests` run means either engine failed, and the step's log names the failing test the
+same way a local `npm test` does. `~/.npm` and the Playwright browser cache are cached
+between runs, so only a `package-lock.json` change re-downloads anything.
+
+`node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
+without a browser, and drives the assembled `www/runners/watch.js` through its three
+events with the host objects mocked (`tests/runner.test.mjs`, needs a build first),
+which is the closest thing to running the background task without a device. `mobile/tests/smoke.spec.mjs` runs its checks against `mobile/www`
+with every external request blocked, which is both the offline guarantee and a way to keep the tests
+deterministic. It covers booting with no network, the absence of remote references,
+valid structured data, and the three ways a route gets in: the file picker,
+`?gpx_url=` and the native share plugin.
+
+Two things about it are worth knowing before you extend it:
+
+- **It tests `mobile/www`, not `public/`.** The website pulls its libraries from CDNs
+  and cannot be tested offline; the bundle is the same code plus local copies. The one
+  exception is the structured-data check, which reads `public/index.html` because the
+  build strips those blocks from the bundle.
+- **A route that cannot be used says so and changes nothing.** Every route goes through
+  `cw.requestRoute`; one that fails ends as `'failed'` and leaves the route on screen
+  untouched, with the `route_load_failed` notice when the text holds no usable route and
+  `route_read_failed` when it could not be read or the read missed its deadline. The old loader showed an `alert` and could
+  leave a route name with no track, which is why the tests still watch for dialogs and
+  loader console errors and look for the track on the map, not just for the name.
+
+If you add a handoff path, add a test for it. If you add a CDN reference, the build
+fails before the tests even run.
+
+The suite does not compile the native code. To check the Android Java compiles from a
+terminal on this machine, the global `~/.gradle/gradle.properties` pins JDK 17 and
+Capacitor 8 needs 21, and the background-runner plugin's Kotlin target disagrees with
+its Java target:
+
+```bash
+cd mobile/android
+ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew \
+  "-Dorg.gradle.java.home=/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  -Pkotlin.jvm.target.validation.mode=warning :app:compileDebugJavaWithJavac
+```
+
+A Playwright glob matches the whole URL, query string included, so `**/route.gpx`
+also matches a navigation to `index.html?gpx_url=/route.gpx` and hijacks the page
+itself. Route on `url.pathname` instead; two probes here were silently broken by it.
+
+**Always check a new test against the bug it is meant to catch.** Three of the tests
+here passed against the broken code on the first attempt and had to be rewritten. The
+mid-drain test is the instructive one: the shell drains the inbox once at boot, and
+that drain was swallowing the request the test meant to exercise, so the scenario ran
+but proved nothing. It now waits the boot drain out, and the stubbed plugin decides
+its answer when the call arrives rather than when it resolves, which is what native
+code does and what makes the race reproducible.
+
+## Open work
+
+- Android release signing is wired (task 12): `app/build.gradle` reads
+  `ANDROID_KEYSTORE_*` env vars, then `mobile/android/keystore.properties` (git-ignored;
+  see `keystore.properties.example`), and signs `assembleRelease`/`bundleRelease` when
+  either is complete. Neither present is not an error — the build still produces an
+  unsigned APK with a console warning. The author still has to point one of those two
+  at their own keystore; nothing here has it.
+- The remote branch `claude/cool-allen-w8evld` is stale — it predates this work and
+  nothing on it is wanted. It has to be deleted from the GitHub side by the author;
+  an agent session here gets a 403 trying.
+- The smoke suite stubs provider responses, so providers, the weather table, comparison modes and the
+  unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
+- `npm test` runs the suite on both Chromium and WebKit (`mobile-webkit`, see
+  «Verifying a change» above; `npm run test:webkit` runs that engine alone).
+  WebKit used to fail 55 of 260; the IndexedDB `Blob`-write cause behind 54 of
+  those is fixed (task 11, §10 of `docs/HANDOFF.md`) and the suite is 261/261
+  there, so it was folded into the default gate.
+- The iOS native code has now been compiled and run in the simulator on the author's
+  Mac — the app launches, the app-local plugin registers, the App Group resolves and a
+  GPX loads from Files. Nothing here compiles it: everything written in this
+  environment was checked by reading the Capacitor sources in
+  `node_modules/@capacitor/ios`, which is how the plugin registration bug above was
+  found, but reading is not building, so a change to the Swift still has to go through
+  Xcode before anyone can call it working. The Android code compiles (against
+  hand-written stubs of the dozen SDK and Capacitor classes it touches; there is no
+  Android SDK here), and `cap sync android` runs here, so the generated
+  `capacitor.settings.gradle` / `capacitor.build.gradle` are committed in step with the
+  installed plugins. Android itself has never been built or run.
+- **Nothing has run on a physical device.** iOS background tasks never execute in the
+  simulator, so no ride alert has ever fired through the real path: the rules and the
+  runner are covered by tests, the delivery is not.
+- **iOS reads a route opened via "Open in MeteoRide" on the main thread.**
+  `scene(_:openURLContexts:)` (`SceneDelegate.swift:34-54`) calls
+  `MeteoRideShareStore.ingest(fileURL:)` synchronously, which streams the file through
+  `readCapped` — up to 25 MB — before the UI thread is free again. The share-extension
+  path was moved off the main thread; this one has not been. Documented, not fixed.
+- **Android can lose an "Open in"/share import if the process dies mid-ingest.**
+  `ingest(Intent)` marks the intent `EXTRA_HANDLED` (`MainActivity.java:57`) before
+  handing the actual read-and-store to the background executor (`:61-66`); a process
+  killed between those two lines never writes the file to the inbox, and the same guard
+  that stops a route being imported twice then also stops it being retried. Reopening
+  the task from Recent Apps used to be an incidental way to retry exactly this case —
+  Android hands `onCreate` the same original intent again — but the Recents guard above
+  (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) now refuses that intent too, on purpose: a
+  route already delivered must not be re-ingested from Recents. That accidental
+  recovery is gone along with the duplicates it used to cost. Phase 5 did not change it: its
+  durable import starts once a route reaches JavaScript, and the native inboxes are out of its
+  scope (`docs/HANDOFF.md` §10).
+- The six findings in `docs/REVIEW-2026-09-14.md` are fixed: H6 (the `/share` size limit),
+  H2 (offline preparation), H1 (overlapping forecasts), H5 (notices by time window, for the
+  computation in phase 2 and the comparisons in phase 4), H3 (OpenWeather cached per location) and
+  H4 (provider deadlines and aborts). `docs/HANDOFF.md` §9 has the table and §10 what remains.
+- The iOS share extension has no UI. It flashes and closes. Fine, but a one-line
+  confirmation would be friendlier.
+- The share extension reaches the host app by walking the responder chain to
+  `openURL:` when `NSExtensionContext.open` reports failure, which it usually does
+  for a share extension. Widely used, public API, but App Store review has been known
+  to question it. If it is ever rejected, the fallback is to drop the hop: the route
+  is already in the inbox and the app picks it up the next time it opens.
+- The donation button on the website's help pages is an image on buymeacoffee's CDN
+  (the app strips the whole section, see the security model). Dropping the PNG into
+  `public/assets/` would remove a third-party request from the website.
+- A tip jar in the app, if ever wanted, has to be an in-app purchase (consumable) on
+  iOS; on Android Play Billing is the safe route too.
+- Only waypoint metadata is sanitised, because that is the only place the libraries
+  build HTML from file content. Any new feature that renders something out of a route
+  needs the same scrutiny.
+- Connecting an account to Strava, Komoot, Bikemap or Hammerhead from inside the app.
+  Passing a route between apps already works through the system share sheet, in both
+  directions: another app shares an exported GPX in, and the share button hands the
+  loaded route back out. An account connection is a different thing, and the
+  Tampermonkey userscripts in `tools/userscripts/` are not a head start on it: they
+  work by running inside the user's logged-in session on those sites and fetching
+  their APIs with `credentials: 'include'`, and Hammerhead's token is scraped from an
+  open dashboard tab. An app holding no cookies for those origins cannot do that. Of
+  the four, only Strava publishes an API meant for third-party apps, so only Strava
+  could be done properly, through OAuth.
+- The two items the security model leaves open on purpose: self-hosting the libraries
+  (which unlocks `script-src 'self'` and Subresource Integrity), and a rate limit on
+  `POST /share` at the Cloudflare edge.
+- Idea, not planned work: other sources for official alerts. Today OpenWeather is the
+  only one (task 15). Checked and worth recording so it is not re-checked from scratch:
+  Open-Meteo has no alerts endpoint at all — it is a long-standing open request on their
+  tracker, not something missed here. MeteoAlarm (api.meteoalarm.org) publishes the
+  European national weather services' warnings for free, in CAP format, per country,
+  with geometries and severity levels — mapping those onto route points would be real
+  work, not a drop-in. alert-hub.org aggregates many CAP feeds worldwide, which could
+  cover more ground than MeteoAlarm alone. And national services such as AEMET or
+  Météo-France could be used directly. Nobody has scoped which of these is worth
+  building.
+- Xcode prints four warnings, all from third-party Capacitor plugins under
+  `node_modules`, none from code this repo maintains: `authorizationStatus` deprecated
+  since iOS 14 and `summaryArgument` deprecated since iOS 15, in
+  `@capacitor/background-runner` and `@capacitor/local-notifications`; an unused
+  immutable `responseType` in `@capacitor/filesystem`; and a `String?` implicitly
+  coerced to `Any` in `@capacitor/app`. Every one of those plugins is already at its
+  latest published version (app 8.1.1, filesystem 8.1.3, local-notifications 8.3.1,
+  background-runner 3.0.0, core/ios/cli 8.5.2), so no upgrade clears them. They are
+  compile-time noise, not defects here; the real exposure is the day Apple removes
+  those APIs, which upstream has to fix. Deliberately not silenced: extending
+  `scripts/patch-background-runner.mjs` to rewrite someone else's source would buy
+  maintenance on every plugin update in exchange for no change in behaviour. Suppress
+  warnings for dependency targets in Xcode if they get in the way.

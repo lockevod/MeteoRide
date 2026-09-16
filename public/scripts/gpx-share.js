@@ -2,42 +2,112 @@
 (function(){
   // Register service worker and listen for shared GPX messages
   async function registerServiceWorker() {
+    // The native shell receives shared files through the MeteoRideShare plugin,
+    // so the service worker handoff is neither available nor needed there.
+    if (window.CW_NATIVE) return;
     if (!('serviceWorker' in navigator)) return;
+    // Listening before registering: the worker posts as soon as it has stored a route.
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.type === 'cw-shared-gpx') takeSharedFromServiceWorker();
+    });
     try {
       await navigator.serviceWorker.register('/scripts/service-worker.js');
     } catch (err) {
       console.warn('[cw] sw register failed', err);
     }
-    if (navigator.serviceWorker.addEventListener) {
-      navigator.serviceWorker.addEventListener('message', (ev) => {
-        try {
-          if (ev.data && ev.data.type === 'cw-shared-gpx') {
-            readSharedGPXFromIDB().then(payload => {
-              if (payload && payload.text) {
-                window.cwInjectGPXFromText(payload.text, payload.name || ev.data.name);
-              }
-            }).catch(()=>{});
-          }
-        } catch(_) {}
+  }
+
+  // Confirming a route draws it onto the Leaflet map, and routes from outside routinely
+  // arrive before app.js has built it: the native inbox at boot, the service worker,
+  // sessionStorage, ?gpx_url=. Each read waits on its own and stops once its request has ended
+  // (`ended`), so a map that never comes leaves no poll running for the life of the page.
+  function whenMapReady(ended) {
+    const ready = () => !!window.map && typeof window.cwParseRoute === 'function';
+    return new Promise((resolve) => {
+      if (ready()) return resolve();
+      const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 100);
+      ended.then(() => clearInterval(timer));
+    });
+  }
+
+  // Every route from outside the page arrives here. Its request is made at once, before any
+  // wait; the download and the wait for the map happen inside its read, under its deadline.
+  // Keeping the route among the recent ones is separate from which route ends up on screen:
+  // a share is imported as its text arrives, whatever its request ends as; a link or a
+  // message only once it is the route confirmed. The download starts with the request
+  // rather than in its read, because a request replaced in the same tick never reads, and
+  // its import must not depend on that. Resolves with what the request ends as.
+  function cwReceiveRoute({ source, name, text, fetchText, importOn = source === 'url' || source === 'message' ? 'commit' : 'arrival' }) {
+    // No text and nothing to download it from: fail without asking, so the route being read
+    // is not replaced by one that cannot be read.
+    if (typeof text === 'string' ? !text : typeof fetchText !== 'function') return Promise.resolve('failed');
+    const routeName = name || 'Shared route';
+    const arrived = typeof text === 'string' ? Promise.resolve(text) : Promise.resolve().then(fetchText);
+    arrived.catch(() => {});   // the read reports it; a replaced request never reads
+    const status = window.cw.requestRoute({
+      source,
+      read: async () => {
+        const got = await arrived;
+        if (!got) throw new Error('no route text');
+        await whenMapReady(status);
+        return { text: got, name: routeName };
+      },
+    });
+    const importIt = (got) => { if (got) window.cwImportIfRoute(got, routeName); };
+    const importFailed = (err) => console.warn('[cw] keeping a route from outside failed', err);
+    if (importOn === 'arrival') arrived.then(importIt, () => {}).catch(importFailed);
+    else status.then((s) => { if (s === 'committed') return arrived.then(importIt); }).catch(importFailed);
+    return status;
+  }
+
+  window.cwReceiveRoute = cwReceiveRoute;
+
+  function cwInjectGPXFromText(text, name, source = 'share-native') {
+    return cwReceiveRoute({ source, name, text });
+  }
+
+  // leaflet-gpx builds waypoint popups by concatenating the <name> and <desc> text
+  // straight into an HTML string, so a route carrying markup there runs it in our
+  // origin — where the provider API key lives, and in the app where the Capacitor
+  // bridge lives. Escaping those text nodes before the library sees them keeps the
+  // text visible and inert, and does not touch anything else in the file.
+  function escapeMarkup(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  const RISKY_TEXT_NODES = [
+    'wpt > name', 'wpt > desc', 'wpt > cmt',
+    'trk > name', 'trk > desc',
+    'rte > name', 'rte > desc',
+    'metadata > name', 'metadata > desc'
+  ].join(', ');
+
+  function cwSanitizeGPXText(gpxText) {
+    const original = String(gpxText || '');
+    try {
+      const doc = new DOMParser().parseFromString(original, 'application/xml');
+      // Leave broken XML alone; the loader reports it far better than we could.
+      if (doc.getElementsByTagName('parsererror').length) return original;
+
+      let changed = false;
+      doc.querySelectorAll(RISKY_TEXT_NODES).forEach((el) => {
+        const text = el.textContent || '';
+        const safe = escapeMarkup(text);
+        if (safe !== text) {
+          el.textContent = safe;
+          changed = true;
+        }
       });
+      // Only re-serialise when something actually needed escaping, so ordinary
+      // routes reach the parser byte for byte as they arrived.
+      return changed ? new XMLSerializer().serializeToString(doc) : original;
+    } catch (e) {
+      console.warn('[cw] GPX sanitise failed, passing through', e);
+      return original;
     }
   }
 
-  // Facade: prefer cwLoadGPXFromString when available, otherwise postMessage fallback.
-  function cwInjectGPXFromText(gpxText, routeName){
-    try {
-      const name = routeName || 'Shared route';
-      if (typeof window.cwLoadGPXFromString === 'function') {
-        window.cwLoadGPXFromString(String(gpxText || ''), name);
-        return true;
-      }
-      window.postMessage({ type: 'cw-gpx', name, gpx: String(gpxText || '') }, '*');
-      return true;
-    } catch(e){
-      console.error('[cw] cwInjectGPXFromText error', e);
-      return false;
-    }
-  }
+  window.cwSanitizeGPXText = cwSanitizeGPXText;
 
   // Parse GPX text and return a small summary object for easier debugging
   function parseGPXSummary(gpxText) {
@@ -102,7 +172,8 @@
     } catch(_) { if (window.logdebug) window.logdebug('GPX: (unreadable)'); else console.log('GPX: (unreadable)'); }
   }
 
-  // Read GPX stored by the Service Worker in IndexedDB (one-time read)
+  // Takes the route the service worker stored in IndexedDB, if any: read and delete in one
+  // readwrite transaction, settled only once it completes. Resolves null when there is none.
   function readSharedGPXFromIDB() {
     if (typeof indexedDB === 'undefined') return Promise.resolve(null);
     return new Promise((resolve) => {
@@ -111,24 +182,61 @@
         try { evt.target.result.createObjectStore('files'); } catch(_) {}
       };
       req.onsuccess = (evt) => {
+        const db = evt.target.result;
+        const done = (val) => { try { db.close(); } catch(_) {} ; resolve(val); };
         try {
-          const db = evt.target.result;
           const tx = db.transaction('files', 'readwrite');
           const store = tx.objectStore('files');
+          tx.onabort = () => done(null);
           const gt = store.get('gpx');
           gt.onsuccess = () => {
             const val = gt.result || null;
-            if (val) {
-              // remove stored item so it's one-time
-              store.delete('gpx');
-            }
-            tx.oncomplete = () => { try { db.close(); } catch(_) {} ; resolve(val); };
+            if (val) store.delete('gpx');
+            tx.oncomplete = () => done(val);
           };
-          gt.onerror = () => { try { db.close(); } catch(_) {} ; resolve(null); };
-        } catch (err) { resolve(null); }
+          gt.onerror = () => done(null);
+        } catch (err) { done(null); }
       };
       req.onerror = () => resolve(null);
     });
+  }
+
+  // The one reader of the service worker's slot, which holds a single route. One read at a
+  // time: a call while a read runs makes that read go round once more when it ends, so a route
+  // stored meanwhile, whose message found the reader busy, is still taken, and no route is
+  // taken twice. Called at start-up (which covers ?shared, where the worker sends the page)
+  // and on every cw-shared-gpx message.
+  // `keepOnly`: the route found is kept among recent routes but not asked for. The start-up read
+  // passes it when the address opens a link: its request comes only once IndexedDB answers, after
+  // the link's, and a route left in the slot by an earlier share would replace the link just
+  // opened. A round a message asks for meanwhile asks for its route as usual.
+  // ponytail: a slot transaction that never settles stalls the reader for the page's life,
+  // like the recent-routes queue; a timeout per read would unstick it.
+  let slotRead = null;
+  let slotAgain = false;
+
+  function takeSharedFromServiceWorker(keepOnly = false) {
+    if (slotRead) {
+      slotAgain = true;
+      return slotRead;
+    }
+    slotRead = (async () => {
+      try {
+        do {
+          slotAgain = false;
+          const payload = await readSharedGPXFromIDB();
+          if (payload && payload.text && keepOnly) {
+            try { window.cwImportIfRoute(payload.text, payload.name || 'Shared route'); } catch (err) { console.warn('[cw] keeping a route from outside failed', err); }
+          } else if (payload && payload.text) {
+            cwReceiveRoute({ source: 'share-sw', name: payload.name, text: payload.text, importOn: 'arrival' });
+          }
+          keepOnly = false;
+        } while (slotAgain);
+      } finally {
+        slotRead = null;
+      }
+    })();
+    return slotRead;
   }
 
   // sessionStorage handoff (keeps existing behavior for open-in from other pages)
@@ -142,51 +250,11 @@
         const routeName = ss.getItem(KEY_NAME) || 'Shared route';
         ss.removeItem(KEY);
         ss.removeItem(KEY_NAME);
-        window.cwInjectGPXFromText(pending, routeName);
+        cwReceiveRoute({ source: 'share-session', name: routeName, text: pending, importOn: 'arrival' });
         console.log('[cw] loaded GPX from sessionStorage');
         if (window.openDebug) window.openDebug();
       }
     } catch(e){ console.warn('[cw] sessionStorage unavailable', e); }
-  }
-
-  // Helper to open the shared DB (used elsewhere)
-  function openIndexedDB() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('cw_shared_db', 1);
-      request.onupgradeneeded = (e) => {
-        try { e.target.result.createObjectStore('files'); } catch(_) {}
-      };
-      request.onsuccess = (e) => resolve(e.target.result);
-      request.onerror = (e) => reject(e);
-    });
-  }
-
-  // Called from UI when needing to load shared GPX (from '?shared' or message)
-  async function loadSharedGPX() {
-    try {
-      const db = await openIndexedDB();
-      const tx = db.transaction('files', 'readonly');
-      const store = tx.objectStore('files');
-      const request = store.get('gpx');
-      request.onsuccess = () => {
-        const data = request.result;
-        if (data && data.text) {
-          // Parse and load the GPX
-          if (typeof window.cw !== 'undefined' && window.cw.loadGPXFromText) {
-            window.cw.loadGPXFromText(data.text, data.name || 'shared.gpx');
-          } else {
-            // fallback to injector
-            window.cwInjectGPXFromText(data.text, data.name || 'shared.gpx');
-          }
-          // Clear the shared data
-          const delTx = db.transaction('files', 'readwrite');
-          delTx.objectStore('files').delete('gpx');
-        }
-      };
-      request.onerror = () => console.error('Failed to load shared GPX');
-    } catch (e) {
-      console.error('Error loading shared GPX:', e);
-    }
   }
 
   // --- Minimal URL param ingest (moved from gpx-ingest.js) ---
@@ -201,89 +269,79 @@
     };
   }
 
-  async function fetchText(url) {
-    const res = await fetch(url);
+  async function fetchText(url, init) {
+    const res = await fetch(url, init);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.text();
   }
 
-  async function loadFromParams() {
+  // A hosted route is downloaded inside its request, so a route picked while it downloads is
+  // the later request and wins. What is not a GPX (a login page, say) fails the request with a
+  // notice. It is kept among recent routes only once confirmed.
+  function loadFromParams() {
     const { gpxUrl, name } = getParams();
     if (!gpxUrl) return;
-
-    // wait for loader to be available (if possible)
-    let tries = 0;
-    await new Promise((res) => {
-      const t = setInterval(() => {
-        tries++;
-        const ok = typeof window.cwLoadGPXFromString === "function";
-        if (ok || tries >= 60) { clearInterval(t); res(ok); }
-      }, 250);
+    cwReceiveRoute({
+      source: 'url',
+      name,
+      importOn: 'commit',
+      fetchText: async () => {
+        const txt = await fetchText(gpxUrl);
+        if (!txt || !txt.includes("<gpx")) throw new Error("Fetched content is not GPX");
+        return txt;
+      },
     });
-
-    try {
-      const txt = await fetchText(gpxUrl);
-      if (!txt || !txt.includes("<gpx")) throw new Error("Fetched content is not GPX");
-      window.cwLoadGPXFromString && window.cwLoadGPXFromString(txt, name);
-    } catch (e) {
-      console.warn('[ingest] loadFromParams error', e);
-    }
   }
 
-  // Auto-load GPX from server share_id parameter
-  async function loadSharedIdIfPresent() {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const sid = urlParams.get('shared_id');
-      if (!sid) return;
-      const shareUrl = `/shared/${encodeURIComponent(sid)}`;
-      const resp = await fetch(shareUrl, { credentials: 'omit' });
-      if (!resp.ok) return;
-      const gpxText = await resp.text();
-      if (gpxText && gpxText.length > 0) {
-        window.cwInjectGPXFromText(gpxText, `shared_${sid}.gpx`);
-        // Try to delete server copy to minimize retention
-        try { await fetch(shareUrl, { method: 'DELETE' }); } catch (_) {}
-      }
-    } catch (e) { console.warn('shared_id load failed', e); }
+  // A route /share keeps for two minutes. Its request is made as the download starts; it is
+  // kept among recent routes as soon as its text arrives, whatever the request ends as, and the
+  // server copy is deleted then, without waiting for the answer. The link is spent by then, so
+  // shared_id leaves the address too, or a reload would ask the server again for nothing.
+  function loadSharedIdIfPresent() {
+    const sid = new URLSearchParams(window.location.search).get('shared_id');
+    if (!sid) return;
+    const shareUrl = `/shared/${encodeURIComponent(sid)}`;
+    cwReceiveRoute({
+      source: 'shared-id',
+      name: `shared_${sid}.gpx`,
+      importOn: 'arrival',
+      fetchText: async () => {
+        const text = await fetchText(shareUrl, { credentials: 'omit' });
+        // A body with nothing in it is not a route that arrived: the server copy stays and so does
+        // shared_id, so a reload can try again.
+        if (!text.trim()) throw new Error('empty shared route');
+        fetch(shareUrl, { method: 'DELETE' }).catch(() => {});
+        try {
+          const address = new URL(window.location.href);
+          address.searchParams.delete('shared_id');
+          window.history.replaceState(window.history.state, '', address.href);
+        } catch (_) { /* the route still loads */ }
+        return text;
+      },
+    });
   }
 
   // NOTE: localizeHeader moved to ui.js; gpx-share.js will call the global function if present.
 
   // Expose some helpers globally (non-enumerable)
   window.cwInjectGPXFromText = cwInjectGPXFromText;
-  window.readSharedGPXFromIDB = readSharedGPXFromIDB;
-  window.openIndexedDB = openIndexedDB;
 
-  // Boot/initialization logic is exposed so the main app can control when to start
-  async function initGpxShare() {
-    await registerServiceWorker();
+  // Boot/initialization logic is exposed so the main app can control when to start.
+  // Called while app.js loads, before the map exists: every entry below asks for its route
+  // at once and waits for the map inside its request.
+  function initGpxShare() {
+    registerServiceWorker();
     sessionStorageHandoff();
     // prefer UI module's header localize if available
     try { if (typeof window.localizeHeader === 'function') window.localizeHeader(); } catch(_) {}
-    // Try to read any GPX the SW might have stored
-    try {
-      const payload = await readSharedGPXFromIDB();
-      if (payload && payload.text) {
-        console.log('[cw] loaded GPX from IndexedDB (service-worker handoff)', payload.name || '');
-        cwInjectGPXFromText(payload.text, payload.name || 'Shared route');
-      }
-    } catch (e) { console.warn('[cw] readSharedGPXFromIDB error', e); }
+    // Whatever the service worker stored while no page was reading, only kept when the address
+    // opens a link, which is the route the user asked for. The app has no service worker, and
+    // reading would only create its database there.
+    const opensLink = !!getParams().gpxUrl || !!new URLSearchParams(window.location.search).get('shared_id');
+    if (!window.CW_NATIVE) takeSharedFromServiceWorker(opensLink);
 
-    // Listen for in-page messages to load shared GPX
-    if (navigator.serviceWorker && navigator.serviceWorker.addEventListener) {
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'cw-shared-gpx') {
-          loadSharedGPX();
-        }
-      });
-    }
-
-    // If URL has ?shared, attempt to load
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('shared')) loadSharedGPX();
-    } catch (_) {}
+    // ?gpx_url= / ?url= — the documented way to open a hosted route.
+    loadFromParams();
 
     // handle shared_id server copies
     loadSharedIdIfPresent();

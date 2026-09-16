@@ -577,6 +577,10 @@ nav button:hover {
   align-items: center;
   padding: 6px 0; /* give each row some vertical breathing room */
 }
+/* `display: flex` above beats the hidden attribute; rows that are app-only rely on it. */
+#configMenu .config-row[hidden] {
+  display: none;
+}
 
 /* Compact inline row: place multiple inline checkbox labels on one line */
 #configMenu .config-row.compact-inline {
@@ -591,7 +595,9 @@ nav button:hover {
   gap: 6px;
   margin: 0;
 }
-#configMenu .config-row.compact-inline label.compact-notice { 
+/* Spacing between the two checkboxes on one line, by position rather than by a
+   class naming one of them: the order is a presentation choice and has changed. */
+#configMenu .config-row.compact-inline label.inline + label.inline {
   margin-left: 6px;
   white-space: nowrap;
 }
@@ -2493,14 +2499,6 @@ input[type="number"] {
   border-color: #fca5a5;/* red-300 */
 }
 
-/* Larger MeteoBlue API input for readability */
-#configMenu #apiKey {
-  height: 36px;
-  font-size: 14px;
-  letter-spacing: 0.02em;
-  width: 65%; /* make it span the full panel width */
-}
-
 #configMenu #apiKeyOW {
   height: 36px;
   font-size: 14px;
@@ -2509,23 +2507,6 @@ input[type="number"] {
 }
 
 /* Themed “Check API” button */
-#configMenu #checkApiKey {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #2563eb;
-  color: #fff;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 120ms ease, transform 100ms ease, opacity 120ms ease;
-}
-
 #configMenu #checkApiKeyOW {
   align-self: flex-start;
   display: inline-flex;
@@ -2542,11 +2523,6 @@ input[type="number"] {
   cursor: pointer;
   transition: background-color 120ms ease, transform 100ms ease, opacity 120ms ease;
 }
-
-#configMenu #checkApiKey::before { content: "🔍"; }
-#configMenu #checkApiKey.testing::before { content: "⏳"; }
-#configMenu #checkApiKey:hover { background: #1d4ed8; transform: translateY(-1px); }
-#configMenu #checkApiKey:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
 #configMenu #checkApiKeyOW::before { content: "🔍"; }
 #configMenu #checkApiKeyOW.testing::before { content: "⏳"; }
@@ -3335,3 +3311,161 @@ tr.selected-row:hover {
   opacity: 0.7;
   pointer-events: none; /* Don't interfere with clicks */
 }
+/* =========================================================================
+   Native shell (iOS / Android app built with Capacitor).
+   These rules only apply when scripts/native.js detects a native platform,
+   so the website and the PWA are unaffected.
+   ========================================================================= */
+html.cw-native,
+html.cw-native body {
+  overscroll-behavior: none;          /* no rubber-band bounce over the app chrome */
+  -webkit-touch-callout: none;        /* no long-press callout on map/table */
+}
+
+/* Tight to the top: on a phone every pixel above the map is a pixel of map. The
+   inset is not padding we chose, it is the notch, so only the 0.5rem the website
+   adds is worth trimming. */
+html.cw-native header {
+  padding-top: calc(0.15rem + env(safe-area-inset-top));
+  padding-bottom: 0.15rem;
+  padding-left: calc(0.6rem + env(safe-area-inset-left));
+  padding-right: calc(0.6rem + env(safe-area-inset-right));
+}
+
+/* Added to the page's own padding, not in place of it: an earlier version set the
+   sides to the inset alone, which is zero in portrait, and the text sat on the edge.
+   The bottom keeps the home-indicator inset and nothing else. */
+html.cw-native main {
+  padding-top: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: calc(0.5rem + env(safe-area-inset-left));
+  padding-right: calc(0.5rem + env(safe-area-inset-right));
+  gap: 0.35rem;
+}
+
+/* The website sizes `main` as `calc(100vh - 3rem)`, taking the header to be exactly
+   3rem. In the app it is not: it grows by the safe-area inset, which is around 60px
+   on a phone with a notch, and `main` then runs off the bottom of the screen. Rather
+   than guess a new number, let the page be a column — the header takes what it needs
+   and main gets the rest. Both panels that are not header or main (#configMenu,
+   #debugSection) are positioned out of the flow, so nothing else becomes a flex item. */
+html.cw-native body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+}
+
+html.cw-native header {
+  flex: 0 0 auto;
+}
+
+html.cw-native main {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;   /* without this the children refuse to shrink and overflow instead */
+}
+
+/* 300px is a third of a phone screen and cannot shrink, so a notice appearing pushed
+   the table off the bottom. Let the map give up the space instead — it is the one
+   element here that reads fine at any height. */
+html.cw-native #map {
+  min-height: 150px;   /* low enough to give way when a notice appears */
+  max-height: 62vh;    /* and the ceiling the website already used, not lower */
+}
+
+/* Last resort: if the controls still do not fit, they scroll rather than vanish. */
+html.cw-native #controlsPanel {
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The panel is positioned from the top of the page, so it needs the same inset the
+   header got or it opens over it. */
+html.cw-native #configMenu {
+  top: calc(3.5rem + env(safe-area-inset-top));
+  max-height: calc(100dvh - 5rem - env(safe-area-inset-top));
+  overflow-y: auto;
+}
+
+/* The app adds two buttons the website does not have, and on a phone that pushed the
+   row onto a second line. Tighten the toolbar rather than move the controls. */
+html.cw-native header nav {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: nowrap;
+}
+
+html.cw-native header nav button {
+  padding: 6px 5px;
+  gap: 3px;
+}
+
+html.cw-native header h1 .subtitle {
+  display: none;
+}
+
+/* Shown over the map when there is no connection: without tiles the background is
+   blank, and an unexplained grey rectangle reads as a failure rather than a state. */
+html.cw-native #cwMapOffline {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;                 /* clear of the route, the zoom controls and the credits */
+  transform: translateX(-50%);
+  z-index: 600;
+  max-width: 62%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #5a5a5a;
+  font-size: 0.78em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Compare-by-dates, app only: the sticky first column (day + summary) is wide, and
+   following the user right as they scroll to the time steps eats the width the steps
+   need. compare.js toggles this class on the container once the user has actually
+   scrolled away from the start, and removes it again back at the start. The table is
+   table-layout:fixed, so animating the column's width (not display) is what keeps the
+   step columns from jumping. */
+html.cw-native #weatherTable.compare-dates-mode tbody tr th:first-child,
+html.cw-native #weatherTable.compare-dates-mode thead tr th:first-child {
+  transition: width 0.15s ease, min-width 0.15s ease, max-width 0.15s ease;
+}
+html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-dates-mode tbody tr th:first-child,
+html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-dates-mode thead tr th:first-child {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+/* Collapsed, only the day (interval row) and the weather icon (summary row) stay;
+   the numeric summary is what goes away. */
+html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-dates-mode .ds-summary-numbers {
+  display: none;
+}
+
+/* The 16px override that used to live here is gone. It existed to stop iOS zooming
+   in when a small field took focus, but it only applied to the inputs that open a
+   keyboard, so the speed box ended up visibly larger than the interval select next
+   to it. The app's viewport now carries `user-scalable=no` (see build-www.mjs), which
+   removes the cause, and every control keeps the size the website gives it. */
+
+/* Under the ride-alerts toggle (app only): what is being watched. */
+/* Sub-lines under the ride-alerts toggle. Outside the row, indented to sit under
+   the label text rather than under the checkbox. */
+.ride-alerts-status {
+  font-size: 0.8em;
+  color: #4a5a70;
+  margin: 0 0 6px 26px;
+}
+.ride-alerts-status:empty { display: none; }
+.ride-alerts-hint { color: #a04a00; }

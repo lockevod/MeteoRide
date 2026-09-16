@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MeteoRide Import from Komoot, Bikemap and Hammerhead
 // @namespace    github.com/lockevod
-// @version      0.25
+// @version      0.26
 // @description  Add a button on Komoot, Bikemap and Hammerheadto open the current route in MeteoRide (downloads GPX and sends via postMessage)
 // @author       Lockevod
 // @license      MIT
@@ -47,11 +47,17 @@
                 const targetUrl = METEORIDE_URL.replace(/[#?].*$/, '') + '#autopost';
                 const w = window.open(targetUrl, '_blank');
         if (!w) return;
-                // Listen for ack
+                // The app answers once it has decided: status 'committed' means shown, anything
+                // else ('superseded', 'failed') means it arrived but is not on screen. Either way
+                // this send has been heard, and a resend would only get the same answer, so the
+                // pending resends stop.
+                const timers = [];
                 const ackListener = (ev) => {
                     const data = ev.data;
-                    if (!data || data.action !== 'loadGPX:ack') return;
-                    d('ACK from app', data);
+                    if (!data || data.action !== 'loadGPX:ack' || ev.source !== w) return;
+                    if (data.name !== name || data.size !== (gpxText && gpxText.length)) return;
+                    d(data.ok ? 'MeteoRide showed the route' : 'MeteoRide did not show the route: ' + (data.status || data.reason), data);
+                    timers.forEach(clearTimeout);
                     window.removeEventListener('message', ackListener);
                 };
                 window.addEventListener('message', ackListener);
@@ -65,9 +71,7 @@
             }
         };
         // wait a bit and then post (best-effort)
-        setTimeout(tryPost, 1000);
-        setTimeout(tryPost, 2000);
-        setTimeout(tryPost, 4000);
+        timers.push(setTimeout(tryPost, 1000), setTimeout(tryPost, 2000), setTimeout(tryPost, 4000));
     }
 
     function fetchAsText(url, cb) {

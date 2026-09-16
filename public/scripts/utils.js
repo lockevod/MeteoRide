@@ -1,6 +1,188 @@
 (function() {
   const cacheTTL = 1000 * 60 * 30; 
 
+  // With no connection there is nothing better to show than the last forecast that
+  // was downloaded, so past the normal TTL the cache keeps serving it rather than
+  // leaving an empty table. Beyond this a forecast is not worth looking at.
+  const staleMaxAge = 1000 * 60 * 60 * 12;
+
+  // Preparing a route used to pin its cache entries under this key; it now keeps its own record in
+  // IndexedDB, so the list an older version left behind is dropped once at start-up.
+  try { localStorage.removeItem('cw_offline_pinned'); } catch (_) { /* storage blocked */ }
+  // OpenWeather answers used to be filed under the step's date and quarter hour, and again under
+  // each of their hours. Nothing reads those keys now (makeCacheKey), so they are dropped here.
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('cw_weather_openweather_') && k.endsWith('Z'))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (_) { /* storage blocked */ }
+
+  // Forecast requests are watched so the app can say why a table came out empty. A
+  // computation hands fetch its own recorder (`cwRecorder`) and the wrapper notes each
+  // provider answer there and nowhere else, so what one computation saw can never turn
+  // into a notice over another. A request without a recorder is not watched at all.
+  const PROVIDER_HOSTS = ['api.open-meteo.com', 'api.openweathermap.org'];
+
+  // The author's deadline (review 14/09, H4), set after measuring: Open-Meteo and AROME start answering in
+  // about 0.3 s, and what is slow with poor coverage is the download. So a watched request is given up
+  // after 15 s without the server starting to answer, or 15 s in a row without any data while its body
+  // is read; a slow download that keeps arriving is never cut.
+  const PROVIDER_SILENCE_MS = 15000;
+  // Watched answers: the provider each came from and the controller that cuts it.
+  const watched = new WeakMap();
+
+  // `signal` is the computation's or the comparison's: aborted when a newer one replaces it, which
+  // aborts its requests and is nobody's failure. `timedOut` lists the providers given up on, which is
+  // what the notice names; `timedOutHosts` the hosts, which is what is not asked again: AROME is
+  // Open-Meteo with another model, so a host that has just gone silent must not be waited on twice.
+  function createRecorder(signal) {
+    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [], signal };
+  }
+
+  // The recorder a best-effort secondary request hands to fetch: the deadline and the abort of the
+  // computation it belongs to, and its notes taken nowhere. Completing an AROME answer from the
+  // standard model is the one such request, and its failure is swallowed by design, so it must give
+  // up no host — the answer it completes came from that same host and has just arrived — and must
+  // never count as a failure or name a provider in the notice. One per computation, kept on the
+  // recorder, so a host that does go silent still costs a single wait and not one per step.
+  function bestEffortRecorder(recorder) {
+    if (!recorder.bestEffort) recorder.bestEffort = createRecorder(recorder.signal);
+    return recorder.bestEffort;
+  }
+
+  // Whether a failure happened without connection is noted as it happens: by the time the
+  // computation publishes, the connection may be back.
+  function noteFailure(recorder, status) {
+    recorder.failed++;
+    recorder.lastFailStatus = status;
+    if (isOffline()) recorder.offline = true;
+  }
+
+  function noteTimeout(recorder, prov, host) {
+    noteFailure(recorder, 'timeout');
+    if (!recorder.timedOut.includes(prov)) recorder.timedOut.push(prov);
+    if (host && !recorder.timedOutHosts.includes(host)) recorder.timedOutHosts.push(host);
+  }
+
+  const timeoutError = (prov) => Object.assign(new Error(`${prov} is not responding`), { name: 'TimeoutError' });
+
+  // Every body read of a watched answer: chunk by chunk, so the silence can be timed. Anything else
+  // is read as it always was.
+  async function readText(response) {
+    const w = watched.get(response);
+    if (!w || !response.body) return response.text();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    try {
+      for (;;) {
+        let timer;
+        const silence = new Promise((resolve) => { timer = setTimeout(resolve, PROVIDER_SILENCE_MS, null); });
+        const chunk = await Promise.race([reader.read(), silence]).finally(() => clearTimeout(timer));
+        if (!chunk) { w.cut.abort(); throw timeoutError(w.prov); }
+        if (chunk.done) return text + decoder.decode();
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      // The body is over, one way or another: nothing is left for the computation's signal to cut,
+      // so this request stops listening to it. An answer nobody reads keeps its listener until the
+      // signal itself is collected, which is the end of that computation.
+      if (w.dropAbort) w.dropAbort();
+    }
+  }
+
+  // A body that cannot be read is a failed answer, not a success with no data; one that goes silent
+  // is a provider not responding; one aborted because a newer computation replaced this one is neither.
+  function readJson(response, recorder) {
+    return readText(response).then(JSON.parse).catch((err) => {
+      if (recorder.signal && recorder.signal.aborted) throw err;
+      if (err.name === 'TimeoutError') noteTimeout(recorder, watched.get(response).prov, watched.get(response).host);
+      else noteFailure(recorder, 'body');
+      throw err;
+    });
+  }
+
+  function isProviderUrl(url) {
+    try { return PROVIDER_HOSTS.includes(new URL(String(url), location.href).hostname); }
+    catch (_) { return false; }
+  }
+
+  // The provider a URL asks, which is what a notice names; AROME and Open-Meteo share a host.
+  function providerOf(url) {
+    const u = new URL(String(url), location.href);
+    if (u.hostname === 'api.openweathermap.org') return 'openweather';
+    return u.searchParams.get('models') === 'arome_france_hd' ? 'aromehd' : 'openmeteo';
+  }
+
+  function hostOf(url) {
+    try { return new URL(String(url), location.href).hostname; }
+    catch (_) { return ''; }
+  }
+
+  function watchProviderRequests() {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    if (window.__cwFetchWatched) return;
+    window.__cwFetchWatched = true;
+
+    const original = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const recorder = init && init.cwRecorder;
+      if (!recorder || !isProviderUrl(url)) return original(input, init);
+      const prov = providerOf(url);
+      const host = hostOf(url);
+      // This host went silent earlier in this computation: it is not asked again, whichever provider
+      // of it the step wants, and the step goes the way a network error takes it.
+      if (recorder.timedOutHosts.includes(host)) {
+        // Counted as this step's failure, but it says nothing about the connection: no request left
+        // the device. noteFailure would ask isOffline() here, and an outcome marked offline stops
+        // decideNotice naming the provider at all — the host went quiet, the network did not.
+        recorder.failed++;
+        recorder.lastFailStatus = 'timeout';
+        return Promise.reject(timeoutError(prov));
+      }
+      const cut = new AbortController();
+      // Dropped once there is nothing left to cut. It cannot go when the headers arrive: the body is
+      // read afterwards and a computation replaced meanwhile must still cut it mid-stream, so the
+      // answer carries this along and readText drops it when the body ends.
+      let dropAbort = () => {};
+      if (recorder.signal) {
+        if (recorder.signal.aborted) cut.abort();
+        else {
+          const onAbort = () => cut.abort();
+          recorder.signal.addEventListener('abort', onAbort, { once: true });
+          dropAbort = () => recorder.signal.removeEventListener('abort', onAbort);
+        }
+      }
+      let silent = false;
+      const timer = setTimeout(() => { silent = true; cut.abort(); }, PROVIDER_SILENCE_MS);
+      return original(input, { ...init, signal: cut.signal }).then(
+        (res) => {
+          clearTimeout(timer);
+          watched.set(res, { prov, host, cut, dropAbort });
+          if (res.ok) recorder.ok++;
+          else noteFailure(recorder, String(res.status));
+          return res;
+        },
+        (err) => {
+          clearTimeout(timer);
+          dropAbort();   // no answer, so no body to cut later
+          if (silent) { noteTimeout(recorder, prov, host); throw timeoutError(prov); }
+          if (!(recorder.signal && recorder.signal.aborted)) noteFailure(recorder, 'network');
+          throw err;
+        }
+      );
+    };
+  }
+
+  watchProviderRequests();
+
+  function isOffline() {
+    // navigator.onLine is only trustworthy when it says false, which is the case
+    // that matters here: out of coverage rather than behind a captive portal.
+    return typeof navigator !== 'undefined' && navigator.onLine === false;
+  }
+
   // Nuevo: traducciones minimalistas para UI y logs
   const i18n = {
     es: {
@@ -9,15 +191,11 @@
       app_name: "MeteoRide",
       subtitle: "Previsión para tu salida",
       subtitle_long: " – Previsión meteorológica para tu salida a lo largo de la ruta GPX (MTB, ciclismo y senderismo)",
-      enter_meteoblue_key: "Introduzca API key MeteoBlue",
-      missing_meteoblue_key: "Error: falta API Key MeteoBlue",
       error_http_step: "Error API paso {step}: HTTP {status}",
       error_api_step: "Error API paso {step}: {msg}",
       error_api: "Error API: {msg}",
       geojson_invalid: "Geojson inválido o vacío",
       track_too_short: "Pista demasiado corta",
-      route_date_empty: "Fecha y hora ruta vacías o inválidas",
-      route_date_invalid: "Fecha y hora ruta no válida: {val}",
       route_date_past: "Fecha/hora seleccionada anterior a la actual, usando fecha y hora actual",
       select_gpx: "Primero selecciona un archivo GPX.",
       error_reading_gpx: "Error leyendo GPX: {msg}",
@@ -28,6 +206,37 @@
       toggle_config: "Configuración ⚙️",
       toggle_debug: "🐞",
       toggle_help: "Ayuda ❓",
+      share_route: "Enviar ruta a otra app",
+      offline_stale_forecast: "Sin conexión. Previsión de hace {age}.",
+      offline_no_data: "Sin conexión y sin previsión guardada para esta ruta.",
+      offline_first_run: "Sin conexión. Puedes abrir una ruta, pero la previsión necesita cobertura.",
+      route_load_failed: "No se ha podido abrir la ruta: el fichero no contiene un track o una ruta utilizable.",
+      route_read_failed: "No se ha podido leer la ruta.",
+      route_not_saved: "No se ha podido guardar la ruta en las recientes.",
+      map_offline: "Mapa sin conexión",
+      ride_alerts_label: "Avisarme si cambia el tiempo de la ruta",
+      ride_alerts_watching: "Vigilando {name} hasta las {until}",
+      ride_alerts_denied: "Las notificaciones de MeteoRide están desactivadas. Actívalas en Ajustes para recibir avisos.",
+      ride_alerts_bg_ios: "La actualización en segundo plano está desactivada para MeteoRide, así que no se hará ninguna comprobación. Actívala en Ajustes → General → Actualización en segundo plano.",
+      ride_alerts_bg_android: "La optimización de batería puede impedir la comprobación: excluye MeteoRide en los ajustes de batería.",
+      no_route_for_export: "No hay ninguna ruta cargada",
+      recenter_route: "Recentrar ruta",
+      toggle_debug_label: "Debug",
+      provider_unreachable: "No se ha podido obtener la previsión: el proveedor no responde.",
+      provider_not_responding: "{prov} no responde.",
+      provider_rejected: "El proveedor ha rechazado la petición. Revisa tu API key en ajustes.",
+      prepare_offline: "Preparar ruta para ir sin cobertura",
+      prepare_offline_done: "Ruta preparada para ir sin cobertura: hay previsión para los {n} puntos con cualquier salida hasta 3 h antes o después.",
+      prepare_offline_empty: "Carga una ruta y espera a que salga la previsión antes de prepararla.",
+      prepare_offline_partial: "Ruta preparada solo en parte: hay previsión para {n} de {total} puntos con cualquier salida hasta 3 h antes o después. Vuelve a calcularla con cobertura.",
+      prepare_offline_failed: "No se ha podido guardar la ruta preparada.",
+      prepare_offline_uncovered: "No se ha guardado nada: ningún punto tiene previsión con cualquier salida hasta 3 h antes o después. Vuelve a calcularla con cobertura.",
+      prepare_offline_replaced: "Sustituye a la ruta preparada antes.",
+      compare_needs_coverage: "Comparar proveedores necesita cobertura.",
+      prepared_expired_needs_coverage: "La ruta preparada ya no sirve para esta hora de salida y se ha borrado: la previsión necesita cobertura.",
+      offline_cannot_recalculate: "Sin cobertura no se puede recalcular la previsión: se mantiene la guardada.",
+      prepared_out_of_range: "Sin cobertura: la ruta preparada no tiene datos para una salida a más de 3 h de la hora para la que se preparó.",
+      prepared_replayed: "Previsión guardada hace {age} para salir a las {at}, recolocada a la hora de salida.",
       close: "Cerrar",
   //title: "🚴‍♂️ MeteoRide",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
@@ -37,7 +246,6 @@
       // nuevas claves para labels/placeholders
       provider_label: "Proveedor:",
       api_key_init: "API Key",
-      api_key_label: "MeteoBlue:",
       api_key_label_ow: "OpenWeather:",
       language_label: "Idioma:",
       wind_units_label: "Viento:",
@@ -76,6 +284,7 @@
       key_network_error: "Error de red: {msg}",
      notices_noncritical_label: "Mostrar avisos no críticos",
      show_weather_alerts_label: "Mostrar alertas meteorológicas oficiales",
+     show_weather_alerts_needs_key: "Requiere una API Key de OpenWeather.",
      show_debug_button_label: "Mostrar botón de debug",
       // Compare-dates UI
       summary_label: "Resumen",
@@ -103,15 +312,11 @@
       app_name: "MeteoRide",
       subtitle: "Forecast for your ride",
       subtitle_long: " – Weather forecast for your ride along the GPX route (MTB, cycling & walking)",
-      enter_meteoblue_key: "Enter MeteoBlue API key",
-      missing_meteoblue_key: "Error: missing MeteoBlue API key",
       error_http_step: "API error step {step}: HTTP {status}",
       error_api_step: "API error step {step}: {msg}",
       error_api: "API error: {msg}",
       geojson_invalid: "Invalid or empty GeoJSON",
       track_too_short: "Track too short",
-      route_date_empty: "Route date/time empty or invalid",
-      route_date_invalid: "Invalid route date/time: {val}",
       route_date_past: "Selected date/time is earlier than now, using current date/time",
       select_gpx: "Please select a GPX file first.",
       error_reading_gpx: "Error reading GPX: {msg}",
@@ -122,6 +327,37 @@
       toggle_config: "Config ⚙️",
       toggle_debug: "🐞",
       toggle_help: "Help ❓",
+      share_route: "Send route to another app",
+      offline_stale_forecast: "No connection. Forecast is {age} old.",
+      offline_no_data: "No connection, and no saved forecast for this route.",
+      offline_first_run: "No connection. You can open a route, but the forecast needs coverage.",
+      route_load_failed: "Could not open the route: the file holds no usable track or route.",
+      route_read_failed: "Could not read the route.",
+      route_not_saved: "The route could not be saved to recent routes.",
+      map_offline: "Map unavailable offline",
+      ride_alerts_label: "Tell me if the weather on the route changes",
+      ride_alerts_watching: "Watching {name} until {until}",
+      ride_alerts_denied: "Notifications are off for MeteoRide. Allow them in Settings to get ride alerts.",
+      ride_alerts_bg_ios: "Background App Refresh is off for MeteoRide, so no check will run. Turn it on in Settings → General → Background App Refresh.",
+      ride_alerts_bg_android: "Battery optimisation may stop the check: exclude MeteoRide in the battery settings.",
+      no_route_for_export: "No route loaded",
+      recenter_route: "Recentre route",
+      toggle_debug_label: "Debug",
+      provider_unreachable: "Could not get the forecast: the provider is not responding.",
+      provider_not_responding: "{prov} is not responding.",
+      provider_rejected: "The provider rejected the request. Check your API key in settings.",
+      prepare_offline: "Save this route for riding without coverage",
+      prepare_offline_done: "Route saved for riding without coverage: forecast for all {n} points with any start up to 3 h earlier or later.",
+      prepare_offline_empty: "Load a route and let the forecast appear before saving it.",
+      prepare_offline_partial: "Route only partly saved: forecast for {n} of {total} points with any start up to 3 h earlier or later. Run it again while you have coverage.",
+      prepare_offline_failed: "Could not save the prepared route.",
+      prepare_offline_uncovered: "Nothing saved: no point has a forecast for every start up to 3 h earlier or later. Run it again while you have coverage.",
+      prepare_offline_replaced: "It replaces the route prepared before.",
+      compare_needs_coverage: "Comparing providers needs coverage.",
+      prepared_expired_needs_coverage: "The prepared route no longer fits this start time and was deleted: the forecast needs coverage.",
+      offline_cannot_recalculate: "Without coverage the forecast cannot be computed again: the saved one stays.",
+      prepared_out_of_range: "No coverage: the prepared route has no data for a start more than 3 h from the one it was prepared for.",
+      prepared_replayed: "Forecast saved {age} ago for a {at} start, moved to this start time.",
       close: "Close",
   // Short tab title: combine app name + short subtitle so the browser tab shows a concise localized string
   title: "MeteoRide — Forecast for your ride",
@@ -130,7 +366,6 @@
       // new keys
       provider_label: "Provider:",
       api_key_init: "API Key",
-      api_key_label: "MeteoBlue:",
       api_key_label_ow: "OpenWeather:",
       language_label: "Language:",
       wind_units_label: "Wind:",
@@ -169,6 +404,7 @@
       key_network_error: "Network error: {msg}",
       notices_noncritical_label: "Show non‑critical notices",
       show_weather_alerts_label: "Show official weather alerts",
+      show_weather_alerts_needs_key: "Requires an OpenWeather API Key.",
       show_debug_button_label: "Show debug button",
       // Compare-dates UI
       summary_label: "Summary",
@@ -234,8 +470,6 @@
       distanceUnits: getVal("distanceUnits"), // NEW
       precipUnits: getVal("precipUnits"),     // NEW
       cyclingSpeed: Number(getVal("cyclingSpeed")),
-      // Do NOT persist MeteoBlue API key to avoid accidental storage — always keep empty
-      apiKey: "",
       apiKeyOW: getVal("apiKeyOW"),
       apiSource: getVal("apiSource"),
       datetimeRoute: getVal("datetimeRoute"),
@@ -243,38 +477,68 @@
       noticeAll: !!document.getElementById("noticeAll")?.checked,
       showWeatherAlerts: !!document.getElementById("showWeatherAlerts")?.checked,
       showDebugButton: !!document.getElementById("showDebugButton")?.checked,
+      rideAlerts: !!document.getElementById("rideAlerts")?.checked,   // app only
     };
-    try { localStorage.setItem("cwSettings", JSON.stringify(settings)); } catch (e) { /* ignore */ }
+    const payload = JSON.stringify(settings);
+    try { localStorage.setItem("cwSettings", payload); } catch (e) { /* ignore */ }
+    // In the app, keep a copy outside the web view. iOS can clear WebKit storage
+    // when the device runs short of space, which would silently wipe the settings.
+    try { if (window.cwMirrorSettings) window.cwMirrorSettings(payload); } catch (e) { /* ignore */ }
     logDebug(t("config_saved"));
+  }
+
+  /**
+   * The language to start in when the user has never chosen one. Follows the
+   * device instead of defaulting to English: inside the app `navigator.languages`
+   * is the system's list, and on the website it is the browser's.
+   *
+   * Catalan and Galician map to Spanish. There is no Catalan translation, and for
+   * someone whose phone is in Catalan, Spanish is a great deal closer than English.
+   */
+  function deviceLanguage() {
+    const tags = (typeof navigator === 'undefined')
+      ? []
+      : (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
+    for (const tag of tags) {
+      const base = String(tag || '').toLowerCase().split('-')[0];
+      if (base === 'es' || base === 'ca' || base === 'gl') return 'es';
+      if (base === 'en') return 'en';
+    }
+    return 'en';
   }
 
   function loadSettings() {
     const raw = localStorage.getItem("cwSettings");
     const s = raw ? JSON.parse(raw) : {};
-    // Ensure any stored MeteoBlue API key is cleared so it never becomes active
-    try { if (s && s.apiKey) s.apiKey = ""; } catch (e) { /* ignore */ }
 
     [
       "language","windUnits","tempUnits","distanceUnits","precipUnits", // NEW
-      "cyclingSpeed","apiKey","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
-      "noticeAll","showWeatherAlerts","showDebugButton",
+      "cyclingSpeed","apiKeyOW","apiSource","datetimeRoute","intervalSelect",
+      "noticeAll","showWeatherAlerts","showDebugButton","rideAlerts",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
-      // For MeteoBlue API key input always force empty and do not populate from settings
-      if (id === 'apiKey') {
-        if (el.type === 'checkbox') el.checked = false; else el.value = '';
-        return;
-      }
       if (el.type === "checkbox") el.checked = !!s[id];
-      else el.value = s[id] != null ? s[id] : "";
+      // Nothing stored: leave whatever the markup already holds. Blanking it here
+      // threw away the defaults written in index.html — speed 12 and interval 15
+      // came up empty on a fresh install, and an empty <select> shows nothing at all.
+      // An empty string counts as nothing: the earlier bug persisted one into
+      // cwSettings, and on the next load it would go on winning for ever. No field
+      // that carries a default in the markup can legitimately be blank anyway.
+      else if (s[id] != null && s[id] !== "") el.value = s[id];
     });
 
     // Apply sensible defaults when missing and persist them so subsequent loads are consistent
     let changed = false;
+    // A MeteoBlue API key or provider choice left by an older version is dropped once at
+    // start-up, the same as cw_offline_pinned, so that provider can never run again.
+    if (Object.prototype.hasOwnProperty.call(s, 'apiKey')) { delete s.apiKey; changed = true; }
+    if (s.apiSource === 'meteoblue') { s.apiSource = ''; changed = true; }
     if (s.apiSource) apiSource = s.apiSource;
     else { apiSource = 'openmeteo'; s.apiSource = 'openmeteo'; changed = true; }
-    if (!s.language) { s.language = 'en'; changed = true; }
+    // Only when nothing is stored: once the selector has been touched it wins,
+    // and saveSettings writes the choice on every change.
+    if (!s.language) { s.language = deviceLanguage(); changed = true; }
     if (!s.tempUnits) { s.tempUnits = 'C'; changed = true; }
     if (!s.windUnits) { s.windUnits = 'ms'; changed = true; }
     if (!s.distanceUnits) { s.distanceUnits = 'km'; changed = true; }
@@ -303,12 +567,17 @@
     // Apply showWeatherAlerts configuration
     const swa = document.getElementById("showWeatherAlerts");
     if (swa) swa.checked = (s.showWeatherAlerts !== false); // Default to true
+    try { window.updateWeatherAlertsAvailability?.(); } catch (e) { /* ignore */ }
+
+    // Ride alerts (app only): on unless switched off
+    const ra = document.getElementById("rideAlerts");
+    if (ra) ra.checked = (s.rideAlerts !== false);
 
     // Apply showDebugButton configuration and set initial visibility
     const sdb = document.getElementById("showDebugButton");
     const debugButton = document.getElementById("toggleDebug");
     if (sdb && debugButton) {
-      sdb.checked = (s.showDebugButton !== false); // Default to true
+      sdb.checked = (s.showDebugButton === true); // Default to false; a stored value (true or false) wins
       if (sdb.checked) {
         debugButton.classList.remove('debug-hidden');
         debugButton.style.display = ''; // Reset any inline styles
@@ -328,6 +597,9 @@
       if (retries <= 0) return;
       setTimeout(() => tryApplyTranslations(retries - 1, delay), delay);
     })();
+
+    // A stored start that has passed becomes now, rounded up; one still ahead is kept (app.js).
+    try { if (window.cwApplyStartRule) window.cwApplyStartRule(); } catch (e) { /* ignore */ }
   }
   function getVal(id) {
     const el = document.getElementById(id);
@@ -336,7 +608,7 @@
   // DEBUG FLAG: when true, disable use of localStorage weather cache to force fresh fetches
   // Set to false to enable cache (default for normal operation)
   const DISABLE_WEATHER_CACHE = false;
-  function getCache(key) {
+  function getCache(key, recorder) {
     try {
       if (DISABLE_WEATHER_CACHE) {
         logDebug(`getCache disabled by flag key=${key}`);
@@ -355,6 +627,14 @@
       const now = Date.now();
       const age = now - obj.timestamp;
       if (age > cacheTTL) {
+        if (isOffline() && age <= staleMaxAge) {
+          logDebug(`getCache stale-but-offline key=${key} age=${age}ms`);
+          if (recorder) {
+            recorder.staleAgeMs = Math.max(recorder.staleAgeMs, age);
+            recorder.offline = true;
+          }
+          return obj.data;
+        }
         logDebug(`getCache expired key=${key} age=${age}ms > ${cacheTTL}ms`);
         return null;
       }
@@ -379,7 +659,8 @@
       if (e.name === 'QuotaExceededError' || e.message.includes('quota')) {
         // Clear old cache entries to free space
         try {
-          const keys = Object.keys(localStorage).filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'));
+          const keys = Object.keys(localStorage)
+            .filter(k => k.startsWith('cw_weather_') || k.startsWith('alerts_'));
           if (keys.length > 0) {
             // Sort by timestamp (assuming keys have timestamps, but to be safe, remove oldest by access time if possible)
             // For simplicity, remove the first 10 oldest assuming they are weather caches
@@ -414,6 +695,9 @@
       const wUnit = String(windUnit || '').toString();
       const la = (typeof lat === 'number') ? lat : Number(lat);
       const lo = (typeof lon === 'number') ? lon : Number(lon);
+      // OpenWeather is asked by location and units only, and its one answer holds 48 hours: every
+      // step there shares it and the extraction picks its hour by `dt`.
+      if (prov === 'openweather') return `cw_weather_openweather_${tUnit}_${wUnit}_${la.toFixed(3)}_${lo.toFixed(3)}`;
   // Normalize timestamp to a canonical 15-minute-aligned ISO (no seconds/ms)
   const dt = (timeAt && (timeAt instanceof Date || timeAt.toISOString)) ? new Date(timeAt) : new Date(timeAt);
   // round down to nearest 15 minutes to match step granularity
@@ -428,15 +712,6 @@
     }
   }
 
-  function getValidatedDateTime() {
-    const datetimeValue = getVal("datetimeRoute");
-    const now = new Date();
-    if (!datetimeValue) return roundUpToNextQuarterDate(now);
-    const selected = new Date(datetimeValue);
-    if (isNaN(selected.getTime())) return roundUpToNextQuarterDate(now);
-    if (selected < now) return roundUpToNextQuarterDate(now);
-    return selected;
-  }
   function validateDateRange(dateString, fieldName = 'fecha') {
     if (!dateString) return { valid: false, error: window.t ? window.t('date_empty', { field: fieldName }) : `La ${fieldName} no puede estar vacía.` };
 
@@ -471,26 +746,16 @@
     }
     return { valid: true };
   }
+  // The same instant as roundUpToNextQuarterDate, as a datetime-local value (local wall clock).
   function roundToNextQuarterISO(date = new Date()) {
-    const d = new Date(date);
-    const q = Math.ceil(d.getMinutes() / 15);
-    const mm = (q * 15) % 60;
-    let hh = d.getHours() + (q === 4 ? 1 : 0);
-    if (hh >= 24) { hh = 0; d.setDate(d.getDate() + 1); }
-    d.setHours(hh, mm, 0, 0);
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 16);
+    const d = roundUpToNextQuarterDate(new Date(date));
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
+  // Up to the next quarter hour, in epoch ms. Every zone in use is offset by whole quarters, so this
+  // is the next local quarter too; seconds count, and setting wall-clock hours on a day the clocks
+  // go back can no longer land an hour off.
   function roundUpToNextQuarterDate(date = new Date()) {
-    const d = new Date(date.getTime());
-    const q = Math.ceil(d.getMinutes() / 15);
-    const mm = (q * 15) % 60;
-    let hh = d.getHours() + (q === 4 ? 1 : 0);
-    if (hh >= 24) { hh = 0; d.setDate(d.getDate() + 1); }
-    d.setSeconds(0, 0);
-    d.setMinutes(mm);
-    d.setHours(hh);
-    return d;
+    return new Date(Math.ceil(date.getTime() / 900000) * 900000);
   }
   function setupDateLimits() {
     const dt = document.getElementById("datetimeRoute");
@@ -498,7 +763,6 @@
     dt.step = 900;
     const rounded = roundToNextQuarterISO(new Date());
     dt.min = rounded;
-    if (!dt.value || new Date(dt.value) < new Date(dt.min)) dt.value = dt.min;
   }
   function haversine(p1, p2) {
     const R = 6371, toRad = (deg) => (deg * Math.PI) / 180;
@@ -720,7 +984,7 @@
       const withinHours = h <= 48; // app policy
       return withinHours && isAromeHdCoveredLatLon(lat, lon);
     }
-    // OpenWeather/OpenMeteo/MeteoBlue: assume operational (network/key checks elsewhere)
+    // OpenWeather/OpenMeteo: assume operational (network/key checks elsewhere)
     return true;
   }
 
@@ -753,7 +1017,6 @@
   window.getVal = getVal;
   window.getCache = getCache;
   window.setCache = setCache;
-  window.getValidatedDateTime = getValidatedDateTime;
   window.roundToNextQuarterISO = roundToNextQuarterISO;
   window.roundUpToNextQuarterDate = roundUpToNextQuarterDate;
   window.setupDateLimits = setupDateLimits;
@@ -785,7 +1048,12 @@
        getVal,
        getCache,
        setCache,
-       getValidatedDateTime,
+       createRecorder,
+       bestEffortRecorder,
+       readJson,
+       readText,
+       staleMaxAge,
+       isOffline,
        validateDateRange,
        validateRouteLoaded,
        roundToNextQuarterISO,

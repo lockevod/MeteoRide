@@ -1,14 +1,8 @@
 (function () {
-  // Re-render guard and simple dedupe key to avoid self-trigger loops
-  let compareMO = null;
-  let compareRendering = false;
-  let lastCompareKey = "";
-
   // Provider abbreviations for change indicators
   const providerAbbreviations = {
     'openmeteo': 'OPM',
     'aromehd': 'ARM',
-    'meteoblue': 'MB',
     'openweather': 'OPW',
     'ow2_arome_openmeteo': 'CHAIN'
   };
@@ -18,36 +12,27 @@
     const sel = document.getElementById("apiSource");
     if (!sel) return;
 
-    // Run compare when selected or when table mutates after route load
-    // NOTE: Do NOT auto-run when the table is in compare-dates-mode. That mode
-    // relies on an explicit "run" button and should not auto-refresh on control
-    // changes.
-    const runIfCompare = () => {
-      try {
-        const tableEl = document.getElementById("weatherTable");
-        // If user explicitly selected compare but the table is currently in
-        // compare-dates-mode, don't auto-refresh (preserve explicit button behavior)
-        if (tableEl && tableEl.classList.contains('compare-dates-mode')) return;
-      } catch (_) {}
-      if (sel.value === "compare" && !compareRendering) {
-        // Force a fresh render even if key matches previous (user explicitly switched)
-        lastCompareKey = "";
-        // Slight delay to allow baseline render/markers
-        setTimeout(runCompareMode, 0);
-      }
-    };
-    sel.addEventListener("change", runIfCompare);
-
-    // Also monitor table changes (GPX reloads/interval changes)
-    const table = document.getElementById("weatherTable");
-    if (table) {
-      compareMO = new MutationObserver(() => runIfCompare());
-      compareMO.observe(table, { childList: true, subtree: true });
-    }
+    // Nothing here launches a comparison: publish (app.js) does, for the snapshot it puts on
+    // screen, and so does choosing compare (ui.js). A table observer and a listener of our own
+    // used to launch it too, several times per route and with whatever weatherData held.
 
     // Add our own click handler (selection) with higher priority in compare mode
     const container = document.getElementById("weatherTableContainer");
     if (container) {
+      // App only: in compare-by-dates the sticky first column (day + summary) is wide,
+      // and following the user right as they scroll to the time steps eats the width
+      // the steps need. Bound once here, not per render, since compare-by-dates rebuilds
+      // the table on every run but the container itself never changes. A small threshold
+      // stands in for "scrolled back to the start", since iOS momentum scroll can leave
+      // scrollLeft a fraction above 0 rather than exactly there.
+      const DATES_COL_COLLAPSE_THRESHOLD = 4;
+      container.addEventListener("scroll", () => {
+        if (!document.documentElement.classList.contains("cw-native")) return;
+        const table = document.getElementById("weatherTable");
+        if (!table || !table.classList.contains("compare-dates-mode")) return;
+        container.classList.toggle("dates-col-collapsed", container.scrollLeft > DATES_COL_COLLAPSE_THRESHOLD);
+      }, { passive: true });
+
       container.addEventListener("click", (ev) => {
         // Allow clicks in both compare and compare-dates mode
         const table = document.getElementById("weatherTable");
@@ -116,23 +101,6 @@
       });
     }
 
-    // Check initial value and trigger if compare
-    if (sel.value === "compare") {
-      runIfCompare();
-    }
-
-    // Auto-refresh compare mode when controls change
-    ['intervalSelect', 'tempUnits', 'windUnits', 'precipUnits', 'distanceUnits', 'apiKey', 'apiKeyOW', 'datetimeRoute'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const ev = (id === 'apiKey' || id === 'apiKeyOW') ? 'input' : 'change';
-      el.addEventListener(ev, () => {
-        const tableEl = document.getElementById('weatherTable');
-        if (sel.value === 'compare' && tableEl?.classList.contains('compare-mode') && !compareRendering) {
-          setTimeout(() => window.reloadFull?.(), 150);
-        }
-      });
-    });
   });
 
   function isReady() {
@@ -156,62 +124,123 @@
     return !temp.some(v => v != null && !Number.isNaN(Number(v)));
   }
 
+  // A provider's answer for one step, got as the table gets it: AROME filled in from standard
+  // Open-Meteo (cwForecastRules.mergeAromeWithStandard) and replaced by Open-Meteo when unusable.
+  // Null when the provider does not answer 200, or AROME is unusable and Open-Meteo does not either;
+  // `effProv` is the provider the answer comes from, the one to file it under.
+  async function fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init = {}) {
+    const ask = (prov, key, rec = recorder) =>
+      fetch(window.cw.buildProviderUrl(prov, p, timeAt, key, units.wind, units.temp), { ...init, cwRecorder: rec });
+    const res = await ask(effProv, apiKey);
+    if (!res.ok) return null;
+    let json = await window.cw.utils.readJson(res, recorder);
+    if (effProv === "aromehd") {
+      try {
+        // Best-effort, as in the table: this only completes AROME from the standard model and its
+        // failure is swallowed right here, so it gives up no host — AROME is served by that same
+        // host and has just answered this step. Its own recorder carries the deadline and the abort.
+        const bestEffort = window.cw.utils.bestEffortRecorder(recorder);
+        const std = await ask("openmeteo", "", bestEffort);
+        if (std.ok) cwForecastRules.mergeAromeWithStandard(json, await window.cw.utils.readJson(std, bestEffort));
+      } catch {}
+      // The Open-Meteo answer that stands in for an unusable AROME one is this step's real answer,
+      // not a completion: it keeps the comparison's recorder, and its failure is the row's to name.
+      if (aromeResponseLooksInvalid(json)) {
+        const r3 = await ask("openmeteo", "");
+        if (!r3.ok) return null;
+        json = await window.cw.utils.readJson(r3, recorder);
+        effProv = "openmeteo";
+      }
+    }
+    return { json, effProv };
+  }
+
+  // fetchAnswer that never throws and, when a failed request left the step with nothing, notes under
+  // `row` (the provider whose row shows the gap) the recorder's failure status ('500', 'network',
+  // 'body'…) and, for OpenWeather, the table's reading of it (classifyProviderError: 401 the key, 429
+  // the quota). That is what the notice names. The run's requests go one after another, so the count
+  // is its own.
+  async function fetchAnswerNoting(failed, row, effProv, p, timeAt, apiKey, units, recorder, init) {
+    const before = recorder.failed;
+    const answer = await fetchAnswer(effProv, p, timeAt, apiKey, units, recorder, init).catch(() => null);
+    if (!answer && recorder.failed > before) {
+      const status = recorder.lastFailStatus;
+      const code = effProv === 'openweather' && /^\d+$/.test(status) ? window.classifyProviderError(effProv, Number(status)) : null;
+      failed[row] = { status, code };
+    }
+    return answer;
+  }
+
+  // A comparison's steps: the published snapshot's, in the shape the table and markers read.
+  function snapshotSteps(snapshot) {
+    return (snapshot.steps || []).map((s) => ({ lat: s.lat, lon: s.lon, time: new Date(s.time), distanceM: s.distanceM }));
+  }
+
+  // A comparison on screen says what its own requests saw (spec §4.10): a table whose requests
+  // failed and that came out empty says why, data read from the cache without connection says how
+  // old it is, and otherwise every provider that failed is named (`failedProviders`), after the
+  // missing OpenWeather key when a date comparison asked Open-Meteo for lack of it. A step counts
+  // when any painted row has a temperature or a wind for it.
+  function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false } = {}) {
+    const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
+    let usableSteps = 0;
+    for (let i = 0; i < length; i++) {
+      if (rows.some((r) => r && r[i] && (r[i].temp != null || r[i].windSpeed != null))) usableSteps++;
+    }
+    if (!window.cwShowForecastNotice) return;
+    window.cwShowForecastNotice({
+      requestedProvider: 'compare',
+      usableSteps,
+      transportFailures: recorder.failed,
+      lastFailStatus: recorder.lastFailStatus,
+      offline: recorder.offline,
+      staleAgeMs: recorder.staleAgeMs,
+      failedProviders,
+      missingKey,
+    }, !!run.snapshot.settings.noticeAll, run);
+  }
+
   async function runCompareMode() {
     if (!isReady()) return;
     const apiSel = document.getElementById("apiSource");
     if (!apiSel || apiSel.value !== "compare") return;
+    // Compares the snapshot on screen, or nothing. Every effect below waits for a check that
+    // this is still the comparison of that snapshot.
+    const run = window.cwLaunchComparison && window.cwLaunchComparison("providers");
+    if (!run) return;
+    const current = () => window.cwIsComparisonCurrent(run);
+    // What this comparison's requests and cache reads saw; its notice is decided from it.
+    const recorder = window.cw.utils.createRecorder(run.signal);
+    // Providers whose request left a step with nothing, named in the notice.
+    const failedProviders = {};
 
-    // Prevent re-entrancy and stop observer while we render
-    compareRendering = true;
-    try { compareMO && compareMO.disconnect(); } catch(_) {}
+    try {
+    const snapshot = run.snapshot;
+    const steps = snapshotSteps(snapshot);
+    if (!steps.length) return;
 
-    // Mark body as compare-active (used for small-screen behavior)
-    try { document.body.classList.add("compare-active"); } catch {}
-
-    // Ensure no wind/rain markers are shown in compare mode: always clear on entering/refresh
-    if (window.cw?.clearMarkers) {
-      try { window.cw.clearMarkers(); } catch(_) {}
-      try { window.cw._compareMarkersCleared = true; } catch(_) {}
-    }
-
-    const steps = (window.cw.getSteps && window.cw.getSteps()) || [];
-    if (!steps.length) { compareRendering = false; return; } // no baseline yet
-
-    const units = (window.cw.getUnits && window.cw.getUnits()) || { temp: "C", wind: "kmh", precip: "mm", distance: "km" };
+    // Temperature and wind as the snapshot was computed; rain and distance only change how it looks.
+    const units = {
+      temp: snapshot.settings.units.temp,
+      wind: snapshot.settings.units.wind,
+      precip: document.getElementById("precipUnits")?.value || "mm",
+      distance: document.getElementById("distanceUnits")?.value || "km",
+    };
+    const keys = snapshot.settings.keys || {};
     const horizons = window.cw.horizons || {};
     const MS_PER_DAY = horizons.MS_PER_DAY || (24*60*60*1000);
     const MS_PER_HOUR = horizons.MS_PER_HOUR || (60*60*1000);
     const now = new Date();
-    const dateStr = (function () {
-      const dt = document.getElementById("datetimeRoute")?.value || "";
-      return dt ? dt.substring(0, 10) : new Date().toISOString().substring(0, 10);
-    })();
 
-    const provs = getCompareProviders();
+    const provs = getCompareProviders(keys);
     const baseProvs = provs.filter(p => p !== 'ow2_arome_openmeteo'); // NEW: exclude chain from direct fetch
-    // Simple key to avoid redundant work triggered by our own DOM changes
-    const k0 = steps[0]?.time ? new Date(steps[0].time).toISOString() : "";
-    const k1 = steps[steps.length - 1]?.time ? new Date(steps[steps.length - 1].time).toISOString() : "";
-    const newKey = `${provs.join(",")}|${steps.length}|${k0}|${k1}|${units.temp}|${units.wind}|${units.precip}`;
-    if (lastCompareKey === newKey) {
-      // Reconnect observer and bail out
-      try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-      compareRendering = false;
-      return;
-    }
 
     const compareData = {};
     const hasAny = {};
     for (const p of provs) compareData[p] = [];
 
-    // Show loading overlay (use global overlay for consistency)
-    try {
-      if (window.cw && window.cw.ui && typeof window.cw.ui.showLoading === 'function') window.cw.ui.showLoading();
-      else if (typeof window.showLoading === 'function') window.showLoading();
-    } catch(_) {}
-
-    try {
     for (let i = 0; i < steps.length; i++) {
+      if (!current()) return;
       const p = steps[i];
       const timeAt = new Date(p.time);
       const daysAhead = (timeAt - now) / MS_PER_DAY;
@@ -219,10 +248,12 @@
 
       for (const prov of baseProvs) { // CHANGED: use baseProvs
         // Respect horizons
-        if ((prov === "meteoblue"   && daysAhead > (horizons.METEOBLUE_MAX_DAYS   || 7))  ||
-            (prov === "openweather" && daysAhead > (horizons.OPENWEATHER_MAX_DAYS || 2))  ||
-            (prov === "aromehd"     && hoursAhead > (horizons.AROMEHD_MAX_HOURS   || 48)) ||
-            (daysAhead > (horizons.OPENMETEO_MAX_DAYS || 14))) {
+        // The numbers are window.cw.horizons (app.js). The literals that used to stand in for them
+        // here had gone stale — OpenWeather's said two days where the table keeps four — so there is
+        // no second copy of them any more: with no horizons there is simply no guard.
+        if ((prov === "openweather" && daysAhead > horizons.OPENWEATHER_MAX_DAYS) ||
+            (prov === "aromehd"     && hoursAhead > horizons.AROMEHD_MAX_HOURS) ||
+            (daysAhead > horizons.OPENMETEO_MAX_DAYS)) {
           compareData[prov].push(blankStep(prov, p));
           continue;
         }
@@ -233,7 +264,7 @@
         // For aromehd: use chain resolver to respect 36-hour limit (same as normal mode)
         if (prov === "aromehd") {
           const resolverExternal = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp || null;
-          const resolver = resolverExternal || localChainResolve;
+          const resolver = resolverExternal;
           const chainsExternal = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
           const chainEnabled = chainsExternal[prov] || prov === 'aromehd';
           if (resolver && chainEnabled) {
@@ -241,28 +272,28 @@
             const resolved = resolver(prov, timeAt, now, { lat: p.lat, lon: p.lon });
             if (resolved) effProv = resolved;
           } else {
-            // Fallback: use horizon check (48 hours) and domain check
-            if (hoursAhead > (horizons.AROMEHD_MAX_HOURS || 48) || !isAromeHdCovered(p.lat, p.lon)) {
+            // Fallback: use horizon check and domain check
+            if (hoursAhead > horizons.AROMEHD_MAX_HOURS || !isAromeHdCovered(p.lat, p.lon)) {
               effProv = "openmeteo";
             }
           }
         }
 
         // Keys presence
-        const apiKeyMB  = document.getElementById("apiKey")?.value || "";
-        const apiKeyOWM = document.getElementById("apiKeyOW")?.value || "";
-        const needsKey  = (effProv === "meteoblue" || effProv === "openweather");
-        if (needsKey && ((effProv === "meteoblue" && apiKeyMB.trim().length < 5) || (effProv === "openweather" && apiKeyOWM.trim().length < 5))) {
+        const apiKeyOWM = keys.openweather || "";
+        const needsKey  = (effProv === "openweather");
+        if (needsKey && apiKeyOWM.trim().length < 5) {
           compareData[prov].push(blankStep(prov, p));
           continue;
         }
 
         // Cache key (use effective provider for data source)
   const mk = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-  const key = mk(effProv, dateStr, units.temp, units.wind, p.lat, p.lon, timeAt);
-  const cached = window.cw.getCache && window.cw.getCache(key);
+  // Filed as the table files its answers: under each step's UTC date.
+  const key = mk(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt);
+  const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
-          const s = extractStepMetrics(effProv, cached, p, units.wind);
+          const s = extractStepMetrics(effProv, cached, p, units);
           // Preserve which provider actually supplied the data (effective provider)
           // and keep the originally requested provider as _reqProv for row labeling.
           s._effProv = effProv;
@@ -275,115 +306,15 @@
         }
 
         try {
-          const apiKey = (effProv === "meteoblue") ? apiKeyMB : (effProv === "openweather") ? apiKeyOWM : "";
-          const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
-          const res = await fetch(url);
-          if (res.ok) {
-            let json = await res.json();
-            if (effProv === "aromehd") {
-              // Backfill + validate coverage
-              try {
-                const urlStd = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
-                const r2 = await fetch(urlStd);
-                if (r2.ok) {
-                  const std = await r2.json();
-                  const stdH = std?.hourly || {};
-                  const mergeKeys = ["precipitation_probability","weathercode","cloud_cover","uv_index","is_day"];
-                  json.hourly = json.hourly || {};
-                  try {
-                    const aromeTimes = Array.isArray(json.hourly.time) ? json.hourly.time : null;
-                    const stdTimes = Array.isArray(stdH.time) ? stdH.time : null;
-                    let stdIndexByTime = null;
-                    if (aromeTimes && stdTimes) {
-                      stdIndexByTime = Object.create(null);
-                      for (let si = 0; si < stdTimes.length; si++) stdIndexByTime[String(stdTimes[si])] = si;
-                    }
-                    mergeKeys.forEach(k => {
-                      const aVal = json.hourly[k];
-                      // Determine std value and accept common variants (uv_index vs uvindex vs uvi)
-                      let sVal = stdH[k];
-                      if (!Array.isArray(sVal)) {
-                        if (k === 'uv_index') {
-                          sVal = stdH['uv_index'] || stdH['uvindex'] || stdH['uvi'] || stdH['uv'] || null;
-                          // If still not an array but we have a scalar current.uvi, broadcast it across hourly times
-                          if (!Array.isArray(sVal) && Array.isArray(stdH.time) && std && typeof std.current === 'object' && (std.current.uvi != null)) {
-                            try {
-                              const v = Number(std.current.uvi);
-                              if (!Number.isNaN(v)) sVal = Array(stdH.time.length).fill(v);
-                            } catch (_) { /* ignore */ }
-                          }
-                        } else if (k === 'cloud_cover') {
-                          sVal = stdH['cloud_cover'] || stdH['cloudcover'] || null;
-                        } else if (k === 'precipitation_probability') {
-                          sVal = stdH['precipitation_probability'] || stdH['pop'] || null;
-                        }
-                      }
-                      if (!Array.isArray(aVal) && Array.isArray(sVal)) {
-                        json.hourly[k] = sVal.slice();
-                      } else if (Array.isArray(aVal) && Array.isArray(sVal)) {
-                        const merged = aVal.slice();
-                        if (stdIndexByTime) {
-                          for (let i = 0; i < aromeTimes.length; i++) {
-                            if (merged[i] == null) {
-                              const t = String(aromeTimes[i]);
-                              const si = stdIndexByTime[t];
-                              if (si != null && sVal[si] != null) merged[i] = sVal[si];
-                            }
-                          }
-                        } else {
-                          for (let mi = 0; mi < sVal.length; mi++) {
-                            if (merged[mi] == null && sVal[mi] != null) merged[mi] = sVal[mi];
-                          }
-                        }
-                        json.hourly[k] = merged;
-                      }
-                    });
-                    // Debug: log uv_index merge activity when debugging enabled
-                    try {
-                      if (window.cw && window.cw.DEBUG_MERGE) {
-                        const beforeKeys = Object.keys(stdH || {});
-                        console.debug('[merge][compare] aromeTimes=', Array.isArray(aromeTimes) ? aromeTimes.length : null, 'stdTimes=', Array.isArray(stdTimes) ? stdTimes.length : null, 'stdKeys=', beforeKeys);
-                        if (Array.isArray(json.hourly.uv_index)) console.debug('[merge][compare] json.hourly.uv_index sample=', json.hourly.uv_index.slice(0,5));
-                        else console.debug('[merge][compare] json.hourly.uv_index missing after merge');
-                      }
-                    } catch(_) {}
-                    // Special handling: ensure precipitation_probability is normalized
-                    try {
-                      if (!Array.isArray(json.hourly.precipitation_probability)) {
-                        const candNames = ['precipitation_probability','precipitationProbability','precip_prob','pop','probability_of_precipitation'];
-                        for (const n of candNames) {
-                          if (Array.isArray(stdH[n])) {
-                            // Normalize: if values are 0..1 assume fraction and convert to percent
-                            const arr = stdH[n].slice();
-                            const nums = arr.filter(v => v != null && !Number.isNaN(Number(v))).map(Number);
-                            const max = nums.length ? Math.max(...nums) : null;
-                            const normalized = (max != null && max <= 1) ? arr.map(v => v == null ? null : Number(v) * 100) : arr;
-                            json.hourly.precipitation_probability = normalized;
-                            break;
-                          }
-                        }
-                      }
-                    } catch (_) {}
-                    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                    if ((!json.minutely_15 || Object.keys(json.minutely_15 || {}).length === 0) && std && std.minutely_15 && typeof std.minutely_15 === 'object') {
-                      json.minutely_15 = std.minutely_15;
-                    }
-                  } catch (mergeErr) {
-                    mergeKeys.forEach(k => { if (Array.isArray(stdH[k])) json.hourly[k] = stdH[k]; });
-                    if (!Array.isArray(json.hourly.time) && Array.isArray(stdH.time)) json.hourly.time = stdH.time;
-                  }
-                }
-              } catch {}
-              // If AROME payload invalid, refetch with Open‑Meteo
-              if (aromeResponseLooksInvalid(json)) {
-                const url2 = window.cw.buildProviderUrl("openmeteo", p, timeAt, "", units.wind, units.temp);
-                const r3 = await fetch(url2);
-                if (r3.ok) json = await r3.json();
-                effProv = "openmeteo";
-              }
-            }
-            window.cw.setCache && window.cw.setCache(key, json);
-            const s = extractStepMetrics(effProv, json, p, units.wind);
+          const apiKey = (effProv === "openweather") ? apiKeyOWM : "";
+          const answer = await fetchAnswerNoting(failedProviders, prov, effProv, p, timeAt, apiKey, units, recorder);
+          if (answer) {
+            const json = answer.json;
+            effProv = answer.effProv;
+            if (!current()) return;
+            // Filed under the provider the answer comes from, as the table files a fallback.
+            window.cw.setCache && window.cw.setCache(mk(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt), json);
+            const s = extractStepMetrics(effProv, json, p, units);
             // Preserve effective provider and original requested provider separately.
             s._effProv = effProv;
             s._reqProv = prov;
@@ -402,31 +333,11 @@
       }
     }
 
-    // NEW: local fallback resolver if app-level one missing
-    function localChainResolve(chainId, ts, nowRef, loc) {
-      const diffH = (new Date(ts) - nowRef) / MS_PER_HOUR;
-      
-      // Handle aromehd chain (0-36h aromehd, 36h+ openmeteo)
-      if (chainId === 'aromehd') {
-        if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
-        return 'openmeteo';
-      }
-      
-      // Handle ow2_arome_openmeteo chain (0-1h openweather, 1-36h aromehd, 36h+ openmeteo)
-      if (chainId === 'ow2_arome_openmeteo') {
-        if (diffH <= 2) return 'openweather';
-        if (diffH <= 36 && isAromeHdCovered(loc.lat, loc.lon)) return 'aromehd';
-        return 'openmeteo';
-      }
-      
-      return null;
-    }
-
     // NEW: Build chain row (ow2_arome_openmeteo) AFTER base providers fetched (always attempt if present in provs)
     const chainId = 'ow2_arome_openmeteo';
     if (provs.includes(chainId)) {
       const resolverExternal = (window.cw && window.cw.utils && window.cw.utils.resolveProviderForTimestamp) || window.resolveProviderForTimestamp || null;
-      const resolver = resolverExternal || localChainResolve;
+      const resolver = resolverExternal;
       const chainsExternal = (window.cw && window.cw.utils && window.cw.utils.providerChains) || {};
       const chainEnabled = chainsExternal[chainId] || chainId === 'ow2_arome_openmeteo';
       if (resolver && chainEnabled) {
@@ -450,12 +361,23 @@
     }
 
     // Filter providers without any usable data
-    const order = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"];
+    const order = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo"];
     const filtered = {};
     order.forEach(k => { if (compareData[k] && (hasAny[k] || k === 'ow2_arome_openmeteo')) filtered[k] = compareData[k]; });
 
     // Baseline for summary (prefer OM). Markers are disabled in compare mode.
-    const baseline = filtered.openmeteo || filtered.aromehd || filtered.meteoblue || filtered.openweather || [];
+    const baseline = filtered.openmeteo || filtered.aromehd || filtered.openweather || [];
+
+    // Replaced by another comparison, another computation or another route: nothing reaches the page.
+    if (!current()) return;
+
+    // Mark body as compare-active (used for small-screen behavior)
+    try { document.body.classList.add("compare-active"); } catch {}
+    // No wind or rain markers in compare mode
+    if (window.cw?.clearMarkers) {
+      try { window.cw.clearMarkers(); } catch(_) {}
+      try { window.cw._compareMarkersCleared = true; } catch(_) {}
+    }
     if (window.cw.setWeatherData) window.cw.setWeatherData(baseline);
 
     // Store provider data for row selection
@@ -463,29 +385,11 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
-
-    // Compare mode: ensure no markers remain (only once)
-    if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
-      window.cw.clearMarkers();
-      try { window.cw._compareMarkersCleared = true; } catch(_) {}
-    }
-
-    // Hide global loading overlay
-    try {
-      if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-      else if (typeof window.hideLoading === 'function') window.hideLoading();
-    } catch(_) {}
-
-    // Store key and reconnect observer after rendering
-    lastCompareKey = newKey;
-    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-    compareRendering = false;
+    // Without an OpenWeather key its row is left out (getCompareProviders) on purpose, and nothing is said.
+    showComparisonNotice(recorder, Object.values(compareData), run, { failedProviders });
     } finally {
-      // Ensure global loading is hidden even if there's an error
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-        else if (typeof window.hideLoading === 'function') window.hideLoading();
-      } catch(_) {}
+      // Only this comparison's claim: a newer one, or a computation, holds its own.
+      window.cw.releaseLoading("compare:" + run.comparisonId);
     }
   }
 
@@ -499,17 +403,17 @@
       return;
     }
 
-    // Prevent re-entrancy
-    if (compareRendering) return;
-    compareRendering = true;
-    try { compareMO && compareMO.disconnect(); } catch(_) {}
+    // Compares the snapshot on screen at two dates, or nothing. A newer comparison, another
+    // computation or another route replaces this one, which then paints and stores nothing.
+    const run = window.cwLaunchComparison && window.cwLaunchComparison("dates");
+    if (!run) return;
+    const current = () => window.cwIsComparisonCurrent(run);
+    // What this comparison's requests and cache reads saw; its notice is decided from it.
+    const recorder = window.cw.utils.createRecorder(run.signal);
+    // Providers whose request left a step with nothing, named in the notice.
+    const failedProviders = {};
 
-    // Clear any existing markers since we can't show two dates at once (only once per session)
-    if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
-      window.cw.clearMarkers();
-      try { window.cw._compareMarkersCleared = true; } catch(_) {}
-    }
-
+    try {
     // Helper: parse "YYYY-MM-DDTHH:mm" (or with space) as local time reliably
     function parseLocalDateTime(val) {
       try {
@@ -523,15 +427,27 @@
       } catch (_) { return null; }
     }
 
-    const steps = (window.cw.getSteps && window.cw.getSteps()) || [];
-    if (!steps.length) { compareRendering = false; return; }
+    const snapshot = run.snapshot;
+    const steps = snapshotSteps(snapshot);
+    if (!steps.length) return;
 
-    const units = (window.cw.getUnits && window.cw.getUnits()) || { temp: "C", wind: "kmh", precip: "mm", distance: "km" };
-  // Use the currently selected provider in the main select; coerce invalid 'compare' to openmeteo
-  let provider = (document.getElementById('apiSource')?.value) || 'openmeteo';
+    // Temperature and wind as the snapshot was computed; rain and distance only change how it looks.
+    const units = {
+      temp: snapshot.settings.units.temp,
+      wind: snapshot.settings.units.wind,
+      precip: document.getElementById("precipUnits")?.value || "mm",
+      distance: document.getElementById("distanceUnits")?.value || "km",
+    };
+    const keys = snapshot.settings.keys || {};
+    const horizons = window.cw.horizons || {};
+    const MS_PER_DAY = horizons.MS_PER_DAY || (24 * 60 * 60 * 1000);
+  // The provider the snapshot was computed with; 'compare' compares dates with Open-Meteo
+  let provider = snapshot.settings.provider || 'openmeteo';
   if (provider === 'compare') provider = 'openmeteo';
+  // As the table: OpenWeather chosen with no key of five characters is asked of Open-Meteo, and says so.
+  const missingKey = provider === 'openweather' && (keys.openweather || '').trim().length < 5;
 
-  // Read both datetimes (full YYYY-MM-DDTHH:mm) and parse locally
+  // The two dates are what this comparison is asked for (full YYYY-MM-DDTHH:mm, parsed locally)
   const dtA = document.getElementById("datetimeRoute")?.value || "";
   const dtB = document.getElementById("datetimeRoute2")?.value || "";
 
@@ -541,21 +457,17 @@
 
   if (!validationA.valid) {
     const table = document.getElementById("weatherTable");
-    if (table) {
+    if (table && current()) {
       table.innerHTML = `<tbody><tr><td><span style="color: red;">${validationA.error}</span></td></tr></tbody>`;
     }
-    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-    compareRendering = false;
     return;
   }
 
   if (!validationB.valid) {
     const table = document.getElementById("weatherTable");
-    if (table) {
+    if (table && current()) {
       table.innerHTML = `<tbody><tr><td><span style="color: red;">${validationB.error}</span></td></tr></tbody>`;
     }
-    try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-    compareRendering = false;
     return;
   }
 
@@ -564,12 +476,10 @@
   if (!baseA || !baseB) {
       // nothing to do yet; render notice
       const table = document.getElementById("weatherTable");
-      if (table) {
+      if (table && current()) {
         const msg = (window.t ? window.t('choose_compare_both_dates') : 'Please pick both dates to compare.');
         table.innerHTML = `<tbody><tr><td><span data-i18n="choose_compare_both_dates">${msg}</span></td></tr></tbody>`;
       }
-      try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-      compareRendering = false;
       return;
     }
 
@@ -581,7 +491,7 @@
       const d = (s0.time instanceof Date) ? s0.time : new Date(s0.time);
       return isNaN(d) ? null : d;
     })();
-    const intervalMin = Number((window.getVal && window.getVal('intervalSelect')) || 15) || 15;
+    const intervalMin = Number(snapshot.settings.interval) || 15;
     const intervalMs = intervalMin * 60000;
     const offsets = steps.map((s, i) => {
       const d = (s.time instanceof Date) ? s.time : new Date(s.time);
@@ -609,50 +519,60 @@
           const h = (new Date(ts) - new Date()) / (1000*60*60);
           return (h <= 48) ? 'openweather' : 'openmeteo';
         }
-        if (pid === 'meteoblue') {
-          const hasMB = ((document.getElementById('apiKey')?.value || '').trim().length >= 5);
-          return hasMB ? 'meteoblue' : 'openmeteo';
-        }
         return 'openmeteo';
       } catch (_) { return 'openmeteo'; }
     };
 
-    // For each base datetime, build an array of step-metrics by fetching with timeAt = base + offset
+    // For each base datetime, build an array of step-metrics by fetching with timeAt = base + offset.
+    // Null once this comparison has been replaced: it stops asking.
     async function fetchDataForBase(baseDate) {
       const arr = [];
       for (let i = 0; i < steps.length; i++) {
+        if (!current()) return null;
         const p = steps[i];
         const offMs = offsets[i] || 0;
         const timeAt = new Date(baseDate.getTime() + offMs);
         // Base step copy with aligned time for indexing and display
         const baseForIndex = { ...p, time: timeAt };
         // Decide effective provider for this timestamp/location
-        let effProv = resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider;
-        // Ensure keys exist when required; fallback to OpenMeteo if missing
-        if (effProv === 'meteoblue' && !(document.getElementById('apiKey')?.value || '').trim()) effProv = 'openmeteo';
-        if (effProv === 'openweather' && !(document.getElementById('apiKeyOW')?.value || '').trim()) effProv = 'openmeteo';
+        // Without the key that is Open-Meteo, decided before the resolver: it reads the page's key field
+        // and would pick AROME-HD, or OpenWeather with a short key.
+        let effProv = missingKey ? 'openmeteo' : (resolveEff(provider, timeAt, { lat: p.lat, lon: p.lon }) || provider);
+        // A chain that reaches OpenWeather without a usable key asks Open-Meteo too, as the table does.
+        if (effProv === 'openweather' && (keys.openweather || '').trim().length < 5) effProv = 'openmeteo';
+        // The horizons the table (app.js) and compare-providers both keep, which this mode had
+        // none of: the date field accepts fourteen days, OpenWeather is trusted for four and its
+        // answer only holds 48 hours, so beyond that the step asks Open-Meteo, and beyond
+        // Open-Meteo's own horizon it has no data. The numbers come from window.cw.horizons; with
+        // none there is no guard, as before, rather than a second copy of them here.
+        const daysAhead = (timeAt.getTime() - Date.now()) / MS_PER_DAY;
+        if (effProv === 'openweather' && daysAhead > horizons.OPENWEATHER_MAX_DAYS) effProv = 'openmeteo';
+        if (daysAhead > horizons.OPENMETEO_MAX_DAYS) {
+          arr.push(blankStep(effProv, baseForIndex));
+          continue;
+        }
         // Build cache key and try cache
         // Include provider, units, coords and exact timeAt in key (date uniqueness comes from timeAt)
   const mk2 = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
-  const dateStr2 = (function () { const dt = document.getElementById('datetimeRoute')?.value || ''; return dt ? dt.substring(0,10) : new Date().toISOString().substring(0,10); })();
-  const key = mk2(effProv, dateStr2, units.temp, units.wind, p.lat, p.lon, timeAt);
-  const cached = window.cw.getCache && window.cw.getCache(key);
+  const key = mk2(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt);
+  const cached = window.cw.getCache && window.cw.getCache(key, recorder);
         if (cached) {
-          const s = extractStepMetrics(effProv, cached, baseForIndex, units.wind);
+          const s = extractStepMetrics(effProv, cached, baseForIndex, units);
           s.provider = effProv;
           arr.push(s);
           continue;
         }
         try {
-          const apiKeyMB  = document.getElementById("apiKey")?.value || "";
-          const apiKeyOWM = document.getElementById("apiKeyOW")?.value || "";
-          const apiKey = (effProv === 'meteoblue') ? apiKeyMB : (effProv === 'openweather' ? apiKeyOWM : '');
-          const url = window.cw.buildProviderUrl(effProv, p, timeAt, apiKey, units.wind, units.temp);
-          const res = await fetch(url, { cache: 'no-store' });
-          if (res.ok) {
-            const json = await res.json();
-            window.cw.setCache && window.cw.setCache(key, json);
-            const s = extractStepMetrics(effProv, json, baseForIndex, units.wind);
+          const apiKeyOWM = keys.openweather || "";
+          const apiKey = (effProv === 'openweather') ? apiKeyOWM : '';
+          const answer = await fetchAnswerNoting(failedProviders, effProv, effProv, p, timeAt, apiKey, units, recorder, { cache: 'no-store' });
+          if (answer) {
+            const json = answer.json;
+            effProv = answer.effProv;
+            if (!current()) return null;
+            // Filed under the provider the answer comes from, as the table files a fallback.
+            window.cw.setCache && window.cw.setCache(mk2(effProv, timeAt.toISOString().substring(0,10), units.temp, units.wind, p.lat, p.lon, timeAt), json);
+            const s = extractStepMetrics(effProv, json, baseForIndex, units);
             s.provider = effProv;
             arr.push(s);
           } else {
@@ -666,21 +586,17 @@
       return arr;
     }
 
-    try {
-      // Show global loading overlay for consistency
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.showLoading === 'function') window.cw.ui.showLoading();
-        else if (typeof window.showLoading === 'function') window.showLoading();
-      } catch(_) {}
-
       const dataA = await fetchDataForBase(baseA);
+      if (!dataA) return;
       const dataB = await fetchDataForBase(baseB);
+      // Replaced by another comparison, another computation or another route: nothing reaches the page.
+      if (!dataB || !current()) return;
 
-      // Hide global loading overlay
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-        else if (typeof window.hideLoading === 'function') window.hideLoading();
-      } catch(_) {}
+      // Clear any existing markers since we can't show two dates at once (only once per session)
+      if (window.cw?.clearMarkers && !window.cw._compareMarkersCleared) {
+        window.cw.clearMarkers();
+        try { window.cw._compareMarkersCleared = true; } catch(_) {}
+      }
 
       // Render combined table: header (times) then block A (label row + data rows), block B
       const labelA = formatDateOnly(baseA);
@@ -690,17 +606,10 @@
       // Store data for row selection
       window.cw.weatherDataA = dataA;
       window.cw.weatherDataB = dataB;
-
-      lastCompareKey = `${provider}|${steps.length}|${baseA.toISOString()}|${baseB.toISOString()}`;
+      showComparisonNotice(recorder, [dataA, dataB], run, { failedProviders, missingKey });
     } finally {
-      // Ensure global loading is hidden even if there's an error
-      try {
-        if (window.cw && window.cw.ui && typeof window.cw.ui.hideLoading === 'function') window.cw.ui.hideLoading();
-        else if (typeof window.hideLoading === 'function') window.hideLoading();
-      } catch(_) {}
-
-      try { compareMO && compareMO.observe(document.getElementById("weatherTable"), { childList: true, subtree: true }); } catch(_) {}
-      compareRendering = false;
+      // Only this comparison's claim: a newer one, or a computation, holds its own.
+      window.cw.releaseLoading("compare:" + run.comparisonId);
     }
   }
 
@@ -713,12 +622,20 @@
     table.innerHTML = "";
     table.classList.remove('compare-mode');
     table.classList.add('compare-dates-mode');
-    
+
     // Also add class to main element for viewport height adjustments on small screens
     const main = document.querySelector('main');
     if (main) {
       main.classList.remove('compare-mode');
       main.classList.add('compare-dates-mode');
+    }
+
+    // Every run rebuilds the table; start the sticky column expanded and let the
+    // scroll listener above collapse it again once the user has actually scrolled.
+    const weatherTableContainer = document.getElementById('weatherTableContainer');
+    if (weatherTableContainer) {
+      weatherTableContainer.classList.remove('dates-col-collapsed');
+      weatherTableContainer.scrollLeft = 0;
     }
 
     // In compare-dates mode, remove any previously injected compact summary bar
@@ -744,17 +661,16 @@
         return m >= 1000 ? `${(m/1000).toFixed(1)} <span class="unit-lower">km</span>` : `${m.toFixed(0)} <span class="unit-lower">m</span>`;
       }
     };
-    const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
-    const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
+    const startIconUrl = "/icons/marker-icon-green.png";
+    const endIconUrl = "/icons/marker-icon-red.png";
 
   const tbody = document.createElement('tbody');
   // Build compact summary (route summary + sun) HTML for each base date using first available step
-    const latA = (dataA && dataA[0] && dataA[0].lat) != null ? dataA[0].lat : ((window.cw.getSteps && window.cw.getSteps()[0]?.lat) || 0);
-    const lonA = (dataA && dataA[0] && dataA[0].lon) != null ? dataA[0].lon : ((window.cw.getSteps && window.cw.getSteps()[0]?.lon) || 0);
+    // Every row copies its step from the snapshot, position included.
+    const { lat: latA, lon: lonA } = dataA[0];
     const dateLikeA = (dataA && dataA[0] && dataA[0].time) || null;
     const sunA = buildSunHeaderFull(latA, lonA, dateLikeA);
-    const latB = (dataB && dataB[0] && dataB[0].lat) != null ? dataB[0].lat : ((window.cw.getSteps && window.cw.getSteps()[0]?.lat) || 0);
-    const lonB = (dataB && dataB[0] && dataB[0].lon) != null ? dataB[0].lon : ((window.cw.getSteps && window.cw.getSteps()[0]?.lon) || 0);
+    const { lat: latB, lon: lonB } = dataB[0];
     const dateLikeB = (dataB && dataB[0] && dataB[0].time) || null;
   const sunB = buildSunHeaderFull(latB, lonB, dateLikeB);
 
@@ -767,8 +683,9 @@
       // Fallback to previous local behavior (shouldn't normally be used)
       return null;
     }
-    const tempUnit = (document.getElementById("tempUnits")?.value || "C").toString();
-    const windUnit = (document.getElementById("windUnits")?.value || "kmh").toString();
+    // Temperature and wind in the units the rows were asked and read in, not the ones selected now.
+    const tempUnit = String(units.temp || "C");
+    const windUnit = String(units.wind || "kmh");
     const precipUnit = (document.getElementById("precipUnits")?.value || "mm").toString().toLowerCase();
     const degSymbol = "º";
     const tempUnitLabel = tempUnit.toLowerCase().startsWith("f") ? `${degSymbol}F` : `${degSymbol}C`;
@@ -883,7 +800,7 @@
       th.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
           ${iconClassA ? `<i class="wi ${iconClassA}" style="font-size: 24px; color: #29519b; flex-shrink: 0;"></i>` : ''}
-          <div style="flex: 1;">${summaryHTML_A || ''}</div>
+          <div class="ds-summary-numbers" style="flex: 1;">${summaryHTML_A || ''}</div>
         </div>`;
       summaryA.appendChild(th);
     }
@@ -969,7 +886,7 @@
       th.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
           ${iconClassB ? `<i class="wi ${iconClassB}" style="font-size: 24px; color: #29519b; flex-shrink: 0;"></i>` : ''}
-          <div style="flex: 1;">${summaryHTML_B || ''}</div>
+          <div class="ds-summary-numbers" style="flex: 1;">${summaryHTML_B || ''}</div>
         </div>`;
       summaryB.appendChild(th);
     }
@@ -1028,11 +945,9 @@
     } catch (_) { return String(d); }
   }
 
-  function getCompareProviders() {
+  function getCompareProviders(keys) {
     const provs = ["openmeteo", "aromehd"];
-    const hasMB  = ((document.getElementById("apiKey")?.value || "").trim().length >= 5);
-    const hasOWM = ((document.getElementById("apiKeyOW")?.value || "").trim().length >= 5);
-    if (hasMB)  provs.push("meteoblue");
+    const hasOWM = ((keys.openweather || "").trim().length >= 5);
     if (hasOWM) {
       provs.push("openweather");
       // NEW: include chain id when OpenWeather key present
@@ -1052,124 +967,53 @@
     };
   }
 
-  function extractStepMetrics(prov, raw, baseStep, windUnit) {
+  // `units` are the comparison's own (its snapshot's): the request was made in them.
+  function extractStepMetrics(prov, raw, baseStep, units) {
+    const windUnit = units.wind;
     const step = { ...baseStep, provider: prov, weather: raw };
     const safeNum = window.cw.safeNum || ((v)=>Number.isFinite(Number(v))?Number(v):null);
     const windToUnits = window.cw.windToUnits || ((v)=>v);
-    const findClosestIndex = window.cw.findClosestIndex || (()=>-1);
+    // What extractStep read, in the units the rows are drawn in. Its wind is km/h whatever the
+    // answer was asked in, so every provider goes through windToUnits the same way.
+    const apply = (r) => {
+      if (!r) return;
+      step.temp = safeNum(r.temp);
+      step.windSpeed = safeNum(windToUnits(r.wind, windUnit));
+      step.windDir = r.windDir;
+      step.windGust = safeNum(r.gust != null ? windToUnits(r.gust, windUnit) : null);
+      step.humidity = safeNum(r.humidity);
+      step.precipitation = safeNum(r.precipitation);
+      step.precipProb = safeNum(r.precipProb);
+      step.weatherCode = r.weatherCode;
+      step.uvindex = safeNum(r.uvIndex);
+      step.cloudCover = safeNum(r.cloudCover);
+    };
     try {
       if (!raw) return blankStep(prov, baseStep);
 
       if (prov === "openmeteo" || prov === "aromehd") {
-        const H = raw.hourly || {};
-        const idx = Array.isArray(H.time) ? findClosestIndex(H.time, step.time) : -1;
-        if (idx >= 0) {
-          step.temp = safeNum(H.temperature_2m?.[idx]);
-          step.windSpeed = safeNum(windToUnits(H.wind_speed_10m?.[idx], windUnit));
-          step.windDir = H.winddirection_10m?.[idx];
-          step.windGust = safeNum(windToUnits(H.wind_gusts_10m?.[idx], windUnit));
-          step.humidity = safeNum(H.relative_humidity_2m?.[idx]);
-          step.precipitation = safeNum(H.precipitation?.[idx]);
-          // Use precipitation probability when available (0..100)
-          step.precipProb = safeNum(H.precipitation_probability?.[idx]);
-          step.weatherCode = H.weathercode?.[idx];
-          // Debug: log uv_index array and selected index when debugging enabled
-          try {
-            if (window.cw && window.cw.DEBUG_MERGE) {
-              console.debug('[extract][compare] idx=', idx, 'has_uv_array=', Array.isArray(H.uv_index), 'uv_sample=', Array.isArray(H.uv_index) ? H.uv_index.slice(0,5) : null);
-            }
-          } catch(_) {}
-          // If uv array exists but idx is out of bounds, try to find closest index by time
-          let uvVal = null;
-          if (Array.isArray(H.uv_index)) {
-            if (H.uv_index.length > idx) uvVal = H.uv_index[idx];
-            else {
-              try {
-                const finder = (window.cw && window.cw.findClosestIndex) || window.findClosestIndex;
-                if (typeof finder === 'function' && Array.isArray(H.time)) {
-                  const alt = finder(H.time, step.time);
-                  if (alt != null && alt >= 0 && H.uv_index.length > alt) uvVal = H.uv_index[alt];
-                }
-              } catch (_) {}
-            }
-          }
-          step.uvindex = safeNum(uvVal);
-          step.isDaylight = H.is_day?.[idx];
-          step.cloudCover = safeNum(H.cloud_cover?.[idx]);
+        // The table's own reading: the hour by the answer's utc_offset_seconds, and the quarter of
+        // minutely_15 whenever the answer has one for the step, with uv, probability and weather code
+        // from hourly when the quarter has none. Precipitation is the hour being ridden, (H, H+60 min].
+        const r = cwForecastRules.extractStep(raw, { provider: prov, time: step.time });
+        if (r) {
+          apply(r);
+          step.isDaylight = r.isDay;
+          if (prov === "aromehd") window.cw.aromeCodeAndDay(step);
         }
-        // Derive category for models without robust weathercode (e.g., AROME‑HD)
-        step._derivedCat = deriveCategoryFromParams(step);
       } else if (prov === "openweather") {
+        // The table's own reading here too (extractStep): an hourly entry only within an hour of the
+        // step, otherwise the daily entry of the step's own local date — not the nearest in raw `dt`,
+        // which past the 48 hours One Call sends showed the last hour of the answer, a different day.
+        // Daylight stays SunCalc's, as the table's does: OpenWeather sends no is_day.
         const timeMs = (step.time instanceof Date ? step.time : new Date(step.time)).getTime();
-        const closestByDt = (arr) => {
-          if (!Array.isArray(arr) || !arr.length) return -1;
-          let best = -1, bestDiff = Infinity;
-          for (let i = 0; i < arr.length; i++) {
-            const t = Number(arr[i]?.dt) * 1000;
-            const df = Math.abs(t - timeMs);
-            if (df < bestDiff) { bestDiff = df; best = i; }
-          }
-          return best;
-        };
-        const useHourly = Array.isArray(raw.hourly) && raw.hourly.length > 0;
-        const hi = useHourly ? closestByDt(raw.hourly) : -1;
-        const di = (!useHourly || hi === -1) ? closestByDt(raw.daily) : -1;
-        const src = (useHourly && hi !== -1) ? raw.hourly[hi] : ((Array.isArray(raw.daily) && di !== -1) ? raw.daily[di] : null);
         try {
           const pos = SunCalc.getPosition(new Date(timeMs), step.lat, step.lon);
           step.isDaylight = pos.altitude > 0 ? 1 : 0;
         } catch { step.isDaylight = 1; }
-        const tempUnits = (document.getElementById("tempUnits")?.value || "C");
-        const units = String(tempUnits).toLowerCase().startsWith("f") ? "imperial" : "metric";
-        const toKmhFromOW = (ws) => {
-          const v = Number(ws) || 0;
-          if (units === "imperial") return v * 1.60934;
-          return v * 3.6;
-        };
-        if (src) {
-          step.temp = safeNum(useHourly ? src.temp : (src.temp?.day ?? src.temp?.max ?? src.temp?.min));
-          step.windSpeed = safeNum(windToUnits(toKmhFromOW(src.wind_speed), windUnit));
-          step.windDir = Number(src.wind_deg || 0);
-          step.windGust = safeNum(src.wind_gust != null ? windToUnits(toKmhFromOW(src.wind_gust), windUnit) : null);
-          step.humidity = safeNum(src.humidity);
-          const rain = Number(useHourly ? (src.rain?.["1h"] ?? 0) : (src.rain ?? 0));
-          const snow = Number(useHourly ? (src.snow?.["1h"] ?? 0) : (src.snow ?? 0));
-          step.precipitation = safeNum(rain + snow);
-          // OpenWeather 'pop' is 0..1 -> convert to percent
-          if (useHourly && src && (src.pop != null)) {
-            step.precipProb = safeNum(Number(src.pop) * 100);
-          } else if (src && src.pop != null) {
-            step.precipProb = safeNum(Number(src.pop) * 100);
-          } else {
-            step.precipProb = null;
-          }
-          step.weatherCode = Array.isArray(src.weather) && src.weather[0] ? src.weather[0].id : null;
-          step.uvindex = safeNum(src.uvi ?? raw.current?.uvi ?? null);
-          step.cloudCover = safeNum(src.clouds);
-        }
-      } else if (prov === "meteoblue") {
-        step.temp = safeNum(raw.temperature_2m);
-        step.windSpeed = safeNum(raw.wind_speed_10m);
-        step.windDir = raw.wind_direction_10m || 0;
-        step.windGust = safeNum(raw.wind_gust_10m);
-        step.humidity = safeNum(raw.relative_humidity_2m);
-        step.precipitation = safeNum(raw.precipitation);
-        // MeteoBlue may provide precipitation_probability per timestep; attempt to pick closest
-        try {
-          const Ht = raw.time || raw.valid_time || null;
-          const idx = Array.isArray(Ht) ? (window.cw.findClosestIndex ? window.cw.findClosestIndex(Ht, step.time) : -1) : -1;
-          step.precipProb = idx >= 0 ? safeNum(raw.precipitation_probability?.[idx]) : null;
-        } catch (_) { step.precipProb = null; }
-        let pic = null;
-        try {
-          const Ht = raw.time || raw.valid_time || null;
-          const idx = Array.isArray(Ht) ? (window.cw.findClosestIndex ? window.cw.findClosestIndex(Ht, step.time) : -1) : -1;
-          pic = Array.isArray(raw.pictocode) && idx >= 0 ? raw.pictocode[idx] : null;
-        } catch {}
-        step.weatherCode = pic;
-        step.uvindex = safeNum((raw.uvindex?.[0] ?? raw.uv_index?.[0]));
-        step.isDaylight = raw.isdaylight ?? 1;
-        step.cloudCover = safeNum(raw.total_cloud_cover?.[0] ?? raw.cloudcover?.[0]);
+        // OpenWeather answers in the system buildProviderUrl asked for from the same temperature unit.
+        const owUnits = String(units.temp || "").toLowerCase().startsWith("f") ? "imperial" : "metric";
+        apply(cwForecastRules.extractStep(raw, { provider: prov, time: step.time, payloadUnits: owUnits }));
       }
 
       if (step.precipitation != null && Number(step.precipitation) === 0) {
@@ -1185,70 +1029,13 @@
     }
   }
 
-  // Decide a category when weathercode is missing/misleading (AROME‑HD)
-  function deriveCategoryFromParams(step) {
-    const t = Number(step?.temp);
-    const p = Number(step?.precipitation || 0);     // mm/h
-    const cc = Number(step?.cloudCover);            // 0..100
-    const day = step?.isDaylight === 1;
-    const hasSnow = Number.isFinite(t) && t <= 0 && p > 0;
-    // Strong buckets first
-    if (hasSnow) {
-      if (p >= 2.5) return "snow_heavy";
-      if (p >= 0.5) return "snow";
-      return "snow_light";
-    }
-    if (p > 0) {
-      if (p >= 5) return "rain_heavy";
-      if (p >= 0.7) return "rain";
-      // light precip or showery
-      return (cc >= 50) ? "showers" : "rain_light";
-    }
-    // No precip: decide on cloud cover
-    if (Number.isFinite(cc)) {
-      if (cc >= 90) return "overcast";
-      if (cc >= 40) return "partlycloudy";
-      return "clearsky";
-    }
-    return "default";
-  }
-
-  // Minimal mapper from category -> weather-icons class (day/night aware)
-  function categoryToIconClass(cat, isDay) {
-    const dn = isDay === 1 ? "day" : "night";
-    const M = {
-      clearsky:      { day: "wi-day-sunny",           night: "wi-night-clear" },
-      partlycloudy:  { day: "wi-day-sunny-overcast",  night: "wi-night-alt-partly-cloudy" },
-      overcast:      { day: "wi-day-cloudy",          night: "wi-night-alt-cloudy" },
-      drizzle:       { day: "wi-sprinkle",            night: "wi-sprinkle" },
-      rain_light:    { day: "wi-day-showers",         night: "wi-night-alt-showers" },
-      rain:          { day: "wi-rain",                night: "wi-night-alt-rain" },
-      rain_heavy:    { day: "wi-rain",                night: "wi-night-alt-rain" },
-      showers:       { day: "wi-showers",             night: "wi-night-alt-showers" },
-      freezing_drizzle:{day:"wi-sleet",               night: "wi-night-alt-sleet" },
-      freezing_rain: { day: "wi-rain-mix",            night: "wi-night-alt-rain-mix" },
-      sleet:         { day: "wi-sleet",               night: "wi-night-alt-sleet" },
-      hail:          { day: "wi-day-hail",            night: "wi-night-alt-hail" },
-      snow_light:    { day: "wi-day-snow",            night: "wi-night-alt-snow" },
-      snow:          { day: "wi-day-snow",            night: "wi-night-alt-snow" },
-      snow_heavy:    { day: "wi-snow-wind",           night: "wi-night-alt-snow" },
-      snow_showers:  { day: "wi-day-snow",            night: "wi-night-alt-snow" },
-      fog:           { day: "wi-day-fog",             night: "wi-night-fog" },
-      thunderstorm:  { day: "wi-day-thunderstorm",    night: "wi-night-alt-thunderstorm" },
-      thunder_hail:  { day: "wi-storm-showers",       night: "wi-night-alt-storm-showers" },
-      default:       { day: "wi-na",                  night: "wi-na" }
-    };
-    return (M[cat] || M.default)[dn];
-  }
-
   function buildCompareCell(step) {
     if (!step || step.temp == null) return "-";
     // Support chain: underlying effective provider stored in _effProv
     const prov = step.provider;
     const eff = step._effProv || prov;
     let iconClass = "";
-    if (eff === "meteoblue") iconClass = (window.cw.icons?.mb ? window.cw.icons.mb(step.weatherCode, step.isDaylight) : "");
-    else if (eff === "openweather") iconClass = (window.cw.icons?.ow ? window.cw.icons.ow(step.weatherCode, step.isDaylight) : "");
+    if (eff === "openweather") iconClass = (window.cw.icons?.ow ? window.cw.icons.ow(step.weatherCode, step.isDaylight) : "");
     else iconClass = (window.cw.icons?.om ? window.cw.icons.om(step.weatherCode, step.isDaylight) : "");
 
     const tempTxt = (step.temp != null && Number.isFinite(Number(step.temp))) ? `${Math.round(Number(step.temp))}º` : "-";
@@ -1310,8 +1097,10 @@
     const table = document.getElementById("weatherTable");
     if (!table) return;
     table.innerHTML = "";
+    // A date comparison painted before leaves its mode on the table; row clicks read it first.
+    table.classList.remove("compare-dates-mode");
     table.classList.add("compare-mode");
-    
+
     // Also add class to main element for viewport height adjustments on small screens
     const main = document.querySelector('main');
     if (main) {
@@ -1385,8 +1174,8 @@
           distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
         } else if (convertedM < 1000) distText = `${convertedM.toFixed(1)} ${unitM}`; else distText = distanceUnit === "mi" ? `${convertedM.toFixed(1)} ${unitKm}` : `${(convertedM/1000).toFixed(1)} ${unitKm}`;
       }
-      const startIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png";
-      const endIconUrl = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png";
+      const startIconUrl = "/icons/marker-icon-green.png";
+      const endIconUrl = "/icons/marker-icon-red.png";
       let iconHtml = "";
       if (Number.isFinite(m)) {
         if (Math.round(m) === 0) iconHtml = `<img src="${startIconUrl}" class="start-icon" alt="" />`; else if (Math.round(m) === Math.round(maxM)) iconHtml = `<img src="${endIconUrl}" class="end-icon" alt="" />`;
@@ -1420,7 +1209,7 @@
   }
 
     // Keep only those present in compareData; append any others (unexpected) at end
-    const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo","meteoblue"]; // FIXED ORDER
+    const desiredOrder = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo"]; // FIXED ORDER
     let provOrder = desiredOrder.filter(p => compareData[p]).concat(Object.keys(compareData).filter(p => !desiredOrder.includes(p)));
 
     provOrder.forEach((prov, rowIndex) => {
@@ -1457,7 +1246,7 @@
       } catch(_) {}
       try {
         // Build a compact, label-free summary: icon + numeric-only values
-    const ic = summary?.iconClass || (window.categoryToIconClass ? window.categoryToIconClass('default', 1) : 'wi-cloud');
+    const ic = summary?.iconClass || 'wi-cloud';
   // Fixed-size icon container so the following summary text is consistently aligned
   const iconHtml = `<div style="width:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:8px"><i class="wi ${ic}" style="font-size:22px;line-height:1;color:#29519b"></i></div>`;
         // Build stacked values like other rows (combined-top / combined-bottom)
@@ -1565,8 +1354,7 @@
   function labelForProvider(p) {
     if (p === "openmeteo") return "OpenMeteo";
     if (p === "aromehd")   return "AromeHD";
-    if (p === "ow2_arome_openmeteo") return "OPW-AromeHD"; 
-    if (p === "meteoblue") return "MeteoBlue";
+    if (p === "ow2_arome_openmeteo") return "OPW-AromeHD";
     if (p === "openweather") return "OpenWeather";
     return String(p || "");
   }
@@ -1575,7 +1363,6 @@
     if (p === "openmeteo") return "OMT";
     if (p === "aromehd")   return "ARM";
     if (p === "ow2_arome_openmeteo") return "OARM"; // NEW chain abbrev
-    if (p === "meteoblue") return "MTB";
     if (p === "openweather") return "OWM";
     return String(p || "").substring(0, 3).toUpperCase();
   }

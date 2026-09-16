@@ -42,8 +42,9 @@
     }
   }
 
-  // Loading overlay
-  function showLoading() {
+  // Loading overlay. This only paints it; whether it should be on is decided by the claims
+  // in route-requests.js, so one owner letting go cannot hide another's indicator.
+  function paintLoading(visible) {
     let el = document.getElementById("loadingOverlay");
     if (!el) {
       // Create the overlay if it doesn't exist
@@ -69,17 +70,21 @@
       document.body.appendChild(el);
     }
     // Do not overwrite the content if the element already existed (keeps data-i18n translation)
-    el.style.visibility = "visible";
-    el.style.opacity = "1";
-    el.style.pointerEvents = "auto";
+    if (visible) {
+      el.style.visibility = "visible";
+      el.style.opacity = "1";
+      el.style.pointerEvents = "auto";
+    } else {
+      el.style.opacity = "0";
+      el.style.visibility = "hidden";
+      el.style.pointerEvents = "none";
+    }
   }
-  function hideLoading() {
-    const el = document.getElementById("loadingOverlay");
-    if (!el) return;
-    el.style.opacity = "0";
-    el.style.visibility = "hidden";
-    el.style.pointerEvents = "none";
-  }
+  // createDiscreteLoadingIndicator still shows and hides the overlay itself, through one
+  // claim of its own, so it cannot switch off the indicator of a computation, a comparison
+  // or a route request still in flight.
+  function showLoading() { window.cw.claimLoading("legacy"); }
+  function hideLoading() { window.cw.releaseLoading("legacy"); }
 
   // Toggle functions
   function toggleConfig() {
@@ -151,6 +156,13 @@
     }
     const bclose = document.getElementById("closeConfig");
     if (bclose) bclose.setAttribute("aria-label", t("close"));
+    const brecent = document.getElementById("recentRoutesButton");
+    if (brecent) {
+      const label = t("recent_routes_count", { n: brecent.dataset.count });
+      brecent.title = label;
+      brecent.setAttribute("aria-label", label);
+      brecent.setAttribute("data-tooltip", label);
+    }
 
     // Document title
     if (typeof document !== "undefined") document.title = t("title");
@@ -203,7 +215,6 @@
 
       // Disable options that require API keys when keys missing
       const hasOW = !!getVal('apiKeyOW');
-    const hasMB = false;
       // Helper to set disabled state
       function setDisabled(val, disabled) {
         const opt = Array.from(sel.options).find(o => o.value === val);
@@ -212,8 +223,6 @@
       // OpenWeather-dependent options
       setDisabled('openweather', !hasOW);
       setDisabled('ow2_arome_openmeteo', !hasOW);
-      // MeteoBlue option (if exists)
-  setDisabled('meteoblue', true);
 
       // If the currently selected option is disabled, pick first non-disabled option
       const curOpt = sel.options[sel.selectedIndex];
@@ -229,19 +238,31 @@
     } catch (e) { console.warn('updateProviderOptions error', e); }
   }
 
+  // Official alerts come only from OpenWeather (checkWeatherAlertsIndependent in app.js
+  // bails out below this same 5-char threshold), so the checkbox is pointless without a
+  // usable key. Disable it and show why, instead of letting it sit checked and silent.
+  function updateWeatherAlertsAvailability() {
+    try {
+      const chk = document.getElementById('showWeatherAlerts');
+      if (!chk) return;
+      const hint = document.getElementById('weatherAlertsKeyHint');
+      const hasKey = window.cwWatchRules.hasAlertsKey(window.getVal ? window.getVal('apiKeyOW') : '');
+      chk.disabled = !hasKey;
+      if (hint) {
+        hint.hidden = hasKey;
+        // .key-status.warn sets display:inline-block, which beats the [hidden] default
+        // on specificity alone, so the class only goes on together with showing the hint.
+        hint.classList.toggle('warn', !hasKey);
+      }
+    } catch (e) { console.warn('updateWeatherAlertsAvailability error', e); }
+  }
+
   // Inline status helper for API key check. Accept optional element id (defaults to OpenWeather status)
   function setKeyStatus(msg, cls = "", elId = 'apiKeyStatusOW') {
     const el = document.getElementById(elId);
     if (!el) return;
     el.className = "key-status" + (cls ? " " + cls : "");
     el.textContent = msg || "";
-  }
-
-  // Test MeteoBlue key is intentionally disabled in the UI — provide a no-op to avoid errors
-  async function testMeteoBlueKey() {
-    // UI for MeteoBlue removed; nothing to test.
-    try { setKeyStatus(window.t('key_test_missing'), 'warn', 'apiKeyStatusOW'); } catch (e) {}
-    return;
   }
 
   // Test OpenWeather API key
@@ -364,11 +385,11 @@
     try {
       const fc = (geojson.type === 'FeatureCollection') ? geojson : { type: 'FeatureCollection', features: geojson.type === 'Feature' ? [geojson] : [] };
       let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="meteoride">\n`;
-      for (const feat of (fc.features || [])) {
-        const props = feat.properties || {};
-        const name = props.name || props.title || '';
-        const geom = feat.geometry;
-        if (!geom) continue;
+
+      // togeojson turns a KML <MultiGeometry> with more than one child geometry into a
+      // GeometryCollection; recurse so each child is emitted under the same feature name.
+      function appendGeometry(geom, name) {
+        if (!geom) return;
         const type = geom.type;
         if (type === 'Point') {
           const [lon, lat] = geom.coordinates;
@@ -396,7 +417,15 @@
             for (const c of outer) { gpx += `<trkpt lat="${c[1]}" lon="${c[0]}"></trkpt>`; }
             gpx += `</trkseg></trk>\n`;
           }
+        } else if (type === 'GeometryCollection') {
+          for (const g of (geom.geometries || [])) appendGeometry(g, name);
         }
+      }
+
+      for (const feat of (fc.features || [])) {
+        const props = feat.properties || {};
+        const name = props.name || props.title || '';
+        appendGeometry(feat.geometry, name);
       }
       gpx += '</gpx>';
       return gpx;
@@ -408,9 +437,8 @@
   function escapeXml(s) { return String(s || '').replace(/[<>&'"]/g, function(c){ return ({'<' : '&lt;','>' : '&gt;','&' : '&amp;',"'":'&apos;', '"':'&quot;'})[c]; }); }
 
   // Programmatic export: build GPX from existing map layer or cw steps and set window.lastGPXFile
-  // Exposed as window.cw.exportRouteToGpx(nameHint, noReload)
-  // If noReload is true the function will NOT call reloadFull() (avoids reloading map/route/clima)
-  function exportRouteToGpx(nameHint = 'route.gpx', noReload = false) {
+  // Exposed as window.cw.exportRouteToGpx(nameHint). It never reloads the route on screen.
+  function exportRouteToGpx(nameHint = 'route.gpx') {
     try {
       // Prefer an existing GPX/track layer
       let gpxText = null;
@@ -436,7 +464,7 @@
         return null;
       }
 
-      // Create a File-like object for compatibility with reloadFull()
+      // The route as a file, for the share sheet and the /share upload.
       try {
         window.lastGPXFile = (typeof File === 'function')
           ? new File([gpxText], nameHint || 'route.gpx', { type: 'application/gpx+xml' })
@@ -445,10 +473,6 @@
         window.lastGPXFile = { name: nameHint || 'route.gpx', _text: gpxText };
       }
 
-      // Trigger the normal reload path so UI updates unless caller requested noReload
-      if (!noReload && typeof window.reloadFull === 'function') {
-        try { window.reloadFull(); } catch (e) { /* ignore */ }
-      }
       console.info('[MeteoRide] exportRouteToGpx: GPX generated and assigned to window.lastGPXFile');
       return gpxText;
     } catch (err) {
@@ -518,7 +542,7 @@
     }
 
     try {
-      window.showLoading && window.showLoading();
+      window.cw.claimLoading('share-upload');
       window.setKeyStatus && window.setKeyStatus('Subiendo GPX...', 'testing');
       // Preferred: send raw GPX body with application/gpx+xml
       let res = null;
@@ -594,130 +618,14 @@
       console.error('uploadGPXToShareServer error', err);
       return null;
     } finally {
-      window.hideLoading && window.hideLoading();
+      window.cw.releaseLoading('share-upload');
     }
   }
 
   // Export geojsonToGpx helper so other scripts/userscripts can reuse it
   // Attach to window.cw namespace (created later in the file); create temporary holder now
   window._internal_geojsonToGpx = geojsonToGpx;
-
-  function reloadFull() {
-    if (!window.lastGPXFile) {
-      // No mostrar mensaje cuando no hay fichero seleccionado (comportamiento silencioso)
-      return;
-    }
-    // Reset transient application state to avoid duplication when reloading a GPX
-    (function resetAppStateForNewRoute() {
-      try {
-        // Clear computed weather/state
-        if (window.weatherData && Array.isArray(window.weatherData)) window.weatherData.length = 0;
-        // Clear active weather alerts
-        if (Array.isArray(window.activeWeatherAlerts)) window.activeWeatherAlerts.length = 0; else window.activeWeatherAlerts = [];
-        // Hide and clear alerts UI
-        const alertContainer = document.getElementById('weather-alerts-container');
-        if (alertContainer) {
-          alertContainer.style.display = 'none';
-          // remove child alert elements
-          const children = Array.from(alertContainer.querySelectorAll('.weather-alert'));
-          children.forEach(c => c.remove());
-        }
-        try {
-          if (typeof hideAndCleanupAlertIndicator === 'function') hideAndCleanupAlertIndicator();
-          else {
-            const indicator = document.getElementById('weather-alert-indicator');
-            if (indicator) indicator.style.display = 'none';
-          }
-        } catch (e) { /* ignore */ }
-
-        // Remove wind and rain markers from map
-        try {
-          if (Array.isArray(window.windMarkers)) {
-            window.windMarkers.forEach(m => { try { if (m && window.map && typeof m.remove === 'function') m.remove(); } catch(e){} });
-            window.windMarkers.length = 0;
-          }
-          if (Array.isArray(window.rainMarkers)) {
-            window.rainMarkers.forEach(m => { try { if (m && window.map && typeof m.remove === 'function') m.remove(); } catch(e){} });
-            window.rainMarkers.length = 0;
-          }
-        } catch (e) { /* ignore marker cleanup errors */ }
-
-        // Reset selection/index state
-        window.selectedOriginalIdx = null;
-        window.viewOriginalIndexMap = [];
-        window.colIndexByOriginal = {};
-        window.lastAppliedSpeed = null;
-      } catch (e) {
-        console.warn('resetAppStateForNewRoute error', e);
-      }
-    })();
-    const reader = new FileReader();
-    
-    reader.onload = async function (e) {
-      try {
-        // Detect file type by extension and convert if necessary
-        const name = (window.lastGPXFile && window.lastGPXFile.name) ? String(window.lastGPXFile.name).toLowerCase() : '';
-        let content = e.target.result;
-        if (name.endsWith('.kml')) {
-          const g = kmlToGpxText(content);
-          if (!g) throw new Error('KML to GPX conversion failed');
-          content = g;
-        }
-  // FIT files are not accepted by the file input; only .gpx and .kml are handled here.
-        if (window.trackLayer) window.map.removeLayer(window.trackLayer);
-        window.trackLayer = new L.GPX(content, {
-          async: true,
-          polyline_options: { color: 'blue' },
-          marker_options: {
-            startIconUrl:
-              "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
-            endIconUrl:
-              "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-            shadowUrl:
-              "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-            // opcionales:
-            wptIconUrl: null
-          }
-        });
-
-        window.trackLayer.on("loaded", async (evt) => {
-          window.map.fitBounds(evt.target.getBounds());
-          await window.segmentRouteByTime(evt.target.toGeoJSON());
-          let routeName = evt.target.get_name ? evt.target.get_name() : null;
-          if (!routeName && evt.target.get_metadata) {
-            let meta = evt.target.get_metadata();
-            routeName = meta && meta.name ? meta.name : null;
-          }
-          if (routeName) {
-            const rutaNameEl = document.getElementById("rutaName");
-            rutaNameEl.textContent = routeName;
-            // Clear placeholder styling when real route name is loaded
-            rutaNameEl.style.color = '';
-            rutaNameEl.style.fontStyle = '';
-          }
-
-          const layer = evt.target;
-
-          // Reemplazo robusto de iconos (usa tanto layer como fallback sobre el mapa)
-          window.replaceGPXMarkers(layer);
-
-          // Si aún quieres mantener la lógica previa de markers[] puedes dejarla como backup,
-          // pero la función anterior ya cubre la mayoría de situaciones.
-
-          window.map.fitBounds(evt.target.getBounds(), {
-            padding: [20, 20], // Puedes ajustar el padding si quieres más/menos borde
-            maxZoom: 15        // Opcional: así no se acerca demasiado
-          });
-        });
-
-        window.trackLayer.addTo(window.map);
-      } catch (err) {
-        console.error(window.t ? window.t("error_reading_gpx", { msg: err.message }) : ('Error reading GPX: ' + err.message));
-        window.logDebug && window.logDebug(window.t ? window.t("error_reading_gpx", { msg: err.message }) : ('Error reading GPX: ' + err.message), true);
-      }
-    };
-    reader.readAsText(window.lastGPXFile);
-  }
+  window.cwKmlToGpxText = kmlToGpxText;
 
   // GPX marker replacement function
   function replaceGPXMarkers(layer) {
@@ -750,8 +658,8 @@
     if (markers.length === 0) return;
 
     const startIcon = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconUrl: '/icons/marker-icon-green.png',
+      shadowUrl: '/icons/marker-shadow.png',
       iconSize: [16, 30],      // reducido
       iconAnchor: [9, 30],
       shadowSize: [30, 30],
@@ -760,8 +668,8 @@
     });
 
     const endIcon = L.icon({
-      iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconUrl: '/icons/marker-icon-red.png',
+      shadowUrl: '/icons/marker-shadow.png',
       iconSize: [16, 30],      // reducido
       iconAnchor: [9, 30],
       shadowSize: [30, 30],
@@ -777,10 +685,6 @@
       window.logDebug("replaceGPXMarkers: error al aplicar iconos - " + err.message, true);
     }
   }
-
-  // Explicit compare-by-dates mode flag: when true and compare UI is visible,
-  // date changes do NOT auto-recalculate; user must click the "Run compare" button.
-  let explicitCompareActive = false;
 
   // Bind UI events
   function bindUIEvents() {
@@ -836,22 +740,8 @@
       menu.style.display = "none";
     }, { capture: true });
 
-    // File input
-    const gpxFileEl = document.getElementById("gpxFile");
-    if (gpxFileEl) {
-      gpxFileEl.addEventListener("change", function () {
-        if (!this.files.length) {
-          window.lastGPXFile = null;
-          return;
-        }
-        window.lastGPXFile = this.files[0];
-        const val = (this.files[0].name) || (this.value.split("\\").pop() || this.value.split("/").pop() || "");
-        const rutaBase = val.replace(/\.[^/.]+$/, "");
-        const rutaEl = document.getElementById("rutaName");
-        if (rutaEl) rutaEl.textContent = rutaBase ? rutaBase : "";
-        window.reloadFull();
-      });
-    }
+    // File input: handled in initUI, which also records the route as recent. A second
+    // listener here started every forecast twice over.
 
     const dtEl = document.getElementById("datetimeRoute");
     if (dtEl) {
@@ -866,23 +756,10 @@
         } else {
           dtEl.value = rounded;
         }
-          // If compare-by-dates is active, refresh compare instead of full reload
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive) {
-          if (!explicitCompareActive && window.cw?.runCompareDatesMode) {
-            window.cw.runCompareDatesMode();
-          }
-          // In explicit mode, do nothing until user clicks Run Compare
-        } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-          window.cw.runCompareMode();
-        } else {
-          window.reloadFull();
-        }
-        // Re-validate weather alerts when date changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
-        }
+        // Saved like every other setting, so a reload keeps a time chosen ahead.
+        window.saveSettings();
+        // Recomputed; publishing launches the comparison chosen, or a date comparison running by itself.
+        window.cw.settingsChanged();
       });
     }
 
@@ -891,28 +768,12 @@
     if (dtEl2) {
       dtEl2.addEventListener("change", () => {
         if (!dtEl2.value) return;
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const visible = row2 && getComputedStyle(row2).display !== 'none';
         // Round to next quarter like A
         const [Y, M, D, H, Min] = dtEl2.value.split(/[-:T]/).map(Number);
         const localDate = new Date(Y, M - 1, D, H, Min, 0, 0);
         const rounded = window.roundToNextQuarterISO(localDate);
         dtEl2.value = rounded;
-        if (visible && window.cw?.runCompareDatesMode) {
-          if (!explicitCompareActive) {
-            window.cw.runCompareDatesMode();
-          }
-        }
-      });
-      // Also react on input (useful on some UIs) when value is complete
-      dtEl2.addEventListener("input", () => {
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const visible = row2 && getComputedStyle(row2).display !== 'none';
-        if (!visible || explicitCompareActive) return;
-        const v = dtEl2.value || "";
-        if (v.length >= 16 && window.cw?.runCompareDatesMode) {
-          window.cw.runCompareDatesMode();
-        }
+        // Compare-by-dates always runs explicitly, via the Run button below.
       });
     }
 
@@ -923,13 +784,13 @@
       "tempUnits",
       "distanceUnits",
       "precipUnits",
-      "apiKey",
       "apiKeyOW",
       "apiSource",
       "intervalSelect",
       "noticeAll",
       "showWeatherAlerts",
       "showDebugButton",
+      "rideAlerts",
     ].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {
@@ -937,39 +798,25 @@
           if (id === "apiSource") {
             window.apiSource = el.value;
 
-            if ((window.apiSource === "meteoblue" || window.apiSource === "openweather") && !window.getVal("apiKey") && !window.getVal("apiKeyOW")) {
-              const provName = window.apiSource === "openweather" ? "OpenWeather" : "MeteoBlue";
-              window.setNotice(window.t("provider_key_missing", { prov: provName }), "warn");
+            if (window.apiSource === "openweather" && !window.getVal("apiKeyOW")) {
+              window.setNotice(window.t("provider_key_missing", { prov: "OpenWeather" }), "warn");
             } else {
               window.clearNotice();
             }
-            // If compare-by-dates is active, refresh compare instead of full reload
-            const row2 = document.getElementById('datetimeRoute2Row');
-            const compareActive = row2 && row2.style.display !== 'none';
-            if (compareActive && window.cw?.runCompareDatesMode) {
-              window.saveSettings();
-              if (!explicitCompareActive) {
-                window.cw.runCompareDatesMode();
-                return; // avoid falling through to reloadFull
-              }
-              // In explicit mode, do not auto-run; just save settings
-              return;
-            } else if (el.value === "compare" && window.cw?.runCompareMode) {
+            // Leaving compare: a comparison still fetching never paints under another provider.
+            if (el.value !== "compare") window.cwCancelComparisons?.();
+            if (el.value === "compare" && window.cw?.runCompareMode) {
               // If switching TO compare-providers mode, run compare
               window.saveSettings();
               window.cw.runCompareMode();
               return;
             }
           }
-          if (id === "apiKey" || id === "apiKeyOW") {
+          if (id === "apiKeyOW") {
             updateProviderOptions();
-            const hasMB  = ((window.getVal("apiKey")  || "").trim().length >= 5);
-            const hasOWM = ((window.getVal("apiKeyOW") || "").trim().length >= 5);
+            const hasOWM = window.cwWatchRules.hasAlertsKey(window.getVal("apiKeyOW"));
             const sel = document.getElementById("apiSource");
-            if (sel) {
-              if (sel.value === "meteoblue" && !hasMB)  { sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
-              if (sel.value === "openweather" && !hasOWM){ sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
-            }
+            if (sel && sel.value === "openweather" && !hasOWM) { sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
           }
           
           if (id === "showDebugButton") {
@@ -996,34 +843,21 @@
 
           window.saveSettings();
           if (id === "language") window.applyTranslations();
-          if (["windUnits", "tempUnits"].includes(id) && window.weatherData.length) {
-            // Validate that a route is loaded before updating units
-            const routeValidation = window.validateRouteLoaded();
-            if (!routeValidation.valid) {
-              if (window.setNotice) window.setNotice(routeValidation.error, 'error');
-              return;
-            }
-            window.updateUnits();
-          }
-          // If compare-by-dates UI is visible, refresh the compare view instead of full reload
-          const row2 = document.getElementById('datetimeRoute2Row');
-          const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive && window.cw?.runCompareDatesMode) {
-            if (!explicitCompareActive) {
-              window.cw.runCompareDatesMode();
-              return;
-            }
-            return;
-          } else if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-            window.cw.runCompareMode();
+          // Settings that only change how the forecast looks. Nothing is computed again:
+          // language and detailed notices repaint the forecast on screen, unless the
+          // comparison table is what is showing, and the debug button and ride alerts have
+          // already done their part.
+          if (id === "showDebugButton" || id === "rideAlerts") return;
+          if (id === "language" || id === "noticeAll") {
+            const row2 = document.getElementById('datetimeRoute2Row');
+            const compareOnScreen = (window.cwCompareOwnsTable ? window.cwCompareOwnsTable() : window.apiSource === "compare")
+              || (row2 && row2.style.display !== 'none');
+            if (!compareOnScreen && window.cwRepaintPublished) window.cwRepaintPublished();
             return;
           }
-          window.reloadFull();
-          
-          // Re-validate weather alerts when parameters change
-          if (["intervalSelect", "cyclingSpeed", "datetimeRoute"].includes(id) && window.revalidateWeatherAlerts) {
-            window.revalidateWeatherAlerts();
-          }
+          // Official warnings are looked up by the computation this launches, and with compare
+          // chosen its publish launches the comparison.
+          window.cw.settingsChanged();
         });
       }
     });
@@ -1039,17 +873,11 @@
           if (window.setNotice) window.setNotice(routeValidation.error, 'error');
           return;
         }
-        // If date-compare is active and a normal provider is selected, re-run date compare with the new provider
+        // With compare-by-dates showing, the computation this change launched decides what is painted.
         const row2 = document.getElementById('datetimeRoute2Row');
-        const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive && prov !== 'compare') {
-          if (window.cw?.runCompareDatesMode && !explicitCompareActive) window.cw.runCompareDatesMode();
-          return;
-        }
-        if (prov === "compare") {
-          if (window.cw?.runCompareMode) window.cw.runCompareMode();
-          return;
-        }
+        if (row2 && row2.style.display !== 'none' && prov !== 'compare') return;
+        // Choosing compare launched the comparison in the handler above, once.
+        if (prov === "compare") return;
         window.renderWeatherTable();
       });
     }
@@ -1075,8 +903,6 @@
             }
             dt2.focus();
           }
-          // Enter explicit compare mode by default; user can click the run button to compute
-          explicitCompareActive = true;
           if (compareNowBtn) {
             compareNowBtn.style.display = '';
             // Ensure i18n title
@@ -1103,19 +929,13 @@
             toggleCompBtn.title = window.t('compare_dates_btn_title');
           }
           if (compareNowBtn) compareNowBtn.style.display = 'none';
-          explicitCompareActive = false;
-          
-          // Check if we should return to compare-providers mode after reloading
-          const apiSel = document.getElementById("apiSource");
-          const shouldReturnToCompare = apiSel && apiSel.value === "compare";
-          
-          // Store flag to restore compare mode after reload completes
-          if (shouldReturnToCompare) {
-            window._pendingCompareRestore = true;
-          }
-          
-          // Recalculate normal weather data when exiting compare-dates mode
-          window.reloadFull();
+
+          // A date comparison still fetching never paints once the row is closed, even while a
+          // route request holds the recomputation below back.
+          window.cwCancelComparisons?.();
+          // Recalculate normal weather data when exiting compare-dates mode; with compare chosen,
+          // its publish compares providers again.
+          window.cw.settingsChanged();
         }
       });
     }
@@ -1146,7 +966,6 @@
           return;
         }
         if (window.cw?.runCompareDatesMode) {
-          // explicitCompareActive doesn't block the user clicking Run; here this is the Run button handler
           window.cw.runCompareDatesMode();
         }
       });
@@ -1162,23 +981,8 @@
         if (cs) cs.value = v;
         window.lastAppliedSpeed = Number(v);
         window.saveSettings();
-        // Check mode: if we're in compare-dates (row2 visible) do NOT auto-refresh here.
-        // Just save the speed and let the user trigger the compare explicitly with the Run button.
-        const row2 = document.getElementById('datetimeRoute2Row');
-        const compareActive = row2 && row2.style.display !== 'none';
-        if (compareActive) {
-          return;
-        }
-        // Otherwise behave as before for compare-mode (provider compare) or normal reload
-        if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-          window.cw.runCompareMode();
-        } else {
-          window.reloadFull();
-        }
-        // Re-validate weather alerts when speed changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
-        }
+        // Recomputed; publishing launches the comparison chosen, or a date comparison running by itself.
+        window.cw.settingsChanged();
       });
     }
 
@@ -1189,19 +993,7 @@
         if (ev.key === "Enter") {
           window.lastAppliedSpeed = Number(cyclingInput.value);
           window.saveSettings();
-          // If in compare-dates mode, do NOT auto-refresh on Enter; user should press Run
-          const row2 = document.getElementById('datetimeRoute2Row');
-          const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive) return;
-          if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-            window.cw.runCompareMode();
-          } else {
-            window.reloadFull();
-          }
-        }
-        // Re-validate weather alerts when speed changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
+          window.cw.settingsChanged();
         }
       });
       cyclingInput.addEventListener("blur", () => {
@@ -1210,19 +1002,7 @@
         if (window.lastAppliedSpeed === null || Number(v) !== Number(window.lastAppliedSpeed)) {
           window.lastAppliedSpeed = Number(v);
           window.saveSettings();
-          // If in compare-dates mode, do NOT auto-refresh on blur; user should press Run
-          const row2 = document.getElementById('datetimeRoute2Row');
-          const compareActive = row2 && row2.style.display !== 'none';
-          if (compareActive) return;
-          if (window.apiSource === "compare" && window.cw?.runCompareMode) {
-            window.cw.runCompareMode();
-          } else {
-            window.reloadFull();
-          }
-        }
-        // Re-validate weather alerts when speed changes
-        if (window.revalidateWeatherAlerts) {
-          window.revalidateWeatherAlerts();
+          window.cw.settingsChanged();
         }
       });
       cyclingInput.addEventListener("input", () => {
@@ -1234,12 +1014,7 @@
       });
     }
 
-    // API key test buttons
-    const chk = document.getElementById("checkApiKey");
-  // Disable MeteoBlue key test UI if present
-  try { if (chk) { chk.disabled = true; chk.classList.remove('testing'); } } catch(e){}
-    if (chk) chk.addEventListener("click", testMeteoBlueKey);
-
+    // API key test button
     const chkOW = document.getElementById("checkApiKeyOW");
     if (chkOW) chkOW.addEventListener("click", testOpenWeatherKey);
 
@@ -1254,18 +1029,13 @@
       });
     }
 
-    // Update options when API keys change so options can be enabled/disabled live
-    const apiKeyEl = document.getElementById('apiKey');
+    // Update options when the OpenWeather key changes so options can be enabled/disabled live
     const apiKeyOWEl = document.getElementById('apiKeyOW');
-    const apiKeyMBEl = document.getElementById('apiKey');
-    // MeteoBlue key input is intentionally disabled and always kept empty
-    if (apiKeyMBEl) { apiKeyMBEl.value = ''; apiKeyMBEl.disabled = true; apiKeyMBEl.addEventListener('input', () => { apiKeyMBEl.value = ''; }); }
-    // Wire OpenWeather and generic apiKey inputs to update provider options when changed
-    if (apiKeyEl) apiKeyEl.addEventListener('input', () => { updateProviderOptions(); });
-    if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); });
+    if (apiKeyOWEl) apiKeyOWEl.addEventListener('input', () => { updateProviderOptions(); updateWeatherAlertsAvailability(); });
 
     // Call update once to inject new options
     updateProviderOptions();
+    updateWeatherAlertsAvailability();
 
     // Floating quick-export-and-save GPX button (single control)
     try {
@@ -1315,11 +1085,10 @@
   window.applyTranslations = applyTranslations;
   window.localizeHeader = localizeHeader;
   window.updateProviderOptions = updateProviderOptions;
+  window.updateWeatherAlertsAvailability = updateWeatherAlertsAvailability;
   window.setKeyStatus = setKeyStatus;
-  window.testMeteoBlueKey = testMeteoBlueKey;
   window.testOpenWeatherKey = testOpenWeatherKey;
   window.bindUIEvents = bindUIEvents;
-  window.reloadFull = reloadFull;
   window.replaceGPXMarkers = replaceGPXMarkers;
 
   // Via window.cw
@@ -1329,16 +1098,15 @@
     clearNotice,
     showLoading,
     hideLoading,
+    paintLoading,
     createDiscreteLoadingIndicator,
     toggleConfig,
     toggleDebug,
     applyTranslations,
     updateProviderOptions,
     setKeyStatus,
-    testMeteoBlueKey,
     testOpenWeatherKey,
     bindUIEvents,
-    reloadFull,
     replaceGPXMarkers,
   uploadGPXToShareServer,
   };
@@ -1387,6 +1155,13 @@
       return ('00000000' + h.toString(16)).slice(-8);
     }
 
+    // Senders resend a route until they hear back (the userscript posts at 1, 2 and 4 s), and the
+    // answer waits for the route to be confirmed. A resend was a newer request, so it could replace
+    // a file picked after the first copy was shown. The same text from the same origin within 30 s
+    // of the one that asked is not asked for again: its answer is that request's result.
+    const RESEND_WINDOW_MS = 30000;
+    let lastAsked = null;   // { origin, fingerprint, at, status }
+
     window.addEventListener('message', function (ev) {
       try {
         const msg = ev && ev.data;
@@ -1403,25 +1178,20 @@
         const hs = simpleHash(msg.gpx);
         console.log('[MeteoRide] Accepted loadGPX postMessage origin=' + ev.origin + ' name=' + name + ' size=' + size + ' hash=' + hs);
         window.logDebug && window.logDebug('Received GPX via postMessage from ' + ev.origin + ' name=' + name + ' size=' + size + ' hash=' + hs);
-        // Create a Blob/File-like object so reloadFull and other flows can reuse it
-        const blob = new Blob([msg.gpx], { type: 'application/gpx+xml' });
-        // Try to set a name property for compatibility
-        try { blob.name = name; } catch (e) { /* ignore */ }
-        window.lastGPXFile = blob;
-        // Save to recent routes (same as when loading from file input)
-        if (typeof window.saveRecentRoute === 'function') {
-          window.saveRecentRoute(blob);
-        }
-        // If the app exposes the programmatic loader, use it; otherwise fall back to reloadFull
-        if (typeof window.cwLoadGPXFromString === 'function') {
-          try { window.cwLoadGPXFromString(msg.gpx, name); } catch (e) {
-            // Fallback: let reloadFull read window.lastGPXFile
-            window.reloadFull();
-          }
+        // Shown through its own request, which waits for the map, and kept among recent routes
+        // once confirmed. The sender hears what that request ended as, not just that it arrived.
+        const reply = (answer) => { try { ev.source && ev.source.postMessage(answer, ev.origin || '*'); } catch(_) {} };
+        const fingerprint = typeof msg.gpx === 'string' ? cwForecastRules.fingerprint(msg.gpx) : null;
+        const now = Date.now();
+        let status;
+        if (fingerprint && lastAsked && lastAsked.origin === ev.origin && lastAsked.fingerprint === fingerprint
+            && now - lastAsked.at < RESEND_WINDOW_MS) {
+          status = lastAsked.status;
         } else {
-          window.reloadFull();
+          status = window.cwReceiveRoute({ source: 'message', name, text: msg.gpx, importOn: 'commit' });
+          if (fingerprint) lastAsked = { origin: ev.origin, fingerprint, at: now, status };
         }
-        try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: true, name, size }, ev.origin || '*'); } catch(_) {}
+        status.then((s) => reply({ action: 'loadGPX:ack', ok: s === 'committed', status: s, name, size }));
       } catch (e) {
         console.warn('postMessage loadGPX error', e);
         try { ev.source && ev.source.postMessage({ action: 'loadGPX:ack', ok: false, reason: 'exception' }, ev.origin || '*'); } catch(_) {}
@@ -1441,7 +1211,7 @@
 
   // GPX Recent Routes Storage Functions (IndexedDB-backed with in-memory cache)
   const RECENT_ROUTES_KEY = 'meteoride_recent_routes'; // kept for backward compatibility
-  const MAX_RECENT_ROUTES = 3;
+  const MAX_RECENT_ROUTES = 5;
   // Maximum size (in bytes) allowed for storing a recent route in the UI cache.
   // Increased from the original 50KB to 750KB to support longer routes (~250k-750k text length).
   const MAX_RECENT_ROUTE_SIZE = 750000;
@@ -1451,7 +1221,6 @@
   const IDB_VERSION = 1;
 
   let recentRoutesCache = [];
-  let recentRoutesDisabled = false;
 
   function openIDB() {
     return new Promise((resolve, reject) => {
@@ -1602,26 +1371,40 @@
     }
   }
 
-  // Put (insert or replace) a route record; returns the record id/key
-  async function idbPutRoute(route) {
-    try {
-      const db = await openIDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        const store = tx.objectStore(IDB_STORE);
-        // If route includes id, ensure we set it on the object so put replaces
-        const obj = { name: route.name, size: route.size, lastModified: route.lastModified, timestamp: route.timestamp };
-        if (route.blob) obj.blob = route.blob;
-        if (route.id != null) obj.id = route.id;
-        const req = store.put(obj);
-        req.onsuccess = function (ev) { resolve(ev.target.result); };
-        req.onerror = function () { reject(req.error || new Error('put failed')); };
-      });
-    } catch (e) {
-      console.warn('[MeteoRide] idbPutRoute failed', e);
-      throw e;
-    }
+  // Moves a stored route to the top: the whole record, fingerprint included, gets a
+  // timestamp above every other stored route, in one readwrite transaction, and nothing
+  // is written if the record is gone. It runs in the import queue (cw.touchRecent), so an
+  // import that trimmed the route first is never undone. True once the transaction
+  // completes with the record moved.
+  async function idbTouchRoute(id, timestamp) {
+    let db;
+    try { db = await openIDB(); } catch (e) { return false; }
+    return new Promise((resolve) => {
+      let tx;
+      try { tx = db.transaction(IDB_STORE, 'readwrite'); } catch (e) { return resolve(false); }
+      let moved = false;
+      tx.oncomplete = () => resolve(moved);
+      tx.onabort = () => resolve(false);
+      tx.onerror = () => resolve(false);
+      const store = tx.objectStore(IDB_STORE);
+      const all = store.getAll();
+      all.onsuccess = () => {
+        const records = all.result || [];
+        const current = records.find((r) => r.id === id);
+        if (!current) return;
+        // Stored times can be ahead of this clock (the phone's clock was changed since
+        // the others were imported). Stay above every OTHER record so opening a route
+        // never demotes it below routes that arrived earlier while the clock ran fast.
+        const top = records.reduce((max, r) => (r.id === id ? max : Math.max(max, Number(r.timestamp) || 0)), 0);
+        // Puts back whatever shape it read, `blob` included on a legacy record. Safe: a
+        // `blob` field can only exist on an engine whose IndexedDB already accepted a
+        // Blob in a put, so re-putting the same record here cannot newly fail on it.
+        store.put(Object.assign(current, { timestamp: Math.max(timestamp, top + 1) }));
+        moved = true;
+      };
+    });
   }
+  window.cwIdbTouchRoute = idbTouchRoute;
 
   // Delete a route record by id
   async function idbDeleteRoute(id) {
@@ -1640,40 +1423,6 @@
     }
   }
 
-  async function idbSaveAll(routes) {
-    // Keep for compatibility but delegate to adding individual routes with blob support.
-    try {
-      // Clear and re-add: convert routes to objects that may include blob
-      const db = await openIDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        const store = tx.objectStore(IDB_STORE);
-        const clearReq = store.clear();
-        clearReq.onsuccess = async function () {
-          try {
-            for (let i = 0; i < routes.length; i++) {
-              // route may contain 'blob' or 'content' (fallback)
-              const r = routes[i];
-              const obj = { name: r.name, size: r.size, lastModified: r.lastModified, timestamp: r.timestamp };
-              if (r.blob) obj.blob = r.blob; else if (r.content) obj.blob = new Blob([r.content], { type: 'application/gpx+xml' });
-              // eslint-disable-next-line no-await-in-loop
-              await new Promise((res, rej) => {
-                const areq = store.add(obj);
-                areq.onsuccess = () => res(true);
-                areq.onerror = () => rej(areq.error || new Error('add failed'));
-              });
-            }
-            resolve(true);
-          } catch (e) { reject(e); }
-        };
-        clearReq.onerror = () => reject(clearReq.error || new Error('clear failed'));
-      });
-    } catch (e) {
-      console.warn('[MeteoRide] idbSaveAll failed', e);
-      throw e;
-    }
-  }
-
   async function migrateFromLocalStorage() {
     try {
       const stored = localStorage.getItem(RECENT_ROUTES_KEY);
@@ -1687,10 +1436,9 @@
       // Convert to limited array, newest first
       routes.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       routes = routes.slice(0, MAX_RECENT_ROUTES);
-      // Convert each legacy string entry into a blob record and add
+      // Carry the legacy string straight over as `content`; no need to wrap it in a Blob.
       for (const r of routes) {
-        const blob = new Blob([r.content], { type: 'application/gpx+xml' });
-        const obj = { name: r.name, size: r.size || (r.content ? r.content.length : 0), lastModified: r.lastModified || Date.now(), timestamp: r.timestamp || Date.now(), blob };
+        const obj = { name: r.name, size: r.size || (r.content ? r.content.length : 0), lastModified: r.lastModified || Date.now(), timestamp: r.timestamp || Date.now(), content: r.content };
         try { await idbAddRoute(obj); } catch (e) { /* ignore individual errors */ }
       }
       localStorage.removeItem(RECENT_ROUTES_KEY);
@@ -1846,6 +1594,9 @@
     btn.id = 'recentRoutesButton';
     btn.className = 'recent-routes-button';
   btn.type = 'button';
+  // Kept so applyTranslations can relabel the button: it can be drawn before the saved
+  // language is loaded.
+  btn.dataset.count = routes.length;
   // Accessible label / tooltip text
   btn.title = pText;
   btn.setAttribute('aria-label', pText);
@@ -1907,26 +1658,11 @@
         it.style.fontFamily = 'Arial, sans-serif';
         it.textContent = (route.name || '').replace(/\.[^/.]+$/, "");
         it.addEventListener('click', async function () {
-          try {
-            // behave like selecting the option
-            const route = filtered[idx];
-            let full = null;
-            if (route.id != null) full = await idbGetRouteById(route.id);
-            if (!full) {
-              try {
-                const stored = localStorage.getItem(RECENT_ROUTES_KEY);
-                const arr = stored ? JSON.parse(stored) : [];
-                const found = arr.find(r => r.name === route.name && (route.timestamp == null || r.timestamp === route.timestamp));
-                if (found) full = { name: found.name, size: found.size, lastModified: found.lastModified, timestamp: found.timestamp, blob: new Blob([found.content], { type: 'application/gpx+xml' }) };
-              } catch (_) { /* ignore */ }
-            }
-            if (!full) {
-              console.warn('[MeteoRide] recentRoutesMenu: Could not retrieve route content for', route.name);
-              return;
-            }
-            await loadRecentRoute(full);
-          } catch (e) { console.error(e); }
+          // The request is made on the tap, before anything is read, so a route asked for
+          // while this one is still read replaces it. readRecentRoute finds the text by id,
+          // then by name, then in the old localStorage list.
           hideMenu();
+          try { await loadRecentRoute(filtered[idx]); } catch (e) { console.error(e); }
         });
         menu.appendChild(it);
       });
@@ -2007,230 +1743,218 @@
     console.log('[MeteoRide] updateRecentRoutesUI: Completed');
   }
 
+  // The name a route is kept under: no path separators or line breaks, at most 64
+  // characters before the extension, and .gpx or .kml as written, or .gpx added.
+  function recentRouteName(name) {
+    const raw = String(name || 'route.gpx');
+    const ext = (/\.(gpx|kml)$/i.exec(raw) || [''])[0];
+    let base = raw.slice(0, raw.length - ext.length).replace(/[\\/\n\r\t]+/g, '-').replace(/\s+/g, ' ').trim();
+    if (base.length > 64) base = base.substring(0, 64).trim();
+    return `${base || 'route'}${ext || '.gpx'}`;
+  }
+
+  // Imports a route into recent routes in one readwrite transaction: read what is stored,
+  // choose a name that does not take another route's, write, and trim to the newest by
+  // arrival. It has worked only once the transaction completes. No IndexedDB, a route
+  // too big to keep or an aborted transaction all come back as { ok: false }; the import
+  // queue in route-requests.js says so. Nothing falls back to localStorage any more.
+  // A record kept before fingerprints existed (phase 3) carries none, so uniqueRouteName
+  // never matches it. Read once, outside the write transaction (its own blob read is not an
+  // IDB request and would let the transaction auto-commit under it): every record missing a
+  // fingerprint gets one computed from its stored content. Not written back; only used to
+  // match this import. Nothing else writes to the store between this read and the write
+  // transaction below, both being one job in the same import queue.
+  // ponytail: computed again on every import while the record stays unmatched; persisting it
+  // back the first time would save the reread, worth doing if this shows up as slow.
+  async function withComputedFingerprints(db) {
+    let records;
+    try {
+      records = await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error || new Error('getAll failed'));
+      });
+    } catch (e) { return null; }
+    return Promise.all(records.map(async (r) => {
+      if (r.fingerprint || (!r.blob && !r.content)) return r;
+      try {
+        const text = r.blob ? await r.blob.text() : r.content;
+        return Object.assign({}, r, { fingerprint: cwForecastRules.fingerprint(text) });
+      } catch (e) { return r; }
+    }));
+  }
+
+  async function idbImportRoute({ text, name, arrivedAt, fingerprint }) {
+    const bytes = new Blob([text]).size;
+    if (bytes > MAX_RECENT_ROUTE_SIZE) return { ok: false };
+    let db;
+    try { db = await openIDB(); } catch (e) { return { ok: false }; }
+    const withFingerprints = await withComputedFingerprints(db);
+    const storedName = recentRouteName(name);
+    // A .kml import may already be kept from before phase 5, converted to GPX text and stored
+    // under the matching .gpx name (no fingerprint, and a name the walk below never builds,
+    // since it only ever tries .kml candidates for a .kml import). cwKmlToGpxText is
+    // deterministic, so today's conversion of the same KML hashes the same as what that
+    // record stored. Computed once, used only when the normal walk finds no exact match by
+    // its own name, so a plain .kml import still walks (2), (3)... as before.
+    let legacyKmlName = null;
+    let legacyKmlFingerprint = null;
+    const kmlExt = /\.kml$/i.exec(storedName);
+    if (kmlExt && window.cwKmlToGpxText) {
+      try {
+        legacyKmlFingerprint = cwForecastRules.fingerprint(window.cwKmlToGpxText(text));
+        legacyKmlName = `${storedName.slice(0, -kmlExt[0].length)}.gpx`;
+      } catch (e) { legacyKmlFingerprint = null; }
+    }
+    const result = await new Promise((resolve) => {
+      let tx;
+      try { tx = db.transaction(IDB_STORE, 'readwrite'); } catch (e) { return resolve({ ok: false }); }
+      let chosen = null;
+      tx.oncomplete = () => resolve({ ok: true, name: chosen });
+      tx.onabort = () => resolve({ ok: false });
+      tx.onerror = () => resolve({ ok: false });
+      const store = tx.objectStore(IDB_STORE);
+      const all = store.getAll();
+      all.onsuccess = () => {
+        const records = all.result || [];
+        // Matched by id against the pre-read, enriched copy; a record added or removed since
+        // then (nothing else writes here, but a match by identity stays correct either way)
+        // just falls back to the record as read now.
+        const byId = new Map((withFingerprints || []).map((r) => [r.id, r]));
+        const forMatch = records.map((r) => byId.get(r.id) || r);
+        let pick = cwForecastRules.uniqueRouteName(forMatch, { name: storedName, fingerprint, bytes });
+        if (pick.replaceId == null && legacyKmlFingerprint != null) {
+          const legacy = forMatch.find((r) => r && r.name === legacyKmlName && r.fingerprint === legacyKmlFingerprint);
+          if (legacy) pick = { name: pick.name, replaceId: legacy.id };
+        }
+        chosen = pick.name;
+        // Stored times can be ahead of this clock (the phone's clock was changed). The route
+        // arriving now is still the newest, or the trim below would delete it.
+        const at = records.reduce((top, r) => Math.max(top, (Number(r.timestamp) || 0) + 1), arrivedAt);
+        // Stored as text, not a Blob: WebKit's IndexedDB throws UnknownError on a Blob
+        // put (Chromium accepts it), so iOS silently kept no recent route at all. A
+        // record from an older Android/web build still has `blob` instead and every
+        // read path above already falls back to it.
+        const record = {
+          name: pick.name, size: bytes, lastModified: at, timestamp: at, fingerprint,
+          content: text,
+        };
+        let write;
+        if (pick.replaceId != null) {
+          record.id = pick.replaceId;
+          write = store.put(record);
+        } else {
+          write = store.add(record);
+        }
+        write.onsuccess = () => {
+          const kept = records.filter((r) => r.id !== pick.replaceId).concat([{ id: write.result, timestamp: at }]);
+          kept.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          kept.slice(MAX_RECENT_ROUTES).forEach((r) => store.delete(r.id));
+        };
+      };
+    });
+    if (result.ok) {
+      try { recentRoutesCache = await idbGetAllRoutes(); } catch (e) { /* the menu catches up next time */ }
+      updateRecentRoutesUI();
+    }
+    return result;
+  }
+  window.cwIdbImportRoute = idbImportRoute;
+
+  // For callers holding a File (userscripts included): it joins the import queue.
   async function saveRecentRoute(file) {
     try {
-      if (recentRoutesDisabled) {
-        console.log('[MeteoRide] saveRecentRoute: recent routes disabled, skipping');
-        return;
-      }
-      // Prefer the displayed route name in the UI when available (rutaName element)
-      const displayed = (document.getElementById('rutaName')?.textContent || '').toString().trim();
-      const MAX_NAME_LEN = 64;
-      function sanitizeName(n) {
-        if (!n) return '';
-        // remove path separators and non-printable chars
-        let s = String(n).replace(/[\\/\n\r\t]+/g, '-').trim();
-        // collapse multiple spaces
-        s = s.replace(/\s+/g, ' ');
-        // truncate sensibly
-        if (s.length > MAX_NAME_LEN) s = s.substring(0, MAX_NAME_LEN).trim();
-        return s;
-      }
-      const baseFromUI = sanitizeName(displayed);
-      // If we have a nice UI name, use it; otherwise fall back to file.name
-      const rawSourceName = (file && file.name) ? String(file.name) : 'route.gpx';
-      const fallbackBase = sanitizeName(rawSourceName.replace(/\.gpx$/i, '').replace(/\.[^/.]+$/, '')) || 'route';
-      const chosenBase = baseFromUI || fallbackBase;
-      let chosenName = chosenBase;
-      if (!/\.gpx$/i.test(chosenName)) chosenName = `${chosenName}.gpx`;
-      console.log('[MeteoRide] saveRecentRoute: Starting to save route, sourceName=', rawSourceName, 'chosenName=', chosenName, 'size:', file.size);
-
-      // Skip files that are too large (configurable) to avoid huge storage usage in the UI
-      if (file.size > MAX_RECENT_ROUTE_SIZE) {
-        console.log('[MeteoRide] saveRecentRoute: File too large (', file.size, 'bytes), skipping save; limit=', MAX_RECENT_ROUTE_SIZE);
-        return;
-      }
-
-      // We store the original file as a Blob in IndexedDB and only keep metadata in memory.
-      try {
-  const blob = file instanceof Blob ? file : new Blob([file], { type: 'application/gpx+xml' });
-  const routeRecord = { name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), blob };
-
-        // Always overwrite if a route with same name exists
-        try {
-          const existing = await idbFindRouteByName(chosenName);
-          if (existing && existing.id != null) {
-            // Overwrite existing record
-            routeRecord.id = existing.id;
-            const id = await idbPutRoute(routeRecord);
-            console.log('[MeteoRide] saveRecentRoute: overwrote existing IndexedDB id=', id);
-            // Update in-memory metadata cache
-            const meta = { id: id, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
-            const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
-            if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-            recentRoutesCache.unshift(meta);
-            if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
-            updateRecentRoutesUI();
-            return;
-          }
-          // Otherwise add new
-          const id = await idbAddRoute(routeRecord);
-          // Update in-memory metadata cache
-          const meta = { id: id, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: routeRecord.timestamp };
-          const existingIndex = recentRoutesCache.findIndex(r => r.name === meta.name);
-          if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-          recentRoutesCache.unshift(meta);
-          if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
-
-          console.log('[MeteoRide] saveRecentRoute: persisted blob to IndexedDB id=', id);
-          updateRecentRoutesUI();
-          return;
-        } catch (idbErr) {
-          console.warn('[MeteoRide] saveRecentRoute: IndexedDB add failed, attempting fallback to localStorage', idbErr);
-          // Fallback: try to read as text and save a single newest route to localStorage
-          try {
-            const txt = await file.text();
-            const compressedContent = txt.replace(/\s+/g, ' ').trim();
-            // Overwrite by name in localStorage fallback
-            try {
-              const stored = localStorage.getItem(RECENT_ROUTES_KEY);
-              let arr = stored ? JSON.parse(stored) : [];
-              // Remove any existing with same name
-              arr = arr.filter(r => r.name !== chosenName);
-              arr.unshift({ name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now(), content: compressedContent });
-              arr = arr.slice(0, MAX_RECENT_ROUTES);
-              localStorage.setItem(RECENT_ROUTES_KEY, JSON.stringify(arr));
-            } catch (_){ /* ignore localStorage write errors */ }
-            // Remove any existing with same name from cache before adding
-            const existingIndex = recentRoutesCache.findIndex(r => r.name === chosenName);
-            if (existingIndex !== -1) recentRoutesCache.splice(existingIndex, 1);
-            recentRoutesCache.unshift({ id: null, name: chosenName, size: file.size, lastModified: file.lastModified, timestamp: Date.now() });
-            if (recentRoutesCache.length > MAX_RECENT_ROUTES) recentRoutesCache.splice(MAX_RECENT_ROUTES);
-            updateRecentRoutesUI();
-            return;
-          } catch (txtErr) {
-            console.error('[MeteoRide] saveRecentRoute: Fallback localStorage failed, disabling recent routes', txtErr);
-            recentRoutesDisabled = true;
-            try { localStorage.removeItem(RECENT_ROUTES_KEY); } catch(_){ }
-            updateRecentRoutesUI();
-            return;
-          }
-        }
-      } catch (e) {
-        console.error('[MeteoRide] saveRecentRoute: Exception while storing blob:', e);
-      }
+      return await window.cw.importRoute({ text: await file.text(), name: file.name });
     } catch (e) {
       console.error('[MeteoRide] saveRecentRoute: Exception:', e);
+      return { ok: false };
     }
   }
 
-  async function loadRecentRoute(routeData) {
-    try {
-      console.log('[MeteoRide] loadRecentRoute: Starting to load route', routeData.name || routeData.name);
-
-      // routeData may be a full record (with blob) or metadata (with id). If metadata, fetch full record.
-      let full = routeData;
-      if (!routeData.blob && routeData.id != null) {
-        full = await idbGetRouteById(routeData.id);
-      }
-      // Fallback: if we still don't have a blob but have 'content', create a blob
-      if (!full) {
-        console.warn('[MeteoRide] loadRecentRoute: Full record not found for', routeData.name);
-        return;
-      }
-      if (!full.blob && full.content) {
-        full.blob = new Blob([full.content], { type: 'application/gpx+xml' });
-      }
-
-      // If still no blob, try to find any string field that looks like GPX content
-      if (!full.blob) {
-        const keys = Object.keys(full || {});
-        let found = null;
-        for (const k of keys) {
-          try {
-            const v = full[k];
-            if (typeof v === 'string' && v.length > 20 && /<gpx|<trk|<trkseg|<wpt/i.test(v)) {
-              found = { key: k, value: v };
-              break;
-            }
-          } catch (_e) { /* ignore */ }
-        }
-        if (found) {
-          console.log('[MeteoRide] loadRecentRoute: Recovered GPX text from field', found.key);
-          full.blob = new Blob([found.value], { type: 'application/gpx+xml' });
+  // The stored text of a recent route: the record by id, then by name, then the old
+  // localStorage list. Null when none of them holds it.
+  async function readRecentRoute(routeData) {
+    if (!routeData) return null;
+    let full = routeData;
+    if (!routeData.blob && routeData.id != null) full = await idbGetRouteById(routeData.id);
+    if (!full) {
+      console.warn('[MeteoRide] readRecentRoute: Full record not found for', routeData.name);
+      return null;
+    }
+    // full.content is the normal shape and is already the text; only a legacy `blob`
+    // record needs decoding.
+    let text = typeof full.content === 'string' ? full.content : (full.blob ? await full.blob.text() : null);
+    // A record from an older version may keep the GPX under another field.
+    if (text == null) {
+      for (const k of Object.keys(full)) {
+        const v = full[k];
+        if (typeof v === 'string' && v.length > 20 && /<gpx|<trk|<trkseg|<wpt/i.test(v)) {
+          console.log('[MeteoRide] readRecentRoute: Recovered GPX text from field', k);
+          text = v;
+          break;
         }
       }
-
-      // Additional attempts: try to find by name in IndexedDB, or fallback to localStorage entries
-      if (!full.blob && routeData && routeData.name) {
-        try {
-          console.log('[MeteoRide] loadRecentRoute: attempting recovery by name for', routeData.name);
-          const byName = await idbFindRouteByName(routeData.name);
-          if (byName && (byName.blob || byName.content)) {
-            console.log('[MeteoRide] loadRecentRoute: found record by name in IndexedDB');
-            full = Object.assign({}, byName);
-            if (!full.blob && full.content) full.blob = new Blob([full.content], { type: 'application/gpx+xml' });
-          }
-        } catch (e) {
-          console.warn('[MeteoRide] loadRecentRoute: idbFindRouteByName failed', e);
-        }
-      }
-
-      if (!full.blob && routeData && routeData.name) {
-        try {
-          const stored = localStorage.getItem(RECENT_ROUTES_KEY);
-          if (stored) {
-            const arr = JSON.parse(stored || '[]');
-            const entry = arr.find(r => r && r.name === routeData.name && r.content);
-            if (entry) {
-              console.log('[MeteoRide] loadRecentRoute: recovered GPX from localStorage fallback for', routeData.name);
-              full.blob = new Blob([entry.content], { type: 'application/gpx+xml' });
-            }
-          }
-        } catch (e) { /* ignore parsing/localStorage errors */ }
-      }
-
-      if (!full.blob) {
-        console.warn('[MeteoRide] loadRecentRoute: No blob/content available for', full.name, 'record=', full);
-        return;
-      }
-
-      // Create a File object from the stored blob so existing flows that rely on File work unchanged
-      const file = new File([full.blob], full.name || routeData.name, { type: 'application/gpx+xml', lastModified: full.lastModified || Date.now() });
-      console.log('[MeteoRide] loadRecentRoute: Created File object, size:', file.size);
-
-      window.lastGPXFile = file;
-      console.log('[MeteoRide] loadRecentRoute: Set window.lastGPXFile');
-
-      const rutaBase = routeData.name.replace(/\.[^/.]+$/, "");
-      const rutaEl = document.getElementById("rutaName");
-      if (rutaEl) {
-        rutaEl.textContent = rutaBase ? rutaBase : "";
-        console.log('[MeteoRide] loadRecentRoute: Updated rutaName to', rutaBase);
-      }
-
-      if (typeof window.reloadFull === 'function') {
-        console.log('[MeteoRide] loadRecentRoute: Calling window.reloadFull()');
-        window.reloadFull();
-      } else {
-        console.error('[MeteoRide] loadRecentRoute: window.reloadFull not available');
-      }
-
-      // Move this route to the top of the in-memory cache and persist
+    }
+    if (text == null && routeData.name) {
       try {
-        const idx = recentRoutesCache.findIndex(r => r.name === routeData.name && r.size === routeData.size);
-        if (idx > 0) {
-          const [r] = recentRoutesCache.splice(idx, 1);
-          recentRoutesCache.unshift(r);
-          await idbSaveAll(recentRoutesCache);
-          updateRecentRoutesUI();
-          console.log('[MeteoRide] loadRecentRoute: Moved route to top');
+        const byName = await idbFindRouteByName(routeData.name);
+        if (byName && typeof byName.content === 'string') {
+          full = byName;
+          text = byName.content;
+        } else if (byName && byName.blob) {
+          full = byName;
+          text = await byName.blob.text();
         }
       } catch (e) {
-        console.warn('[MeteoRide] loadRecentRoute: failed to reorder/persist recent routes', e);
+        console.warn('[MeteoRide] readRecentRoute: idbFindRouteByName failed', e);
       }
-
-      console.log('[MeteoRide] loadRecentRoute: Completed successfully');
-    } catch (e) {
-      console.error('[MeteoRide] loadRecentRoute: Exception:', e);
     }
+    if (text == null && routeData.name) {
+      try {
+        const arr = JSON.parse(localStorage.getItem(RECENT_ROUTES_KEY) || '[]');
+        const entry = arr.find(r => r && r.name === routeData.name && r.content);
+        if (entry) text = entry.content;
+      } catch (e) { /* ignore parsing/localStorage errors */ }
+    }
+    if (text == null) {
+      console.warn('[MeteoRide] readRecentRoute: No blob/content available for', full.name);
+      return null;
+    }
+    const id = full.id != null ? full.id : (routeData.id != null ? routeData.id : null);
+    return { text, name: full.name || routeData.name, id };
+  }
+
+  // Opens a recent route through the coordinator. Only a route that reached the screen
+  // moves to the top of the list, and the list is read back from the store once it has.
+  async function loadRecentRoute(routeData) {
+    const status = await window.cw.requestRoute({ source: 'recent', read: () => readRecentRoute(routeData) });
+    if (status !== 'committed' || !routeData || routeData.id == null) return status;
+    try {
+      // The cache holds metadata only. Writing it back to the store would drop every
+      // stored GPX, so only the opened route's record is moved, in the import queue.
+      if (await window.cw.touchRecent(routeData.id)) {
+        recentRoutesCache = await idbGetAllRoutes();
+        updateRecentRoutesUI();
+      }
+    } catch (e) {
+      console.warn('[MeteoRide] loadRecentRoute: failed to reorder/persist recent routes', e);
+    }
+    return status;
   }
 
   // Initialize UI event listeners and recent routes
+  let uiInitialised = false;
   function initUI() {
+    // Called on script load and again from app.js on DOMContentLoaded; running twice
+    // registered the file listener twice and computed every route more than once.
+    if (uiInitialised) return;
+    uiInitialised = true;
     console.log('[MeteoRide] initUI: Starting initialization');
-    // Migrate any legacy localStorage entries into IndexedDB and populate cache
-    (async function() {
+    // Migrate any legacy localStorage entries into IndexedDB and populate cache. It is a job
+    // in the import queue: an import made meanwhile at start-up is neither overwritten by the
+    // older list read here nor raced by the migration and the duplicate cleanup.
+    window.cw.enqueueRecents(async function() {
       try {
         await migrateFromLocalStorage();
         recentRoutesCache = await idbGetAllRoutes();
@@ -2246,7 +1970,7 @@
         } catch (_) { recentRoutesCache = []; }
       }
       updateRecentRoutesUI();
-    })();
+    });
 
 
 
@@ -2256,35 +1980,14 @@
     
     if (gpxFileEl) {
       gpxFileEl.addEventListener("change", function () {
-        console.log('[MeteoRide] initUI: File input changed, files:', this.files.length);
-        if (!this.files.length) {
-          window.lastGPXFile = null;
-          console.log('[MeteoRide] initUI: No files selected');
-          return;
-        }
-        const file = this.files[0];
+        const file = this.files && this.files[0];
+        if (!file) return;
         console.log('[MeteoRide] initUI: Processing file', file.name, 'size:', file.size);
-        window.lastGPXFile = file;
-
-        // Save to recent routes
-        saveRecentRoute(file);
-
-        // Update UI
-        const val = (file.name) || (this.value.split("\\").pop() || this.value.split("/").pop() || "");
-        const rutaBase = val.replace(/\.[^/.]+$/, "");
-        const rutaEl = document.getElementById("rutaName");
-        if (rutaEl) {
-          rutaEl.textContent = rutaBase ? rutaBase : "";
-          console.log('[MeteoRide] initUI: Updated rutaName to', rutaBase);
-        }
-
-        // Trigger reload
-        if (typeof window.reloadFull === 'function') {
-          console.log('[MeteoRide] initUI: Calling window.reloadFull()');
-          window.reloadFull();
-        } else {
-          console.error('[MeteoRide] initUI: window.reloadFull not available');
-        }
+        // A file that turns out not to be a route leaves the one on screen and is not kept
+        // among the recent routes; a route that is shown goes in under the file's name.
+        let text = null;
+        window.cw.requestRoute({ source: 'file', read: async () => ({ text: (text = await file.text()), name: file.name }) })
+          .then((status) => { if (status === 'committed') window.cw.importRoute({ text, name: file.name }); });
       });
       console.log('[MeteoRide] initUI: File input event listener added');
     }
@@ -2302,6 +2005,11 @@
   window.initUI = initUI;
   // Expose saveRecentRoute for programmatic GPX loading (e.g., from userscript)
   window.saveRecentRoute = saveRecentRoute;
+  // Exposed so the native shell can put the last route back on screen when the app
+  // is opened cold, which is the difference between a blank app and a usable one.
+  window.getRecentRoutes = getRecentRoutes;
+  window.loadRecentRoute = loadRecentRoute;
+  window.cwReadRecentRoute = readRecentRoute;
 
   // Call initUI on script load
   initUI();

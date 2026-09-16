@@ -31,7 +31,7 @@
   "@type": "WebSite",
   "name": "MeteoRide",
   "url": "https://app.meteoride.cc/",
-  "description": "Route weather over your track for MTB, cycling and walking: rain, wind and temperature by segment.",
+  "description": "Route weather over your track for MTB, cycling and walking: rain, wind and temperature by segment."
 }
 </script>
 
@@ -116,25 +116,36 @@
     <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="alerts_section_title">Alertas</h4>
     <div class="config-row">
       <label class="inline">
-        <input type="checkbox" id="showWeatherAlerts" checked />
+        <input type="checkbox" id="showWeatherAlerts" checked aria-describedby="weatherAlertsKeyHint" />
         <span data-i18n="show_weather_alerts_label">Mostrar alertas meteorológicas oficiales</span>
       </label>
     </div>
+    <div id="weatherAlertsKeyHint" class="key-status" aria-live="polite" data-i18n="show_weather_alerts_needs_key" hidden>Requiere una API Key de OpenWeather.</div>
+    <!-- App only: scripts/native.js reveals it when the background runner exists.
+         The two status lines sit outside the row so the label gets exactly the same
+         treatment as every other checkbox row; both are invisible until filled. -->
+    <div class="config-row" id="rideAlertsRow" hidden>
+      <label class="inline">
+        <input type="checkbox" id="rideAlerts" checked />
+        <span data-i18n="ride_alerts_label">Avisarme si cambia el tiempo de la ruta</span>
+      </label>
+    </div>
+    <div id="rideAlertsStatus" class="ride-alerts-status" aria-live="polite"></div>
+    <div id="rideAlertsHint" class="ride-alerts-status ride-alerts-hint" hidden></div>
 
-    <!-- NEW: Debug button visibility option and condensed noticeAll on same line -->
+    <!-- Notices first, debug last: debug is the developer option of the two. -->
     <div class="config-row compact-inline">
       <label class="inline">
-        <input type="checkbox" id="showDebugButton" checked />
-        <span data-i18n="show_debug_button_label">Mostrar botón de debug</span>
-      </label>
-      <label class="inline compact-notice">
         <input type="checkbox" id="noticeAll" checked />
         <span data-i18n="notices_noncritical_label">Mostrar avisos no críticos</span>
+      </label>
+      <label class="inline">
+        <input type="checkbox" id="showDebugButton" />
+        <span data-i18n="show_debug_button_label">Mostrar botón de debug</span>
       </label>
     </div>
 
     <h4 style="font-size: 14px; margin: 8px 0; text-decoration: underline; color: #203050;" data-i18n="api_key_init">API Key</h4>
-    <!-- MeteoBlue API key input removed from UI (provider disabled by policy) -->
     <div class="config-row">
       <label for="apiKeyOW" data-i18n="api_key_label_ow">OpenWeather:</label>
   <input type="text" id="apiKeyOW" placeholder="" />
@@ -280,13 +291,19 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet-compass@1.5.6/dist/leaflet-compass.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.9.0/suncalc.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<script src="/scripts/version.js"></script>
+<!-- native shell bridge (no-op in a browser) -->
+<script src="/scripts/watch-rules.js"></script>
+<script src="/scripts/native.js"></script>
 <script src="/scripts/utils.js"></script>
+<script src="/scripts/forecast-rules.js"></script>
+<script src="/scripts/route-requests.js"></script>
+<script src="/scripts/tile-cache.js"></script>
 <script src="/scripts/gpx-share.js"></script>
 <!-- togeojson: convert KML to GeoJSON in-browser when available -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
 <script src="/scripts/ui.js"></script>
 <script src="/scripts/app.js"></script>
-<script src="/scripts/gpx-share.js"></script>
 <script src="/scripts/compare.js"></script>
 <script src="/scripts/ui_weather.js"></script>
 <script src="/scripts/console_debug.js"></script>
