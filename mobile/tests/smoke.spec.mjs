@@ -6592,6 +6592,70 @@ test('a slow body that keeps arriving for more than 15 s is never cut', async ({
   expect((await page.evaluate(() => window.__notices)).filter((n) => notResponding.test(n))).toEqual([]);
 });
 
+/** OpenWeather answered inside the page: its headers at once, then `stopAfter` pieces of the body
+ *  and silence, so the deadline falls while the body is being read rather than before it starts.
+ *  Only the first request is served this way; Open-Meteo is left to page.route. */
+async function streamOpenWeather(page, { now, pieces = 4, everyMs = 1000, stopAfter = 2 }) {
+  const base = Math.floor(now / 3600000) * 3600;
+  const hourly = Array.from({ length: 48 }, (_, i) => ({
+    dt: base + i * 3600, temp: 21, wind_speed: 3, wind_deg: 180, humidity: 60,
+    pop: 0.05, weather: [{ id: 800 }], uvi: 3, clouds: 20,
+  }));
+  const body = JSON.stringify({ timezone_offset: 0, hourly, daily: [] });
+  await page.addInitScript(({ body, pieces, everyMs, stopAfter }) => {
+    const real = window.fetch;
+    window.__owAsked = 0;
+    window.__owSent = 0;
+    window.fetch = function (input, init = {}) {
+      const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+      if (url.hostname !== 'api.openweathermap.org') return real(input, init);
+      if (++window.__owAsked !== 1) return real(input, init);
+      const bytes = new TextEncoder().encode(body);
+      const size = Math.ceil(bytes.length / pieces);
+      const stream = new ReadableStream({
+        start(controller) {
+          init.signal?.addEventListener('abort', () => { try { controller.error(new DOMException('aborted', 'AbortError')); } catch (_) {} });
+          for (let i = 0; i < Math.min(pieces, stopAfter); i++) {
+            setTimeout(() => {
+              try { controller.enqueue(bytes.slice(i * size, (i + 1) * size)); window.__owSent++; } catch (_) { /* aborted */ }
+            }, i * everyMs);
+          }
+        },
+      });
+      return Promise.resolve(new Response(stream, { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    };
+  }, { body, pieces, everyMs, stopAfter });
+}
+
+// The deadline was only handled around fetch() itself: a body that went silent threw from the read
+// below it, fell into the computation's generic catch and left that step with no data, while a
+// server that never answered at all took the fallback. The step whose body was cut must take the
+// same one — here OpenWeather stalls mid-body and Open-Meteo, on the other host, is fine.
+test('a primary answer whose body stops arriving falls back for that very step, not just the later ones', async ({ page }) => {
+  await startClock(page);
+  await goOffline(page);
+  await streamOpenWeather(page, { now: T0 });
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"timezone_offset":0,"hourly":[],"daily":[]}' }));
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const url = new URL(route.request().url());
+    const body = url.searchParams.get('timeformat') === 'unixtime' ? watchForecast(url) : forecastAround(T0);
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('showWeatherAlerts').checked = false; });
+  await selectOpenWeather(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(() => page.evaluate(() => window.__owSent)).toBe(2);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.steps ?? 0).toBeGreaterThan(1);
+  const shown = await shownSnapshot(page);
+  expect(shown.usable, 'the step whose body was cut went without data instead of falling back').toBe(shown.steps);
+});
+
 /* ---------- deadlines are per host, and a fallback crosses hosts (H4, fix round 1) ---------- */
 
 // AROME and Open-Meteo are the same service (api.open-meteo.com with models=arome_france_hd), so falling

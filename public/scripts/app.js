@@ -908,20 +908,27 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
 
       let res, json, ok = false;
 
+      // Where a request given up leaves this step, whether the server never started answering or its
+      // body went silent halfway: the way a network error takes it. OpenWeather is on another host,
+      // so Open-Meteo can be asked for; a step of AROME or Open-Meteo reads the cache and nothing
+      // else, its own host being the one that has just gone quiet. Null when this computation has
+      // been replaced, and then nothing more is pushed.
+      const afterTimeout = () => {
+        const sameHost = prov !== "openweather";
+        if (!sameHost) {
+          usedFallback = true;
+          usedFallbackError = true;
+        }
+        return openMeteoInstead(sameHost);
+      };
+
       try {
         const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
         try {
           res = await fetch(urlPrim, { cwRecorder: recorder });
         } catch (err) {
           if (err.name !== "TimeoutError") throw err;
-          // OpenWeather is on another host, so Open-Meteo can be asked for; a step of AROME or
-          // Open-Meteo reads the cache and nothing else.
-          const sameHost = prov !== "openweather";
-          if (!sameHost) {
-            usedFallback = true;
-            usedFallbackError = true;
-          }
-          const entry = await openMeteoInstead(sameHost);
+          const entry = await afterTimeout();
           if (!entry) return;
           results.push(entry);
           continue;
@@ -934,7 +941,19 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
           } catch (e) { /* ignore logging errors */ }
         }
         if (res.ok) {
-          json = await readJson(res);
+          try {
+            json = await readJson(res);
+          } catch (err) {
+            // The body of the primary answer went silent. Handled here and not in the computation's
+            // own catch further down, which would leave this step with no data while a server that
+            // never answered at all fell back: it is the same failure and takes the same road. Only
+            // the primary answer — the AROME merge below is best-effort and its own catch keeps it.
+            if (err.name !== "TimeoutError") throw err;
+            const entry = await afterTimeout();
+            if (!entry) return;
+            results.push(entry);
+            continue;
+          }
           if (!isCurrent()) return;
           // Sanity-check / normalize payload shape for OpenWeather
           if (prov === "openweather") {
