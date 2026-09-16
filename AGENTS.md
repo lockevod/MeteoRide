@@ -342,6 +342,16 @@ What is still open, and why it was left:
   table, not in the sticky column). Width, not `display`, is what changes on the
   column itself, since the table is `table-layout: fixed` and toggling `display` on a
   `<th>` would reflow every step column under it.
+- **The app is locked to portrait, deliberately: rotating breaks the layout badly.**
+  Native configuration only, on both platforms — nothing in `public/` changed, so the
+  website still rotates freely. iOS: `UISupportedInterfaceOrientations` (and its
+  `~ipad` counterpart, set explicitly rather than left to fall back to the iPhone one)
+  in `mobile/native/ios/Info.plist.additions.xml`, merged into `ios/App/App/Info.plist`
+  by hand as `docs/IOS.md` step 4 already describes — `mobile/ios/` is gitignored and
+  regenerated, so this is a one-time step per checkout, not something `npm run sync`
+  repeats. Android: `android:screenOrientation="portrait"` on `.MainActivity` in the
+  committed `AndroidManifest.xml`; there is only the one activity, and the share sheet
+  and file-open intent filters are on it too, so nothing else needs the same line.
 
 ## Gotchas found the hard way
 

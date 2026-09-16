@@ -49,6 +49,12 @@ The manifest accepts three things:
 Routes are stored under the app's private files directory and deleted as soon as the
 web layer reads them.
 
+`MainActivity` also carries `android:screenOrientation="portrait"`. The app is locked
+to portrait on purpose — rotating breaks the layout badly — and there is only the one
+activity to lock: the share sheet and file-open filters above are intent filters on
+`MainActivity` itself, not a separate activity, so this single line covers every way
+in as well as the launcher.
+
 The ride-alert watch (see the iOS document for what it does) runs through
 `@capacitor/background-runner` on WorkManager, which needs nothing in the project
 beyond what is committed: the `flatDir` line in `app/build.gradle` for the plugin's

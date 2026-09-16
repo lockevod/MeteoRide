@@ -69,6 +69,19 @@
 <key>NSLocationWhenInUseUsageDescription</key>
 <string>MeteoRide uses your location to centre the map on where you are.</string>
 
+<!-- Rotating breaks the layout badly, so the app is locked to portrait. Capacitor's
+     template ships all four orientations for both idioms; set both keys rather than
+     leave the iPad one to fall back, since `cap add ios` targets iPhone and iPad alike
+     unless that is changed by hand. -->
+<key>UISupportedInterfaceOrientations</key>
+<array>
+	<string>UIInterfaceOrientationPortrait</string>
+</array>
+<key>UISupportedInterfaceOrientations~ipad</key>
+<array>
+	<string>UIInterfaceOrientationPortrait</string>
+</array>
+
 <!-- Ride alerts: the background task the runner schedules. The identifier must equal
      plugins.BackgroundRunner.label in mobile/capacitor.config.json. Xcode adds
      UIBackgroundModes itself when "Background fetch" and "Background processing" are
