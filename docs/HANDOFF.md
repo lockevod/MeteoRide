@@ -397,6 +397,23 @@ revisiones adversariales internas y una revisión adversarial externa).
 
 - Ninguno: los seis están corregidos (§9).
 
+### La ayuda dentro de la app
+
+Ya no es la de la web tal cual: las secciones son `<details>` escritos abiertos (la web
+se lee igual que siempre, porque el `summary` no acepta clics; solo `help.js` las cierra
+bajo `cw-native`), las recetas para instalar la PWA son `.web-only` y desaparecen dentro
+de la app, y el texto se repasó contra el código en los dos idiomas.
+
+- **Sin comprobar en aparato.** `env(safe-area-inset-top)` vale cero en los navegadores
+  de la suite y Playwright no puede simular un inset, así que los tests solo afirman que
+  la regla existe y que el `calc()` es válido —no que el botón de volver quede por debajo
+  de la isla dinámica en un iPhone real—. El `viewport-fit=cover` del que depende lo
+  añade `patchBundledHtml`, solo al paquete.
+- **La paridad entre idiomas la sostiene un test de estructura**
+  (`mobile/tests/help-pages.test.mjs`): mismas secciones en el mismo orden y mismo número
+  de encabezados y viñetas. Compara la forma, no la prosa: una traducción que diga otra
+  cosa con el mismo número de viñetas pasaría.
+
 ### WebKit en Playwright: la causa de los 55 fallos, resuelta
 
 Medido en la tarea 9 sin arreglar nada

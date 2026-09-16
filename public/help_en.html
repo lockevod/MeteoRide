@@ -186,7 +186,7 @@
 
     <details class="section" open>
         <summary><h2>🚀 Introduction</h2></summary>
-    <p>MeteoRide is a web application designed for cyclists that lets you load GPX/KML routes and get detailed weather forecasts along the route.</p>
+    <p>MeteoRide is an application for cyclists —on the web and as an iPhone and Android app— that lets you load GPX/KML routes and get detailed weather forecasts along the route.</p>
         <p>The app automatically computes route steps based on the selected cycling speed and fetches data from multiple weather providers to show temperature, wind, precipitation, humidity, cloudiness, luminosity and more.</p>
         <p>It includes automatic fallback options to ensure data even if a provider fails, and lets you compare forecasts from different sources.</p>
         <p>It's ideal for planning safe, weather-aware rides.</p>
@@ -199,7 +199,7 @@
             <h3>1. Load a GPX/KML Route</h3>
             <p>Click the <strong>📁</strong> button to select your GPX or KML file. MeteoRide supports standard tracks, routes and waypoints.</p>
             <div class="tip">
-                <strong>💡 Tip:</strong> You can also use direct URLs with parameters like <code>?gpx_url=</code> to load routes automatically. For details about sharing routes from iOS or Android check the project page on GitHub.
+                <strong>💡 Tip:</strong> You can also use direct URLs with parameters like <code>?gpx_url=</code> to load routes automatically. For details about sharing routes from iOS or Android check the project page on <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>.
             </div>
             <div class="tip">
                 <strong>🔗 Export from Komoot/Bikemap/Hammerhead:</strong> There is a Tampermonkey userscript that adds a button on Komoot and Bikemap to open the current route directly in MeteoRide. Note that GPX downloads on Komoot require a <strong>Premium</strong> account. See the README for installation instructions.
@@ -362,6 +362,9 @@
             <li>With no route loaded, the map opens where you are rather than in Barcelona.</li>
             <li>The app starts in the phone's language until you pick one by hand.</li>
             <li>Units, language and your API key are also kept outside the internal browser, so they survive the system reclaiming space.</li>
+            <li>The first time the map looks for you, the system asks for location permission in MeteoRide's name.</li>
+            <li>Recent routes and the tiles you have already looked at are stored in a form WebKit does keep, so on iPhone they are still there when you open the app again. They were not before.</li>
+            <li>The phone stays in portrait, because turning it breaks the layout. The iPad does rotate.</li>
         </ul>
     </details>
 
@@ -483,7 +486,7 @@
         <h3>💾 Local cache and performance</h3>
         <p>
             Provider responses are stored in <code>localStorage</code> for ~30 minutes per step/hour.
-            This speeds up frequent reloads and reduces requests to rate-limited APIs. You can clear the cache from your browser devtools.
+            This speeds up frequent reloads and reduces requests to rate-limited APIs. It expires on its own: there is nothing to clear by hand.
         </p>
     </details>
 
@@ -516,7 +519,7 @@
         <p>MeteoRide can display official weather warnings published by national meteorological services when these are exposed in the <code>alerts</code> of the OpenWeather. To enable alerts you must enter your <strong>OpenWeather API Key</strong> in Settings and check <strong>Show official weather alerts</strong>.</p>
 
         <ul>
-            <li><strong>Availability:</strong> Requires an OpenWeather API Key. If the key is configured MeteoRide will check for alerts even when OpenWeather is not the selected primary provider.</li>
+            <li><strong>Availability:</strong> Requires an OpenWeather API Key, as it is the only provider that publishes them. If the key is configured MeteoRide will check for alerts even when OpenWeather is not the selected primary provider; without a key the checkbox is disabled and says why.</li>
             <li><strong>Visibility:</strong> When an alert is detected a non‑invasive info card will appear (auto‑hides after 15 seconds). A persistent <strong>⚠️</strong> indicator is also created in the UI so you can re-open all detected alerts.</li>
             <li><strong>Sampling & efficiency:</strong> To limit API calls MeteoRide samples a representative set of points along the route (approx. 2/3 of steps, minimum 3). Alert responses are cached locally for ~1 hour.</li>
             <li><strong>Time window:</strong> Only alerts whose period (start/end) overlap the route time windows are considered (a ±1 hour tolerance is applied around the matching step).</li>
@@ -571,7 +574,7 @@
         <h3>🗂️ What is stored locally</h3>
         <ul>
             <li>Units and language settings</li>
-            <li>API Keys (stored in your browser)</li>
+            <li>API Keys (stored in your browser, not encrypted)</li>
             <li>Speed and interval preferences</li>
             <li>Temporary weather data cache (30 minutes)</li>
         </ul>
@@ -622,8 +625,8 @@
         <h3>🐛 Report Issues</h3>
         <ul>
             <li>Visit the <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">GitHub repository</a></li>
-            <li>Enable debug mode (🐞) to get technical details</li>
-            <li>Include device and browser details</li>
+            <li>Turn the debug button (🐞) on under <strong>Settings → Show debug button</strong>: it starts off</li>
+            <li>Include your device and the version, shown at the foot of this page</li>
         </ul>
 
         <h3>🤝 Contribute to the Project</h3>

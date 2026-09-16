@@ -248,6 +248,23 @@ What is still open, and why it was left:
   which belongs on a help page), but Capacitor injects its bridge into every page in
   the web view, so the same check works. Anything added to the shell that a reader
   cannot work out from a button belongs in both languages there.
+- **There is a `.web-only` counterpart, and the sections collapse.** The recipes for
+  installing the PWA are noise to a reader already inside the app, so
+  `html.cw-native .web-only` hides that section. Every section is a `<details>`
+  written `open`: that is what the website shows and what a reader without JavaScript
+  gets, and only `help.js` closes them, only under `cw-native`, so the phone gets an
+  index to tap instead of 600 lines to scroll. The website takes no clicks on a
+  `<summary>` (`pointer-events: none`), so it reads exactly as it did before.
+  `mobile/tests/help-pages.test.mjs` compares the two languages section by section —
+  same sections in the same order, same count of headings and bullets — because the
+  failure mode here has always been an edit landing in one language only.
+- **The help pages' back button pays for the notch itself.** `.header` adds
+  `env(safe-area-inset-top)` to its padding, and the absolutely positioned button adds
+  half of it back to its own offset, because an absolute offset measures from the
+  border box the inset just grew. Insets are only reported to a page whose viewport
+  covers the screen, which is why `patchBundledHtml` adds `viewport-fit=cover` to the
+  bundled pages: without it `env()` is zero and the rule does nothing. The website
+  keeps its own viewport, having no notch to dodge.
 - **The icon set holds two different drawings.** Every PNG in `public/icons/` shares
   one artwork with a 9% transparent margin — except `icon-ios.png`, which is the one
   `<link rel="apple-touch-icon">` points at, so it is what iOS actually shows for the
