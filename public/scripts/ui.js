@@ -1375,6 +1375,9 @@
         // the others were imported). Stay above every OTHER record so opening a route
         // never demotes it below routes that arrived earlier while the clock ran fast.
         const top = records.reduce((max, r) => (r.id === id ? max : Math.max(max, Number(r.timestamp) || 0)), 0);
+        // Puts back whatever shape it read, `blob` included on a legacy record. Safe: a
+        // `blob` field can only exist on an engine whose IndexedDB already accepted a
+        // Blob in a put, so re-putting the same record here cannot newly fail on it.
         store.put(Object.assign(current, { timestamp: Math.max(timestamp, top + 1) }));
         moved = true;
       };
@@ -1858,42 +1861,47 @@
       console.warn('[MeteoRide] readRecentRoute: Full record not found for', routeData.name);
       return null;
     }
-    let blob = full.blob || (full.content ? new Blob([full.content], { type: 'application/gpx+xml' }) : null);
+    // full.content is the normal shape and is already the text; only a legacy `blob`
+    // record needs decoding.
+    let text = typeof full.content === 'string' ? full.content : (full.blob ? await full.blob.text() : null);
     // A record from an older version may keep the GPX under another field.
-    if (!blob) {
+    if (text == null) {
       for (const k of Object.keys(full)) {
         const v = full[k];
         if (typeof v === 'string' && v.length > 20 && /<gpx|<trk|<trkseg|<wpt/i.test(v)) {
           console.log('[MeteoRide] readRecentRoute: Recovered GPX text from field', k);
-          blob = new Blob([v], { type: 'application/gpx+xml' });
+          text = v;
           break;
         }
       }
     }
-    if (!blob && routeData.name) {
+    if (text == null && routeData.name) {
       try {
         const byName = await idbFindRouteByName(routeData.name);
-        if (byName && (byName.blob || byName.content)) {
+        if (byName && typeof byName.content === 'string') {
           full = byName;
-          blob = byName.blob || new Blob([byName.content], { type: 'application/gpx+xml' });
+          text = byName.content;
+        } else if (byName && byName.blob) {
+          full = byName;
+          text = await byName.blob.text();
         }
       } catch (e) {
         console.warn('[MeteoRide] readRecentRoute: idbFindRouteByName failed', e);
       }
     }
-    if (!blob && routeData.name) {
+    if (text == null && routeData.name) {
       try {
         const arr = JSON.parse(localStorage.getItem(RECENT_ROUTES_KEY) || '[]');
         const entry = arr.find(r => r && r.name === routeData.name && r.content);
-        if (entry) blob = new Blob([entry.content], { type: 'application/gpx+xml' });
+        if (entry) text = entry.content;
       } catch (e) { /* ignore parsing/localStorage errors */ }
     }
-    if (!blob) {
+    if (text == null) {
       console.warn('[MeteoRide] readRecentRoute: No blob/content available for', full.name);
       return null;
     }
     const id = full.id != null ? full.id : (routeData.id != null ? routeData.id : null);
-    return { text: await blob.text(), name: full.name || routeData.name, id };
+    return { text, name: full.name || routeData.name, id };
   }
 
   // Opens a recent route through the coordinator. Only a route that reached the screen

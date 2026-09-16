@@ -338,7 +338,8 @@ What is still open, and why it was left:
   fails right after an edit is probably running the previous build. This cost a long
   debugging detour into code that was already correct.
 - **The in-memory recent-routes cache holds metadata only; never write it back to
-  IndexedDB.** The GPX lives only in each stored record's `blob`. Opening an older
+  IndexedDB.** The GPX lives only in each stored record's `content` (a string; a record
+  from an older build still carries `blob`, and every read falls back to it). Opening an older
   recent route used to clear the store and re-add the cache, which wiped every stored
   route and renumbered them, so the menu and the native cold-start restore found
   nothing. Reordering now rewrites just the opened record with a new `timestamp`.
@@ -1105,7 +1106,8 @@ runtime, because `app.js` and `ui.js` load after it.
   falls back to localStorage on write any more**; reading and migrating old localStorage
   entries stay. A record from before fingerprints existed (phase 3) has none stored: before
   matching, `idbImportRoute` reads once, outside the write transaction, every such record's
-  blob and computes its fingerprint from the content, so a route already kept under one of
+  stored text (`content`, or `blob` on a record from an older build) and computes its
+  fingerprint from it, so a route already kept under one of
   these is still recognised and moved up rather than duplicated. That computed fingerprint
   is not written back, so it is recomputed on every import while the record stays
   unmatched (ponytail: negligible at five records; persist it the first time if this ever

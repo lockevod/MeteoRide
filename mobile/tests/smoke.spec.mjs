@@ -139,7 +139,9 @@ const storedRoutes = (page) =>
           all.onsuccess = () =>
             resolve(
               all.result
-                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : (r.content ? r.content.length : 0), fingerprint: r.fingerprint }))
+                // UTF-8 byte count either way, so it means the same thing for a legacy Blob
+                // record and a text one, and compares like-for-like with the stored `size`.
+                .map((r) => ({ id: r.id, name: r.name, bytes: r.blob ? r.blob.size : (r.content ? new Blob([r.content]).size : 0), fingerprint: r.fingerprint }))
                 .sort((a, b) => a.id - b.id)
             );
         };
@@ -2423,6 +2425,45 @@ test('a recent route is stored as text, not a Blob', async ({ page }) => {
   expect(shape).toEqual({ isBlob: false, contentType: 'string', hasBlobField: false });
 });
 
+// A record written before this change still carries `blob`, not `content`, and has no
+// fingerprint (phase 3 predates fingerprints too). Every read path must fall back to it.
+// Chromium-only: seeding a Blob in IndexedDB is exactly what WebKit cannot do, so there is
+// no engine on which a legacy record could exist there to begin with.
+test('a recent route written by an older build (a Blob, no fingerprint) is still listed, opened and matched on reimport', async ({ page, browserName }) => {
+  test.skip(browserName === 'webkit', 'a legacy Blob record cannot be seeded on an engine that cannot store one');
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const text = routeAt('Legado', 41.48);
+  await page.evaluate((t) => new Promise((resolve, reject) => {
+    const open = indexedDB.open('meteoride_recent_routes_db');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('routes', 'readwrite');
+      const blob = new Blob([t], { type: 'application/gpx+xml' });
+      tx.objectStore('routes').add({ name: 'legado.gpx', size: blob.size, lastModified: Date.now(), timestamp: Date.now(), blob });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    };
+  }), text);
+
+  // A cold start lists it like any other stored route.
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().map((r) => r.name))).toEqual(['legado.gpx']);
+
+  // Opened through the same coordinator path every recent route uses.
+  const status = await page.evaluate(() => window.loadRecentRoute(window.getRecentRoutes()[0]));
+  expect(status).toBe('committed');
+  await expect(routeName(page)).toContainText('Legado');
+  await expect(trackDrawn(page)).not.toHaveCount(0);
+
+  // Reimporting the same content is matched by the fingerprint backfilled from the Blob's
+  // own text, not kept as a second record.
+  expect(await importRecent(page, text, 'legado.gpx')).toEqual({ ok: true, name: 'legado.gpx' });
+  expect(await storedNames(page)).toEqual(['legado.gpx']);
+});
+
 test('two different routes under the same name are both kept', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
@@ -4237,6 +4278,22 @@ test('map tiles already seen survive losing coverage', async ({ page }) => {
   await expect
     .poll(async () => (await page.evaluate(() => window.cwTileCacheStats())).tiles)
     .toBeGreaterThan(0);
+
+  // WebKit's IndexedDB throws UnknownError on a Blob put; a cached tile must be raw
+  // bytes, never a Blob (mirrors the recent-routes shape test above).
+  const tileShape = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('cw_tiles', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const all = open.result.transaction('tiles').objectStore('tiles').getAll();
+      all.onsuccess = () => {
+        const r = all.result[0];
+        resolve({ isBlob: r.bytes instanceof Blob, bytesType: r.bytes && r.bytes.constructor.name, hasBlobField: 'blob' in r });
+      };
+      all.onerror = () => reject(all.error);
+    };
+  }));
+  expect(tileShape).toEqual({ isBlob: false, bytesType: 'ArrayBuffer', hasBlobField: false });
 
   // Out of coverage, cold start: the route restores and the background comes back
   // from what was stored, so the map is not a blank rectangle.
