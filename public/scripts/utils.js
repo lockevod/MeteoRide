@@ -577,7 +577,7 @@
     const sdb = document.getElementById("showDebugButton");
     const debugButton = document.getElementById("toggleDebug");
     if (sdb && debugButton) {
-      sdb.checked = (s.showDebugButton !== false); // Default to true
+      sdb.checked = (s.showDebugButton === true); // Default to false; a stored value (true or false) wins
       if (sdb.checked) {
         debugButton.classList.remove('debug-hidden');
         debugButton.style.display = ''; // Reset any inline styles

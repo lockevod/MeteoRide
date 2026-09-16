@@ -3014,6 +3014,21 @@ test('settings that only change how it looks never compute the forecast again', 
   expect(await shownTemperatures(page)).toEqual(before);
 });
 
+test('a fresh install starts with the debug button off', async ({ page }) => {
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(page.locator('#showDebugButton')).not.toBeChecked();
+  await expect(page.locator('#toggleDebug')).toBeHidden();
+});
+
+test('a stored preference for the debug button survives, on or off', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ showDebugButton: true })));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(page.locator('#showDebugButton')).toBeChecked();
+  await expect(page.locator('#toggleDebug')).toBeVisible();
+});
+
 test('detailed notices switch the notice of the forecast on screen on and off', async ({ page }) => {
   let calls = 0;
   await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
@@ -4036,6 +4051,8 @@ test('a route posted before the map exists is drawn once the map is ready, and o
 test('the app toolbar stays on one line', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
+  // The debug button is off by default now; turn it on so both app-only buttons are on screen.
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ showDebugButton: true })));
   await page.goto('/index.html');
   await mapReady(page);
 
