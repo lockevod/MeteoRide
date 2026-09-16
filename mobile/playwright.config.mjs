@@ -25,7 +25,8 @@ export default defineConfig({
       },
     },
     {
-      // Same engine WKWebView uses on iOS. Not run by `npm test`; see `npm run test:webkit`.
+      // Same engine WKWebView uses on iOS. Part of the default `npm test` gate; run it
+      // alone with `npm run test:webkit`.
       name: 'mobile-webkit',
       use: {
         ...devices['iPhone 14'],

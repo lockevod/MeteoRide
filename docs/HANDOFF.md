@@ -142,8 +142,9 @@ presente para la app nativa:
 - Firma de release de Android sin configurar: `assembleRelease` no firma.
 - Borrar la rama remota obsoleta `claude/cool-allen-w8evld` (desde GitHub, por el
   autor: una sesión de agente recibe 403).
-- Suite solo en Chromium; iOS usa WKWebView. Añadir el proyecto `webkit` de
-  Playwright cerraría casi todo ese hueco.
+- La suite corre ya en Chromium y WebKit (`npm test`, tarea 11 + cierre de la
+  tarea 9/10), pero solo en el WebKit de escritorio de Playwright; sigue sin
+  probarse en un iPhone físico.
 - Nada ejecuta los tests automáticamente: un job de GitHub Actions en los PR cuesta
   unas pocas líneas.
 - Ideas, no pendientes: tip jar (en iOS solo como compra in-app), conexión con Strava
@@ -399,8 +400,9 @@ tipo; crear un `Blob` en memoria para pintar una tesela o para leer una ruta
 sigue funcionando en WebKit, solo falla guardarlo. Un registro de una versión
 anterior de Android o de la web sigue teniendo `blob` directamente y cada
 lectura cae de vuelta a él, así que no hizo falta ninguna migración. Con eso,
-`mobile-webkit` queda en 261/261 (`npm run test:webkit`, tarea 11); sigue
-fuera de `npm test` por decisión, no por ningún fallo pendiente.
+`mobile-webkit` queda en 261/261 y se incorpora a la puerta por defecto:
+`npm test` corre ahora los dos motores (`npm run test:webkit` sigue lanzando
+WebKit solo).
 
 ### Límites aceptados (decididos, no se arreglan salvo que se pida)
 

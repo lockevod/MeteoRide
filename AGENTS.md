@@ -1413,8 +1413,8 @@ a replay takes the ones in use ("Preparing and replaying").
 
 ```bash
 cd mobile
-npm install                     # once; plus `npx playwright install chromium`
-npm test                        # builds the bundle, then runs the smoke suite (mobile-chromium only)
+npm install                     # once; plus `npx playwright install chromium webkit`
+npm test                        # builds the bundle, then runs the smoke suite on both engines
 node --check public/scripts/<file>.js
 ```
 
@@ -1432,9 +1432,12 @@ with `type` alongside); a `Blob` is still built in memory to paint a tile or
 hand a route's text to a reader, since only *storing* one fails, not creating
 one. A record written by an older Android/web build still carries `blob`
 directly and every read path falls back to it, so nothing needed migrating.
-`mobile-webkit` is still not part of `npm test` — `npx playwright install
-webkit` once, then `npm run test:webkit` — but the suite is fully green there
-now (261/261, task 11).
+`mobile-webkit` is now part of the default `npm test` gate, alongside
+`mobile-chromium` — the suite is fully green on both (task 11 fixed the last
+failures). Each engine takes roughly 40 s, so `npm test` costs about 80 s of
+Playwright time instead of 40 s; accepted because the WebKit-only IndexedDB
+bug stayed invisible for the whole project life under a Chromium-only gate.
+Run WebKit alone with `npm run test:webkit`.
 
 `node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
 without a browser, and drives the assembled `www/runners/watch.js` through its three
@@ -1493,12 +1496,11 @@ code does and what makes the race reproducible.
   an agent session here gets a 403 trying.
 - The smoke suite stubs provider responses, so providers, the weather table, comparison modes and the
   unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
-- The suite runs on Chromium by default. A `mobile-webkit` project exists
-  (`npm run test:webkit`, see «Verifying a change» above) but is not wired into
-  `npm test`. It used to fail 55 of 260 there; the IndexedDB `Blob`-write cause
-  behind 54 of those is fixed (task 11, §10 of `docs/HANDOFF.md`) and the suite
-  is now 261/261 on WebKit, so nothing is left to explain — whether to wire it
-  into `npm test` by default is still an open call, not a correctness gap.
+- `npm test` runs the suite on both Chromium and WebKit (`mobile-webkit`, see
+  «Verifying a change» above; `npm run test:webkit` runs that engine alone).
+  WebKit used to fail 55 of 260; the IndexedDB `Blob`-write cause behind 54 of
+  those is fixed (task 11, §10 of `docs/HANDOFF.md`) and the suite is 261/261
+  there, so it was folded into the default gate.
 - The iOS native code has now been compiled and run in the simulator on the author's
   Mac — the app launches, the app-local plugin registers, the App Group resolves and a
   GPX loads from Files. Nothing here compiles it: everything written in this
