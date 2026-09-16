@@ -565,7 +565,8 @@ location reads the same answer, the extraction picking the hour by `dt`. The tab
 answer under the step's quarter-hour key and again under a key for each hourly entry: for
 `route.gpx` with the test stub, 147 writes and 900 522 serialized characters for 3 requests; now 3
 writes and 18 378. Those copies only helped a step on the hour exactly. Keys in the old shape (they
-end in the ISO `Z`) are never read and are deleted once at start-up in `utils.js`. Both units stay in
+end in the ISO `Z`) are never read and are deleted at start-up in `utils.js` — a scan of the whole of
+`localStorage` on every start, not once ever; the cost is negligible and nothing tracks that it ran. Both units stay in
 the key, so ºF never reads a ºC answer. The key does not say whether the answer came with alerts,
 as it did not before; the table only takes alerts from a network answer.
 
@@ -598,17 +599,26 @@ watched body is read (the table's error snippet uses it too). A request given up
 `recorder.timedOut` — told by the URL (`openweather`; `aromehd` for `models=arome_france_hd`; otherwise
 `openmeteo`), and what a notice names — and its **host** in `recorder.timedOutHosts`. The step then goes
 the way a network error takes it: no data in the table (its `catch`), a named gap in a comparison.
+A deadline that falls while the body is being read takes the step down that same road: it used to
+throw past the fallback into the computation's generic `catch`, leaving that one step with no data
+while a server that never answered at all fell back cleanly.
 **The deadline is per host, not per provider**, because AROME is Open-Meteo asked for another model:
 falling back from AROME to Open-Meteo would only wait again on a host that has just gone silent. So no
 later request of that computation or comparison reaches that host, whichever of its providers a step
-wants — the wrapper rejects them at once, noted as `timeout` — and a silent host costs 15 s once, 30 s at
+wants — the wrapper rejects them at once, noted as `timeout`, counted as that step's failure but never as a
+sign of the connection, since nothing was sent — and a silent host costs 15 s once, 30 s at
 worst for the two of them, with a new computation asking again. A step whose provider was given up falls
 back only across hosts: OpenWeather asks Open-Meteo, as an HTTP error already makes it, and never AROME,
 since Open-Meteo is global and AROME covers part of Europe — so that is the stand-in whatever the chain
 says. A step of AROME or Open-Meteo has no stand-in to ask for, but an Open-Meteo
 answer already in the cache still stands in: the rule is not to wait on that host again, not to refuse
 data already downloaded. With nothing cached, those steps and the later ones have no data. An HTTP
-error leaves every chain as it was. The table's outcome names
+error leaves every chain as it was. The standard request that completes an AROME answer is
+best-effort — its failure is swallowed and raises no flag — so it gives up no host either:
+`cw.utils.bestEffortRecorder` hands it a recorder carrying the computation's signal and deadline
+whose notes go nowhere, one per computation so a host that does go silent still costs a single
+wait. Without that, one silent completion blanked every later step of a route AROME was answering
+perfectly and painted "Open-Meteo is not responding" over a table asked of AROME-HD. The table's outcome names
 the providers given up (`failedProviders`, `{ status: 'timeout' }`): `decideNotice` says
 `provider_unreachable` over an empty table and `provider_not_responding` over a partial one, as a
 comparison does, in place of that computation's fallback notices. Each recorder carries the signal of
@@ -618,8 +628,9 @@ cancelling a comparison aborts the earlier comparison's. An aborted request or b
 replaced is no provider's failure. The official-warnings lookup has a recorder of its own, so it is timed,
 given up and aborted the same way and never reaches the notice; it shares the computation's list of
 silent hosts, so it never waits its own 15 s on one the steps have already given up, which used to hold
-the publish back. A request without a recorder (the ride
-watch's baseline, the API-key test) has no deadline. In the Playwright suite a test that holds a provider
+the publish back. A request without a recorder gets no deadline from the wrapper: the ride watch's
+baseline now sets a plain 15 s total one of its own (`AbortSignal.timeout`, not the wrapper's rule,
+which measures silence), so the API-key test is the only provider request left without any. In the Playwright suite a test that holds a provider
 while it fast-forwards past 15 s gives that request up, so pass long spans before holding;
 `streamProvider` answers inside the page to send a body in pieces on the page's clock.
 
@@ -765,6 +776,14 @@ Things that were decided rather than discovered:
   difference between providers as a change in the weather. So the web view reads the
   baseline from the runner's own request when it arms the watch, and offline the
   runner seeds it on its first run and stays silent that time.
+- **A baseline records which reading made it** (`BASELINE_VERSION`). Nothing re-arms a watch in the
+  background, so an app update that changes which entry `readForecast` takes leaves behind stored
+  baselines about another hour: comparing the new reading against one of them announces the change
+  of reader as a change in the weather, or hides a real one. `evaluate` reseeds the rain of a
+  baseline whose version does not match — that check reports no rain, the wind is read as it always
+  was and keeps its baseline, and the warnings already notified are untouched — and `reuse` drops
+  such a baseline in the foreground, where `seedBaseline` simply reads it again and stamps it.
+  Raise the number whenever `readForecast` changes which entry a magnitude comes from.
 - **Levels with a margin, and each point's rain and wind keep their own baseline.** A
   value sitting on 20 km/h would otherwise wake the phone every half hour. Rain, and
   wind together with its gust, move to the current reading only when that magnitude was
@@ -862,8 +881,9 @@ Four things changed on purpose when the extraction moved, each in its own commit
   zone: a phone in another zone than the route read other hours. Without that field the old
   reading stays. The table does it through `processWeatherData` → `extractStep`; since phase 4
   the comparison (`extractStepMetrics` in `compare.js`) picks its Open-Meteo and AROME hours
-  with the same `cwForecastRules.nearestIndex` and offset, and the rest of its extraction is
-  still its own.
+  with the same `cwForecastRules.nearestIndex` and offset, and since the closing round its
+  OpenWeather reading goes through `extractStep` as well, so no provider is extracted twice
+  anywhere any more.
 - **AROME is completed hour by hour.** A variable AROME lacks was copied from Open-Meteo slot
   by slot even when the two time axes differed. A value is now taken only for an hour both
   answers have; with no standard time axis nothing is copied onto AROME hours.
@@ -901,7 +921,10 @@ re-reading a distant hourly entry: `extractOpenWeather` (`forecast-rules.js:98-1
 an hourly entry only within an hour of the step's time and otherwise picks the `daily`
 entry whose own local date (`dt` plus `timezone_offset`) matches the step's — not the one
 nearest in raw `dt` seconds, which can tie or lose right at local midnight — since daily
-entries are a day apart by nature and carry no such cap.
+entries are a day apart by nature and carry no such cap. Both comparisons read it that way too
+since the closing round. Until then `compare.js` kept a copy of this with no cap at all, so for a
+ride two to four days out it showed the last hour the answer holds, of another day, in the row
+right under an Open-Meteo one reading the correct day.
 
 `mobile/tests/extraction.test.mjs` and `mobile/tests/aromehd-merge.test.mjs` compare against
 golden files in `mobile/tests/fixtures/`, built from synthetic answers
@@ -1064,7 +1087,10 @@ runtime, because `app.js` and `ui.js` load after it.
   never passes 64 characters — once a suffix is added the base gives up exactly the
   suffix's length, never the suffix, trimmed by Unicode code point (`Array.from`) rather
   than UTF-16 unit, so a base ending in an emoji or another character outside the Basic
-  Multilingual Plane never gets its surrogate pair split into one lone, unpaired unit),
+  Multilingual Plane never gets its surrogate pair split into one lone, unpaired unit, and a
+  collision an earlier version stored *without* that trimming — the base whole, a name this walk no
+  longer builds — is claimed by fingerprint too and moves to the bounded name instead of being kept
+  a second time),
   write, trim. It is saved only on `oncomplete`; an
   abort, no IndexedDB or a route over 750 KB is reported with `route_not_saved`. **Nothing
   falls back to localStorage on write any more**; reading and migrating old localStorage
@@ -1178,7 +1204,9 @@ match by name, and reuses that record's id if it matches, so it moves up under t
 name and content instead of duplicating. An unrelated `.gpx` record whose converted content
 happens to differ is left alone; only a real content match reuses it. Forecast caches and
 ride-watch fingerprints computed from the old converted text still never match a route now kept
-under the new one — that part is unrelated to recents and not fixed here.
+under the new one — that part is unrelated to recents and not fixed here. A collision on a long
+name that an earlier version stored untrimmed is the same shape of mismatch for a different reason,
+and `uniqueRouteName` settles that one itself ("Recent routes" above).
 
 **The service worker slot has one reader.** `service-worker.js` stores one route in IndexedDB
 (`cw_shared_db`, store `files`, key `gpx`) and posts `cw-shared-gpx`.
@@ -1300,16 +1328,27 @@ a replay takes the ones in use ("Preparing and replaying").
     its label), never the nearest one. So it means the same within 5 h and beyond. When H+60 is
     not in the answer the step has no rain value; the rest of the step is unaffected. In replay the
     gap rule still decides whether the step has data at all, and H+60 is never more than an hour
-    from the step. OpenWeather is unchanged: it reads `rain['1h'] + snow['1h']` of the hourly
-    entry nearest the step (`closestByDt`). Whether that `1h` is the hour before or after its
-    `dt` is not stated in the code and is unverified, so its row may cover a different hour.
+    from the step. OpenWeather keeps its own window: `rain['1h'] + snow['1h']` of the entry read.
+    Whether that `1h` is the hour before or after its
+    `dt` is not stated in the code and is unverified, so its row may cover a different hour from
+    the Open-Meteo row beside it — the one magnitude still not pinned to the hour being ridden.
     uv, probability and weather code come from `hourly` when the quarter has none (AROME HD sends
     all three null there). The same unit conversion as the table
     (`window.cw.windToUnits`, `safeNum`), and for AROME the table's `aromeCodeAndDay`: day from
     the sun when missing, the code synthesised or reconciled with rain and cloud, and a probability
     under 10 % dropped when the rain is 0 mm or missing (the table's rule, so compare now drops it
-    too when H+60 is not in the answer). OpenWeather is
-    still read by hand there. The comparison tables are unchanged (spec §2).
+    too when H+60 is not in the answer). Since the closing round OpenWeather goes through
+    `extractStep` here too, so which entry it reads — an hourly one within the hour of the step,
+    otherwise the daily entry of the step's own local date — is the table's rule rather than a
+    second copy of it that had drifted. The comparison tables are unchanged (spec §2).
+  - **Horizons.** Both comparisons keep the table's, out of `window.cw.horizons`: past
+    `OPENWEATHER_MAX_DAYS` the step asks Open-Meteo, past `OPENMETEO_MAX_DAYS` it has no data.
+    Compare-by-dates had none of it and asked OpenWeather for any date its field accepts, which is
+    fourteen days, so a date beyond the 48 hours One Call answers showed the last hour the answer
+    holds under a date OpenWeather does not cover; with the date-less OpenWeather key it read date
+    A's cached answer and issued no request at all, so nothing in the network log hinted at it.
+    `resolveProviderForTimestamp` is no help there: `isProviderOperational` calls OpenWeather
+    operational at any horizon.
   - **AROME answers.** Both comparisons get them through `fetchAnswer`, as the table does: the
     standard Open-Meteo answer merged in with `cwForecastRules.mergeAromeWithStandard`, and
     Open-Meteo instead when AROME's answer is unusable, before caching; if that fallback fails too

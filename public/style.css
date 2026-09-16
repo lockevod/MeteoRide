@@ -2507,23 +2507,6 @@ input[type="number"] {
 }
 
 /* Themed “Check API” button */
-#configMenu #checkApiKey {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #2563eb;
-  color: #fff;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 120ms ease, transform 100ms ease, opacity 120ms ease;
-}
-
 #configMenu #checkApiKeyOW {
   align-self: flex-start;
   display: inline-flex;
@@ -2540,11 +2523,6 @@ input[type="number"] {
   cursor: pointer;
   transition: background-color 120ms ease, transform 100ms ease, opacity 120ms ease;
 }
-
-#configMenu #checkApiKey::before { content: "🔍"; }
-#configMenu #checkApiKey.testing::before { content: "⏳"; }
-#configMenu #checkApiKey:hover { background: #1d4ed8; transform: translateY(-1px); }
-#configMenu #checkApiKey:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
 #configMenu #checkApiKeyOW::before { content: "🔍"; }
 #configMenu #checkApiKeyOW.testing::before { content: "⏳"; }
