@@ -23,6 +23,7 @@ public/            the web app — the single source of truth for all platforms
     ui_weather.js  weather table rendering helpers
     native.js      native shell bridge; inert in a browser
     service-worker.js  POST handoff for iOS Shortcuts (web only)
+    version.js     generated, committed — window.CW_VERSION for the help pages
 functions/         Cloudflare Pages functions for the /share endpoint
 tools/             local dev server, icon scripts, Tampermonkey userscripts
 mobile/            Capacitor project (see below)
@@ -40,6 +41,14 @@ docs/ANDROID.md    Android build
   Do not add a CDN reference without also adding it to `VENDOR` in
   `mobile/scripts/build-www.mjs`; the build fails otherwise, on purpose.
 - User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
+- **The version has one source: `mobile/package.json`'s `version`.** Android's
+  `versionName` and iOS's `MARKETING_VERSION` are kept equal to it by hand (only
+  `versionCode`/`CURRENT_PROJECT_VERSION` are free to move as their own increasing
+  integers). `public/scripts/version.js` (`window.CW_VERSION`, read by the help pages'
+  footer) is generated from the same field by `mobile/scripts/build-www.mjs` — but it is
+  also committed, because the website serves `public/` directly and never runs that
+  build. Run `npm run build` in `mobile/` after bumping the version so the committed
+  copy stays in sync; `mobile/tests/version.test.mjs` checks all three agree.
 
 ## The native shell
 

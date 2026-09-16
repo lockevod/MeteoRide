@@ -37,4 +37,14 @@
   } else if (pageLang.startsWith('en') && browserLang.startsWith('es')) {
     document.title = 'Ayuda - MeteoRide';
   }
+
+  // Version footer, same element and script in both pages: window.CW_VERSION comes from
+  // scripts/version.js, generated from mobile/package.json, so there is nothing to keep
+  // in sync by hand here.
+  const versionEl = document.getElementById('cwVersion');
+  if (versionEl) {
+    const label = pageLang.startsWith('es') ? 'Versión' : 'Version';
+    const fallback = pageLang.startsWith('es') ? 'desconocida' : 'unknown';
+    versionEl.textContent = `${label} ${window.CW_VERSION || fallback}`;
+  }
 })();

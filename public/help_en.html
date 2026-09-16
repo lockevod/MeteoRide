@@ -148,6 +148,7 @@
         .icon { font-size: 1.2em; margin-right: 0.5em; }
         ul { padding-left: 1.5rem; }
         li { margin: 0.5rem 0; }
+        .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; margin: 1.5rem 0 0.5rem; }
         @media screen and (max-width: 600px) {
             body { padding: 10px; }
             .back-button { position: static; transform: none; margin-bottom: 1rem; display: inline-block; }
@@ -208,10 +209,10 @@
             <p>Select the weather provider you want to use to obtain the data.</p>
             <ul>
                 <li><strong>Open-Meteo:</strong> Free, no API key required, up to 14 days forecast</li>
-                <li><strong>OpenWeather:</strong> Requires API key, up to 5 days, detailed data</li>
+                <li><strong>OpenWeather:</strong> Requires API key, up to 4 days, detailed data</li>
                 <li><strong>AromeHD:</strong> High-resolution model from MeteoFrance, available via Open-Meteo. Only available for parts of Europe (~39-52°N, 10.5°W-16.5°E) and within 48 hours; otherwise the app falls back to the best provider available through Open-Meteo. Especially useful for wind and short-term precipitation.</li>
                 <li><strong>OpenWeather - AromeHD:</strong> Use OpenWeather for the first hour, then AromeHD up to 48 hours. Routes outside this period are calculated with Open-Meteo. Only available if you provide an OpenWeather API key. This chain leverages real-time OpenWeather data for immediate planning and hyper-local AROME precision for wind and precipitation forecasting.</li>
-                <li><strong>Compare (Comp.):</strong> Enable comparison mode to evaluate differences between providers.</li>
+                <li><strong>Compare (Comp.):</strong> Enable comparison mode to evaluate differences between providers. It reads Open-Meteo and AROME exactly like the table, including quarter-hour data within the first 5 hours, and its notices name the provider when one fails to answer.</li>
             </ul>
             <div class="tip">
                 <strong>💡 Automatic Fallback:</strong> If your primary provider fails or has no data, MeteoRide automatically switches to Open-Meteo. MeteoRide will notify you with a brief message about the situation (if notifications are enabled in Settings).
@@ -386,7 +387,7 @@
             <li><strong>Second row:</strong> Weather icons with provider change indicators when applicable</li>
             <li><strong>Temperature:</strong> In degrees Celsius or Fahrenheit</li>
             <li><strong>Wind:</strong> Speed + direction arrow (gusts in parentheses)</li>
-            <li><strong>Rain:</strong> Amount in mm/h (probability in parentheses)</li>
+            <li><strong>Rain:</strong> Amount in mm/h for the hour you are riding through (probability in parentheses), not the reading closest to the step's exact minute</li>
             <li><strong>Humidity:</strong> Relative humidity percentage</li>
             <li><strong>Cloudiness:</strong> Cloud cover percentage</li>
             <li><strong>Luminosity:</strong> Shown as a vertical bar next to the weather icon in the second row (represents 0–100% of available light for that interval)</li>
@@ -440,6 +441,7 @@
             <li>Switching to Open-Meteo if your provider exceeds its time horizon</li>
             <li>Retries when there are temporary errors</li>
             <li>Clear notifications about data limitations</li>
+            <li>Every request has a deadline: 15 seconds for the server to start answering, and 15 more seconds without receiving data while it downloads. A provider that goes silent is not asked again during that same calculation.</li>
         </ul>
 
         <h3>🔗 URLs with Parameters</h3>
@@ -453,7 +455,7 @@
         <p>MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. This is a local-only feature — <strong>no</strong> routes are sent to any server.</p>
         <ul>
             <li><strong>How to use:</strong> next to the file upload button (📁) you'll find a compact dropdown with your recent routes. Choosing one loads it exactly as if you had uploaded the file now.</li>
-            <li><strong>Limit:</strong> the app stores the last <strong>3</strong> routes by default.</li>
+            <li><strong>Limit:</strong> the app stores the last <strong>5</strong> routes by default. Re-loading a route that is already saved moves it to the top instead of duplicating it.</li>
             <li><strong>Recommended size:</strong> supports larger GPX files up to about <strong>750 KB</strong>. For much larger files consider hosting them and using <code>?gpx_url=</code>.</li>
             <li><strong>Privacy:</strong> GPX files are saved locally using IndexedDB (with localStorage fallback). They are never sent outside your device.</li>
             <li><strong>Efficiency:</strong> Only metadata (name, size, timestamp) is kept in memory; the full GPX is loaded from the local store only when you select it.</li>
@@ -471,7 +473,7 @@
         <div class="warning">
             <h3>🚨 Important Limits</h3>
             <ul>
-                <li><strong>Time horizon:</strong> Open-Meteo (14 days), OpenWeather (2 days)</li>
+                <li><strong>Time horizon:</strong> Open-Meteo (14 days), OpenWeather (4 days)</li>
                 <li><strong>Accuracy:</strong> Forecasts are less reliable from day 3-4 onwards</li>
                 <li><strong>Free APIs:</strong> OpenWeather free tier has usage limits (Open-Meteo does not require an API key)</li>
             </ul>
@@ -491,7 +493,7 @@
 
     <div class="section">
         <h2>🚨 Official Weather Alerts</h2>
-        <p>MeteoRidºe can display official weather warnings published by national meteorological services when these are exposed in the <code>alerts</code> of the OpenWeather. To enable alerts you must enter your <strong>OpenWeather API Key</strong> in Settings and check <strong>Show official weather alerts</strong>.</p>
+        <p>MeteoRide can display official weather warnings published by national meteorological services when these are exposed in the <code>alerts</code> of the OpenWeather. To enable alerts you must enter your <strong>OpenWeather API Key</strong> in Settings and check <strong>Show official weather alerts</strong>.</p>
 
         <ul>
             <li><strong>Availability:</strong> Requires an OpenWeather API Key. If the key is configured MeteoRide will check for alerts even when OpenWeather is not the selected primary provider.</li>
@@ -508,7 +510,7 @@
     </div>
 
     <div class="section">
-        <h2>�🐛 Troubleshooting</h2>
+        <h2>🐛 Troubleshooting</h2>
 
         <h3>❌ Common Issues</h3>
         <ul>
@@ -581,7 +583,8 @@
             <li><strong>Weather Data:</strong> Open-Meteo, OpenWeather</li>
             <li><strong>Weather Icons:</strong> Weather Icons by Erik Flowers</li>
             <li><strong>Libraries:</strong> Leaflet.js, SunCalc, GPX parser</li>
-            <li><strong>Hosting:</strong> GitHub Pages (optional)</li>
+            <li><strong>Native shell:</strong> Capacitor (iOS / Android)</li>
+            <li><strong>Hosting:</strong> Cloudflare Pages (web version only)</li>
         </ul>
 
         <h3>⚖️ Disclaimer</h3>
@@ -618,6 +621,9 @@
         <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
     </div>
 
+    <p class="version-footer" id="cwVersion"></p>
+
+    <script src="/scripts/version.js"></script>
     <script src="/scripts/help.js"></script>
 </body>
 </html>

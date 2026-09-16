@@ -61,7 +61,7 @@ For more detailed information, see the [User Guide (English)](https://app.meteor
 
 ## Recent routes (local)
 
-MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. The feature is local-only (uses IndexedDB with a localStorage fallback) and by default stores the last 3 routes. For details and usage instructions see the User Guide links above.
+MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. The feature is local-only (uses IndexedDB with a localStorage fallback) and by default stores the last 5 routes; re-loading a route that is already in the list moves it to the top instead of duplicating it. For details and usage instructions see the User Guide links above.
 
 ## Limitations and Tips
 

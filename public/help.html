@@ -147,6 +147,7 @@
         .icon { font-size: 1.2em; margin-right: 0.5em; }
         ul { padding-left: 1.5rem; }
         li { margin: 0.5rem 0; }
+        .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; margin: 1.5rem 0 0.5rem; }
         @media screen and (max-width: 600px) {
             body { padding: 10px; }
             .back-button { position: static; transform: none; margin-bottom: 1rem; display: inline-block; }
@@ -206,10 +207,10 @@
             <p>Selecciona el proveedor meteorológico que deseas utilizar para obtener los datos.</p>
             <ul>
                 <li><strong>Open-Meteo:</strong> Gratuito, no requiere API key, hasta 14 días de previsión.</li>
-                <li><strong>OpenWeather:</strong> Requiere API key, hasta 5 días, datos detallados</li>
+                <li><strong>OpenWeather:</strong> Requiere API key, hasta 4 días, datos detallados</li>
                 <li><strong>AromeHD:</strong> Modelo de alta resolución de MeteoFrance, accesible vía Open-Meteo. Solo disponible para Europa (aprox. 39-52°N, 10.5°W-16.5°E) y dentro de 48 horas (fuera de estas horas conmuta directamente al mejor provedor que provee Open-Meteo para esa localización). Es especialmente útil para viento y precipitaciones a corto plazo.</li>
                 <li><strong>OpenWeather - AromeHD</strong> Utilizar Openweather para la primera hora, luego AromeHD hasta 48 horas. Rutas fuera de este periodo se calculan con OpenMeteo. Solo disponible si hay key de Openweather. Esta cadena aprovecha los datos en tiempo real de OpenWeather para planificación inmediata y la precisión hiperlocal de AROME para viento y precipitaciones.</li>
-                <li><strong>Comparar (Comp.):</strong> Activa el modo de comparación para evaluar diferencias entre proveedores.</li>
+                <li><strong>Comparar (Comp.):</strong> Activa el modo de comparación para evaluar diferencias entre proveedores. Lee Open-Meteo y AROME exactamente igual que la tabla, incluidos los datos de cuarto de hora dentro de las primeras 5 horas, y si un proveedor no responde el aviso dice cuál.</li>
             </ul>
             <div class="tip">
             <strong>💡 Fallback Automático:</strong> Si tu proveedor principal falla o no tiene datos, MeteoRide cambia automáticamente a Open-Meteo. Meteoride notificará mediante un mensaje esta situación (siempre que esté seleccionado en Configuración)
@@ -256,7 +257,7 @@
     </div>
 
     <div class="section">
-        <h2>� Instalación como App</h2>
+        <h2>🏁 Instalación como App</h2>
         <p>MeteoRide se puede instalar como una Aplicación Web Progresiva (PWA) en tu dispositivo para una experiencia similar a una app nativa.</p>
         
         <h3>Android</h3>
@@ -389,7 +390,7 @@
             <li><strong>Segunda fila:</strong> Iconos del tiempo con indicadores de cambio de proveedor cuando corresponda</li>
             <li><strong>Temperatura:</strong> En grados Celsius o Fahrenheit</li>
             <li><strong>Viento:</strong> Velocidad + flecha de dirección (rachas entre paréntesis)</li>
-            <li><strong>Lluvia:</strong> Cantidad en mm/h (probabilidad entre paréntesis)</li>
+            <li><strong>Lluvia:</strong> Cantidad en mm/h de la hora que vas a pedalear (probabilidad entre paréntesis), no la lectura más cercana al minuto exacto del paso</li>
             <li><strong>Humedad:</strong> Porcentaje de humedad relativa</li>
             <li><strong>Nubosidad:</strong> Porcentaje de cobertura de nubes</li>
             <li><strong>Luminosidad:</strong> Se muestra como una barra vertical junto al símbolo del tiempo en la segunda fila (representa 0–100% de luz disponible para ese intervalo)</li>
@@ -443,6 +444,7 @@
             <li>Cambio a Open-Meteo si tu proveedor excede su horizonte temporal</li>
             <li>Reintentos cuando hay errores temporales</li>
             <li>Notificaciones claras sobre limitaciones de datos</li>
+            <li>Cada petición tiene un plazo: 15 segundos para que el servidor empiece a responder y 15 segundos más sin recibir datos mientras descarga. Si un proveedor se queda callado, no se le vuelve a preguntar durante ese mismo cálculo.</li>
         </ul>
 
         <h3>🔗 URLs con Parámetros</h3>
@@ -456,7 +458,7 @@
         <p>MeteoRide guarda localmente las últimas rutas GPX que has cargado para que puedas recuperarlas rápidamente sin subir de nuevo el archivo. Esta funcionalidad es totalmente local: <strong>no</strong> se envían las rutas al servidor.</p>
         <ul>
             <li><strong>Cómo usarlo:</strong> junto al botón de subir archivo (📁) verás un desplegable con tus rutas recientes. Selecciona una ruta y se cargará exactamente como si la hubieras subido ahora.</li>
-            <li><strong>Límite:</strong> se guardan las últimas <strong>3</strong> rutas por defecto.</li>
+            <li><strong>Límite:</strong> se guardan las últimas <strong>5</strong> rutas por defecto. Si vuelves a cargar una ruta que ya estaba guardada, sube al principio de la lista en vez de duplicarse.</li>
             <li><strong>Tamaño recomendado:</strong> soporta archivos GPX grandes, hasta aproximadamente <strong>750 KB</strong>. Si tu GPX es significativamente más grande, considera recortarlo o usar un host público y cargarlo con <code>?gpx_url=</code>.</li>
             <li><strong>Privacidad:</strong> Los GPX se almacenan en tu navegador usando IndexedDB (o localStorage como fallback). No se comparten fuera de tu dispositivo.</li>
             <li><strong>Eficiencia:</strong> Para ahorrar memoria, MeteoRide mantiene en memoria solo la información básica (nombre, tamaño y fecha) y carga el contenido completo solo cuando seleccionas una ruta del desplegable.</li>
@@ -474,7 +476,7 @@
         <div class="warning">
             <h3>🚨 Limitaciones Importantes</h3>
             <ul>
-                <li><strong>Horizonte temporal:</strong> Open-Meteo (14 días), OpenWeather (2 días)</li>
+                <li><strong>Horizonte temporal:</strong> Open-Meteo (14 días), OpenWeather (4 días)</li>
                 <li><strong>Precisión:</strong> Las previsiones son menos fiables a partir del día 3-4</li>
                 <li><strong>APIs gratuitas:</strong> OpenWeather ofrece una modalidad gratuita; Open-Meteo no requiere API key. Ten en cuenta que las APIs con clave pueden tener límites de uso mensuales.</li>
             </ul>
@@ -493,7 +495,7 @@
     </div>
 
     <div class="section">
-        <h2>� Alertas meteorológicas oficiales</h2>
+        <h2>🚨 Alertas meteorológicas oficiales</h2>
         <p>MeteoRide puede mostrar avisos y alertas oficiales que publican los servicios meteorológicos nacionales cuando estos aparecen en las <code>alertas</code> del servicio OpenWeather. Para que las alertas estén disponibles debes introducir tu <strong>OpenWeather API Key</strong> en el panel de configuración y activar la casilla <strong>Mostrar alertas meteorológicas oficiales</strong>.</p>
 
         <ul>
@@ -501,7 +503,7 @@
             <li><strong>Visibilidad:</strong> Cuando se detecta una alerta se mostrará una tarjeta informativa en pantalla (auto‑oculta tras 15 segundos). Además se crea un indicador persistente <strong>⚠️</strong> en la interfaz que permite reabrir todas las alertas detectadas.</li>
             <li><strong>Muestreo y eficiencia:</strong> Para reducir el número de llamadas a la API se comprueba una muestra representativa de puntos a lo largo de la ruta (aprox. 2/3 de los pasos, mínimo 3). Las respuestas de alertas se cachean localmente durante ~1 hora.</li>
             <li><strong>Compatibilidad temporal:</strong> Solo se considerarán alertas cuyo periodo (start/end) coincida con la ventana temporal del tramo de la ruta (se aplica un filtro de ±1 hora alrededor del paso correspondiente).</li>
-
+            <li><strong>Pruebas:</strong> Si eres desarrollador o quieres validar la integración puedes forzar alertas de prueba desde la consola del navegador: <code>window.testWeatherAlerts()</code>.</li>
         </ul>
 
         <div class="warning">
@@ -511,7 +513,7 @@
     </div>
 
     <div class="section">
-        <h2>��🐛 Resolución de Problemas</h2>
+        <h2>🐛 Resolución de Problemas</h2>
         
         <h3>❌ Problemas Comunes</h3>
         <ul>
@@ -573,7 +575,17 @@
             <li>✅ Para uso personal y comercial</li>
             <li>✅ Tienes que informar sobre el autor y la licencia MIT</li>
         </ul>
- 
+
+        <h3>🙏 Tecnologías y Servicios</h3>
+        <ul>
+            <li><strong>Mapas:</strong> OpenStreetMap y sus colaboradores</li>
+            <li><strong>Datos meteorológicos:</strong> Open-Meteo, OpenWeather</li>
+            <li><strong>Iconos meteorológicos:</strong> Weather Icons de Erik Flowers</li>
+            <li><strong>Librerías:</strong> Leaflet.js, SunCalc, GPX parser</li>
+            <li><strong>App nativa:</strong> Capacitor (iOS / Android)</li>
+            <li><strong>Alojamiento:</strong> Cloudflare Pages (solo la versión web)</li>
+        </ul>
+
     <p>Bikemap, Komoot, OpenWeatherMaps, Openmeteo y Hammerhead son marcas registradas. Pueden tener licencias propietarias específicas; por favor, si usas este código o la aplicación web publicada debes cumplir con ellas.</p>
 
         <p>Este código y la aplicación web están diseñados con la seguridad de tipo "zero trust" en mente, pero no son un código ni un servicio comercial. El código y la aplicación web se proporcionan tal cual, sin ninguna garantía ni responsabilidad. Aceptas esto si descargas este repositorio, usas el código o usas la aplicación web.</p>
@@ -614,6 +626,9 @@
         <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
     </div>
 
+    <p class="version-footer" id="cwVersion"></p>
+
+    <script src="/scripts/version.js"></script>
     <script src="/scripts/help.js"></script>
 </body>
 </html>
