@@ -24,6 +24,13 @@ export default defineConfig({
         launchOptions: { executablePath: process.env.CHROMIUM_PATH || undefined },
       },
     },
+    {
+      // Same engine WKWebView uses on iOS. Not run by `npm test`; see `npm run test:webkit`.
+      name: 'mobile-webkit',
+      use: {
+        ...devices['iPhone 14'],
+      },
+    },
   ],
   webServer: {
     command: 'node tests/server.mjs',

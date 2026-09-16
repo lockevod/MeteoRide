@@ -8,8 +8,9 @@
   "scripts": {
     "postinstall": "node scripts/patch-background-runner.mjs",
     "build": "node scripts/build-www.mjs",
-    "test": "npm run build && node --test tests/*.test.mjs && playwright test",
+    "test": "npm run build && node --test tests/*.test.mjs && playwright test --project=mobile-chromium",
     "test:rules": "node --test tests/*.test.mjs",
+    "test:webkit": "npm run build && playwright test --project=mobile-webkit",
     "sync": "npm run build && cap sync",
     "ios": "npm run sync && cap open ios",
     "android": "npm run sync && cap open android",

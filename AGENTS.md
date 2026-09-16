@@ -1398,9 +1398,19 @@ a replay takes the ones in use ("Preparing and replaying").
 ```bash
 cd mobile
 npm install                     # once; plus `npx playwright install chromium`
-npm test                        # builds the bundle, then runs the smoke suite
+npm test                        # builds the bundle, then runs the smoke suite (mobile-chromium only)
 node --check public/scripts/<file>.js
 ```
+
+`playwright.config.mjs` also defines a `mobile-webkit` project (`devices['iPhone
+14']`), the same engine WKWebView uses on iOS. It is not part of `npm test` — a
+measurement run against it (see `.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`)
+found 51 of 55 failures traced to one cause: IndexedDB writes that store the
+route as a `Blob` (`ui.js` `meteoride_recent_routes_db`, `cw_tiles`) not
+persisting in WebKit, which cascades into every test that imports a route and
+then checks recent-routes state. That is unresolved, so `mobile-webkit` stays
+out of the default run: `npx playwright install webkit` once, then `npm run
+test:webkit`.
 
 `node --test tests/*.test.mjs` (also `npm run test:rules`) covers the ride-alert rules
 without a browser, and drives the assembled `www/runners/watch.js` through its three
@@ -1459,8 +1469,12 @@ code does and what makes the race reproducible.
   an agent session here gets a 403 trying.
 - The smoke suite stubs provider responses, so providers, the weather table, comparison modes and the
   unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
-- The suite runs on Chromium only. iOS ships WKWebView, so anything Safari-specific
-  goes unnoticed; adding Playwright's `webkit` project would close most of that gap.
+- The suite runs on Chromium by default. A `mobile-webkit` project exists
+  (`npm run test:webkit`, see «Verifying a change» above) but is not wired into
+  `npm test`: 51 of its 55 failures trace to one cause, IndexedDB `Blob` writes
+  for recent routes and the tile cache not persisting in WebKit — genuine
+  WebKit limitation or an artifact of Playwright's ephemeral storage is still
+  undecided (§10 of `docs/HANDOFF.md`).
 - The iOS native code has now been compiled and run in the simulator on the author's
   Mac — the app launches, the app-local plugin registers, the App Group resolves and a
   GPX loads from Files. Nothing here compiles it: everything written in this

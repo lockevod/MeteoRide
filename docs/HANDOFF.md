@@ -377,6 +377,20 @@ revisiones adversariales internas y una revisión adversarial externa).
 
 - Ninguno: los seis están corregidos (§9).
 
+### Pendiente de decisión: WebKit en Playwright
+
+Medido, sin arreglar nada (`.superpowers/sdd/2026-09-15-comparar-recientes-meteoblue/task-9-report.md`).
+`playwright.config.mjs` tiene un proyecto `mobile-webkit` (`devices['iPhone
+14']`, el motor que usa WKWebView en iOS), fuera de `npm test`; se lanza con
+`npm run test:webkit`. De 260 tests, 205 pasan y 55 fallan: 51 de esos 55
+vienen de una sola causa, la escritura en IndexedDB de la ruta como `Blob`
+(`meteoride_recent_routes_db`, `cw_tiles`) que no persiste en WebKit, y de ahí
+cae en cascada todo lo que depende de leerla después (recent routes, tile
+cache, restaurar la última ruta). Falta decidir si es un límite real de
+WebKit (que tocaría también a WKWebView en iOS) o del contexto efímero de
+Playwright, antes de marcar tests con `test.skip` o investigarlo como posible
+bug de cara al dispositivo.
+
 ### Límites aceptados (decididos, no se arreglan salvo que se pida)
 
 - **Plazo de red (H4).** 15 s sin que el servidor empiece a responder o 15 s seguidos sin datos al leer
