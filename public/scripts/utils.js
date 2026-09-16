@@ -32,10 +32,11 @@
   const watched = new WeakMap();
 
   // `signal` is the computation's or the comparison's: aborted when a newer one replaces it, which
-  // aborts its requests and is nobody's failure. `timedOut` lists the providers given up on: later
-  // requests of the same computation to them are not made.
+  // aborts its requests and is nobody's failure. `timedOut` lists the providers given up on, which is
+  // what the notice names; `timedOutHosts` the hosts, which is what is not asked again: AROME is
+  // Open-Meteo with another model, so a host that has just gone silent must not be waited on twice.
   function createRecorder(signal) {
-    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], signal };
+    return { ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [], signal };
   }
 
   // Whether a failure happened without connection is noted as it happens: by the time the
@@ -46,9 +47,10 @@
     if (isOffline()) recorder.offline = true;
   }
 
-  function noteTimeout(recorder, prov) {
+  function noteTimeout(recorder, prov, host) {
     noteFailure(recorder, 'timeout');
     if (!recorder.timedOut.includes(prov)) recorder.timedOut.push(prov);
+    if (host && !recorder.timedOutHosts.includes(host)) recorder.timedOutHosts.push(host);
   }
 
   const timeoutError = (prov) => Object.assign(new Error(`${prov} is not responding`), { name: 'TimeoutError' });
@@ -76,7 +78,7 @@
   function readJson(response, recorder) {
     return readText(response).then(JSON.parse).catch((err) => {
       if (recorder.signal && recorder.signal.aborted) throw err;
-      if (err.name === 'TimeoutError') noteTimeout(recorder, watched.get(response).prov);
+      if (err.name === 'TimeoutError') noteTimeout(recorder, watched.get(response).prov, watched.get(response).host);
       else noteFailure(recorder, 'body');
       throw err;
     });
@@ -87,11 +89,16 @@
     catch (_) { return false; }
   }
 
-  // Given up on per provider, not per host: AROME and Open-Meteo share one.
+  // The provider a URL asks, which is what a notice names; AROME and Open-Meteo share a host.
   function providerOf(url) {
     const u = new URL(String(url), location.href);
     if (u.hostname === 'api.openweathermap.org') return 'openweather';
     return u.searchParams.get('models') === 'arome_france_hd' ? 'aromehd' : 'openmeteo';
+  }
+
+  function hostOf(url) {
+    try { return new URL(String(url), location.href).hostname; }
+    catch (_) { return ''; }
   }
 
   function watchProviderRequests() {
@@ -105,9 +112,10 @@
       const recorder = init && init.cwRecorder;
       if (!recorder || !isProviderUrl(url)) return original(input, init);
       const prov = providerOf(url);
-      // Given up on earlier in this computation: not asked again, and the step goes the way a
-      // network error takes it.
-      if (recorder.timedOut.includes(prov)) {
+      const host = hostOf(url);
+      // This host went silent earlier in this computation: it is not asked again, whichever provider
+      // of it the step wants, and the step goes the way a network error takes it.
+      if (recorder.timedOutHosts.includes(host)) {
         noteFailure(recorder, 'timeout');
         return Promise.reject(timeoutError(prov));
       }
@@ -121,14 +129,14 @@
       return original(input, { ...init, signal: cut.signal }).then(
         (res) => {
           clearTimeout(timer);
-          watched.set(res, { prov, cut });
+          watched.set(res, { prov, host, cut });
           if (res.ok) recorder.ok++;
           else noteFailure(recorder, String(res.status));
           return res;
         },
         (err) => {
           clearTimeout(timer);
-          if (silent) { noteTimeout(recorder, prov); throw timeoutError(prov); }
+          if (silent) { noteTimeout(recorder, prov, host); throw timeoutError(prov); }
           if (!(recorder.signal && recorder.signal.aborted)) noteFailure(recorder, 'network');
           throw err;
         }

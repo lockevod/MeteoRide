@@ -594,13 +594,19 @@ coverage what is slow is the download (22 KB take ~2.6 s at 50 kbps, ~30 s at 16
 given up after **15 s without the server starting to answer**, or **15 s in a row without any data while
 its body is read**; a slow download that keeps arriving is never cut. The body is read chunk by chunk
 with `getReader()` in `cw.utils.readText`, which `readJson` goes through and which stays the one place a
-watched body is read (the table's error snippet uses it too). A request given up notes `timeout` and its
-provider in `recorder.timedOut`, and the step goes the way a network error takes it: no data in the
-table (its `catch`), a named gap in a comparison. Later requests of the same computation or comparison to
-that provider are not made: the wrapper rejects them at once, noted as `timeout`, so a provider that never
-answers costs 15 s once per computation, not once per step, and a new computation asks again. The
-provider is told by the URL (`openweather`; `aromehd` for `models=arome_france_hd`; otherwise
-`openmeteo`), so AROME and Open-Meteo count apart although they share a host. The table's outcome names
+watched body is read (the table's error snippet uses it too). A request given up notes `timeout`, its provider in
+`recorder.timedOut` — told by the URL (`openweather`; `aromehd` for `models=arome_france_hd`; otherwise
+`openmeteo`), and what a notice names — and its **host** in `recorder.timedOutHosts`. The step then goes
+the way a network error takes it: no data in the table (its `catch`), a named gap in a comparison.
+**The deadline is per host, not per provider**, because AROME is Open-Meteo asked for another model:
+falling back from AROME to Open-Meteo would only wait again on a host that has just gone silent. So no
+later request of that computation or comparison reaches that host, whichever of its providers a step
+wants — the wrapper rejects them at once, noted as `timeout` — and a silent host costs 15 s once, 30 s at
+worst for the two of them, with a new computation asking again. A step whose provider was given up falls
+back only across hosts: OpenWeather asks Open-Meteo, as an HTTP error already makes it, and never AROME,
+since Open-Meteo is global and AROME covers part of Europe — so that is the stand-in whatever the chain
+says. AROME and Open-Meteo have no stand-in, and those steps, and the later ones, have no data. An HTTP
+error leaves every chain as it was. The table's outcome names
 the providers given up (`failedProviders`, `{ status: 'timeout' }`): `decideNotice` says
 `provider_unreachable` over an empty table and `provider_not_responding` over a partial one, as a
 comparison does, in place of that computation's fallback notices. Each recorder carries the signal of

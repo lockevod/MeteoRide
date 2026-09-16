@@ -26,7 +26,7 @@ function harness() {
   s.fetch = async () => { s.fetchCalls++; return { ok: true, json: async () => ({ alerts: [{ event: 'Viento' }] }) }; };
   // The recorder and body reader of utils.js, without the deadline the browser suite holds.
   s.window = s;
-  s.cw = { utils: { createRecorder: (signal) => ({ failed: 0, timedOut: [], signal }), readJson: (res) => res.json() } };
+  s.cw = { utils: { createRecorder: (signal) => ({ failed: 0, timedOut: [], timedOutHosts: [], signal }), readJson: (res) => res.json() } };
   vm.runInNewContext(code, s);
   return s;
 }

@@ -72,7 +72,7 @@ function harness({ provider = 'openmeteo', stubs = {} } = {}) {
     processWeatherData: () => { s.renders.push(s.weatherData.map((x) => x.lat)); },
     cw: {
       utils: {
-        createRecorder: (signal) => ({ ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], signal }),
+        createRecorder: (signal) => ({ ok: 0, failed: 0, lastFailStatus: '', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [], signal }),
         isOffline: () => s.offline,
         // As utils.js reads a body, without its deadline (the browser suite holds that).
         readJson: (res, rec) => res.json().catch((err) => {
@@ -777,7 +777,7 @@ test('a computation whose provider does not answer replays nothing while it wait
 
   // Given up the way the fetch wrapper does after 15 s (utils.js; the browser suite holds the deadline).
   const rec = h.pending[0].init.cwRecorder;
-  rec.failed++; rec.lastFailStatus = 'timeout'; rec.timedOut.push('openmeteo');
+  rec.failed++; rec.lastFailStatus = 'timeout'; rec.timedOut.push('openmeteo'); rec.timedOutHosts.push('api.open-meteo.com');
   h.pending[0].reject(Object.assign(new Error('openmeteo is not responding'), { name: 'TimeoutError' }));
   await a;
   assert.equal(h.s.published()[0].origin, 'prepared');

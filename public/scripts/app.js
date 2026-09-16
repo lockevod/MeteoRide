@@ -883,11 +883,41 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
         continue;
       }
 
+      // What a step whose provider was given up for not answering asks instead. Only across hosts:
+      // OpenWeather is another service, and Open-Meteo covers the world, which AROME does not, so it
+      // is the stand-in whatever the chain says. AROME and Open-Meteo share a host, so a step of
+      // theirs has no stand-in at all: that host has just gone silent.
+      const openMeteoInstead = async () => {
+        const mkT = (window.cw && window.cw.utils && window.cw.utils.makeCacheKey) || makeCacheKey;
+        const keyT = mkT("openmeteo", timeAt.toISOString().substring(0,10), tempUnit, windUnit, p.lat, p.lon, timeAt);
+        const cachedT = getCache(keyT, recorder);
+        if (cachedT) return { ...p, provider: "openmeteo", weather: cachedT };
+        const urlT = buildProviderUrl("openmeteo", p, timeAt, '', windUnit, tempUnit, settings.alerts);
+        const resT = await fetch(urlT, { cwRecorder: recorder }).catch(() => null);
+        if (!isCurrent()) return null;
+        if (!resT || !resT.ok) return { ...p, provider: "openmeteo", weather: null };
+        const jsonT = await readJson(resT).catch(() => null);
+        if (!isCurrent()) return null;
+        if (!jsonT) return { ...p, provider: "openmeteo", weather: null };
+        try { setCache(keyT, jsonT); } catch (e) { /* ignore cache set errors */ }
+        return { ...p, provider: "openmeteo", weather: jsonT };
+      };
+
       let res, json, ok = false;
 
       try {
         const urlPrim = buildProviderUrl(prov, p, timeAt, stepApiKey, windUnit, tempUnit, settings.alerts);
-        res = await fetch(urlPrim, { cwRecorder: recorder });
+        try {
+          res = await fetch(urlPrim, { cwRecorder: recorder });
+        } catch (err) {
+          if (err.name !== "TimeoutError" || prov !== "openweather") throw err;
+          usedFallback = true;
+          usedFallbackError = true;
+          const entry = await openMeteoInstead();
+          if (!entry) return;
+          results.push(entry);
+          continue;
+        }
         // Diagnostic logging for OpenWeather: record status and masked URL (hide appid)
         if (prov === "openweather") {
           try {

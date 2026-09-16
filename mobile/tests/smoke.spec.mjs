@@ -4033,7 +4033,7 @@ test('a provider request carrying a recorder notes its outcome there', async ({ 
     await fetch(base + 'key');   // no recorder: noted nowhere
     return rec;
   });
-  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0, offline: false, timedOut: [] });
+  expect(recorded).toEqual({ ok: 1, failed: 2, lastFailStatus: '401', staleAgeMs: 0, offline: false, timedOut: [], timedOutHosts: [] });
 });
 
 // Whether a failure happened without connection is noted when it happens: by the time
@@ -6503,4 +6503,144 @@ test('a slow body that keeps arriving for more than 15 s is never cut', async ({
   const done = await shownSnapshot(page);
   expect(done.usable).toBe(done.steps);
   expect((await page.evaluate(() => window.__notices)).filter((n) => notResponding.test(n))).toEqual([]);
+});
+
+/* ---------- deadlines are per host, and a fallback crosses hosts (H4, fix round 1) ---------- */
+
+// AROME and Open-Meteo are the same service (api.open-meteo.com with models=arome_france_hd), so falling
+// back from AROME to Open-Meteo would only wait again on a host that has just gone silent. OpenWeather is
+// another host: it falls back to Open-Meteo, which is global, never to AROME, whatever the chain says.
+
+/** Open-Meteo (AROME and standard counted apart) and OpenWeather, each silent while `control.silent`
+ *  names it: `arome`, `standard`, `openmeteo` (both of them) or `openweather`. */
+async function stubHosts(page, control) {
+  const silent = (what) => (control.silent || []).includes(what);
+  await goOffline(page);
+  await page.route((url) => url.hostname === 'api.open-meteo.com', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('timeformat') === 'unixtime') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(watchForecast(url)) });
+    }
+    const kind = url.searchParams.get('models') === 'arome_france_hd' ? 'arome' : 'standard';
+    control[kind] = (control[kind] || 0) + 1;
+    if (silent(kind) || silent('openmeteo')) return new Promise(() => {});
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAround(control.now)) });
+  });
+  await page.route((url) => url.hostname === 'api.openweathermap.org', async (route) => {
+    control.openweather = (control.openweather || 0) + 1;
+    if (silent('openweather')) return new Promise(() => {});
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+}
+
+/** A route computed with `provider` and an OpenWeather key, on the clock at T0. */
+async function routeWith(page, control, provider) {
+  await startClock(page);
+  await stubHosts(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => {
+    document.getElementById('apiKeyOW').value = 'a-valid-looking-key';
+    // Official warnings are looked up on OpenWeather too, and would wait on a silent host of their own.
+    document.getElementById('showWeatherAlerts').checked = false;
+  });
+  await selectProvider(page, provider);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+}
+
+test('OpenWeather given up for not answering falls back to Open-Meteo, on the other host, and the notice names it', async ({ page }) => {
+  const control = { now: T0, silent: ['openweather'] };
+  await routeWith(page, control, 'openweather');
+  await expect.poll(() => control.openweather).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
+  const shown = await shownSnapshot(page);
+  expect(shown.usable, 'the steps after the timeout went without data').toBe(shown.steps);
+  expect(control.openweather, 'OpenWeather was asked again after being given up').toBe(1);
+  expect(control.standard).toBeGreaterThan(0);
+  await expect(page.locator('.notice')).toContainText(/OpenWeather (is not responding|no responde)/);
+});
+
+test('AROME given up for not answering asks Open-Meteo for nothing, since it is the same host', async ({ page }) => {
+  const control = { now: T0, silent: ['arome'] };
+  await routeWith(page, control, 'aromehd');
+  await expect.poll(() => control.arome).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(0);
+  expect(control.standard ?? 0, 'the host that had gone silent was asked again').toBe(0);
+  expect(control.arome).toBe(1);
+  await expect(page.locator('.notice')).toContainText(notResponding);
+});
+
+// The standard answer AROME is completed from is on the same host: once it goes silent, the AROME
+// requests of that computation stop too. Tracking the deadline per provider would ask AROME again.
+test('a standard Open-Meteo request given up stops that computation asking AROME again', async ({ page }) => {
+  const control = { now: T0, silent: ['standard'] };
+  await routeWith(page, control, 'aromehd');
+  await expect.poll(() => control.standard).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(1);
+  const shown = await shownSnapshot(page);
+  expect(shown.steps, 'the route has later steps to leave without data').toBeGreaterThan(1);
+  expect(control.arome, 'AROME was asked again on the host that had gone silent').toBe(1);
+  expect(control.standard).toBe(1);
+  await expect(page.locator('.notice')).toContainText(/Open-Meteo (is not responding|no responde)/);
+});
+
+test('with the OpenWeather chain, OpenWeather given up goes straight to Open-Meteo and asks AROME for nothing', async ({ page }) => {
+  const control = { now: T0, silent: ['openweather'] };
+  await routeWith(page, control, 'ow2_arome_openmeteo');
+  await expect.poll(() => control.openweather).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
+  const shown = await shownSnapshot(page);
+  expect(shown.usable).toBe(shown.steps);
+  expect(control.arome ?? 0, 'AROME stood in for OpenWeather outside its area').toBe(0);
+  expect(control.openweather).toBe(1);
+  await expect(page.locator('.notice')).toContainText(/OpenWeather (is not responding|no responde)/);
+});
+
+test('each silent host is waited on once, not once per step or per provider', async ({ page }) => {
+  const control = { now: T0, silent: ['openweather', 'openmeteo'] };
+  await routeWith(page, control, 'ow2_arome_openmeteo');
+  await expect.poll(() => control.openweather).toBe(1);
+  await page.clock.fastForward('00:16');
+  // OpenWeather given up, the fallback asks the other host, which is silent too.
+  await expect.poll(() => control.standard).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(0);
+  await page.waitForTimeout(500);
+  expect([control.openweather, control.standard, control.arome ?? 0],
+    'a host that had gone silent was asked again').toEqual([1, 1, 0]);
+});
+
+// The guard that keeps a step on a silent host from falling back is not covered by the host skip alone:
+// what it decides is the cache. AROME goes silent, Open-Meteo has an answer for that step, and it is not
+// used, because the provider asked did not answer (the author's rule).
+test('AROME given up leaves its steps without data even with an Open-Meteo answer in the cache', async ({ page }) => {
+  const control = { now: T0 };
+  await startClock(page);
+  await stubHosts(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('showWeatherAlerts').checked = false; });
+  await chooseStart(page, localAt(T0 + 2 * 3600000));
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBeGreaterThan(0);
+  // Open-Meteo answers for every step of this start are now in the cache.
+  const cached = control.standard;
+
+  control.silent = ['arome'];
+  await selectProvider(page, 'aromehd');
+  await expect.poll(() => control.arome).toBe(1);
+  await page.clock.fastForward('00:16');
+
+  await expect.poll(async () => (await shownSnapshot(page))?.usable ?? null).toBe(0);
+  expect(control.standard, 'the host that had gone silent was asked again').toBe(cached);
+  await expect(page.locator('.notice')).toContainText(notResponding);
 });
