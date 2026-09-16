@@ -42,12 +42,17 @@ docs/ANDROID.md    Android build
   `mobile/scripts/build-www.mjs`; the build fails otherwise, on purpose.
 - User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
 - **The version has one source: `mobile/package.json`'s `version`.** Android's
-  `versionName` and iOS's `MARKETING_VERSION` are kept equal to it by hand (only
-  `versionCode`/`CURRENT_PROJECT_VERSION` are free to move as their own increasing
-  integers). `public/scripts/version.js` (`window.CW_VERSION`, read by the help pages'
-  footer) is generated from the same field by `mobile/scripts/build-www.mjs` — but it is
-  also committed, because the website serves `public/` directly and never runs that
-  build. Run `npm run build` in `mobile/` after bumping the version so the committed
+  `versionName` is kept equal to it by hand (only `versionCode`/`CURRENT_PROJECT_VERSION`
+  are free to move as their own increasing integers). iOS's `MARKETING_VERSION` cannot be
+  kept by hand at all: `mobile/ios/` is fully gitignored and Capacitor regenerates it
+  (`cap add ios`, `cap sync`), so a hand-edit there lives only in the working tree and is
+  gone on the next regeneration. `mobile/scripts/build-www.mjs`'s `main()` realigns it
+  instead, the same way it does `version.js` below: an `existsSync`-guarded step rewrites
+  every `MARKETING_VERSION` in `mobile/ios/App/App.xcodeproj/project.pbxproj` from
+  `package.json` on every build (a no-op before `cap add ios` has run). `public/scripts/version.js`
+  (`window.CW_VERSION`, read by the help pages' footer) is generated from the same field by
+  the same script — but it is also committed, because the website serves `public/` directly
+  and never runs that build. Run `npm run build` in `mobile/` after bumping the version so the committed
   copy stays in sync; `mobile/tests/version.test.mjs` checks all three agree.
 
 ## The native shell

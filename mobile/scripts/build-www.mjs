@@ -116,6 +116,26 @@ async function writeVersionFile() {
   log(`wrote scripts/version.js (${version})`);
 }
 
+const IOS_PBXPROJ = join(MOBILE, 'ios/App/App.xcodeproj/project.pbxproj');
+
+/**
+ * mobile/ios/ is fully gitignored — Capacitor regenerates it with `cap add ios` and
+ * rewrites it on every `cap sync` — so MARKETING_VERSION cannot be kept aligned with
+ * package.json by hand the way version.js is (there is nothing to commit that edit
+ * to). Derived here instead, the same way version.js is, on every build. A no-op
+ * before `cap add ios` has ever run, and idempotent once it has.
+ */
+async function writeIosMarketingVersion() {
+  if (!existsSync(IOS_PBXPROJ)) return;
+  const { version } = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
+  const src = await readFile(IOS_PBXPROJ, 'utf8');
+  const out = src.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${version};`);
+  if (out !== src) {
+    await writeFile(IOS_PBXPROJ, out);
+    log(`aligned MARKETING_VERSION in project.pbxproj (${version})`);
+  }
+}
+
 async function copyVendor() {
   if (!existsSync(MODULES)) {
     throw new Error('node_modules is missing — run `npm install` inside mobile/ first');
@@ -334,6 +354,7 @@ async function dirSize(dir) {
 
 async function main() {
   await writeVersionFile();
+  await writeIosMarketingVersion();
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
   await cp(SRC, OUT, { recursive: true });

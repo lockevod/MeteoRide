@@ -5,6 +5,7 @@
 // would catch one of them drifting.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,9 +38,14 @@ test('Android versionName matches mobile/package.json', async () => {
   );
 });
 
-test('iOS MARKETING_VERSION matches mobile/package.json', async () => {
+test('iOS MARKETING_VERSION matches mobile/package.json', async (t) => {
+  const pbxprojPath = join(MOBILE, 'ios/App/App.xcodeproj/project.pbxproj');
+  if (!existsSync(pbxprojPath)) {
+    t.skip('mobile/ios/ is not present — run `cap add ios` (or `npm run add:ios`) first');
+    return;
+  }
   const version = await packageVersion();
-  const pbxproj = await readFile(join(MOBILE, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
+  const pbxproj = await readFile(pbxprojPath, 'utf8');
   const marketingVersions = [...pbxproj.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((m) => m[1]);
   assert.ok(marketingVersions.length > 0, 'project.pbxproj has no MARKETING_VERSION entries');
   for (const found of marketingVersions) {
