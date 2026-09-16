@@ -356,3 +356,12 @@ var cwWatchRules = (function () {
     readForecast, readAlerts, compare, newAlerts, compose, evaluate, expired, reuse,
   };
 })();
+
+// The page reads the same rule as the runner. Exposed on its own so a caller cannot turn a
+// module that failed to load into a silent "no key", which would drop official alerts.
+// Guarded because this file is also concatenated into the background runner, which has no window.
+if (typeof window !== 'undefined') {
+  window.cwHasAlertsKey = (key) => (window.cwWatchRules
+    ? window.cwWatchRules.hasAlertsKey(key)
+    : !!key && String(key).trim().length >= 5);
+}

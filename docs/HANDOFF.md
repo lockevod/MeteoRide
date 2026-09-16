@@ -471,13 +471,14 @@ WebKit solo).
   - Sin medir fuera de Chromium con reloj falso: `AbortController` y `ReadableStream.getReader()` en
     WKWebView, y una red real lenta, no se han comprobado.
 
-- **Umbral de clave de OpenWeather duplicado.** El límite de 5 caracteres para considerar
-  usable `apiKeyOW`/`alertsKey` está repetido como literal `5` en diez sitios sin constante
-  compartida: `app.js` (788, 817, 3565), `ui.js` (249, 817), `compare.js` (271, 434, 528, 928)
-  y ahora también `cwWatchRules.hasAlertsKey` en `public/scripts/watch-rules.js`, que el
-  runner en segundo plano usa para aplicar la misma regla. Extraer una constante compartida
-  es un refactor aparte, fuera de alcance aquí; el riesgo aceptado es que un cambio futuro del
-  formato de clave de OpenWeather obligue a tocar los diez sitios en vez de uno.
+- **Umbral de clave de OpenWeather duplicado.** El primer plano ya usa `cwWatchRules.hasAlertsKey`
+  en los tres sitios que deciden si se puede pedir o mostrar algo con la clave (`app.js:3565`,
+  `ui.js:249`, `ui.js:817`), igual que el runner en segundo plano. Quedan siete sitios con el
+  literal `5`: la propia definición en `public/scripts/watch-rules.js` y seis más que no deciden
+  eso mismo sino si conviene resolver a Open-Meteo o incluir OpenWeather en una comparación de
+  proveedores — `app.js` (788, 817), `compare.js` (271, 434, 528, 928). Consolidarlos también es
+  un refactor aparte, fuera de alcance aquí; el riesgo aceptado es que un cambio futuro del
+  formato de clave de OpenWeather obligue a tocar siete sitios en vez de uno.
 
 - **Temperatura en °F.** Resuelto en la fase 7: Open-Meteo y AROME se piden en °F con
   `temperature_unit=fahrenheit`, como OpenWeather con `units=imperial`. Queda una foto preparada

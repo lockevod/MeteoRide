@@ -3562,7 +3562,11 @@ async function checkWeatherAlertsIndependent(steps, timeSteps, sink, settings, i
   if (!settings.alerts) return;
 
   const apiKeyOW = settings.keys.openweather;
-  if (!apiKeyOW || apiKeyOW.trim().length < 5) return;
+  // watch-rules.js carries the rule and loads before this file; the fallback keeps a missing
+  // module from silently reading as "no key" and killing official alerts without a word.
+  const usableKey = window.cwWatchRules ? window.cwWatchRules.hasAlertsKey(apiKeyOW)
+    : !!apiKeyOW && String(apiKeyOW).trim().length >= 5;
+  if (!usableKey) return;
   
   console.log('Checking weather alerts independently...');
   
