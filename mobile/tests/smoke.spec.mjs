@@ -6965,12 +6965,24 @@ test('the alerts toggle is disabled with an explanation when there is no usable 
 
   await expect(page.locator('#showWeatherAlerts')).toBeDisabled();
   await expect(page.locator('#weatherAlertsKeyHint')).toBeVisible();
+  // Same convention as every other .key-status line (apiKeyStatusOW, apiKeyStatus): a
+  // screen reader announces it, and the checkbox it explains points at it.
+  await expect(page.locator('#weatherAlertsKeyHint')).toHaveAttribute('aria-live', 'polite');
+  await expect(page.locator('#showWeatherAlerts')).toHaveAttribute('aria-describedby', 'weatherAlertsKeyHint');
 
   await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'abcdef'; document.getElementById('apiKeyOW').dispatchEvent(new Event('input')); });
   await expect(page.locator('#showWeatherAlerts')).toBeEnabled();
   await expect(page.locator('#weatherAlertsKeyHint')).toBeHidden();
 
   await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'abc'; document.getElementById('apiKeyOW').dispatchEvent(new Event('input')); });
+  await expect(page.locator('#showWeatherAlerts')).toBeDisabled();
+  await expect(page.locator('#weatherAlertsKeyHint')).toBeVisible();
+
+  // Clearing the field entirely is the third transition the brief describes (no key /
+  // typed / cleared), not just typing something short.
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'abcdef'; document.getElementById('apiKeyOW').dispatchEvent(new Event('input')); });
+  await expect(page.locator('#showWeatherAlerts')).toBeEnabled();
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = ''; document.getElementById('apiKeyOW').dispatchEvent(new Event('input')); });
   await expect(page.locator('#showWeatherAlerts')).toBeDisabled();
   await expect(page.locator('#weatherAlertsKeyHint')).toBeVisible();
 });
