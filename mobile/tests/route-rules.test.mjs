@@ -135,3 +135,19 @@ test('uniqueRouteName trims by code points, not UTF-16 units, so a trimmed suffi
   const trimmedBase = result.name.slice(0, -' (2).gpx'.length);
   assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(trimmedBase), false);
 });
+
+test('uniqueRouteName recognises a long name an earlier version stored without trimming', () => {
+  // Before the trimming above, the suffix was simply added to the whole base, so a collision on a
+  // long name was stored as `base (2)` with the base intact. Reimporting that same route now builds
+  // the shortened candidate instead, finds it free, and used to keep the route a second time under
+  // a name one character class away from the first. The old name is matched by fingerprint.
+  const base = 'x'.repeat(64);
+  const records = [rec(1, `${base}.gpx`, 'a'), rec(2, `${base} (2).gpx`, 'fp-new')];
+  const result = unique(records, `${base}.gpx`);
+  assert.equal(result.name, `${'x'.repeat(60)} (2).gpx`, 'the name it is stored under stays within 64 characters');
+  assert.equal(result.replaceId, 2, 'the same route was kept a second time instead of replacing the old record');
+
+  // A different route under that old name keeps it: only the fingerprint may claim a record.
+  const other = [rec(1, `${base}.gpx`, 'a'), rec(2, `${base} (2).gpx`, 'other')];
+  assert.deepEqual(unique(other, `${base}.gpx`), { name: `${'x'.repeat(60)} (2).gpx`, replaceId: null });
+});

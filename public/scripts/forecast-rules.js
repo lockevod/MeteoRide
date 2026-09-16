@@ -566,6 +566,9 @@ var cwForecastRules = (function () {
    * Trimmed by Unicode code point, not UTF-16 code unit, so a base ending in an emoji or
    * another character outside the Basic Multilingual Plane never gets its surrogate pair
    * split into one lone, unpaired unit.
+   * A collision on a long name that an earlier version stored without trimming keeps its base
+   * whole, which is a name this walk never builds: a record holding it with the same content is
+   * claimed by fingerprint too and moves to the bounded name, rather than being kept twice.
    */
   function uniqueRouteName(records, { name, fingerprint: fp }) {
     const m = /\.(gpx|kml)$/i.exec(name);
@@ -577,7 +580,16 @@ var cwForecastRules = (function () {
       const trimmedBase = suffix ? Array.from(base).slice(0, Math.max(0, 64 - suffix.length)).join('') : base;
       const candidate = `${trimmedBase}${suffix}${ext}`;
       const taken = (records || []).filter((r) => r && r.name === candidate);
-      if (!taken.length) return { name: candidate, replaceId: null };
+      if (!taken.length) {
+        // Before the trimming above, the suffix was added to the whole base, so a collision on a
+        // long name was stored with its base intact — a name this walk never builds now. Without
+        // this, the same route reimported finds the shortened candidate free and is kept a second
+        // time. Claimed by fingerprint, like any other record, and moved to the bounded name.
+        const legacy = trimmedBase === base
+          ? null
+          : (records || []).find((r) => r && r.name === `${base}${suffix}${ext}` && same(r));
+        return { name: candidate, replaceId: legacy ? legacy.id : null };
+      }
       const match = taken.find(same);
       if (match) return { name: candidate, replaceId: match.id };
     }
