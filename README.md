@@ -1,299 +1,97 @@
 # MeteoRide
 
-🚴‍♂️ **MeteoRide** is a web application designed for cyclists to forecast detailed weather in a route. Load GPX or KML files, select your cycling speed, and get comprehensive weather data along your path, including temperature, wind, precipitation, humidity, cloudiness, luminosity, and UV index.
-
-You can download de code, execute directly without a server, install in a server or acces to https://app.meteoride.cc webapp.
-
-## Features
-
-- **Weather Providers**: Choose from Open-Meteo (free, up to 14 days), OpenWeather (API key required, up to 4 days), or Arome-HD (high-resolution for Europe within 48 hours).
-- **Provider chains**: A new chain option is available: "OpenWeather 0–1h → Arome 1–48h → OpenMeteo". This requires an OpenWeather API key; if the key is missing the option is disabled in the selector. This chain leverages real-time data from OpenWeather for the immediate hour and hyper-local AROME precision for the next 47 hours.
-- **Provider Change Indicators**: Visual indicators show when the weather data source changes during your route. In normal mode, compare providers mode, and compare dates mode, abbreviated labels (OPM, ARM, OPW) appear at the top of each column where the provider switches, making it easy to see exactly which data source is being used for each time segment. This is especially useful in provider chains where multiple sources are combined.
-- **Comparison Mode**: Evaluate differences between providers for better decision-making.
-- **Date Comparison Mode**: Compare weather forecasts between two different dates/times for the same route.
-- **Automatic Fallbacks**: Switches to Open-Meteo if your primary provider fails or exceeds its horizon, with optional notifications.
-- **Interactive Weather Table**: Displays hourly data with icons, temperature, wind (speed + direction + gusts), rain (amount + probability), humidity, cloudiness, luminosity bar, and UV index.
-- **Interactive Map**: Visualize wind arrows (blue for light <12 km/h, red for strong 30-50 km/h, purple for very strong >50 km/h), precipitation drops, and route markers.
-- **Horizontal Scrolling**: Drag or scroll the table horizontally on touch screens; click columns to highlight and center the map.
-- **Solar Information**: Automatic sunrise/sunset times, civil twilight, and real luminosity calculations.
-- **Smart Fallbacks**: Handles provider failures, retries, and clear notifications on data limitations.
-- **GPX Route Loading**: Supports standard tracks, routes, and waypoints. Load files directly or via URLs with parameters like `?gpx_url=` or sharing directly.
-- **URL Parameters**: Direct links for routes, e.g., `?gpx_url=https://example.com/route.gpx`, `?datetime=2024-03-15T10:00`, `?speed=25`.
-- **Local Caching**: Stores provider responses in localStorage for ~30 minutes per step/hour to speed up reloads and reduce API calls.
-- **Settings**: API key management with check buttons, units (wind: km/h/m/s/mph; temperature: °C/°F; distance: km/mi; precipitation: mm/in), and language support (English/Spanish).
-- **Privacy-Focused**: No data sent to external servers. Only shares coordinates, dates, and API keys with weather providers. This app can be installed locally (only needs a brownser) except if you want to use "share route" with IOS.
-- **Progressive Web App (PWA)**: Installable on mobile and desktop devices for a native app-like experience.
-- **Open Source**: MIT licensed, available on GitHub for contributions.
-
-## Weather Providers & Advantages
-
-MeteoRide supports multiple weather providers, each with unique strengths:
-
-- **Open-Meteo**: 
-  - **Advantages**: Free, no API key required, global coverage, up to 14 days forecast
-  - **Best for**: Long-term planning, global routes, budget-conscious users
-  
-<!-- MeteoBlue provider details removed from public docs per project policy -->
-  
-- **OpenWeather**:
-  - **Advantages**: Real-time data, detailed current conditions, official weather alerts
-  - **Best for**: Immediate departures, urban areas, when current weather is critical
-  
-- **AROME-HD**:
-  - **Advantages**: Free, no API key required (use openmeteo with AromeHD provider). Hyper-local precision (~1-2km resolution), superior wind forecasting, accurate short-term precipitation
-  - **Best for**: European routes (France + nearby), wind-sensitive activities, short-term planning
-  
-- **Provider Chains**:
-  - **OpenWeather → AROME-HD → Open-Meteo**: Combines real-time data from OpenWeather (first hour) with hyper-local AROME precision (next 47 hours), falling back to reliable Open-Meteo for longer forecasts
-
-## Howto use
-You can use in your own computer, only download the code and open index.html in your computer or you can use your own server or you can use https://app.meteoride.cc. We use Cloudflare because it's necessary to have POST option to upload gpx files (it's necessary if you want to share GPX files in IOS between apps).
-
-## Getting Started
-
-1. **Load a GPX Route**: Click the 📁 button or use URL parameters.
-2. **Set Date and Time**: Choose your planned start time (auto-adjusts to 15-minute intervals).
-3. **Adjust Speed**: Enter average speed or use presets (5, 10, 12, 15, 20 km/h).
-4. **Select Interval**: Choose weather data every 15 or 30 minutes.
-5. **Pick Provider**: Select a weather source and enable comparison if needed.
-
-For more detailed information, see the [User Guide (English)](https://app.meteoride.cc/help_en.html) or [Guía de Usuario (Español)](https://app.meteoride.cc/help.html).
-
-## Recent routes (local)
-
-MeteoRide keeps a short list of the most recent GPX files you loaded so you can reload them quickly without re-uploading. The feature is local-only (uses IndexedDB with a localStorage fallback) and by default stores the last 5 routes; re-loading a route that is already in the list moves it to the top instead of duplicating it. For details and usage instructions see the User Guide links above.
-
-## Limitations and Tips
-
-- **Time Horizons**: Open-Meteo (14 days), OpenWeather (4 days in standard mode, 1 hour in chains)
-- **Accuracy**: Forecasts less reliable beyond 3-4 days.
-- **Free APIs**: Monthly limits for OpenWeather; Open-Meteo has no limits.
-- **Best Practices**: Use routes up to 100-200 km, plan 1-2 days ahead, combine sources, have a backup plan, and carry rain gear.
-
-## Official Weather Alerts
-
-MeteoRide can surface official weather warnings published by national meteorological services when these are available via the OpenWeather One Call API (the API exposes an <code>alerts</code> array). To use this feature:
-
-- Provide your OpenWeather API key in the Settings panel and enable "Show official weather alerts".
-- MeteoRide will check for alerts even if OpenWeather is not your selected primary provider (sampling a representative set of route points to limit API usage).
-- Detected alerts are shown as non‑invasive cards (auto‑hide after 15 seconds) and a persistent ⚠️ indicator allows you to re-open them.
-- Alerts are cached locally for ~1 hour to reduce repeated API calls.
-
-Important: These alerts are informational only. Always consult your country's official meteorological service or competent authorities before making safety-critical decisions. OpenWeather may be incomplete, delayed, or contain errors; MeteoRide is not a substitute for official communications.
-
-## Troubleshooting
-
-- **GPX/KML Won't Load**: Ensure the file has valid tracks.
-- **No Weather Data**: Check API key or switch to Open-Meteo.
-- **Date Out of Range**: Reduce the time horizon.
-- **Empty Table**: Verify route length.
-
-
-## Installation
-
-No installation required—run directly in your browser (downloaded or https://app.meteoride.cc  directly). If you want to install locally in a web server you can use a common webserver (apache, caddy, etc), if you want to  use shortcuts  you will need some method to provide POST method (testing in a Caddy and Node environment, but you can use your onwn).
-
-### Installing as a Progressive Web App (PWA)
-
-MeteoRide can be installed as a PWA for a native app-like experience. If you want to install as a PWA you need to have deployed webapp in a server or use https://app.meteoride.cc 
-
-#### Android
-1. Open MeteoRide in Chrome.
-2. Tap the menu (three dots) in the top right.
-3. Select "Add to Home screen".
-4. Confirm by tapping "Add".
-
-#### iOS (iPhone/iPad)
-1. Open MeteoRide in Safari.
-2. Tap the Share button (square with arrow).
-3. Select "Add to Home Screen".
-4. Tap "Add" in the top right.
-
-#### Chrome on Desktop
-1. Open MeteoRide in Chrome.
-2. Click the install icon in the address bar or the menu.
-3. Click "Install".
-
-#### Edge on Desktop
-1. Open MeteoRide in Edge.
-2. Click the install icon in the address bar.
-3. Click "Install".
-
-#### Safari on Mac
-1. Open MeteoRide in Safari.
-2. Go to File > Add to Dock.
-3. Or, click the Share button and select "Add to Dock".
-
-For local development:
-1. Clone the repo: `git clone https://github.com/lockevod/MeteoRide.git`
-2. Open `index.html` in your browser.
-
-## Native apps (iOS / Android)
-
-Besides the PWA, MeteoRide can be built as a real App Store / Play Store app with
-[Capacitor](https://capacitorjs.com). It runs the very same code from `public/`
-inside a native shell, so there is no second codebase to maintain.
-
-What the native build adds:
-
-- **Native share sheet, both ways**: share a GPX to MeteoRide from Files, Mail, Komoot,
-  Strava or any other app, and send the loaded route back out to a head unit app such
-  as Hammerhead. No iOS Shortcut and no upload to a temporary server — the file never
-  leaves the device.
-- **`.gpx` / `.kml` file handler**: "Open in MeteoRide" from anywhere on the system.
-- **Fully offline assets**: Leaflet, SunCalc and the weather icons are bundled
-  instead of loaded from a CDN.
-- **Settings that stay put**: units, language and your API key are also kept in native
-  storage, so they survive the system reclaiming the web view's data.
-- **Ride alerts**: after you plan a route, a background check re-reads its forecast
-  and notifies you if rain or strong wind appears where there was none, or an
-  official warning is issued for the ride. On by default, with a toggle in settings.
-- **Useful without coverage**: the app reopens on your last route, and out of signal it
-  still shows the forecast it downloaded, labelled with its age, instead of an empty
-  table. A button saves the prepared route's forecast so it is not cleared. Map tiles
-  you have already looked at are kept too, so the area you studied at home still has a
-  background on the mountain.
-
-The project lives in `mobile/`. Per-platform instructions:
-
-- [docs/IOS.md](docs/IOS.md) — build, Xcode setup and the Swift share extension.
-- [docs/ANDROID.md](docs/ANDROID.md) — build and the share intents, already wired.
-
-```bash
-cd mobile
-npm install
-npm run add:ios   # iOS only, once; the Android project is already in the repo
-npm run ios       # or: npm run android
-npx playwright install chromium
-npm test          # smoke tests over the built bundle
-```
-
-### Sharing routes (iOS / Android)
-
-MeteoRide supports several ways to share GPX routes from mobile devices. Pick the one that fits your workflow:
-
-- POST handoff (recommended for iOS / Shortcuts): send raw GPX to the app's share endpoint (the service worker accepts a POST and stores the file temporarily). This method is required for many iOS share flows because the browser/service-worker APIs cannot always receive the raw file directly from the share sheet. For technical reasons this involves uploading the GPX to a temporary server for the handoff; the file is used only for this purpose and is deleted automatically (within a maximum of two minutes). By using the POST handoff you acknowledge the GPX will be uploaded to a temporary server for the handoff only.
-
-- Hosted URL (`?gpx_url=`): host your GPX somewhere (GitHub, public file host, S3, etc.) and open MeteoRide with `?gpx_url=https://.../route.gpx`. The client fetches the GPX directly from that URL; no upload to a third-party server is required by MeteoRide.
-
-- Direct / local open (file input, drag & drop, or open-in flows): choose a GPX file from your device or share it directly to the page when supported. These flows run entirely in your browser and do not upload the file.
-
-The repository includes a Shortcuts export with an example iOS recipe in `SHORTCUT_EXPORT.md` which you can follow to create an iOS Shortcuts to automate the POST handoff.
-
-You can also donwload mine shortcut. I'm using it and it's working fine.
-
-[GPX to Meteoride Shortcut](https://www.icloud.com/shortcuts/a57e06eaadca423eafaeaee05753b79b)
-
-
-### Recommended Production setup for POST handoff (Cloudflare Pages + Worker)
-
-If you want the POST handoff to work reliably (required for iOS Shortcuts POST flows), the app's service worker and the POST endpoint must be served from the same origin. GitHub Pages cannot host a dynamic POST endpoint. The quickest production-ready option is Cloudflare Pages + KV  which lets you host the static site and run a small Worker at the same origin (but you can use vercel  or similar also or any webserver supporting POST and commmond headers.)
-
-If you use cloudflare you've exemples in this repo (files in functions,_routes.js an .headers)
-
-
-## Tampermonkey userscripts
-
-This project includes two optional Tampermonkey userscripts. Install them in your browser if you want one-click integrations with third-party sites.
-
-1) Komoot, Bikemap and Hammerhead  MeteoRide
-Adds a small MeteoRide icon button on Komoot and Bikemap pages and a quick-import button on Hammerhead route pages when a GPX is available; clicking the button sends the GPX to MeteoRide. The universal userscript detects Hammerhead dashboard route pages and will attempt to fetch the GPX using the dashboard export endpoint when possible.
-- Path: `tools/userscripts/tamper_meteoride.user.js`
-- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js`
-- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride.user.js)  
-
-
-2) MeteoRide → Hammerhead (URL import)
-Adds an export button in the MeteoRide UI that uploads the generated GPX to Hammerhead Dashboard.
-- Path: `tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
-- Raw URL: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
-- Install (one-click): [![Install (one-click) — Tampermonkey](https://img.shields.io/badge/Install-Tampermonkey-blue?style=flat-square)](https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js)  
-	Raw: `https://raw.githubusercontent.com/lockevod/meteoride/main/tools/userscripts/tamper_meteoride_export_hammerhead.user.js`
-
-Installation (Tampermonkey)
-1. Install Tampermonkey (or a compatible userscript manager) in your browser (Chrome, Firefox, Edge, etc.).
-2. Open the raw URL for the script you want (see above) and use the Tampermonkey `Install` button, or create a new userscript and paste the file contents from the repository.
-3. Make sure the userscript is enabled and allowed to run on the relevant domains:
-	- `tamper_meteoride.user.js`: enable for Komoot/Bikemap domains.
-	- `tamper_meteoride_export_hammerhead.user.js`: enable for `https://app.meteoride.cc/*` and `https://dashboard.hammerhead.io/*`.
-4. Configure any required options in the script header or in the `CONFIG` object near the top of the file (for example, share-server base URL for the Hammerhead exporter).
-
-Notes and limitations
-- Komoot: GPX export is only available for routes if you have a Komoot **Premium** subscription. The userscript can only fetch GPX when the site exposes the GPX file for your current route (direct download or API endpoint).
-- Bikemap: some routes may require login or private access; the userscript cannot fetch GPX in those cases.
-- Hammerhead exporter: requires a share-server that returns a `/shared/<id>.gpx` URL or JSON with the shared URL. The Hammerhead tab should be open in the same browser profile for automatic token discovery; if it is not logged in the script will poll for interactive login (configurable `AUTH_WAIT_MS`).
-- Both scripts avoid heavy DOM parsing and prefer direct GPX links / APIs to stay lightweight and reliable.
-
-Security
-- The Komoot/Bikemap userscript posts the GPX to MeteoRide using `window.postMessage`; MeteoRide validates the message origin. No GPX is uploaded to external servers by that script itself.
-- The Hammerhead exporter uploads GPX to your configured share-server; treat shared links as public unless your server enforces access controls. The Hammerhead token discovery happens inside the Hammerhead tab and the token is not exfiltrated from that page. Web https://app.meteoride.cc delectes all gpx every 2 minutes and tampermonkey is configured to delete gpx once is donwloades/send to hammerhead.
-
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-Bikemap, Komoot, OpenWeatherMaps, Openmeteo and Hammerhead are registered marks. They may have specific proprietary licenses; if you use this code or the published webapp you must comply with them.
-
-This code and the webapp are provided as-is without warranty. By using this repository or the webapp you accept these terms.
-
-
-## Privacy and Data
-
-### Protecting your Privacy
-
-**MeteoRide webapp (https://app.meteoride.cc) runs completely on your device.** All settings, preferences and data are stored only in your browser's localStorage. Only when using shortcuts to share a GPX will the file be uploaded to Cloudflare (or your configured share-server). This is necessary for some iOS Shortcuts workflows that require a POST handoff. If you open the file directly from MeteoRide it will not be uploaded since it is processed locally. In any case, uploaded GPX files are deleted automatically after a short period (the default implementation removes them within a maximum of two minutes).
-
-Key points:
-
-- **No account required:** You don't need to create an account or provide personal data to use MeteoRide.
-- **Full control:** You can delete all stored data via your browser settings (localStorage).
-- **Open source:** The full source code is available on GitHub so you can verify how data is handled.
-
-### Data Shared with Weather Providers
-
-To obtain forecasts, MeteoRide only shares:
-
-- **Geographic coordinates** of the points in your route
-- **Dates and times** for which you request forecasts
-- **Your API Key** (only if you configure one for providers such as OpenWeather)
-
-Note about API keys: API keys are stored in your browser localStorage. While the risk from storing a free API key locally is low, be mindful that they could be accessed by other scripts running in your browser if your environment is compromised. If you prefer, avoid supplying provider API keys and rely on providers that do not require keys (for example Open‑Meteo / AromeHD where available).
-
-> **Note:** Weather providers (Open‑Meteo, OpenWeather) have their own privacy policies. MeteoRide only acts as a client requesting forecast data from those services.
-
-### What is stored locally
-
-- Units and language settings
-- API keys (stored in your browser localStorage)
-- Speed and interval preferences
-- Temporary weather data cache (approximately 30 minutes per step/hour)
-
-If you need stricter privacy guarantees, consider running MeteoRide completely offline (open `index.html` locally without using share/upload features) or deploy the share-server under your control and configure appropriate access policies.
-
-
-## Technologies
-
-- **Maps**: OpenStreetMap
-- **Weather Data**: Open-Meteo, OpenWeather
-- **Icons**: Weather Icons by Erik Flowers
-- **Libraries**: Leaflet.js, SunCalc, GPX parser
-- **Native shell**: Capacitor (iOS / Android)
-- **Hosting**: Cloudfare Pages (only if you use web)
-- **Sripts**: Tampermonkey
+🚴‍♂️ **MeteoRide** shows the weather along your bike route. Load a GPX or KML
+file, set the speed you expect to ride at, and get temperature, wind,
+precipitation, humidity, cloudiness, luminosity and UV index for every point of
+the route — at the hour you will actually be there.
+
+**Try it:** <https://app.meteoride.cc>. Nothing to install, no account. It also
+runs as a native iPhone and Android app, as an installable PWA, or from your own
+copy of this repository.
+
+## Documentation
+
+| Document | What is in it |
+|---|---|
+| **[User guide](docs/GUIDE.md)** · **[Guía de usuario](docs/GUIA.md)** | How to use MeteoRide, in full: providers, settings, the native app, privacy, limits. **Start here.** |
+| [Installing and running](docs/INSTALL.md) | PWA install recipes, the native apps, running your own copy. |
+| [Deploying, and sharing routes into it](docs/DEPLOY.md) | Cloudflare Pages + Worker, the POST handoff, iOS Shortcuts. |
+| [Tampermonkey userscripts](docs/USERSCRIPTS.md) | One-click import from Komoot, Bikemap and Hammerhead. |
+| [iOS build](docs/IOS.md) · [Android build](docs/ANDROID.md) | Per-platform native build instructions. |
+
+The help inside the app —
+[español](https://app.meteoride.cc/help.html) ·
+[English](https://app.meteoride.cc/help_en.html) — is the short version of the
+user guide: what to do, without the why.
+
+## What it does
+
+- **Three weather providers**: Open-Meteo (free, no key, 14 days), OpenWeather
+  (key required, 4 days, official alerts) and AROME-HD (free, high resolution,
+  Europe within 48 hours) — plus a chain that uses each over the stretch where
+  it is best.
+- **Automatic fallbacks**: if a provider exceeds its horizon, fails or has no
+  data, only the affected steps switch to Open-Meteo. An abbreviated label
+  (OPM / ARM / OPW) marks which source each column came from.
+- **Comparison modes**: two providers side by side, or the same route on two
+  different dates.
+- **Interactive table and map**: hourly icons, wind speed with direction and
+  gusts, rain amount and probability, humidity, cloud, a luminosity bar and UV;
+  wind arrows, precipitation drops and route markers on the map, linked to the
+  selected column.
+- **Solar information**: sunrise, sunset, civil twilight and calculated
+  luminosity.
+- **Route loading**: the file picker, recent routes kept locally, or URL
+  parameters such as `?gpx_url=`, `?datetime=` and `?speed=`.
+- **Local caching**: provider responses are kept for ~30 minutes per step, to
+  speed up reloads and stay inside API limits.
+- **Native apps**: system share sheet both ways, `.gpx` / `.kml` file handler,
+  background alerts when the forecast for a planned route turns worse, and a
+  forecast and map tiles that survive going out of signal.
+- **Privacy-focused**: it runs on your device. Only coordinates, times and your
+  own API key reach the weather providers.
+- **Open source**: MIT licensed.
+
+Every one of these is explained in the [user guide](docs/GUIDE.md).
+
+## Privacy, in one paragraph
+
+MeteoRide runs entirely on your device: settings, routes and cache never leave
+it, and there is no account. The one exception is the website's iOS Shortcuts
+handoff, which uploads the GPX to Cloudflare because Shortcuts only accept POST;
+that file is deleted within two minutes. The native apps do not need it. Weather
+providers receive only the coordinates of your route, the times you ask about,
+and your API key if you configured one. The detail is in
+[the guide](docs/GUIDE.md#13-privacy-and-data).
 
 ## Contributing
 
-Contributions are welcome! Fork the repo, report issues, suggest features, translate to new languages, or improve docs. Visit [GitHub Issues](https://github.com/lockevod/MeteoRide/issues) for support.
+Contributions are welcome: fork the repo, report issues, suggest features,
+translate to new languages or improve the docs.
+[GitHub Issues](https://github.com/lockevod/MeteoRide/issues) is also where to
+ask for support.
 
 Developed by [Lockevod](https://github.com/lockevod).
 
-## Support
+## License
 
-If you find MeteoRide useful, consider supporting the project with a donation:
+MIT — see [LICENSE](LICENSE).
+
+Bikemap, Komoot, OpenWeatherMaps, Openmeteo and Hammerhead are registered marks.
+They may have specific proprietary licenses; if you use this code or the
+published webapp you must comply with them.
+
+This code and the webapp are provided as-is, without warranty. By using this
+repository or the webapp you accept these terms.
+
+## Support the project
+
+If you find MeteoRide useful, consider supporting it with a donation:
 
 <a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 ---
 
-**Disclaimer**: MeteoRide is a planning tool. Weather data are estimates and may not be accurate. Always verify conditions and use your judgment. The developer is not responsible for decisions based on this information.
+**Disclaimer**: MeteoRide is a planning tool. Weather data are estimates and may
+not be accurate. Always verify conditions and use your judgment. The developer
+is not responsible for decisions based on this information.

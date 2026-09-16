@@ -41,6 +41,16 @@ docs/ANDROID.md    Android build
   Do not add a CDN reference without also adding it to `VENDOR` in
   `mobile/scripts/build-www.mjs`; the build fails otherwise, on purpose.
 - User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
+- **The help pages are the short version; `docs/GUIA.md` and `docs/GUIDE.md` are the
+  long one.** `public/help.html` and `public/help_en.html` answer "what do I do" in
+  about 1600 visible words, because inside the app they are one scroll on a phone; the
+  why, the edge cases and the exact numbers live in the two guides, which the help links
+  to on GitHub so a phone can open them. `mobile/tests/help-pages.test.mjs` holds an
+  1800-word ceiling and checks that link resolves to a file that exists, and the same
+  file compares the two pages' tag counts — so every edit lands in both languages, and
+  anything that no longer fits goes into the guide rather than being dropped. `README.md`
+  is presentation plus links: the install recipes, the Cloudflare deployment and the
+  userscripts are annexes (`docs/INSTALL.md`, `docs/DEPLOY.md`, `docs/USERSCRIPTS.md`).
 - **The version has one source: `mobile/package.json`'s `version`.** Android's
   `versionName` is kept equal to it by hand (only `versionCode`/`CURRENT_PROJECT_VERSION`
   are free to move as their own increasing integers). iOS's `MARKETING_VERSION` cannot be
