@@ -91,12 +91,32 @@ test('the help stays short enough to read on a phone', async () => {
   }
 });
 
+/* The ceiling above checks each page on its own, so a paragraph dropped from only one
+ * language passes it (the short page just has more room to spare). Word counts across
+ * a translation are never identical, but a real drift is much bigger than phrasing. */
+const LENGTH_DRIFT_MAX = 0.15;
+
+test('the two languages stay within 15% of each other in length', async () => {
+  const [es, en] = await pages();
+  const esWords = visibleWords(es);
+  const enWords = visibleWords(en);
+  const drift = Math.abs(esWords - enWords) / Math.max(esWords, enWords);
+  assert.ok(
+    drift <= LENGTH_DRIFT_MAX,
+    `es has ${esWords} visible words, en has ${enWords} (${(drift * 100).toFixed(1)}% apart); one language likely lost content`
+  );
+});
+
 /* Both halves of that split: the help must hand the reader the guide, and the guide
- * must exist where the link says. A link to the repository is what a phone can open. */
-test('each help page links to its guide, and the guide is there', async () => {
+ * must exist where the link says. A link to the repository is what a phone can open.
+ * Five sections link out; counting the occurrences (not just checking one survived)
+ * catches an edit that mangles four of the five and leaves one intact. */
+test('each help page links to its guide from every section, and the guide is there', async () => {
   for (const [page, guide] of [['help.html', 'GUIA.md'], ['help_en.html', 'GUIDE.md']]) {
     const link = `https://github.com/lockevod/MeteoRide/blob/main/docs/${guide}`;
-    assert.ok((await read(page)).includes(link), `${page} does not link to ${guide}`);
+    const html = await read(page);
+    const occurrences = html.split(link).length - 1;
+    assert.equal(occurrences, 5, `${page} links to ${guide} ${occurrences} time(s), expected 5`);
     await access(join(ROOT, 'docs', guide));
   }
 });
