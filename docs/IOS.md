@@ -396,11 +396,18 @@ apps share a route as a URL rather than a file — that case still goes through
 **Blank screen after `cap sync`.** Open Safari → Develop → your device → the app,
 and read the console. It is the same web inspector the website uses.
 
-**The map does not centre on the device.** The web view asks for location through
-the app's own permission, so `NSLocationWhenInUseUsageDescription` must be in
-`Info.plist` (it is in the additions file). In the simulator, set a location under
+**The map does not centre on the device.** `centreOnUser` asks for the position through
+the `@capacitor/geolocation` plugin, which needs `NSLocationWhenInUseUsageDescription`
+in `Info.plist` (it is in the additions file). In the simulator, set a location under
 *Features → Location*; with *None* the request simply fails and the map stays where
 the website puts it.
+
+**The permission prompt said "localhost".** That was the bug this plugin fixes: the
+web `navigator.geolocation` API runs inside the WKWebView, so iOS names the page's own
+origin in the prompt — "localhost" under Capacitor — rather than the app, and the plist
+usage string above was never shown. The plugin asks through the OS instead, which names
+the app. Android never had this problem (its permission dialog is already tied to the
+app package, not the page origin) and gets nothing new in its manifest from the plugin.
 
 **No alert ever arrives.** In order: Background App Refresh on for MeteoRide (the
 toggle shows a hint when it is not); the two `AppDelegate` lines from step 6 present;

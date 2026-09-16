@@ -225,13 +225,18 @@ What is still open, and why it was left:
   is zero in portrait, and the text sat on the edge of the screen. The website's
   0.5rem stays and the inset goes on top.
 - **With no route the map opens where the phone is.** The website centres on
-  Barcelona, a hard-coded default. `centreOnUser` in `native.js` asks the web view's
-  own `navigator.geolocation` (no plugin: WKWebView and the Android web view both
-  forward it once the app holds the location permission, which the plist string and
-  the manifest entries provide). It runs alongside the route restore, not after it,
-  because on a first run the restore waits seconds for routes that do not exist; a
-  position is only applied while the map is still unclaimed, and a route fits itself
-  afterwards regardless.
+  Barcelona, a hard-coded default. `centreOnUser` in `native.js` asks for the
+  position through the `@capacitor/geolocation` plugin when it is there, `navigator.geolocation`
+  otherwise (the web build has no plugin, so it keeps working exactly as before). The plugin
+  is why it exists at all: `navigator.geolocation` runs inside the WKWebView, so iOS
+  attributes the permission prompt to the page's origin — "localhost" under Capacitor
+  — instead of the app, and `NSLocationWhenInUseUsageDescription` in the plist was never
+  shown. Android was never affected (its permission dialog is already tied to the app,
+  not the page origin), and the plugin adds nothing to its manifest — the two
+  `ACCESS_*_LOCATION` permissions were already declared for the old web-view path. It
+  runs alongside the route restore, not after it, because on a first run the restore
+  waits seconds for routes that do not exist; a position is only applied while the map
+  is still unclaimed, and a route fits itself afterwards regardless.
 - **The root `.gitignore` ignores every nested `.gitignore`** (line 6). So the one
   `cap add android` generates never reaches a clone, and on a fresh checkout the
   files `cap sync android` writes — `app/src/main/assets/`, `res/xml/config.xml`,

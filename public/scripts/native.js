@@ -960,17 +960,35 @@
   // restore waits several seconds for routes that do not exist; whichever finishes
   // last must not undo the other, so a position is only applied while the map is
   // still unclaimed, and a route always fits itself afterwards anyway.
+  // The web geolocation API runs inside the WKWebView, so iOS attributes the permission
+  // prompt to the page's origin — "localhost" under Capacitor — instead of the app, and
+  // the usage string in Info.plist is never shown. The official plugin asks through the
+  // OS instead, so the prompt names the app. Kept on the web (no Capacitor bridge) too,
+  // exactly as before, because the plugin does not exist there.
   async function centreOnUser() {
-    if (!navigator.geolocation) return;
     const map = await waitFor(() => window.map, 10000);
     if (!map || window.lastGPXFile) return;
+    const opts = { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 };
+    const geo = plugins.Geolocation;
+    if (geo) {
+      try {
+        let status = (await geo.checkPermissions()).location;
+        if (status !== 'granted') status = (await geo.requestPermissions()).location;
+        if (status !== 'granted') { log('no position', 'permission ' + status); return; }
+        const pos = await geo.getCurrentPosition(opts);
+        if (window.lastGPXFile) return;   // a route arrived while we were waiting
+        map.setView([pos.coords.latitude, pos.coords.longitude], 12);
+      } catch (e) { log('no position', e && e.message); }
+      return;
+    }
+    if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         if (window.lastGPXFile) return;   // a route arrived while we were waiting
         map.setView([pos.coords.latitude, pos.coords.longitude], 12);
       },
       (err) => log('no position', err && err.message),
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60 * 1000 }
+      opts
     );
   }
 
@@ -1029,4 +1047,5 @@
   window.cwPreparedRecord = () => preparedRecord;
   window.cwLoadPreparedRecord = loadPreparedRecord;
   window.cwArmWatch = armWatch;
+  window.cwCentreOnUser = centreOnUser;
 })();

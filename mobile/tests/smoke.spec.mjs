@@ -242,9 +242,9 @@ async function recordNotices(page) {
 /** Stand-in for the bridge Capacitor injects into the web view, implementing the same
  *  MeteoRideShare contract as the iOS and Android plugins. `delayMs` makes a drain slow
  *  enough to collide with a second request, which is the interesting case. */
-async function installNativeBridge(page, { routes = [], delayMs = 0, notifications = 'granted', background = 'available' } = {}) {
+async function installNativeBridge(page, { routes = [], delayMs = 0, notifications = 'granted', background = 'available', geolocation = null } = {}) {
   await page.addInitScript(
-    ({ routes: initial, delayMs: delay, notifications: answer, background: bg }) => {
+    ({ routes: initial, delayMs: delay, notifications: answer, background: bg, geolocation: geo }) => {
       const pending = [...initial];
       // What the system will answer when asked for notification permission.
       window.__notifAnswer = answer;
@@ -264,6 +264,17 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
         navigator.serviceWorker.register = function (...args) {
           window.__swRegistered = true;
           return register.apply(navigator.serviceWorker, args);
+        };
+      }
+
+      // Tells the "where is the phone" tests which API actually answered: the plugin
+      // (the app path) or the browser's own navigator.geolocation (the web fallback).
+      window.__geoCalls = { browser: 0, plugin: 0 };
+      const browserGetCurrentPosition = navigator.geolocation && navigator.geolocation.getCurrentPosition;
+      if (browserGetCurrentPosition) {
+        navigator.geolocation.getCurrentPosition = function (...args) {
+          window.__geoCalls.browser++;
+          return browserGetCurrentPosition.apply(navigator.geolocation, args);
         };
       }
 
@@ -361,10 +372,29 @@ async function installNativeBridge(page, { routes = [], delayMs = 0, notificatio
           LocalNotifications: {
             createChannel: async (channel) => { window.__channel = channel; },
           },
+          // Only present when a test asks for it: centreOnUser must fall back to
+          // navigator.geolocation when the plugin is not there, just like on the web.
+          ...(geo ? {
+            Geolocation: {
+              checkPermissions: async () => ({ location: geo.denied ? 'denied' : 'granted', coarseLocation: 'granted' }),
+              requestPermissions: async () => ({ location: geo.denied ? 'denied' : 'granted', coarseLocation: 'granted' }),
+              getCurrentPosition: async () => {
+                window.__geoCalls.plugin++;
+                if (geo.denied) throw new Error('Location permission was denied');
+                return {
+                  timestamp: Date.now(),
+                  coords: {
+                    latitude: geo.latitude, longitude: geo.longitude, accuracy: 10,
+                    altitudeAccuracy: null, altitude: null, speed: null, heading: null,
+                  },
+                };
+              },
+            },
+          } : {}),
         },
       };
     },
-    { routes, delayMs, notifications, background }
+    { routes, delayMs, notifications, background, geolocation }
   );
 }
 
@@ -4693,6 +4723,44 @@ test.describe('with the phone in Madrid', () => {
     const c = await mapCentre(page);
     expect(Math.abs(c.lat - 41.478)).toBeLessThan(0.05);
     expect(Math.abs(c.lng - 2.31)).toBeLessThan(0.05);
+  });
+});
+
+// The web geolocation api runs inside the page, so iOS names its own origin
+// ("localhost" under Capacitor) in the permission prompt instead of the app. The plugin
+// asks through the OS, which names the app. These two tests pin which api centreOnUser
+// actually calls, telling the app path (plugin present) from the web fallback (it is not)
+// apart by the city the map lands on: each is set far from the other's answer, so a
+// regression to the wrong api shows up as the map opening in the wrong place.
+test.describe('the app path uses the native plugin, not the browser api', () => {
+  test.use({ geolocation: { latitude: 51.5074, longitude: -0.1278 }, permissions: ['geolocation'] }); // London
+
+  test('centres on the plugin answer; the browser api is never called', async ({ page }) => {
+    await installNativeBridge(page, { geolocation: { latitude: 40.4168, longitude: -3.7038 } }); // Madrid
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+
+    await expect.poll(async () => (await mapCentre(page)).lng).toBeLessThan(-3);
+    const c = await mapCentre(page);
+    expect(Math.abs(c.lat - 40.4168)).toBeLessThan(0.05);
+    expect(await page.evaluate(() => window.__geoCalls)).toEqual({ browser: 0, plugin: 1 });
+  });
+});
+
+test.describe('without the plugin, the web fallback still uses navigator.geolocation', () => {
+  test.use({ geolocation: { latitude: 48.8566, longitude: 2.3522 }, permissions: ['geolocation'] }); // Paris
+
+  test('centres on the browser answer; the plugin is never asked', async ({ page }) => {
+    await installNativeBridge(page); // no `geolocation` option: the stub has no Plugins.Geolocation
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+
+    await expect.poll(async () => (await mapCentre(page)).lat).toBeGreaterThan(45);
+    const c = await mapCentre(page);
+    expect(Math.abs(c.lng - 2.3522)).toBeLessThan(0.05);
+    expect(await page.evaluate(() => window.__geoCalls)).toEqual({ browser: 1, plugin: 0 });
   });
 });
 
