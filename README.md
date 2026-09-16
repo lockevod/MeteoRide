@@ -75,7 +75,7 @@ Developed by [Lockevod](https://github.com/lockevod).
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).
 
 Bikemap, Komoot, OpenWeatherMaps, Openmeteo and Hammerhead are registered marks.
 They may have specific proprietary licenses; if you use this code or the
