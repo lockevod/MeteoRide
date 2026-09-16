@@ -10,6 +10,7 @@ import vm from 'node:vm';
 
 const SCRIPTS = join(dirname(fileURLToPath(import.meta.url)), '../../public/scripts');
 const src = await readFile(join(SCRIPTS, 'app.js'), 'utf8');
+const rulesSrc = await readFile(join(SCRIPTS, 'watch-rules.js'), 'utf8');
 const start = src.indexOf('async function checkWeatherAlertsIndependent(');
 const end = src.indexOf('\n// Process weather alerts from OpenWeather API');
 assert.ok(start !== -1 && end > start, 'app.js no longer looks the way this test expects');
@@ -27,6 +28,9 @@ function harness() {
   // The recorder and body reader of utils.js, without the deadline the browser suite holds.
   s.window = s;
   s.cw = { utils: { createRecorder: (signal) => ({ failed: 0, timedOut: [], timedOutHosts: [], signal }), readJson: (res) => res.json() } };
+  // The real cwWatchRules, not a stub: checkWeatherAlertsIndependent calls it directly for
+  // the alerts-key threshold, same as the foreground.
+  vm.runInNewContext(rulesSrc, s);
   vm.runInNewContext(code, s);
   return s;
 }

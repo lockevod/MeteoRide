@@ -246,7 +246,7 @@
       const chk = document.getElementById('showWeatherAlerts');
       if (!chk) return;
       const hint = document.getElementById('weatherAlertsKeyHint');
-      const hasKey = !!window.cwHasAlertsKey(window.getVal ? window.getVal('apiKeyOW') : '');
+      const hasKey = window.cwWatchRules.hasAlertsKey(window.getVal ? window.getVal('apiKeyOW') : '');
       chk.disabled = !hasKey;
       if (hint) {
         hint.hidden = hasKey;
@@ -814,7 +814,7 @@
           }
           if (id === "apiKeyOW") {
             updateProviderOptions();
-            const hasOWM = !!window.cwHasAlertsKey(window.getVal("apiKeyOW"));
+            const hasOWM = window.cwWatchRules.hasAlertsKey(window.getVal("apiKeyOW"));
             const sel = document.getElementById("apiSource");
             if (sel && sel.value === "openweather" && !hasOWM) { sel.value = "openmeteo"; window.apiSource = "openmeteo"; }
           }

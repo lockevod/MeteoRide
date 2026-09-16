@@ -6987,6 +6987,25 @@ test('the alerts toggle is disabled with an explanation when there is no usable 
   await expect(page.locator('#weatherAlertsKeyHint')).toBeVisible();
 });
 
+// apiSource can be left on "openweather" while the key is edited down to something unusable
+// (same 5-character rule as the alerts toggle). ui.js reverts the provider select itself,
+// so a shortened key does not silently keep the table pointed at a provider it can no longer ask.
+test('editing the OpenWeather key down to unusable reverts the provider away from OpenWeather', async ({ page }) => {
+  await goOffline(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('cwSettings', JSON.stringify({ apiKeyOW: 'a-valid-looking-key', apiSource: 'openweather' }));
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#toggleConfig').click();
+
+  await expect(page.locator('#apiSource')).toHaveValue('openweather');
+
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'abc'; document.getElementById('apiKeyOW').dispatchEvent(new Event('change')); });
+  await expect(page.locator('#apiSource')).toHaveValue('openmeteo');
+  expect(await page.evaluate(() => window.apiSource)).toBe('openmeteo');
+});
+
 test('the alerts toggle starts enabled when a usable OpenWeather key was already saved', async ({ page }) => {
   await goOffline(page);
   await page.addInitScript(() => {
