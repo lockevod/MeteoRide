@@ -144,6 +144,9 @@ experience close to a native app. You need the site deployed on a server, or use
 If what you want is the native iPhone or Android app, you need none of this:
 install it from the store.
 
+These same steps, and the other ways to get MeteoRide, are also in
+[`docs/INSTALL.md`](INSTALL.md).
+
 **Android**
 
 1. Open MeteoRide in Chrome.
@@ -204,7 +207,8 @@ A forecast is a guess made hours ahead. When you work out a route, the app keeps
 watching it and tells you if it turns worse for the hours you will be out:
 
 - It was dry and rain appears, or the rain becomes heavy.
-- It was calm and moderate or strong wind appears, or gusts above 55 km/h.
+- It was calm and moderate or strong wind appears, or gusts from around
+  43 km/h.
 - An official warning is issued that overlaps your ride. This needs an
   OpenWeather key and official alerts switched on.
 
@@ -213,8 +217,8 @@ Improvements are not reported, and neither are stretches you have already
 ridden. The watch ends an hour after the route's last point.
 
 Switch it on and off under **Settings → Alerts → "Tell me if the weather on the
-route changes"**, where a line underneath says which route is being watched and
-until when.
+route changes"**, on by default, where a line underneath says which route is
+being watched and until when.
 
 **Worth knowing:** the check is run by the operating system when it feels like
 it, not by the app. On iPhone, Background App Refresh must be on for MeteoRide

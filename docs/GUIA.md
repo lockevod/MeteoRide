@@ -150,6 +150,9 @@ un servidor o usar <https://app.meteoride.cc>.
 Si lo que quieres es la app nativa de iPhone o Android, no necesitas nada de
 esto: instálala desde la tienda.
 
+Estos mismos pasos, y las otras formas de tener MeteoRide, están también en
+[`docs/INSTALL.md`](INSTALL.md) (en inglés).
+
 **Android**
 
 1. Abre MeteoRide en Chrome.
@@ -213,8 +216,8 @@ una ruta, la app se queda vigilándola y te avisa si empeora para las horas en
 que vas a estar fuera:
 
 - Estaba seco y va a llover, o la lluvia pasa a ser fuerte.
-- Había calma y va a hacer viento moderado o fuerte, o rachas por encima de
-  55 km/h.
+- Había calma y va a hacer viento moderado o fuerte, o rachas a partir de
+  unos 43 km/h.
 - Se emite un aviso oficial que solapa tu salida. Esto necesita clave de
   OpenWeather y tener activadas las alertas oficiales.
 
@@ -223,8 +226,8 @@ mejoras no se avisan, y los tramos que ya has pasado tampoco. La vigilancia
 termina una hora después del último punto de la ruta.
 
 Se activa y desactiva en **Configuración → Alertas → «Avisarme si cambia el
-tiempo de la ruta»**, y debajo del interruptor la app te dice qué ruta está
-vigilando y hasta cuándo.
+tiempo de la ruta»**, activado por defecto, y debajo del interruptor la app te
+dice qué ruta está vigilando y hasta cuándo.
 
 **Importante:** la comprobación la ejecuta el sistema operativo cuando quiere,
 no la app. En iPhone hace falta tener activada la *Actualización en segundo

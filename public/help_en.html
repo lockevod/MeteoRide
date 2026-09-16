@@ -234,7 +234,7 @@
         <ul>
             <li><strong>Open-Meteo:</strong> no key, global, 14 days. The default, and the right one for almost everything.</li>
             <li><strong>OpenWeather:</strong> needs a key, 4 days. Real-time data, and the only one that publishes official alerts.</li>
-            <li><strong>AROME-HD:</strong> no key, high resolution, Europe only and 48 hours. Outside that it uses Open-Meteo without you having to do anything.</li>
+            <li><strong>AROME-HD:</strong> no key, high resolution, France and nearby countries, and 48 hours. Outside that it uses Open-Meteo without you having to do anything.</li>
             <li><strong>OpenWeather → AROME-HD → Open-Meteo:</strong> a chain that uses each one over the stretch where it is best. Requires an OpenWeather key.</li>
         </ul>
         <div class="tip">
@@ -322,7 +322,7 @@
         <p>Sunrise, sunset and civil twilight, marked with "c", plus the luminosity calculated for each interval.</p>
 
         <h3>🎯 Fallbacks</h3>
-        <p>If your provider runs past its horizon, fails or has no data, those steps —only those— are asked of Open-Meteo. Each request waits 15 seconds at most, and a provider that goes silent is not asked again in that calculation.</p>
+        <p>If your provider runs past its horizon, fails or has no data, those steps —only those— are asked of Open-Meteo. Each request gets 15 seconds for the server to start answering and another 15 without receiving data while it downloads; a slow but steady download is never cut. A provider that goes silent is not asked again in that calculation.</p>
 
         <h3>🗺️ Recent routes and cache</h3>
         <ul>

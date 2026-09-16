@@ -232,7 +232,7 @@
         <ul>
             <li><strong>Open-Meteo:</strong> sin clave, global, 14 días. La opción por defecto y la buena para casi todo.</li>
             <li><strong>OpenWeather:</strong> con clave, 4 días. Datos en tiempo real, y el único que publica alertas oficiales.</li>
-            <li><strong>AROME-HD:</strong> sin clave, alta resolución, solo Europa y 48 horas. Fuera de ahí usa Open-Meteo sin que tengas que hacer nada.</li>
+            <li><strong>AROME-HD:</strong> sin clave, alta resolución, Francia y países cercanos, y 48 horas. Fuera de ahí usa Open-Meteo sin que tengas que hacer nada.</li>
             <li><strong>OpenWeather → AROME-HD → Open-Meteo:</strong> una cadena que usa cada uno en el tramo donde es mejor. Requiere clave de OpenWeather.</li>
         </ul>
         <div class="tip">
@@ -320,7 +320,7 @@
         <p>Amanecer, atardecer y crepúsculo civil, marcado con «c», además de la luminosidad calculada para cada intervalo.</p>
 
         <h3>🎯 Fallbacks</h3>
-        <p>Si tu proveedor se pasa de horizonte, falla o no tiene datos, esos pasos —solo esos— se piden a Open-Meteo. Cada petición espera como mucho 15 segundos, y un proveedor que se queda callado no se vuelve a consultar en ese cálculo.</p>
+        <p>Si tu proveedor se pasa de horizonte, falla o no tiene datos, esos pasos —solo esos— se piden a Open-Meteo. Cada petición tiene 15 segundos para que el servidor empiece a responder y otros 15 sin recibir datos mientras descarga; una descarga lenta pero continua no se corta. Un proveedor que se queda callado no se vuelve a consultar en ese cálculo.</p>
 
         <h3>🗺️ Rutas recientes y caché</h3>
         <ul>

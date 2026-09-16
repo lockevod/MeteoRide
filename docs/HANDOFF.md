@@ -414,7 +414,7 @@ de la app, y el texto se repasó contra el código en los dos idiomas.
   de encabezados, párrafos y viñetas. Compara la forma, no la prosa: una traducción que
   diga otra cosa con el mismo número de viñetas pasaría.
 - **Un `<summary>` sigue respondiendo al teclado en la web.** `pointer-events: none`
-  (`help.html:163`) le quita el clic del ratón, pero no lo saca del orden de tabulación:
+  (`help.html:168`) le quita el clic del ratón, pero no lo saca del orden de tabulación:
   con foco, Enter o Espacio siguen plegando la sección igual que dentro de la app. Es un
   lector de teclado o de pantalla, no el común con ratón al que apunta "la web se lee
   igual que siempre". No hay arreglo de una línea que no dependa de JavaScript también en

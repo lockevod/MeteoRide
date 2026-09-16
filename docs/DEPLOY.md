@@ -22,7 +22,7 @@ the handoff. The file is used only for that and is deleted automatically, within
 a maximum of two minutes. By using the POST handoff you acknowledge the GPX will
 be uploaded to a temporary server for the handoff only.
 
-The repository includes an example iOS recipe in `SHORTCUT_EXPORT.md`, which you
+The repository includes an example iOS recipe in `tools/SHORTCUT_EXPORT.md`, which you
 can follow to build your own Shortcut. There is also a ready-made one:
 
 [GPX to MeteoRide Shortcut](https://www.icloud.com/shortcuts/a57e06eaadca423eafaeaee05753b79b)
@@ -57,7 +57,7 @@ that supports POST and the usual headers works too.
 If you use Cloudflare, this repository already contains the pieces:
 
 - `functions/` — the Worker endpoints.
-- `_routes.js` — which paths go to the Worker rather than to the static site.
+- `_routes.json` — which paths go to the Worker rather than to the static site.
 - `public/_headers` — the site's headers, including its Content-Security-Policy.
 
 `public/_headers` is a Cloudflare file and is stripped from the native bundle,
