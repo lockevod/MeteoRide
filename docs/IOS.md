@@ -474,6 +474,30 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   section, where a reviewer skimming the policy could have credited the website's
   behaviour to the app. Keep the two under their own headings.
 
+### ITMS-90683 after an upload: a purpose string a dependency asked for
+
+Apple's upload check is static: it scans the binary for *references* to APIs that touch
+sensitive data, not for calls the app actually makes. Two installed plugins name the
+always-authorization keys — `@capacitor/geolocation` uses
+`NSLocationAlwaysAndWhenInUseUsageDescription` and `@capacitor/background-runner` the older
+`NSLocationAlwaysUsageDescription` — even though nothing here ever requests always
+authorization. Both strings are in `Info.plist.additions.xml`; without them the delivery
+comes back as a warning and the review comes back as a rejection.
+
+The first upload of build 1 hit exactly this. If a future plugin adds another, the same
+sweep finds it before Apple does:
+
+```bash
+cd mobile
+for d in node_modules/@capacitor/*/; do
+  ks=$(grep -rhoE "NS[A-Za-z]+UsageDescription" "$d/README.md" "$d/ios" 2>/dev/null | sort -u | tr '\n' ' ')
+  [ -n "$ks" ] && echo "$(basename $d): $ks"
+done
+plutil -p ios/App/App/Info.plist | grep -oE "NS[A-Za-z]+UsageDescription" | sort -u
+```
+
+Everything the first list names has to appear in the second.
+
 ## Troubleshooting
 
 **`Capacitor.Plugins.MeteoRideShare` is undefined.** Almost always `SceneDelegate`

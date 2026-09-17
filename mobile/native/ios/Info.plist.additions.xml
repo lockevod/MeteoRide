@@ -100,6 +100,25 @@
 	<string>processing</string>
 </array>
 
+<!-- Location purpose strings. The app only ever asks for "when in use" — `centreOnUser`
+     reads the position once, at launch, to centre the map — but Apple's upload check is
+     static: it scans for *references* to the always-authorization APIs, and two installed
+     plugins carry them. @capacitor/geolocation names
+     NSLocationAlwaysAndWhenInUseUsageDescription in its constants, and
+     @capacitor/background-runner names the older NSLocationAlwaysUsageDescription. Without
+     both, the upload comes back as ITMS-90683 ("Missing purpose string"), which is a
+     warning on delivery and a rejection at review.
+
+     Declaring the strings does not make the app request always-authorization; nothing in
+     this code calls for it. The wording says so, because these are shown to the user if a
+     dependency ever does ask, and a string that promised something else would be a lie
+     told on the app's behalf. Keep all three in step with what public/privacy-ios.html
+     says about location. -->
+<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+<string>MeteoRide centres the map on where you are, and only while you have the app open. It never uses your location in the background.</string>
+<key>NSLocationAlwaysUsageDescription</key>
+<string>MeteoRide centres the map on where you are, and only while you have the app open. It never uses your location in the background.</string>
+
 <!-- Export compliance. MeteoRide implements no cryptography of its own and ships none:
      no algorithms, no key material, no encrypted storage. What it uses is what the
      system provides — TLS for every request, and whatever hashing or randomness the
