@@ -13,7 +13,8 @@ largo de una ruta GPX en función de la hora de salida y la velocidad. Vive en
 esta rama la convierte además en app nativa iOS y Android con **Capacitor 8.5.2**,
 sin segundo código: el mismo `public/` va dentro de la app.
 
-- Rama: `native-ios-capacitor` (todo lo de abajo está ahí; `main` no lo tiene).
+- Rama: `main`. Todo lo de abajo está fusionado ahí (PR #1, `baf7f8e`, 16/09/2026);
+  la rama `native-ios-capacitor` ya no existe.
 - Commits firmados como `Enderthor <58392928+lockevod@users.noreply.github.com>`,
   sin líneas de atribución de ningún asistente. Mantenerlo así.
 - Proyecto móvil: `mobile/`. `mobile/ios/` **no está en git** (se genera con
@@ -173,13 +174,13 @@ Desde cualquier máquina con el repo clonado:
 ```bash
 git clone https://github.com/lockevod/meteoride.git      # o git pull si ya lo tienes
 cd meteoride
-git checkout native-ios-capacitor
+git checkout main
 cd mobile && npm install                                 # postinstall parchea el runner
 ```
 
 Prompt sugerido para un asistente:
 
-> Estoy en el repo MeteoRide, rama `native-ios-capacitor`. Lee `AGENTS.md`,
+> Estoy en el repo MeteoRide, rama `main`. Lee `AGENTS.md`,
 > `docs/HANDOFF.md` y `docs/REVIEW-2026-09-14.md` antes de tocar nada.
 > Convenciones: commits como Enderthor, **sin ninguna atribución de IA** (ni
 > `Co-Authored-By`, ni menciones en comentarios ni en el mensaje), cada test con
@@ -389,7 +390,7 @@ revisiones adversariales internas y una revisión adversarial externa).
   - Hecho: repaso final de `AGENTS.md` y de este documento contra el código (recuentos de tests y
     cobertura de la suite al día). El rediseño no tiene más fases pendientes.
   - Hecho (tarea 13): `.github/workflows/tests.yml` ejecuta la suite completa en cada PR
-    y en cada push a `main`/`native-ios-capacitor`; ver §7.
+    y en cada push a `main`; ver §7.
 
 ### Hallazgos de la revisión del 14/09 aún abiertos
 

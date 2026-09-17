@@ -12,7 +12,8 @@ Claude Code lee este fichero solo en cada sesión. Lo demás hay que abrirlo:
 
 ## Convenciones que no se negocian
 
-- Rama de trabajo de la app nativa: `native-ios-capacitor`.
+- Rama de trabajo: `main`. La rama `native-ios-capacitor` se fusionó en `main`
+  (PR #1, `baf7f8e`, 16/09/2026) y se borró.
 - Commits como `Enderthor <58392928+lockevod@users.noreply.github.com>`, **sin
   ninguna atribución de IA**: ni `Co-Authored-By`, ni identificadores de modelo, ni
   menciones en comentarios, mensajes de commit o texto de PR.

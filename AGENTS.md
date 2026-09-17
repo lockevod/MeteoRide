@@ -1540,7 +1540,7 @@ bug stayed invisible for the whole project life under a Chromium-only gate.
 Run WebKit alone with `npm run test:webkit`.
 
 `.github/workflows/tests.yml` runs this same `npm test` on every pull request and on
-push to `main`/`native-ios-capacitor` (Ubuntu, Node 22, no secrets — Android signing
+push to `main` (Ubuntu, Node 22, no secrets — Android signing
 from task 12 stays out of CI, since it is optional and an unsigned APK is not built
 here anyway). Read the result from the PR's checks list or the Actions tab: a red
 `Tests` run means either engine failed, and the step's log names the failing test the
@@ -1595,6 +1595,20 @@ that drain was swallowing the request the test meant to exercise, so the scenari
 but proved nothing. It now waits the boot drain out, and the stubbed plugin decides
 its answer when the call arrives rather than when it resolves, which is what native
 code does and what makes the race reproducible.
+
+### A red suite is not always broken code
+
+Playwright's trace artifacts under `mobile/test-results/.playwright-artifacts-N/` can
+disappear while the suite is running. Every test whose context is closing then fails with
+`ENOENT ... .trace` or `... .zip` raised inside `browserContext.close`, and the run ends
+red — on WebKit, where contexts are slowest to close, this hit 7 tests at once on a tree
+whose only change was a deleted paragraph of Markdown.
+
+Tell it apart before believing it: grep the log for `expect(`, `AssertionError` and
+`Timed out ... waiting`. **Zero assertion failures plus ENOENT on artifacts means the
+application never misbehaved.** Then `rm -rf mobile/test-results` and run `npm test`
+again; it comes back green. That zero is what licenses the re-run — re-running a red
+suite and reporting only the second number is how a real regression gets buried.
 
 ## Open work
 
