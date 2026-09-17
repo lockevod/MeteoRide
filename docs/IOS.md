@@ -97,7 +97,11 @@ The identifier also lives in `MeteoRideShareStore.appGroupId`; all three must ma
 
 Merge the keys from `mobile/native/ios/Info.plist.additions.xml` into
 `ios/App/App/Info.plist`. They declare the `meteoride://` scheme, register the app
-as a handler for `.gpx`/`.kml`, provide the location usage string, and lock the app
+as a handler for `.gpx`/`.kml`, provide the location usage string, answer the export
+compliance question once and for all (`ITSAppUsesNonExemptEncryption` false — the app
+implements and ships no cryptography of its own, using only what the system provides,
+which is the exemption; the plist file itself spells out what that covers, and without
+the key App Store Connect asks on every single upload), and lock
 **the iPhone** to portrait — rotating breaks the layout badly, and this is
 deliberate, not an oversight. The iPad is left free to rotate, by the author's
 decision: the template `cap add ios` targets iPhone and iPad alike

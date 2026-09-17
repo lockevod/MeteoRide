@@ -5180,8 +5180,14 @@ async function armWithKey(page, control) {
     window.saveSettings();
   });
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
-  await expect.poll(async () => (await armedWatches(page)).length).toBeGreaterThan(0);
-  await expect.poll(async () => (await lastStored(page))?.owKey).toBe('a-valid-looking-key');
+  // Arming is a long chain — settings save, route, forecast, cw:forecast, permissions,
+  // the stored watch, the baseline fetch, the write — and on WebKit with the whole suite
+  // running in parallel it does not always fit in the default five seconds. This setup
+  // failed that way once, which is a flaky test of my own making rather than a bug in
+  // what it covers: the deadline was too tight, not the assertion wrong.
+  const arming = { timeout: 20000 };
+  await expect.poll(async () => (await armedWatches(page)).length, arming).toBeGreaterThan(0);
+  await expect.poll(async () => (await lastStored(page))?.owKey, arming).toBe('a-valid-looking-key');
 }
 
 test('saving an unrelated setting leaves the watch its OpenWeather key', async ({ page }) => {
@@ -6779,7 +6785,7 @@ test('in the app every control is at least 44px to a thumb', async ({ page }) =>
   await page.goto('/index.html');
   await mapReady(page);
 
-  for (const selector of ['#datetimeRoute', '#apiSource', '#intervalSelect', '#toggleConfig', '.file-btn.small-file-btn']) {
+  for (const selector of ['#datetimeRoute', '#apiSource', '#toggleConfig', '.file-btn.small-file-btn']) {
     const box = await boxOf(page, selector);
     expect(box, `${selector} is not on the page any more`).not.toBeNull();
     expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
@@ -6789,6 +6795,16 @@ test('in the app every control is at least 44px to a thumb', async ({ page }) =>
   for (const selector of ['#toggleConfig', '#toggleCompareDates']) {
     const box = await boxOf(page, selector);
     expect(box.width, `${selector} is ${box.width}px wide`).toBeGreaterThanOrEqual(44);
+  }
+
+  // The map's own controls and the two narrow selects. These were the remainder of the
+  // same finding: a media query shrinks Leaflet's zoom pair to 28px for the website, and
+  // the selects had a height floor but no width, leaving 32px of dropdown to aim at.
+  for (const selector of ['.leaflet-control-zoom-in', '.leaflet-control-zoom-out', '.leaflet-control-recenter-button', '.compass-button', '#intervalSelect', '.speed-presets']) {
+    const box = await boxOf(page, selector);
+    expect(box, `${selector} is not on the page any more`).not.toBeNull();
+    expect(box.width, `${selector} is ${box.width}px wide`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
   }
 
   // Square controls have to clear the floor on both axes, not just vertically. This

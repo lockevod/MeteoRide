@@ -99,3 +99,19 @@
 	<string>fetch</string>
 	<string>processing</string>
 </array>
+
+<!-- Export compliance. MeteoRide implements no cryptography of its own and ships none:
+     no algorithms, no key material, no encrypted storage. What it uses is what the
+     system provides — TLS for every request, and whatever hashing or randomness the
+     platform and its dependencies reach for (Capacitor calls CommonCrypto's SHA-256;
+     the background runner exposes system randomness). Those are system services, not an
+     implementation of this app's, which is the exemption Apple describes. The route
+     fingerprints and toGeoJSON's hashes are non-cryptographic. So the answer is always
+     the same one —
+     and declaring it here means App Store Connect stops asking on every single upload
+     instead of once. Removing this key does not change what the app does; it only puts
+     the question back. If MeteoRide ever ships its own crypto, this has to go and the
+     real questionnaire has to be answered.
+     https://developer.apple.com/documentation/security/complying-with-encryption-export-regulations -->
+<key>ITSAppUsesNonExemptEncryption</key>
+<false/>

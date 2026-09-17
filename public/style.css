@@ -3518,6 +3518,43 @@ html.cw-native #configMenu label {
   min-height: 44px;
 }
 
+/* The map's own controls: Leaflet's zoom pair and the recentre button, which a media
+   query shrinks to 28px on a phone for the website's sake. They sit over the map, so
+   growing them costs map rather than layout, and they are the controls a thumb reaches
+   for while riding. `.leaflet-touch` raises specificity on Leaflet's own rules, hence
+   naming the container here. */
+html.cw-native .leaflet-control-zoom .leaflet-control-zoom-in,
+html.cw-native .leaflet-control-zoom .leaflet-control-zoom-out {
+  /* Leaflet's bar puts a 1px border between the two, and its anchors are content-box,
+     so without this the top one comes out 44x45 and the pair is visibly uneven. */
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+}
+/* The compass, the one control on the map this round would otherwise have left behind —
+   26x26, sitting right beside the zoom pair that just grew to 44. `!important` because
+   the website's rule above uses it on width and height. The icon inside keeps its 22px:
+   the target grows, the drawing does not. */
+html.cw-native .leaflet-compass .compass-button {
+  width: 44px !important;
+  height: 44px !important;
+}
+
+/* The recentre button is not listed here on purpose: it also carries `.icon-btn`, which
+   the rule below already floors at 44px. Measuring it proved the rule here was dead —
+   removing it changed nothing — and a line that looks load-bearing and is not is how a
+   reader comes to trust the wrong thing. The test measures the button, so if it ever
+   loses `.icon-btn` that shows up as a failure rather than as silence. */
+
+/* Width as well as height for the two narrow selects. 32px of dropdown is a target a
+   thumb misses; the row has the room because the date field above it is what sets the
+   width of the panel. */
+html.cw-native #intervalSelect,
+html.cw-native .speed-presets {
+  min-width: 44px;
+}
+
 /* The recent-routes button is built in ui.js with inline padding, so it never matched
    any selector above: 18px of icon plus 4px of padding a side plus borders is 28 wide
    and 32 tall. `min-width`/`min-height` still win over inline padding, which is why

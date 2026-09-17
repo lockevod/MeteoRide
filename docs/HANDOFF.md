@@ -440,7 +440,24 @@ Siguen abiertos:
   compartir ya aceptaba ese tipo— pero esta ampliación lo hace mucho más visible.
 ### Segunda re-revisión de publicación (17/09, sobre 4cd5788)
 
-Siete hallazgos, todos ciertos, **todos cerrados**. Dos merecen recordarse:
+Siete hallazgos, todos ciertos. Seis se cerraron en `5915437` y **R4 quedó a medias**:
+las filas de recientes pasaron a ser botones de 44px, pero los controles de zoom del mapa
+(30×30) y los selectores de intervalo y velocidad (32px de ancho) se quedaron cortos, como
+señaló la verificación posterior sobre ese commit. Cerrado después: se subieron cinco
+controles —los dos de zoom, la brújula y los dos selectores— y el test mide seis, con el
+de recentrar incluido, que ya estaba a 44 por `.icon-btn`.
+
+Cada regla se comprobó **por su propia mutación**, no por bloques, y esa distinción pagó:
+quitar un bloque entero solo demuestra que *alguno* de sus controles está cubierto. Así
+salieron dos cosas que se habrían colado — el botón de recentrar estaba en el CSS y fuera
+del test, y una vez medido resultó que su regla era redundante, así que se retiró; y la
+brújula, 26×26 justo al lado del zoom que acababa de crecer, no la vio nadie hasta barrer
+todos los controles visibles y medirlos.
+
+Tras ese barrido no queda ningún control interactivo por debajo de 44px en la pantalla del
+mapa. Las dos excepciones son los enlaces de atribución (autoría y OpenStreetMap, 31×8 y
+50×8): son el texto legal que exige la política de teselas de OSM, no controles, y
+agrandarlos taparía mapa sin que nadie los busque con el pulgar. Dos de los siete merecen recordarse:
 
 - **R1 era una regresión introducida por el propio arreglo anterior.** `revokeWatchKey`
   leía `alertsKey`, que es un campo del *snapshot*, no de lo que `saveSettings` persiste
