@@ -141,6 +141,15 @@
   // config panel is the only such layer, and it is not a page: closing it used to drop
   // the user out of the app altogether, with no way to dismiss the panel by gesture.
   function handleBack({ canGoBack } = {}) {
+    // Layers close one at a time, newest first. The recent-routes menu is built in
+    // ui.js and opens over everything else, so it goes before the config panel.
+    const recents = document.querySelector('.recent-routes-menu');
+    if (recents && window.getComputedStyle(recents).display !== 'none') {
+      const button = document.querySelector('.recent-routes-button');
+      if (button) button.click();          // its own toggle, so the state stays its own
+      else recents.style.display = 'none';
+      return;
+    }
     const menu = document.getElementById('configMenu');
     if (menu && menu.style.display === 'block') {
       menu.style.display = 'none';
@@ -318,10 +327,23 @@
    */
   async function revokeWatchKey(json) {
     if (!runnerPlugin()) return;
-    let key = '';
-    try { key = String((JSON.parse(String(json)) || {}).alertsKey || ''); } catch (_) { return; }
-    // Still wanted and still there: leave the stored watch alone.
-    if (key && alertsWanted()) return;
+    let saved;
+    try { saved = JSON.parse(String(json)) || {}; } catch (_) { return; }
+    // The field names are `saveSettings`'s, in utils.js, and they are not the snapshot's:
+    // what is persisted is the raw key `apiKeyOW` and the `showWeatherAlerts` toggle,
+    // while the snapshot carries the already-resolved `alertsKey`. Reading the snapshot's
+    // name here meant reading `undefined` on every save — so every settings change, even
+    // one about the debug button, silently wiped the key from the armed watch while the
+    // field and both toggles still showed as set. Check any rename against utils.js.
+    // `showWeatherAlerts` is the one that governs this key (`app.js`'s `alertsKey` is
+    // `alerts ? keys.openweather : ''`); `rideAlerts` arms the watch itself and is a
+    // different question.
+    const key = String(saved.apiKeyOW || '');
+    if (key && saved.showWeatherAlerts) return;   // still set and still wanted
+    // No token bump here on purpose: cancelling arms in flight looked like the fix and
+    // is not one — the key comes back from a *new* arm built on a stale snapshot, which
+    // no token can cancel. `saveWatch` reconciles against the live form instead, and
+    // that covers both. Bumping would only throw away a baseline someone is seeding.
     try {
       await queueWatch(async () => {
         const stored = await runnerCall('loadWatch', {}).catch(() => null);
@@ -868,10 +890,26 @@
 
   // Queued. When its turn comes it runs only if no arm or disarm came after it and its
   // snapshot is still the one on screen. Resolves true once the runner has it.
+  /**
+   * The key as the settings have it right now, not as some snapshot remembers it.
+   * A snapshot carries the `alertsKey` it was computed with, so re-arming from one built
+   * before the user cleared the field would put the deleted key straight back — and an
+   * arm already in flight captured it even earlier. Tokens do not help there: the second
+   * case is a *new* arm from a stale snapshot, not an old one. Reconciling here, at the
+   * only point that writes, covers every path at once.
+   */
+  function liveAlertsKey() {
+    const wanted = document.getElementById('showWeatherAlerts');
+    if (wanted && !wanted.checked) return '';
+    const field = document.getElementById('apiKeyOW');
+    return field ? String(field.value || '') : '';
+  }
+
   function saveWatch(watch, snapshot, token) {
     const current = () => token === armToken && window.cw.currentSnapshot() === snapshot;
     return queueWatch(async () => {
       if (!current()) return false;
+      if (watch) watch.owKey = liveAlertsKey();
       // Named before the runner answers, so it is always the last watch sent to it.
       watchFingerprint = watch ? watch.fingerprint : null;
       await runnerCall('saveWatch', { watch: watch || null });

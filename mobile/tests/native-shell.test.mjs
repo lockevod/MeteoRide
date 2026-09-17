@@ -133,59 +133,28 @@ test('Back still leaves the app from a clear index', async () => {
 
 /* ---------- the key the watch keeps its own copy of ---------- */
 
-/** A background runner whose stored watch can be read back by the test. */
-function runnerStub(watch) {
-  const calls = [];
-  return {
-    calls,
-    stored: () => watch,
-    dispatchEvent: async ({ event, details }) => {
-      calls.push(event);
-      if (event === 'loadWatch') return watch;
-      if (event === 'saveWatch') { watch = details.watch; return {}; }
-      return {};
-    },
-  };
-}
+/*
+ * These once fed `revokeWatchKey` a hand-written payload using the *snapshot's* field
+ * names, not the ones `saveSettings` persists — so they agreed with a bug that made
+ * every settings save wipe the key from the armed watch. The behaviour is now covered
+ * end to end through the real form in smoke.spec.mjs; what is left here is the contract
+ * those two files share, read out of utils.js rather than assumed.
+ */
 
-test('clearing the OpenWeather key strips it from the armed watch, with no forecast needed', async () => {
-  // The hole this closes: the watch carries its own copy of the key and only rewrites it
-  // when a computation re-arms it. Offline with a prepared snapshot on screen, the
-  // recompute is refused, nothing re-arms, and the next background run sends the old key
-  // to OpenWeather — while the settings, and the privacy policy, say it is gone.
-  const runner = runnerStub({ fingerprint: 'abc', owKey: 'the-old-key', points: [] });
-  const { window } = await loadNative({
-    plugins: { CapacitorBackgroundRunner: runner },
-    alertsOn: true,
-  });
+test('revokeWatchKey reads the field names saveSettings actually writes', async () => {
+  const utils = await readFile(join(dirname(fileURLToPath(import.meta.url)), '../../public/scripts/utils.js'), 'utf8');
+  const saved = utils.slice(utils.indexOf('function saveSettings()'));
+  const body = saved.slice(0, saved.indexOf('JSON.stringify'));
+  const native = await readFile(NATIVE_JS, 'utf8');
+  const revoke = native.slice(native.indexOf('async function revokeWatchKey'));
+  const read = [...revoke.slice(0, revoke.indexOf('\n  }')).matchAll(/saved\.(\w+)/g)].map((m) => m[1]);
 
-  await window.cwRevokeWatchKey(JSON.stringify({ alertsKey: '' }));
-
-  assert.equal(runner.stored().owKey, '', 'the stored watch still carries the deleted key');
-  assert.ok(runner.calls.includes('saveWatch'), 'nothing was written back');
-});
-
-test('a key that is still set and still wanted is left alone', async () => {
-  const runner = runnerStub({ fingerprint: 'abc', owKey: 'the-key', points: [] });
-  const { window } = await loadNative({
-    plugins: { CapacitorBackgroundRunner: runner },
-    alertsOn: true,
-  });
-
-  await window.cwRevokeWatchKey(JSON.stringify({ alertsKey: 'the-key' }));
-
-  assert.equal(runner.stored().owKey, 'the-key', 'a key in use was revoked');
-  assert.ok(!runner.calls.includes('saveWatch'), 'the watch was rewritten for nothing');
-});
-
-test('turning the alerts off revokes the key even while it is still typed in', async () => {
-  const runner = runnerStub({ fingerprint: 'abc', owKey: 'the-key', points: [] });
-  const { window } = await loadNative({
-    plugins: { CapacitorBackgroundRunner: runner },
-    alertsOn: false,
-  });
-
-  await window.cwRevokeWatchKey(JSON.stringify({ alertsKey: 'the-key' }));
-
-  assert.equal(runner.stored().owKey, '', 'alerts were off and the watch kept the key');
+  assert.ok(read.length >= 2, 'revokeWatchKey no longer reads the saved settings by name');
+  for (const field of read) {
+    assert.match(
+      body, new RegExp(`\\b${field}\\s*:`),
+      `revokeWatchKey reads "${field}", which saveSettings does not write — that is how it ` +
+      'came to wipe the key on every save. The names are utils.js\'s, not the snapshot\'s.'
+    );
+  }
 });

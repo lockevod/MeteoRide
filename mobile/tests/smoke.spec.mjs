@@ -4930,6 +4930,16 @@ async function stubWatchProviders(page, control) {
   await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
 }
 const heldPromise = () => { let release; const promise = new Promise((r) => { release = r; }); return { promise, release }; };
+/** Waits until the runner has stopped being asked anything, or gives up after ~6 s. */
+async function settled(page, quietFor = 400) {
+  let last = -1;
+  for (let i = 0; i < 15; i++) {
+    const now = await page.evaluate(() => (window.__runnerEvents || []).length);
+    if (now === last) return;
+    last = now;
+    await page.waitForTimeout(quietFor);
+  }
+}
 const storedWatches = (page) => page.evaluate(() => window.__runnerStored || []);
 const lastStored = async (page) => (await storedWatches(page)).slice(-1)[0];
 const armedWatches = async (page) => (await storedWatches(page)).filter((w) => w !== null);
@@ -5150,6 +5160,114 @@ test('a save the runner answers after the same route is confirmed again leaves t
   await expect.poll(async () => (await armedWatches(page)).length).toBe(1);
   await page.waitForTimeout(300);
   await expect(page.locator('#rideAlertsStatus')).toHaveText('');
+});
+
+/* The key the background watch carries its own copy of.
+ *
+ * These drive the real settings form, on purpose. A previous version of this behaviour
+ * was covered only by unit tests that fed `revokeWatchKey` a hand-written JSON, and the
+ * hand-written JSON used the snapshot's field names rather than the ones `saveSettings`
+ * actually persists — so the tests agreed with the bug and every settings save silently
+ * wiped the key from the armed watch. Anything that reads the stored settings shape has
+ * to be tested through the form that writes it. */
+async function armWithKey(page, control) {
+  await stubWatchProviders(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => {
+    document.getElementById('apiKeyOW').value = 'a-valid-looking-key';
+    document.getElementById('showWeatherAlerts').checked = true;
+    window.saveSettings();
+  });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await armedWatches(page)).length).toBeGreaterThan(0);
+  await expect.poll(async () => (await lastStored(page))?.owKey).toBe('a-valid-looking-key');
+}
+
+test('saving an unrelated setting leaves the watch its OpenWeather key', async ({ page }) => {
+  await installNativeBridge(page);
+  await armWithKey(page, {});
+
+  // Something with nothing to do with the key or the warnings.
+  await page.evaluate(() => {
+    const debug = document.getElementById('showDebugButton');
+    if (debug) debug.checked = !debug.checked;
+    window.saveSettings();
+  });
+  await page.waitForTimeout(300);
+
+  expect((await lastStored(page)).owKey, 'an unrelated save revoked the key').toBe('a-valid-looking-key');
+  expect(await page.evaluate(() => document.getElementById('apiKeyOW').value)).toBe('a-valid-looking-key');
+});
+
+test('clearing the key in the form takes it out of the armed watch', async ({ page }) => {
+  await installNativeBridge(page);
+  await armWithKey(page, {});
+
+  await page.evaluate(() => {
+    document.getElementById('apiKeyOW').value = '';
+    window.saveSettings();
+  });
+
+  await expect.poll(async () => (await lastStored(page)).owKey).toBe('');
+});
+
+test('turning the official warnings off takes the key out too', async ({ page }) => {
+  await installNativeBridge(page);
+  await armWithKey(page, {});
+
+  await page.evaluate(() => {
+    document.getElementById('showWeatherAlerts').checked = false;
+    window.saveSettings();
+  });
+
+  await expect.poll(async () => (await lastStored(page)).owKey).toBe('');
+});
+
+test('an arm still in flight cannot put a deleted key back', async ({ page }) => {
+  // The race: `armWatch` reads the key off the snapshot and then awaits — permissions,
+  // the stored watch, the baseline — before `saveWatch` writes. Clearing the key while
+  // one of those waits is outstanding must not leave the old arm free to write it again.
+  //
+  // The assertion looks only at what is written *after* the key is cleared. An earlier
+  // version read the last entry of `__runnerStored`, which still held the arm from the
+  // setup, so it reported the bug whether or not the bug was there — and its mutation
+  // check "failed" for that same reason, proving nothing.
+  const control = {};
+  await installNativeBridge(page);
+  await armWithKey(page, control);
+
+  // Drop the stored baseline so the next arm has to seed one, which is the wait this
+  // test holds open. The watch itself stays, so the revoke has something to clear.
+  await page.evaluate(() => {
+    const watch = JSON.parse(sessionStorage.getItem('__watch'));
+    delete watch.baseline;
+    sessionStorage.setItem('__watch', JSON.stringify(watch));
+    window.__runnerStored = [];
+    window.__runnerEvents = [];
+  });
+
+  const held = heldPromise();
+  control.baselineHeld = held.promise;
+  await page.evaluate(() => { document.getElementById('gpxFile').value = ''; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => control.baselineAsked).toBeGreaterThan(0);
+
+  await page.evaluate(() => {
+    document.getElementById('apiKeyOW').value = '';
+    window.saveSettings();
+  });
+  await settled(page);
+
+  held.release();
+  await settled(page);
+
+  const written = await page.evaluate(() =>
+    (window.__runnerStored || []).filter(Boolean).map((w) => w.owKey || ''));
+  expect(
+    written.filter((k) => k !== ''),
+    `a write after the key was cleared still carried it: ${JSON.stringify(written)}`
+  ).toEqual([]);
 });
 
 test('the route restored at start-up keeps its stored watch even when it is confirmed before that watch is read', async ({ page }) => {
@@ -6719,6 +6837,75 @@ test('the recent-routes control clears the floor once there is a route to list',
   expect(Math.round(box.width), `the recent-routes button is ${Math.round(box.width)}px wide`).toBeGreaterThanOrEqual(44);
   expect(Math.round(box.height), `the recent-routes button is ${Math.round(box.height)}px tall`).toBeGreaterThanOrEqual(44);
   expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+});
+
+test('each recent route is a real button, tall enough and reachable by keyboard', async ({ page }) => {
+  // They were divs with a click handler: 180x28, no role, no tab stop, nothing for a
+  // screen reader to announce and nothing for Enter to do.
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(1);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await page.locator('.recent-routes-button').click();
+  const row = page.locator('.recent-routes-menu-item').first();
+  await expect(row).toBeVisible();
+
+  expect(await row.evaluate((el) => el.tagName)).toBe('BUTTON');
+  const box = await row.boundingBox();
+  expect(Math.round(box.height), `a recent route row is ${Math.round(box.height)}px tall`).toBeGreaterThanOrEqual(44);
+  // A button is in the tab order without being told to be.
+  expect(await row.evaluate((el) => el.tabIndex)).toBeGreaterThanOrEqual(0);
+});
+
+test('the load label is readable against its own button', async ({ page }) => {
+  // It inherited white from `.file-btn` onto the grey `.small-file-btn` repaints: a
+  // contrast ratio of 1.10:1, a label nobody can read, and no test looks at colour.
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  const ratio = await page.evaluate(() => {
+    const el = document.querySelector('.file-btn-text');
+    const box = document.querySelector('.file-btn.small-file-btn');
+    const rgb = (v) => v.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+    const lum = ([r, g, b]) => {
+      const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const a = lum(rgb(getComputedStyle(el).color));
+    const b = lum(rgb(getComputedStyle(box).backgroundColor));
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+  expect(ratio, `the label sits at ${ratio.toFixed(2)}:1 against its button`).toBeGreaterThanOrEqual(4.5);
+});
+
+test('Back closes the recent-routes menu before it leaves the app', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(1);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await page.locator('.recent-routes-button').click();
+  await expect(page.locator('.recent-routes-menu')).toBeVisible();
+
+  const exited = await page.evaluate(() => {
+    let left = 0;
+    window.Capacitor.Plugins.App.exitApp = () => { left += 1; };
+    window.cwHandleBack({ canGoBack: false });
+    return { left, open: getComputedStyle(document.querySelector('.recent-routes-menu')).display };
+  });
+  expect(exited.open, 'the recents menu stayed open').toBe('none');
+  expect(exited.left, 'Back left the app with the recents menu open').toBe(0);
 });
 
 test('the app names the first step instead of showing a bare folder glyph', async ({ page }) => {

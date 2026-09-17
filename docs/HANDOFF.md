@@ -438,6 +438,33 @@ Siguen abiertos:
   y no hace nada. Falta decírselo al usuario (un aviso, o un evento `sharedRouteRejected`
   que el `native.js` convierta en un `setNotice`). No es una regresión —el filtro de
   compartir ya aceptaba ese tipo— pero esta ampliación lo hace mucho más visible.
+### Segunda re-revisión de publicación (17/09, sobre 4cd5788)
+
+Siete hallazgos, todos ciertos, **todos cerrados**. Dos merecen recordarse:
+
+- **R1 era una regresión introducida por el propio arreglo anterior.** `revokeWatchKey`
+  leía `alertsKey`, que es un campo del *snapshot*, no de lo que `saveSettings` persiste
+  (`apiKeyOW` + `showWeatherAlerts`). Resultado: cualquier guardado de ajustes —cambiar
+  el botón de debug, por ejemplo— borraba la clave del vigilante armado y dejaba sin
+  avisos oficiales en segundo plano, con el campo y los dos interruptores aparentemente
+  puestos. El test unitario lo avalaba porque le daba un JSON escrito a mano con el
+  nombre supuesto. Ahora se prueba por el formulario real, más un test de contrato que
+  lee los nombres de `utils.js`.
+- **R2 no se arreglaba invalidando los armados en vuelo**, que fue el primer intento. La
+  clave vuelve desde un armado *nuevo* construido sobre un snapshot antiguo, y eso no lo
+  cancela ningún token. `saveWatch` reconcilia ahora contra el formulario vivo. El primer
+  test de esa carrera miraba la entrada del armado de preparación y por eso daba el fallo
+  hubiera o no hubiera fallo: sus mutaciones tampoco probaban nada.
+
+Los otros cinco: contraste 1,10:1 en la etiqueta de cargar fichero (R3), filas de
+recientes de 28px y sin semántica de botón ni teclado (R4), Atrás salía con el menú de
+recientes abierto (R5), permisos persistentes de URI que no se liberaban tras importar
+(R6) y una contradicción en `docs/IOS.md` sobre la ficha de Apple (R7).
+
+Sigue abierto de esa revisión: la atomicidad del contador de `/share` —documentada en el
+código y cubierta por la regla WAF que falta— y todo lo que solo se puede comprobar en un
+dispositivo.
+
 ### Revisión adversarial de Codex (17/09): lo que queda de ella
 
 Diez hallazgos. Cerrados: los códigos de razón de los manifiestos (yo los había «corregido»
@@ -489,6 +516,30 @@ código contradecía. Quedan estos, todos con su razón para quedarse:
   tocarse: desanidarlo activaría sobre los elementos reales los estilos de recientes
   (altura 36px, hover/focus, tooltip, z-index, reglas de ocultación) que nadie ha visto
   aplicados. Merece su propio cambio, mirando la pantalla.
+- **Las 19 alertas de Dependabot: ninguna alcanza al código que se envía (revisado el
+  17/09/2026).** Son tres paquetes, no diecinueve problemas. `uuid` (1, media) entra por
+  `@capacitor/cli` → `xcode`, herramienta de construcción que no se empaqueta. `minimist`
+  (2, una crítica) y `xmldom` (16, una crítica) entran los dos por `togeojson@0.16.0`, que
+  sí es dependencia de producción — pero lo que `build-www.mjs` empaqueta es el fichero
+  de navegador de togeojson, 18 KB, y ahí `minimist` no aparece (es su CLI) y `xmldom`
+  aparece **una sola vez, en una rama muerta**:
+
+  ```js
+  if (typeof XMLSerializer !== 'undefined') { serializer = new XMLSerializer(); }
+  else if (typeof exports === 'object' && ... ) { serializer = new (require('xmldom')...); }
+  ```
+
+  En un WebView `XMLSerializer` siempre existe, así que se toma la primera rama. Y aunque
+  no se tomara, en `mobile/www` no hay **ni un fichero** de xmldom ni de minimist, ni
+  existe `require`. El parseo de KML lo hace `DOMParser` del navegador (`ui.js:311`), no
+  xmldom. El runner de segundo plano y `functions/share.js` no usan togeojson.
+
+  Conclusión: no son explotables ni en las apps ni en la web. Lo correcto es descartarlas
+  en GitHub como «el código vulnerable no se usa», no actualizar a ciegas: `togeojson` se
+  renombró a `@tmcw/togeojson` con otra API, y migrar por unas alertas que no aplican es
+  cambiar código que funciona a cambio de nada. Si se migra algún día, que sea por otro
+  motivo. Rehacer esta comprobación: `npm ls xmldom --all` y
+  `grep -rn "xmldom\|minimist" mobile/www/`.
 - **Los tests de Android no están en CI.** `.github/workflows/tests.yml` corre `npm test`
   en ubuntu; los JUnit del ledger se ejecutan a mano (ver `AGENTS.md`, que explica los dos
   flags de JDK que hacen falta en esta máquina).

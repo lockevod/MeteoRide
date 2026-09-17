@@ -1649,8 +1649,18 @@
     function rebuildMenuItems() {
       menu.innerHTML = '';
       filtered.forEach((route, idx) => {
-        const it = document.createElement('div');
+        // A button, not a div: it is one, and as a div it had no role, no tab stop and
+        // no keyboard — a screen reader announced nothing and Enter did nothing. The
+        // element carries the semantics for free; the reset below keeps the look.
+        const it = document.createElement('button');
+        it.type = 'button';
         it.className = 'recent-routes-menu-item';
+        it.style.display = 'block';
+        it.style.width = '100%';
+        it.style.textAlign = 'left';
+        it.style.background = 'none';
+        it.style.border = '0';
+        it.style.color = 'inherit';
         it.style.padding = '6px 8px';
         it.style.cursor = 'pointer';
         it.style.borderRadius = '4px';

@@ -3528,6 +3528,9 @@ html.cw-native .recent-routes-button {
   justify-content: center;
 }
 
+/* The rows are `.recent-routes-menu-item` buttons built in ui.js; naming the class is
+   what makes this reach them, and the previous element-name selectors did not. */
+html.cw-native .recent-routes-menu-item,
 html.cw-native .recent-routes-menu button,
 html.cw-native .recent-routes-menu a,
 html.cw-native .recent-routes-menu li {
@@ -3577,4 +3580,9 @@ html.cw-native .file-btn-text {
   display: inline;
   font-size: 14px;
   white-space: nowrap;
+  /* `.file-btn` is a blue button with white text; `.small-file-btn` repaints the box
+     light grey but not the colour, so this label inherited white on #f3f4f6 — a
+     contrast ratio of 1.10:1, which is a label nobody can read. WCAG asks 4.5:1 for
+     text this size; #243746 on that grey is about 11:1. */
+  color: #243746;
 }

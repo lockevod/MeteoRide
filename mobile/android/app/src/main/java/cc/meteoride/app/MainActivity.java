@@ -2,6 +2,7 @@ package cc.meteoride.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.UriPermission;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -163,9 +164,33 @@ public class MainActivity extends BridgeActivity {
                 Log.w(TAG, "could not deliver a shared route: " + e);
             } finally {
                 MeteoRideShareStore.forgetIntake(app, uri);
+                releaseAccess(app, uri);
             }
         }
         if (stored) MeteoRideSharePlugin.notifyRouteAvailable();
+    }
+
+    /**
+     * Gives back a persistable grant once the route is copied into the inbox and the
+     * ledger no longer holds it. The bytes are ours by then, so keeping read access to
+     * the user's original document buys nothing — and each import that took one would
+     * otherwise pile up against the per-app limit the system keeps on these.
+     *
+     * Only what this app took: `getPersistedUriPermissions` is asked first, so a grant
+     * the user gave elsewhere is left alone. Releasing happens after `forgetIntake`, so
+     * a retry that still needs the URI still has it.
+     */
+    private static void releaseAccess(Context app, Uri uri) {
+        try {
+            for (UriPermission held : app.getContentResolver().getPersistedUriPermissions()) {
+                if (!held.getUri().equals(uri)) continue;
+                app.getContentResolver().releasePersistableUriPermission(
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                return;
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "could not release the persisted permission: " + e);
+        }
     }
 
     /**

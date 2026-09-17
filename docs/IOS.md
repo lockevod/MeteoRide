@@ -428,11 +428,11 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   device, whoever receives it, and every forecast sends the route's coordinates and
   times to Open-Meteo — which states its logs may hold coordinates and that it deletes
   them after 90 days, so it is not the ephemeral processing that would exempt them.
-  What to declare instead: **Location — Precise Location**, for App Functionality, not
-  linked to the user's identity, not used for tracking. With OpenWeather selected, its
-  key goes too; it is the user's own key and identifies them to OpenWeather, so it goes
-  as Other Data on the same terms — which is what `PrivacyInfo.xcprivacy` declares, and
-  the two have to agree. The device's own position is read
+  What to declare instead: **Location — Precise Location**, for App Functionality and
+  not used for tracking. Whether to mark it *linked* is the one judgement call, and the
+  bullets below give it: unlinked is true of the default Open-Meteo path, linked is true
+  once the user supplies their own OpenWeather key, and the manifest deliberately does
+  not answer it — the form does. The device's own position is read
   only to centre the map, is never transmitted and is not the basis of the forecast
   call — say so in the notes rather than leaving the reviewer to guess.
 - `public/privacy-ios.html` is the policy the questionnaire has to agree with, and it

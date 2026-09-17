@@ -635,6 +635,18 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   coordinates are unlinked going to Open-Meteo and linked going to OpenWeather beside
   the user's own key, and one boolean cannot say both. That answer belongs in App Store
   Connect, where both paths can be described.
+- **The persisted settings and the snapshot's settings are different objects with
+  different field names.** `saveSettings` (utils.js) writes `apiKeyOW` and
+  `showWeatherAlerts`; the snapshot carries an already-resolved `alertsKey`
+  (`alerts ? keys.openweather : ''`, app.js) and is never stored. Reading one shape with
+  the other's names costs nothing at parse time and yields `undefined` — which is exactly
+  how `revokeWatchKey` came to wipe the watch's key on *every* settings save: a change to
+  the debug toggle killed official warnings in the background while the field and both
+  switches still read as set. The unit test agreed with the bug, because it fed the
+  function a hand-written payload using the names its author assumed. Anything that reads
+  the stored settings is now tested through the form that writes them (`smoke.spec.mjs`),
+  with a contract test in `native-shell.test.mjs` that reads the field names out of
+  utils.js rather than restating them.
 - **Clearing the OpenWeather key has to reach the armed watch by itself.** The watch
   keeps its own copy (`buildWatch`'s `owKey`) and it is only rewritten when a
   computation publishes and `cw:forecast` re-arms. With a prepared snapshot on screen
@@ -642,6 +654,17 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   background run still sends the deleted key to OpenWeather — while the settings, and
   the privacy policy, say it is gone. `revokeWatchKey` runs on every settings save and
   only ever clears; adding a key needs no help, the next forecast arms with it.
+
+  **That alone is not enough, and the arm token does not close the gap.** A snapshot
+  carries the key it was computed with, so re-arming from one built before the user
+  cleared the field puts the deleted key straight back — and that is a *new* arm from a
+  stale snapshot, not an old one a token could cancel. `saveWatch` therefore reconciles
+  `owKey` against the live form (`liveAlertsKey`) at the only point that writes, which
+  covers every path at once. Keep it there. The test in `smoke.spec.mjs` holds the
+  baseline fetch open, clears the key, releases it and asserts that nothing written
+  afterwards carries the key; the first version of that test read the *setup's* stored
+  watch and so reported the bug whether or not it was there — check what such a test
+  actually looks at before trusting either its red or its green.
 - **`allowBackup="true"` means "only on your phone" is not true.** Android's automatic
   backup can upload the settings blob — the unencrypted OpenWeather key inside it — to
   the user's Google account, and iOS's `UserDefaults` goes into the device backup. The
