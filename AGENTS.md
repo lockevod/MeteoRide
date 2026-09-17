@@ -1604,9 +1604,6 @@ code does and what makes the race reproducible.
   either is complete. Neither present is not an error — the build still produces an
   unsigned APK with a console warning. The author still has to point one of those two
   at their own keystore; nothing here has it.
-- The remote branch `claude/cool-allen-w8evld` is stale — it predates this work and
-  nothing on it is wanted. It has to be deleted from the GitHub side by the author;
-  an agent session here gets a 403 trying.
 - The smoke suite stubs provider responses, so providers, the weather table, comparison modes and the
   unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
 - `npm test` runs the suite on both Chromium and WebKit (`mobile-webkit`, see

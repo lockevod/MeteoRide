@@ -155,13 +155,11 @@ presente para la app nativa:
 - Firma de release de Android ya configurada (`app/build.gradle` lee
   `ANDROID_KEYSTORE_*` o `mobile/android/keystore.properties`, ver `docs/ANDROID.md`);
   falta que el autor apunte una de las dos fuentes a su propio keystore.
-- Borrar la rama remota obsoleta `claude/cool-allen-w8evld` (desde GitHub, por el
-  autor: una sesión de agente recibe 403).
 - La suite corre ya en Chromium y WebKit (`npm test`, tarea 11 + cierre de la
   tarea 9/10), pero solo en el WebKit de escritorio de Playwright; sigue sin
   probarse en un iPhone físico.
 - `.github/workflows/tests.yml` (tarea 13) ejecuta `npm test` (Chromium y WebKit) en
-  cada PR y en cada push a `main`/`native-ios-capacitor`, sin secretos. El resultado se
+  cada PR y en cada push a `main`, sin secretos. El resultado se
   lee en la lista de checks del PR o en la pestaña Actions: un run en rojo señala qué
   test falló, igual que en local.
 - Ideas, no pendientes: tip jar (en iOS solo como compra in-app), conexión con Strava
