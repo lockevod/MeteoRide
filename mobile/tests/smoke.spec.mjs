@@ -6642,6 +6642,101 @@ test('the app fits the screen even with a taller header and a notice showing', a
   expect(await overflowBelow(page, '.wtc-wrap')).toBeLessThanOrEqual(1);
 });
 
+/* Apple asks for 44pt and Google for 48dp, and a control below that is missed by a
+ * thumb often enough to matter — worst for whoever already finds small targets hard.
+ * The website is dense on purpose and stays so; the floor is the app's alone, which
+ * is why this measures with the bridge installed. A review measured 22px selects,
+ * a 28x28 compare button and a ~32x27 settings button here. */
+const boxOf = (page, selector) =>
+  page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const { width, height } = el.getBoundingClientRect();
+    return { width: Math.round(width), height: Math.round(height) };
+  }, selector);
+
+test('in the app every control is at least 44px to a thumb', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  for (const selector of ['#datetimeRoute', '#apiSource', '#intervalSelect', '#toggleConfig', '.file-btn.small-file-btn']) {
+    const box = await boxOf(page, selector);
+    expect(box, `${selector} is not on the page any more`).not.toBeNull();
+    expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
+  }
+
+  // Both axes for the square ones. Height alone left the settings button 32 wide.
+  for (const selector of ['#toggleConfig', '#toggleCompareDates']) {
+    const box = await boxOf(page, selector);
+    expect(box.width, `${selector} is ${box.width}px wide`).toBeGreaterThanOrEqual(44);
+  }
+
+  // Square controls have to clear the floor on both axes, not just vertically. This
+  // is the one the review measured at 28x28; #compareDatesNow is its sibling and is
+  // hidden until compare mode is on, so a rect taken from it would be 0 and prove
+  // nothing.
+  const compare = await boxOf(page, '#toggleCompareDates');
+  expect(compare, 'the compare-dates toggle is not on the page any more').not.toBeNull();
+  expect(compare.height, `the compare toggle is ${compare.height}px tall`).toBeGreaterThanOrEqual(44);
+  expect(compare.width, `the compare toggle is ${compare.width}px wide`).toBeGreaterThanOrEqual(44);
+
+  // And it all still fits: raising the floor must not push the table off the screen.
+  expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+
+  // The settings panel is a second screenful of controls, and measuring with it closed
+  // is how the first version of this test called itself "every control" while the API
+  // key field and its check button were still 28px.
+  await page.locator('#toggleConfig').click();
+  await expect(page.locator('#configMenu')).toBeVisible();
+  const small = await page.evaluate(() => {
+    const inside = [...document.querySelectorAll('#configMenu input, #configMenu select, #configMenu button')];
+    return inside
+      .filter((el) => el.type !== 'checkbox' && el.type !== 'radio' && el.offsetParent !== null)
+      .map((el) => ({ id: el.id || el.className || el.tagName, height: Math.round(el.getBoundingClientRect().height) }))
+      .filter((c) => c.height < 44);
+  });
+  expect(small, `settings controls below the floor: ${JSON.stringify(small)}`).toEqual([]);
+});
+
+test('the app names the first step instead of showing a bare folder glyph', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  const label = page.locator('.file-btn.small-file-btn .file-btn-text');
+  await expect(label).toBeVisible();
+  expect((await label.textContent()).trim().length).toBeGreaterThan(3);
+
+  // "Visible" is not "fits". A `!important` width elsewhere once pinned the button to
+  // 28px while this label, `white-space: nowrap`, spilled out of it and over the recent
+  // routes control — and `toBeVisible()` was perfectly happy about it. Measure instead.
+  const fit = await page.evaluate(() => {
+    const el = document.querySelector('.file-btn.small-file-btn');
+    const text = el.querySelector('.file-btn-text');
+    return {
+      button: Math.round(el.getBoundingClientRect().right),
+      label: Math.round(text.getBoundingClientRect().right),
+      scroll: document.documentElement.scrollWidth,
+      view: window.innerWidth,
+    };
+  });
+  expect(fit.label, 'the label spills out of its own button').toBeLessThanOrEqual(fit.button);
+  expect(fit.scroll, 'the controls row pushed the page wider than the screen').toBeLessThanOrEqual(fit.view);
+});
+
+test('the website keeps its tight controls: the floor is the app\'s alone', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(page.locator('.file-btn.small-file-btn .file-btn-text')).toBeHidden();
+  const box = await boxOf(page, '#apiSource');
+  expect(box.height, 'the website picked up the app-only touch floor').toBeLessThan(44);
+});
+
 /* ---------- the help page ---------- */
 
 test('the help page describes the app-only features, but only in the app', async ({ page }) => {

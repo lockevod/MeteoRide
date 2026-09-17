@@ -202,9 +202,24 @@ The **Build > Generate Signed Bundle / APK** wizard is self-contained: it asks f
 keystore itself and never reads `android.signingConfigs.release`. It works whether or
 not this block is populated, and it is the other valid route for an existing keystore.
 
-Play Store listings need the same privacy answers as the App Store: no account, no
-analytics, and coordinates sent only to the weather providers. The privacy section of
-the `README` covers the data flows.
+Play's Data safety form needs the same answers as Apple's, and the same warning
+applies: **do not tick "No data collected"**. Route coordinates and times are sent off
+the device on every forecast, so declare **Location — Approximate and precise
+location**, collected, used for App functionality, not shared for advertising, and not
+linked to an identity. Google's "ephemeral processing" exemption does not cover it:
+Open-Meteo says its logs may hold coordinates for up to 90 days. With OpenWeather
+selected, the user's own API key travels too. There is no account, no analytics and no
+third-party advertising SDK, which is worth stating plainly on the form.
+
+`public/privacy-android.html` is the policy behind those answers and the URL for the
+store listing: `https://app.meteoride.cc/privacy-android.html`. There is one policy per
+platform on purpose — iOS has its own, the website has a third — so a reviewer reads
+only what applies to the thing being submitted. Fill the form from it and update the
+two together. Err towards declaring: an extra row on the Data safety card costs
+nothing, while an app removed after launch for under-declaring costs everything. And
+note that the policy keeps the apps and the website under separate headings on purpose
+— the website loads from three CDNs and has an open `connect-src`, the apps have
+neither, and a reviewer should not be able to confuse the two.
 
 ## Icons
 

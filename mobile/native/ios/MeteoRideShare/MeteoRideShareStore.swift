@@ -17,7 +17,12 @@ enum MeteoRideShareStore {
     private static let maxBytes = 25 * 1024 * 1024
     private static let maxAge: TimeInterval = 24 * 60 * 60
 
-    // Two shares can land in the same millisecond; this tells their file names apart.
+    // Two shares can land in the same millisecond; this tells their file names apart
+    // within one process. It cannot do so across processes: the app and the share
+    // extension each start their own counter at zero over the same App Group folder,
+    // so the same millisecond and the same count produce the same name and the atomic
+    // write drops one of the two routes. `uniqueToken` closes that; the counter stays
+    // because it is what keeps arrival order inside a burst from one process.
     private static var sequenceCounter = 0
     private static let sequenceLock = NSLock()
     private static func nextSequence() -> Int {
@@ -25,6 +30,11 @@ enum MeteoRideShareStore {
         defer { sequenceLock.unlock() }
         sequenceCounter += 1
         return sequenceCounter
+    }
+
+    /// Eight hex characters of a fresh UUID: unique wherever the counter is not.
+    private static func uniqueToken() -> String {
+        String(UUID().uuidString.prefix(8)).lowercased()
     }
 
     /// Shared folder, created on first use. Nil means the App Group is misconfigured.
@@ -149,22 +159,25 @@ enum MeteoRideShareStore {
 
     // MARK: - Helpers
 
-    /// Timestamp+sequence file name: unique across shares, sorts in arrival order.
-    /// Mirrors the Android side's `%013d-%04d__name` format.
+    /// Timestamp+sequence+identity file name: unique across shares and across the two
+    /// processes that write here, and sorts in arrival order. One character longer than
+    /// the Android side's `%013d-%04d__name`, which needs no identity: only the one
+    /// process ever writes that inbox.
     static func inboxFileName(millis: Int64, sequence: Int, name: String) -> String {
         // %d reads a 32-bit int and would truncate a 13-digit millisecond
         // timestamp; %lld/%ld match the actual 64-bit argument width.
-        String(format: "%013lld-%04ld__%@", millis, sequence % 10000, sanitize(name))
+        String(format: "%013lld-%04ld-%@__%@", millis, sequence % 10000, uniqueToken(), sanitize(name))
     }
 
-    /// Matches a finished inbox entry — the current `<millis>-<seq>__name` scheme or
-    /// the legacy pre-update `<millis>__name` one (no zero padding, no sequence) —
+    /// Matches a finished inbox entry — the current `<millis>-<seq>-<id>__name` scheme
+    /// or either legacy one (`<millis>-<seq>__name`, and `<millis>__name` before that,
+    /// with no zero padding and no sequence) —
     /// as opposed to an `.atomic` write's transient `<name>.sb-XXXX` sibling or
     /// unrelated junk (e.g. `.DS_Store`). Case-insensitive: `sanitize` only checks
     /// the extension case-insensitively and keeps whatever case the sender used, so
     /// a name can legitimately end in `.GPX` or `.KML`.
     private static let inboxNameRegex = try? NSRegularExpression(
-        pattern: "^(?:\\d{13}-\\d{4}__.+\\.(?:gpx|kml)|\\d+__.+\\.(?:gpx|kml))$",
+        pattern: "^(?:\\d{13}-\\d{4}(?:-[0-9a-f]{8})?__.+\\.(?:gpx|kml)|\\d+__.+\\.(?:gpx|kml))$",
         options: [.caseInsensitive, .dotMatchesLineSeparators]
     )
 

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Privacidad · Privacy — MeteoRide para Android</title>
+  <meta name="description" content="Política de privacidad de la app de MeteoRide para Android: qué se envía a los proveedores meteorológicos, qué se guarda en tu dispositivo y cómo borrarlo.">
+  <link rel="canonical" href="https://app.meteoride.cc/privacy-android.html">
+
+  <!-- Shared with the help pages: the back button when the app opens this page, the
+       version footer and, inside the app, the sections arriving closed. The title
+       swap there is help-only and keeps its hands off this page. -->
+  <script src="/scripts/help.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f0f4f8;
+      color: #243746;
+    }
+    .header {
+      background: #1e40af;
+      color: white;
+      padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: center;
+      position: relative;
+    }
+    .back-button {
+      position: absolute;
+      left: calc(1rem + env(safe-area-inset-left));
+      top: calc(50% + env(safe-area-inset-top) / 2);
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+    h3 { color: #2563eb; margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; border: 0; }
+    a { color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0ebff; vertical-align: top; }
+    .lede { background: #f8fafc; border-left: 4px solid #2563eb; padding: 1rem; border-radius: 0 8px 8px 0; }
+    .other { font-size: 0.9rem; color: #475569; }
+    .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; }
+    /* The title runs under the absolutely positioned back button on a phone; the
+       button only appears in the app. `display` is left alone: help.js sets it inline,
+       and that inline style is what keeps it hidden on the website. */
+    @media (max-width: 480px) {
+      .back-button { position: static; transform: none; margin-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <a href="index.html" class="back-button" id="backBtn" style="display:none;">← Volver</a>
+    <h1>🔒 Privacidad · Privacy</h1>
+    <p>MeteoRide para Android · <a href="#en" style="color:#cbd5e1;">English below</a></p>
+  </div>
+
+  <details class="section" open>
+    <summary><h2>Resumen</h2></summary>
+    <div class="lede">
+      <p><strong>MeteoRide no recopila tus datos ni los explota.</strong> No hay cuenta, ni registro, ni publicidad, ni analítica, ni telemetría, ni informes de fallos, ni identificadores de seguimiento. El autor de MeteoRide no recibe tus rutas, tu ubicación ni ninguna estadística de uso.</p>
+      <p><strong>Pero MeteoRide no inventa el tiempo.</strong> Para darte la previsión tiene que preguntársela a un proveedor meteorológico, y para eso le manda las coordenadas de tu ruta y las horas por las que preguntas. Ese proveedor es una empresa ajena, con su propia política: puede registrar esa petición y conservarla un tiempo. Lo mismo vale para los mapas.</p>
+      <p><strong>Esta política cubre únicamente la app de Android.</strong> La app de iOS tiene <a href="privacy-ios.html">la suya</a> y la web <a href="privacy-web.html">la suya</a>. La web hace cosas que esta app no hace.</p>
+    </div>
+    <p>Última actualización: 17 de septiembre de 2026.</p>
+  </details>
+
+  <details class="section" open>
+    <summary><h2>Qué sale de tu dispositivo, y hacia dónde</h2></summary>
+    <table>
+      <tr><th>Destino</th><th>Qué recibe</th><th>Cuándo</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (incluido el modelo AROME-HD)</td>
+        <td>Las coordenadas de los puntos de tu ruta y las fechas y horas de la previsión, además de tu dirección IP y los datos normales de una petición web.</td>
+        <td>Cada vez que se calcula o recalcula una previsión, también cuando la calcula el vigilante en segundo plano.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>Lo mismo, y además tu clave de API, que te identifica ante ellos como su cliente y permite asociar la petición a tu cuenta.</td>
+        <td>Si eliges OpenWeather como proveedor, <strong>y también si activas los avisos oficiales con una clave guardada, sea cual sea el proveedor elegido</strong>. Sin clave no se le llama nunca.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>Tu dirección IP y qué zona del mapa se está mirando, que es lo que hace falta para servir las teselas.</td>
+        <td>Al mostrar el mapa. Se pide a la red primero: la caché del dispositivo sirve cuando no hay conexión o cuando la petición falla, no para evitarla.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteo declara</strong> que sus registros pueden contener coordenadas y que los borra a los 90 días. No es un tratamiento efímero, y por eso esta política no dice que «no se recopilan datos» sin más: MeteoRide no los recopila, pero los proveedores reciben y registran las peticiones que MeteoRide les hace en tu nombre.</p>
+    <p><strong>Esos tres son los únicos servicios a los que la app se conecta.</strong> No descarga código ni recursos de ninguna parte: todas las bibliotecas viajan dentro del paquete que instalas, y la política de seguridad de contenido de la app lleva esa misma lista cerrada.</p>
+  </details>
+
+  <details class="section" open>
+    <summary><h2>Tu ubicación y tus notificaciones</h2></summary>
+    <p><strong>Ubicación:</strong> si das permiso, se usa una sola vez al abrir la app y solo para centrar el mapa donde estás, cuando todavía no hay ninguna ruta cargada. Esa posición no se guarda ni se envía a ningún sitio, y no forma parte de la consulta meteorológica: la previsión se pide por los puntos de la ruta. Eso sí, centrar el mapa hace que se pidan a OpenStreetMap las teselas de esa zona, así que la zona en la que estás llega a sus servidores igual que cualquier otra que mires. Puedes negar el permiso y la app funciona igual.</p>
+    <p><strong>Notificaciones:</strong> los avisos de lluvia o viento se generan en tu dispositivo y no pasan por ningún servidor de notificaciones push ni por el autor de la app. Pero no salen de la nada: con el vigilante activado, el sistema despierta a la app cada cierto tiempo —cuándo lo decide el sistema, no la app— y en cada despertar <strong>se descarga una previsión nueva</strong> de Open-Meteo para tu ruta, y los avisos oficiales de OpenWeather si los tienes activados. Es decir, hay peticiones a los proveedores mientras la app está en segundo plano.</p>
+  </details>
+
+  <details class="section" open>
+    <summary><h2>Qué se guarda en tu dispositivo</h2></summary>
+    <p>Todo lo siguiente vive solo en tu teléfono. Nadie más lo lee:</p>
+    <ul>
+      <li>Tus ajustes: idioma, unidades, proveedor, intervalos. Se copian a SharedPreferences, el almacén del sistema, porque el navegador interno puede vaciarse solo cuando falta espacio.</li>
+      <li>Las rutas recientes, la ruta preparada para usar sin cobertura y la caché de previsiones y de mapas.</li>
+      <li>Tu clave de OpenWeather, si pones una. <strong>Se guarda sin cifrar</strong>: usa una clave gratuita y con los permisos mínimos, o quédate con Open-Meteo, que no necesita ninguna.</li>
+      <li>Las rutas que te llegan desde otra app por «Compartir» y «Abrir con» esperan en un directorio privado de la app hasta que se cargan. Lo que lleve ahí más de 24 horas sin recogerse se borra la próxima vez que la app mira esa carpeta.</li>
+    </ul>
+  </details>
+
+  <details class="section" open>
+    <summary><h2>Cómo borrarlo</h2></summary>
+    <ul>
+      <li><strong>Borrarlo todo:</strong> Ajustes → Aplicaciones → MeteoRide → Almacenamiento → Borrar datos, o desinstala la app. Se van los ajustes, las rutas, las cachés y la bandeja de entrada.</li>
+      <li><strong>Solo la clave:</strong> bórrala del campo en la configuración y guarda.</li>
+    </ul>
+    <p>No hay nada que pedirle al autor para que lo borre, porque la app no guarda nada en su poder. Lo que ya haya quedado en los registros de un proveedor se rige por la política de ese proveedor, enlazada arriba.</p>
+  </details>
+
+  <details class="section" open>
+    <summary><h2>Contacto y cambios</h2></summary>
+    <p>Dudas sobre privacidad, o para ejercer tus derechos de acceso, rectificación y supresión: <a href="mailto:privacy@poslati.com">privacy@poslati.com</a>. Los fallos y las sugerencias van mejor en <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">github.com/lockevod/MeteoRide/issues</a>.</p>
+    <p>Si esta política cambia, cambia la fecha de arriba y queda el historial en el repositorio.</p>
+  </details>
+
+  <details class="section" open id="en" lang="en">
+    <summary><h2>English</h2></summary>
+
+    <div class="lede">
+      <p><strong>MeteoRide does not collect your data or exploit it.</strong> No account, no sign-up, no ads, no analytics, no telemetry, no crash reporting, no tracking identifiers. MeteoRide's author never receives your routes, your location or any usage statistics.</p>
+      <p><strong>But MeteoRide does not invent the weather.</strong> To give you a forecast it has to ask a weather provider, and that means sending the coordinates of your route and the times you are asking about. That provider is a separate company with its own policy: it may log the request and keep it for a while. The same goes for the maps.</p>
+      <p><strong>This policy covers the Android app only.</strong> The iOS app has <a href="privacy-ios.html">its own</a> and the website has <a href="privacy-web.html">its own</a>. The website does things this app does not.</p>
+    </div>
+    <p>Last updated: 17 September 2026.</p>
+
+    <h3>What leaves your device, and where it goes</h3>
+    <table>
+      <tr><th>Destination</th><th>What it receives</th><th>When</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (the AROME-HD model included)</td>
+        <td>The coordinates of the points along your route and the forecast dates and times, plus your IP address and the ordinary details of a web request.</td>
+        <td>Every time a forecast is computed or recomputed, including when the background ride watch computes one.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>The same, plus your API key, which identifies you to them as their customer and lets them tie the request to your account.</td>
+        <td>If you pick OpenWeather as the provider, <strong>and also if you turn on official warnings with a key saved, whichever provider is selected</strong>. With no key it is never called.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>Your IP address and which part of the map is being looked at, which is what serving the tiles requires.</td>
+        <td>When the map is shown. The network is asked first: the device's cache serves when there is no connection or when a request fails, not to avoid one.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteo states</strong> that its logs may contain coordinates and that it deletes them after 90 days. That is not ephemeral processing, which is why this policy does not simply claim "no data collected": MeteoRide collects none, but the providers receive and log the requests MeteoRide makes on your behalf.</p>
+    <p><strong>Those three are the only services the app connects to.</strong> It downloads no code and no assets from anywhere: every library travels inside the bundle you install, and the app's content security policy carries that same closed list.</p>
+
+    <h3>Your location and your notifications</h3>
+    <p><strong>Location:</strong> with your permission it is read once when the app opens, only to centre the map on where you are while no route is loaded yet. That position is not stored and not sent anywhere, and it is not part of the weather query: the forecast is asked for the route's points. Centring the map does request the OpenStreetMap tiles for that area, though, so the area you are in reaches their servers like any other you look at. Deny the permission and the app works the same.</p>
+    <p><strong>Notifications:</strong> rain and wind alerts are produced on your device and never pass through a push server or through the app's author. They do not come from nowhere, though: with the ride watch armed, the system wakes the app up from time to time — when is the system's decision, not the app's — and each time it <strong>downloads a fresh forecast</strong> from Open-Meteo for your route, plus OpenWeather's official warnings if you have those on. So there are requests to the providers while the app is in the background.</p>
+
+    <h3>What is stored on your device</h3>
+    <p>All of the following lives only on your phone. Nobody else reads it:</p>
+    <ul>
+      <li>Your settings: language, units, provider, intervals. They are copied to SharedPreferences, the system store, because the embedded browser can clear itself when the device runs short of space.</li>
+      <li>Recent routes, the route prepared for use without coverage, and the forecast and map caches.</li>
+      <li>Your OpenWeather key, if you enter one. <strong>It is stored unencrypted</strong>: use a free key with minimal permissions, or stay with Open-Meteo, which needs none.</li>
+      <li>Routes that reach you from another app through "Share" and "Open with" wait in a private directory of the app until they are loaded. Anything left there uncollected for more than 24 hours is deleted the next time the app looks in that folder.</li>
+    </ul>
+
+    <h3>How to delete it</h3>
+    <ul>
+      <li><strong>Delete everything:</strong> Settings → Apps → MeteoRide → Storage → Clear data, or uninstall the app. The settings, the routes, the caches and the inbox all go.</li>
+      <li><strong>The key alone:</strong> clear the field in the settings and save.</li>
+    </ul>
+    <p>There is nothing to ask the author to delete, because the app holds nothing on their side. Whatever has already reached a provider's logs is governed by that provider's policy, linked above.</p>
+
+    <h3>Contact and changes</h3>
+    <p>Privacy questions, or to exercise your rights of access, correction and erasure: <a href="mailto:privacy@poslati.com">privacy@poslati.com</a>. Bugs and suggestions are better off at <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">github.com/lockevod/MeteoRide/issues</a>.</p>
+    <p>If this policy changes, the date above changes with it and the history stays in the repository.</p>
+  </details>
+
+  <p class="version-footer" id="cwVersion"></p>
+
+  <script src="/scripts/version.js"></script>
+</body>
+</html>

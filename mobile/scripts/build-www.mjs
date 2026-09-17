@@ -176,7 +176,9 @@ async function copyVendor() {
 const FORECAST_APIS = [
   'https://api.open-meteo.com',
   'https://api.openweathermap.org',
-  'https://my.meteoblue.com',
+  // meteoblue is gone: `utils.js` migrates the setting away and no code builds a URL
+  // for it. Leaving the host here made the app's "closed list" one host wider than the
+  // list the privacy policies show the user, which is a promise the build was breaking.
 ];
 
 const NATIVE_CSP = [

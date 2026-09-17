@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App target. Belongs at the root of the App bundle, which is what adding it to the
+  target's Copy Bundle Resources phase does. docs/IOS.md step 4 wires it up.
+
+  Read Apple's reason texts before touching the codes below: several codes share a
+  category and they are not interchangeable, and the obvious-looking one is often
+  about *displaying* the value rather than using it.
+
+  FileTimestamp
+    C617.1 — metadata of files inside the app container, the app group container or
+      the CloudKit container. That is MeteoRideShareStore pruning the shared inbox: it
+      reads `.modificationDate` to drop anything the web layer never collected in 24
+      hours, and the folder is in the App Group container. It is also the reason
+      @capacitor/filesystem's README asks for, and for the same kind of access.
+      Not DDA9.1, which is for *displaying* a timestamp to the person — nothing here
+      shows one. Not 3B52.1 either, which is for files the person specifically granted
+      access to through something like a document picker; the inbox is the app's own.
+
+  UserDefaults
+    CA92.1 — user defaults readable only by this app. @capacitor/preferences writes
+      `UserDefaults.standard` and its `group` option is a key prefix, not a suite name
+      (node_modules/@capacitor/preferences/ios/Sources/PreferencesPlugin/Preferences.swift),
+      so nothing here shares defaults through the App Group. Not 1C8F.1, which is for
+      defaults shared with an App Group, and emphatically not 54BD.1, which is about
+      active keyboard information and has nothing to do with user defaults.
+
+  The collected-data section must agree with the App Privacy answers in App Store
+  Connect; public/privacy-ios.html is what both are filled from. Precise location covers
+  the route's own coordinates, which go to Open-Meteo on every forecast — the device's
+  position is read only to centre the map and never leaves. Other data covers the
+  OpenWeather key, which the user supplies and which identifies them to OpenWeather.
+  "Data not collected" would be false: Open-Meteo's logs may hold coordinates for 90
+  days, so this is not ephemeral processing either.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

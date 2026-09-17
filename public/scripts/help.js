@@ -11,11 +11,16 @@
   // only touches <html> itself, which exists as soon as the parser reaches this script,
   // so it runs immediately rather than waiting for the rest of the body below.
   let isNative = false;
+  let platform = '';
   try {
     const cap = window.Capacitor;
     if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
       isNative = true;
       document.documentElement.classList.add('cw-native');
+      // The privacy policy is one document per platform, because that is what each
+      // store's form links to and a reviewer should not have to skip past the other
+      // two. The link below is pointed at the right one once the body exists.
+      platform = typeof cap.getPlatform === 'function' ? cap.getPlatform() : '';
     }
   } catch (_) { /* a plain browser: leave the section hidden */ }
 
@@ -30,6 +35,13 @@
       document.querySelectorAll('details.section').forEach((section) => {
         section.open = false;
       });
+    }
+
+    // Written as the website's policy so a reader without JavaScript, and every
+    // search engine, gets a working link; inside the app it becomes the platform's.
+    const privacyLink = document.getElementById('privacyLink');
+    if (privacyLink && (platform === 'ios' || platform === 'android')) {
+      privacyLink.setAttribute('href', `privacy-${platform}.html?return=true`);
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -49,12 +61,17 @@
     }
 
     // Keep the tab title in the reader's language when they landed on the other page.
+    // Only the help exists as two pages, one per language; the privacy policies borrow
+    // this script for the back button and the footer but carry both languages at once,
+    // so they must keep their own titles. Hence the marker rather than a bare lang check.
     const pageLang = (document.documentElement.lang || '').toLowerCase();
     const browserLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
-    if (pageLang.startsWith('es') && browserLang.startsWith('en')) {
-      document.title = 'Help - MeteoRide';
-    } else if (pageLang.startsWith('en') && browserLang.startsWith('es')) {
-      document.title = 'Ayuda - MeteoRide';
+    if (document.body.dataset.page === 'help') {
+      if (pageLang.startsWith('es') && browserLang.startsWith('en')) {
+        document.title = 'Help - MeteoRide';
+      } else if (pageLang.startsWith('en') && browserLang.startsWith('es')) {
+        document.title = 'Ayuda - MeteoRide';
+      }
     }
 
     // Version footer, same element and script in both pages: window.CW_VERSION comes

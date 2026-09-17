@@ -53,16 +53,34 @@
     }
     consuming = true;
     let got = false;
+    // A total ceiling on top of the per-batch one. `next()` (Android) and
+    // `nextPending()` (iOS) both hand a route back even when the delete that should
+    // remove it from the inbox fails — they log and carry on, so the code already knows
+    // that can happen. With only the repeat flag and no ceiling, one undeletable file
+    // is re-read and re-imported for ever. High enough that it can never be what ends a
+    // real drain: nobody shares two hundred routes at once.
+    const MAX_ROUTES = 200;
+    let delivered = 0;
     try {
       do {
         askedAgain = false;
-        // Several files can pile up while the app was closed.
+        // Several files can pile up while the app was closed. Ten at a time keeps one
+        // batch bounded, but the batch ending is not the queue ending: an eleventh route
+        // used to sit in the inbox until some later activation happened to notice it, and
+        // the 24-hour prune could take it first. Only an empty answer ends the drain.
+        let emptied = false;
         for (let i = 0; i < 10; i++) {
           const payload = await share.consumePending();
-          if (!payload || !payload.gpx) break;
+          if (!payload || !payload.gpx) { emptied = true; break; }
           log('received shared route', payload.name || '');
           injectRoute(payload.gpx, payload.name);
           got = true;
+          delivered++;
+        }
+        if (!emptied) askedAgain = true;
+        if (delivered >= MAX_ROUTES) {
+          log('stopping the drain at', delivered, 'routes: the inbox is not emptying');
+          break;
         }
       } while (askedAgain);
       return got;
@@ -72,6 +90,20 @@
       return got;
     } finally {
       consuming = false;
+    }
+  }
+
+  // Anything waiting in the inbox, or still being read into it. Both stores report the
+  // second count because the read is asynchronous on both platforms.
+  async function sharesArriving() {
+    const share = plugins.MeteoRideShare;
+    if (!share || typeof share.pendingCount !== 'function') return false;
+    try {
+      const counts = await share.pendingCount();
+      return !!(counts && ((counts.count || 0) > 0 || (counts.incoming || 0) > 0));
+    } catch (e) {
+      log('pendingCount failed', e);
+      return false;
     }
   }
 
@@ -99,15 +131,26 @@
         refreshOnResume();
       });
       if (window.CW_PLATFORM === 'android') {
-        app.addListener('backButton', ({ canGoBack }) => {
-          if (canGoBack && window.location.pathname !== '/index.html' && window.location.pathname !== '/') {
-            window.history.back();
-          } else {
-            app.exitApp();
-          }
-        });
+        app.addListener('backButton', handleBack);
       }
     } catch (e) { log('app listeners', e); }
+  }
+
+  // Android's Back, in the order the system expects: close whatever layer is over the
+  // app first, then walk back through the pages, and only leave from a clear index. The
+  // config panel is the only such layer, and it is not a page: closing it used to drop
+  // the user out of the app altogether, with no way to dismiss the panel by gesture.
+  function handleBack({ canGoBack } = {}) {
+    const menu = document.getElementById('configMenu');
+    if (menu && menu.style.display === 'block') {
+      menu.style.display = 'none';
+      return;
+    }
+    if (canGoBack && window.location.pathname !== '/index.html' && window.location.pathname !== '/') {
+      window.history.back();
+      return;
+    }
+    if (plugins.App) plugins.App.exitApp();
   }
 
   // Android has no appUrlOpen for a plain share intent, so the plugin says so itself.
@@ -1027,7 +1070,16 @@
     // another app comes out of the inbox later, so it is the later request and replaces the
     // restore by identity, even once that has published. The map goes to the phone's position
     // only when nothing was shared, as before.
-    consumePendingShare().then((arrived) => { if (!arrived) centreOnUser(); });
+    // `arrived` is false while a read is still in flight on the native side, which
+    // since that read moved off the main thread is the normal state on a launch that
+    // carried a route: the file lands later and comes in through sharedRouteAvailable.
+    // Taking that for "nothing came" is what sends the map to the phone's position, and
+    // asks for the location permission, on the one launch where the user had already
+    // said what they wanted to see.
+    consumePendingShare().then(async (arrived) => {
+      if (arrived || await sharesArriving()) return;
+      centreOnUser();
+    });
     restoreLastRoute();
   }
 
@@ -1042,6 +1094,7 @@
   }
 
   window.cwConsumePendingShare = consumePendingShare;
+  window.cwHandleBack = handleBack;
   window.cwShareCurrentRoute = shareCurrentRoute;
   window.cwPrepareForOffline = prepareForOffline;
   window.cwPreparedRecord = () => preparedRecord;

@@ -120,3 +120,104 @@ test('each help page links to its guide from every section, and the guide is the
     await access(join(ROOT, 'docs', guide));
   }
 });
+
+/* The privacy policies: one per platform, because that is what each store's form links
+ * to and a reviewer should not have to skip past the other two to reach the one that
+ * applies. The cost of that split is drift — the same cost the two help pages pay, and
+ * the reason this file exists — so the two app policies are compared the same way. */
+const POLICIES = ['privacy-ios.html', 'privacy-android.html', 'privacy-web.html'];
+
+test('the help links to a policy that exists, and the app swaps it per platform', async () => {
+  for (const page of ['help.html', 'help_en.html']) {
+    const html = await read(page);
+    assert.match(
+      html, /<a href="privacy-web\.html" id="privacyLink"/,
+      `${page} no longer carries the switchable privacy link`
+    );
+  }
+  for (const policy of POLICIES) await access(join(PUBLIC, policy));
+
+  /* help.js rewrites that href inside the app. Without `?return=true` the page's own
+   * back button stays hidden and a native reader is stranded on it. */
+  const helpJs = await readFile(join(PUBLIC, 'scripts/help.js'), 'utf8');
+  assert.match(helpJs, /privacy-\$\{platform\}\.html\?return=true/, 'the in-app policy link lost its platform or its return');
+});
+
+test('each policy states what MeteoRide does not collect and what the providers receive', async () => {
+  for (const policy of POLICIES) {
+    const html = await read(policy);
+    for (const claim of [/no recopila tus datos/i, /does not collect your data/i]) {
+      assert.match(html, claim, `${policy} no longer states that MeteoRide collects nothing`);
+    }
+    for (const provider of [/open-meteo/i, /openweather/i, /openstreetmap/i]) {
+      assert.match(html, provider, `${policy} no longer names a provider that receives route data`);
+    }
+    // Open-Meteo's own number, not ours: when this fails, re-read their terms at
+    // https://open-meteo.com/en/terms rather than just updating the test.
+    for (const retention of [/90 d[ií]as/i, /90 days/i]) {
+      assert.match(html, retention, `${policy} no longer says how long Open-Meteo keeps the logs`);
+    }
+    // Both stores want a way to reach someone. Two: the page carries both languages.
+    assert.equal(html.split('mailto:').length - 1, 2, `${policy} lost its privacy contact in one language`);
+  }
+});
+
+/* The split only helps if each document stays in its lane. An app policy that starts
+ * describing the website is how a reviewer ends up crediting the website's CDNs to the
+ * app — which is the whole reason these are separate files. */
+test('the app policies claim nothing the website does, and the website policy owns it', async () => {
+  const web = await read('privacy-web.html');
+  for (const third of [/jsdelivr/i, /cdnjs/i, /unpkg/i, /buy me a coffee/i, /gpx_url/i, /cloudflare/i]) {
+    assert.match(web, third, 'the website policy stopped disclosing what the website loads from third parties');
+  }
+  for (const policy of ['privacy-ios.html', 'privacy-android.html']) {
+    const html = await read(policy);
+    for (const websiteOnly of [/jsdelivr/i, /cdnjs/i, /unpkg/i, /buy me a coffee/i, /gpx_url/i]) {
+      assert.doesNotMatch(html, websiteOnly, `${policy} describes website behaviour; a reviewer will credit it to the app`);
+    }
+    assert.match(html, /privacy-web\.html/, `${policy} should point at the website's own policy`);
+  }
+});
+
+/* The two app policies are one document written twice — about 90% shared — so they fail
+ * the way the help pages do: an edit lands in one and not the other. Same shape check. */
+test('the iOS and Android policies do not drift apart', async () => {
+  const ios = await read('privacy-ios.html');
+  const android = await read('privacy-android.html');
+
+  assert.deepEqual(sectionClasses(ios), sectionClasses(android), 'the two app policies have different sections');
+  for (const [what, re] of [['h2', /<h2\b/g], ['h3', /<h3\b/g], ['li', /<li\b/g], ['p', /<p\b/g], ['tr', /<tr>/g]]) {
+    assert.equal(count(ios, re), count(android, re), `${what}: the two app policies have drifted apart`);
+  }
+
+  const iosWords = visibleWords(ios);
+  const androidWords = visibleWords(android);
+  const drift = Math.abs(iosWords - androidWords) / Math.max(iosWords, androidWords);
+  assert.ok(drift <= 0.1, `iOS has ${iosWords} words, Android ${androidWords} (${(drift * 100).toFixed(1)}% apart)`);
+
+  // And each one names its own platform where the other names the other.
+  assert.match(ios, /UserDefaults/, 'the iOS policy stopped naming where iOS keeps the settings');
+  assert.match(android, /SharedPreferences/, 'the Android policy stopped naming where Android keeps the settings');
+  assert.doesNotMatch(ios, /SharedPreferences/, 'the iOS policy describes Android storage');
+  assert.doesNotMatch(android, /UserDefaults/, 'the Android policy describes iOS storage');
+});
+
+/* Claims that were in an earlier draft and were false. Each one is cheap to reintroduce
+ * by "simplifying" the wording, and each one is the kind a reviewer can check. */
+test('the policies do not repeat the claims the code contradicted', async () => {
+  for (const policy of POLICIES) {
+    const html = await read(policy);
+    // The ride watch downloads a fresh forecast in the background; it does not merely
+    // read one already on the device. (mobile/runners/watch.js)
+    if (/privacy-(ios|android)/.test(policy)) {
+      assert.match(html, /descarga una previsi[óo]n nueva|downloads a fresh forecast/i,
+        `${policy} stopped saying the background watch downloads a forecast`);
+    }
+    // Official warnings call OpenWeather whichever provider is selected. (app.js)
+    assert.match(html, /sea cual sea el proveedor|whichever provider is selected/i,
+      `${policy} stopped saying OpenWeather is called for warnings regardless of provider`);
+    // Tiles are network-first; the cache is the fallback, not a way to avoid OSM.
+    assert.match(html, /a la red primero|network is asked first/i,
+      `${policy} stopped saying the map goes to the network first`);
+  }
+});

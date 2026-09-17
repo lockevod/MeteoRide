@@ -455,6 +455,25 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   and the answer to that call was decided before it arrived. A request that turns up
   mid-drain therefore sets a flag and the drain repeats, rather than being dropped
   until the app is next activated.
+- **The ten-route batch is a yield, not the end of the queue.** The drain asks for ten
+  routes and then lets the outer loop decide again; for a while the loop only came back
+  round when a *second* notification had arrived, so sharing eleven routes at once
+  delivered ten and left the eleventh sitting in the inbox until some later activation
+  happened to notice it — and the 24-hour prune could get there first. A batch that ends
+  full now sets the repeat flag itself, so only an empty answer ends the drain. Keep the
+  cap when touching this: it bounds one batch, it must never bound the queue. There is
+  now a second, much higher ceiling on the *total* (`MAX_ROUTES`), and that one is not
+  about batching: `next()` and `nextPending()` both hand a route back even when the
+  delete that should remove it from the inbox fails, so without a total bound one
+  undeletable file is re-read and re-imported for ever, quietly, while the app stays
+  responsive. Two hundred is far past any real share and can never be what ends a real
+  drain.
+- **Android's Back closes a layer before it leaves the app.** `handleBack` in `native.js`
+  checks the config panel first, then history, and calls `exitApp()` only from a clear
+  index. It used to look at the path alone, so Back with the panel open dropped the user
+  out of the app entirely and the panel had no gesture to dismiss it. Anything else drawn
+  over the app — a modal, a sheet — has to be added to that first check; there is nothing
+  generic watching for open layers.
 - **Route injection races the app boot.** A route is parsed off the map, but confirming
   it (`cwCommitRoute`) draws onto the Leaflet map, so `window.map` must exist by then, and
   routes from outside regularly arrive before `initMap` has run: `initGpxShare()` is called
@@ -510,14 +529,23 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   memory budget. The extension also ingests its attachments one at a time.
 - **Two shares landing in the same millisecond need a tiebreaker, and an atomic write
   needs a name filter.** Both inboxes name a stored file
-  `<13-digit-millis>-<4-digit-sequence>__<name>` (`MeteoRideShareStore.swift:150-158`,
-  `MeteoRideShareStore.java:203-206`), so arrival order survives a plain sort by name even
-  when two routes share a millisecond. On iOS that name also has to be filtered on the way
+  `<13-digit-millis>-<4-digit-sequence>__<name>` (`MeteoRideShareStore.java:203-206`), so
+  arrival order survives a plain sort by name even when two routes share a millisecond.
+  **iOS adds a third field**, `<millis>-<sequence>-<8 hex of a UUID>__<name>`
+  (`MeteoRideShareStore.swift`'s `inboxFileName`), and the divergence is the point: the
+  counter is a process-local `NSLock` and `var`, and on iOS *two* processes write this
+  folder — the app and the share extension, each starting its own counter at zero over the
+  same App Group container. Same millisecond plus same count meant the same name, and
+  `.atomic` overwrites rather than refusing, so one of the two routes vanished silently.
+  Android needs no such field: only `MainActivity`'s single ingest executor ever writes
+  there, and one `AtomicInteger` covers it. Keep the extra field out of the Android name
+  rather than "restoring symmetry". On iOS that name also has to be filtered on the way
   back out: `Data.write(to:options:.atomic)` leaves a `<name>.sb-XXXX` sibling in the same
   directory for the instant of the rename, and `isInboxName`
   (`MeteoRideShareStore.swift`) skips it rather than having `pendingURLs()` read and
-  delete it half-written. The filter accepts either that current pattern or the legacy
-  pre-update one (`<millis>__<name>`, no padding, no sequence) case-insensitively — `sanitize`
+  delete it half-written. The filter accepts either that current pattern or either legacy
+  one (`<millis>-<sequence>__<name>` before the identity was added, and
+  `<millis>__<name>` before the sequence was, with no padding) case-insensitively — `sanitize`
   only checks the extension case-insensitively and keeps whatever case the sender used, so a
   stored name can legitimately end in `.GPX`/`.KML`, and a route shared moments before an app
   update must not sit unread until the 24-hour prune sweeps it. `sanitize` also replaces any
@@ -541,6 +569,68 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   name looks right *or* whose first 2 KB contain `<gpx`/`<kml`. Keep the two
   implementations in step: same 25 MB cap, same UTF-8 with Latin-1 fallback, same
   24-hour prune of anything the web layer never collected.
+  That mess reaches the Android manifest too: the `ACTION_VIEW` filter carries the same
+  five MIME types as the share filter (`application/gpx+xml`,
+  `application/vnd.google-earth.kml+xml`, `application/xml`, `text/xml`,
+  `application/octet-stream`). The narrow list it had before meant a file manager
+  serving a GPX as plain XML left MeteoRide out of "Open with" for a file that imported
+  perfectly when shared. Claiming the generic types costs nothing because the decision
+  is not made there: `ingest` reads the item and drops whatever is not a route.
+- **There are three privacy policies, one per platform, and each must stay in its lane.**
+  `public/privacy-ios.html`, `-android` and `-web`. Each store form links to its own
+  platform's, so a reviewer reads only what applies to the thing being submitted. The
+  split exists because the website is not the app: app.meteoride.cc loads libraries from
+  jsDelivr, cdnjs and unpkg, shows a Buy Me a Coffee button on its help pages, and has
+  `connect-src 'self' https:` because `?gpx_url=` fetches from wherever the user names.
+  The apps have none of that. An early draft was one document that took the app's
+  sentence ("nothing else leaves the device") and served it to website visitors, which
+  is the one way a privacy policy is worse than no privacy policy.
+
+  Two costs come with the split, both covered by `help-pages.test.mjs`: the two app
+  policies are ~90% the same document and drift the way the two help pages do, so they
+  are shape-compared against each other; and an app policy that starts describing the
+  website undoes the whole point, so the website-only terms are asserted absent from
+  both. The help pages carry one link, `#privacyLink`, written as the website's policy —
+  that is what a reader without JavaScript and every crawler gets — and `help.js` points
+  it at `privacy-<platform>.html?return=true` inside the app. The `?return=true` is not
+  decoration: without it that page's own back button stays hidden and a native reader is
+  stranded.
+
+  The policies also had to be corrected against the code once, which is worth
+  remembering because all three claims were plausible and all three were false: the ride
+  watch **downloads** a fresh forecast in the background rather than reading one already
+  on the device (`mobile/runners/watch.js`); official warnings call OpenWeather whichever
+  provider is selected, as long as a key is saved (`app.js`); and map tiles are
+  network-first, so the cache rescues a failure rather than avoiding the request
+  (`tile-cache.js`). A test pins all three.
+- **The privacy manifests' reason codes are exactly the ones the plugin READMEs give,
+  and a review that says otherwise is probably reading a mis-parsed summary.**
+  `mobile/native/ios/PrivacyInfo.xcprivacy` (App) and
+  `mobile/native/ios/ShareExtension/PrivacyInfo.xcprivacy` are tracked because
+  `mobile/ios/` is not, and Apple rejects an upload that touches a required-reason API
+  without declaring it. The codes are `C617.1` for file timestamps and `CA92.1` for user
+  defaults, in both manifests.
+
+  **Read Apple's own text before changing a code, and read it from the documentation
+  JSON rather than from a summary.** The codes are four hex characters, they look
+  interchangeable, and each category has three or four of them that mean genuinely
+  different things: `DDA9.1` is *displaying* a timestamp to the person, `3B52.1` is
+  files the person picked through a document picker, `1C8F.1` is defaults shared through
+  an App Group, and `54BD.1` is not about defaults at all — it is active keyboard
+  information. This has already gone wrong here, in the confident direction: a loose
+  regex over Apple's page produced a mis-paired table, the manifests were "corrected"
+  away from what the plugin READMEs said, and for a while the app declared a keyboard
+  reason for its settings. An adversarial review caught it. Fetch it properly instead:
+
+  ```bash
+  curl -s "https://developer.apple.com/tutorials/data/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons.json"
+  ```
+
+  `privacy-manifest.test.mjs` carries the real per-category table and fails on a code
+  from the wrong category, which is exactly what that mistake looked like. It still
+  cannot tell you a code is the right one *for this app*; only the reason text can.
+  Verified by unsigned archive on 17/09/2026: both manifests land at the bundle roots
+  (`App.app/PrivacyInfo.xcprivacy`, `App.app/PlugIns/ShareExtension.appex/…`).
 - **The web view origin in the app is `capacitor://localhost`.** Weather providers
   must send permissive CORS headers. Open-Meteo and OpenWeather do.
 - **The share extension cannot call `UIApplication.open`.** It tries
@@ -1596,6 +1686,32 @@ but proved nothing. It now waits the boot drain out, and the stubbed plugin deci
 its answer when the call arrives rather than when it resolves, which is what native
 code does and what makes the race reproducible.
 
+### Building Android here needs a JDK the global Gradle config does not give it
+
+`~/.gradle/gradle.properties` on this machine pins `org.gradle.java.home` to Zulu 17,
+and Capacitor 8 compiles at `sourceCompatibility 21`, so any Gradle task fails with
+`invalid source release: 21` in `:capacitor-android:compileDebugJavaWithJavac` — a
+dependency, which makes it look like the project is broken rather than the toolchain.
+That file is global and belongs to every other project on the machine, so override it
+per run instead of editing it:
+
+```bash
+cd mobile/android
+ANDROID_HOME="$HOME/Library/Android/sdk" ./gradlew :app:testDebugUnitTest \
+  -Dorg.gradle.java.home="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  -Pkotlin.jvm.target.validation.mode=warning
+```
+
+The second flag is needed because that JBR is a JDK 25 and Kotlin caps at 24, so
+`:capacitor-background-runner` ends up with a Kotlin target of 24 against Java's 21 and
+refuses. Both are mismatches inside dependencies, neither affects `:app`. A JDK 21
+would need neither flag.
+
+**`BUILD SUCCESSFUL` does not mean the tests ran.** Gradle reports a cached task as
+successful in about a second. Read
+`app/build/test-results/testDebugUnitTest/*.xml` for the actual counts, or pass
+`--rerun-tasks`.
+
 ### A red suite is not always broken code
 
 Playwright's trace artifacts under `mobile/test-results/.playwright-artifacts-N/` can
@@ -1639,23 +1755,88 @@ suite and reporting only the second number is how a real regression gets buried.
 - **Nothing has run on a physical device.** iOS background tasks never execute in the
   simulator, so no ride alert has ever fired through the real path: the rules and the
   runner are covered by tests, the delivery is not.
-- **iOS reads a route opened via "Open in MeteoRide" on the main thread.**
-  `scene(_:openURLContexts:)` (`SceneDelegate.swift:34-54`) calls
-  `MeteoRideShareStore.ingest(fileURL:)` synchronously, which streams the file through
-  `readCapped` — up to 25 MB — before the UI thread is free again. The share-extension
-  path was moved off the main thread; this one has not been. Documented, not fixed.
-- **Android can lose an "Open in"/share import if the process dies mid-ingest.**
-  `ingest(Intent)` marks the intent `EXTRA_HANDLED` (`MainActivity.java:57`) before
-  handing the actual read-and-store to the background executor (`:61-66`); a process
-  killed between those two lines never writes the file to the inbox, and the same guard
-  that stops a route being imported twice then also stops it being retried. Reopening
-  the task from Recent Apps used to be an incidental way to retry exactly this case —
-  Android hands `onCreate` the same original intent again — but the Recents guard above
-  (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) now refuses that intent too, on purpose: a
-  route already delivered must not be re-ingested from Recents. That accidental
-  recovery is gone along with the duplicates it used to cost. Phase 5 did not change it: its
-  durable import starts once a route reaches JavaScript, and the native inboxes are out of its
-  scope (`docs/HANDOFF.md` §10).
+- **Reading a route off the main thread cost iOS its ordering, and the announcement is
+  what replaces it.** `scene(_:openURLContexts:)` used to call
+  `MeteoRideShareStore.ingest(fileURL:)` synchronously, which streams up to 25 MB
+  through `readCapped` while the scene callback — and the launch, or the resume — waits.
+  It now runs on `SceneDelegate.intake`, a serial queue. The thing that made the
+  synchronous call attractive was that it finished *before* `SceneDelegateProxy` emitted
+  `appUrlOpen`, so the drain that event triggers was certain to find the route already
+  in the inbox; now that drain usually runs first and finds nothing. What delivers the
+  route is `MeteoRideSharePlugin.notifyRouteAvailable()` once the bytes are stored —
+  `sharedRouteAvailable`, the same event and the same `native.js` listener Android has
+  always used. Two consequences worth keeping in mind: the iOS plugin now holds an
+  instance the way Android's does, and it keeps an announcement made before the bridge
+  built the plugin (a route arriving with the launch) to re-emit at `load`, or it would
+  be dropped into a bridge with no listeners. Making that call synchronous again to
+  "restore the ordering" would put the watchdog risk back.
+
+  Two details that are easy to get wrong and were: the announcement is dispatched onto
+  `CapacitorBridge.dispatchQueue` rather than made from the intake queue, because
+  `notifyListeners` walks `eventListeners` and `retainedEventArguments` — plain
+  `NSMutableDictionary`s with no locking — and `addListener` mutates them from that same
+  queue, so announcing from another thread is a data race on a Foundation collection.
+  The queue is not on `CAPBridgeProtocol`, hence the cast. And `instance` is `weak`, like
+  Android's, which nils it in `handleOnDestroy`: a strong static would pin the plugin,
+  the bridge and the web view past a scene teardown, and a stale non-nil instance would
+  also defeat `missedAnnouncement`, sending the announcement to a dead bridge with
+  nothing left to re-emit it.
+
+  The cost of the asynchronous read is that an empty inbox no longer means "this launch
+  carried nothing" — for as long as the read takes, a launch that carried a route looks
+  exactly like one that did not. `boot()` used that to decide whether to centre the map
+  on the phone, so the change made iOS ask for the location permission on precisely the
+  launches where the user had just opened a route. Both plugins now report `incoming`
+  alongside `count` in `pendingCount`, and `sharesArriving()` in `native.js` consults it
+  before `centreOnUser` runs. Android was always asynchronous here and had the same hole;
+  it is closed by the same counter.
+- **Android's intake ledger is what makes a share survive the process dying.**
+  `ingest(Intent)` used to mark the intent `EXTRA_HANDLED` before handing the read to the
+  executor, so a process killed in between never wrote the file, and the two guards that
+  stop a route being imported twice (`savedInstanceState`, and
+  `FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY` on a reopen from Recents) also stopped it being
+  retried: the user had to share it again. Now `MeteoRideShareStore.rememberIntake`
+  writes the URIs to `incoming-routes.pending` on the main thread, *before* the executor
+  is handed anything — deliberately not inside the executor, which may be seconds deep
+  in a large route — and `forgetIntake` drops each one when its attempt is over. What is
+  left in that file at launch is exactly what was received and never delivered, and
+  `retryIntake` in `onCreate` retries it on every launch.
+
+  **The ledger entry is also the claim, and that is what stops a double delivery.**
+  `deliver` skips any URI `isPendingIntake` no longer finds, and the entry is only
+  removed once an attempt is over, so of two tasks carrying the same URI only the first
+  to arrive delivers it. This is not a theoretical guard: `onCreate` queues `retryIntake`
+  *before* `ingest(getIntent())` writes the ledger, so on a cold start from a share the
+  retry task usually reads a ledger that already holds the URI the intent is about to
+  deliver — and an earlier version of this code, which relied on "the retry reads the
+  ledger inside the executor so an in-flight delivery has already removed its URI",
+  imported that route twice. That reasoning only holds when the write happens before the
+  retry is queued, which is the opposite of the order here. Do not restore it, and do not
+  reason about the order of those two lines: the claim is what makes the order not
+  matter. The check and the removal both run on the single ingest thread, which is also
+  the only thread that removes, so they cannot interleave with another delivery.
+
+  Three more things are load bearing: the entry is dropped whether the attempt succeeded
+  or failed, because a grant that died with the process cannot be revived and a URI left
+  behind would be retried on every launch for ever; `deliver` catches `RuntimeException`
+  around the read, because `openInputStream` throws unchecked on a provider that no
+  longer maps the path and a stale URI retried from the ledger is exactly how that
+  happens — letting it escape the `Runnable` would crash the app on the launch meant to
+  recover the user's route; and the Recents guard stays, because what a reopen should
+  recover is in the ledger, not in the intent. `keepAccess` asks for a persistable grant
+  when the provider offered one, which is what makes the retry worth attempting; a plain
+  share sheet offers none, so failing there is the normal case.
+
+  One honest limit: this is at-least-once, not exactly-once. A kill between `store()`
+  returning and `forgetIntake` in the `finally` leaves a delivered route in the ledger,
+  and the next launch delivers it again. The window is microseconds and the alternative
+  — forgetting first — loses routes instead, which is the failure this whole mechanism
+  exists to prevent.
+
+  Rotation is not among the cases any of this covers, and never was: the manifest gives
+  `MainActivity` `configChanges` for orientation and screenSize *and* locks
+  `screenOrientation` to portrait, so rotation does not recreate it. What recreates it is
+  process death and a config change outside that list.
 - The six findings in `docs/REVIEW-2026-09-14.md` are fixed: H6 (the `/share` size limit),
   H2 (offline preparation), H1 (overlapping forecasts), H5 (notices by time window, for the
   computation in phase 2 and the comparisons in phase 4), H3 (OpenWeather cached per location) and

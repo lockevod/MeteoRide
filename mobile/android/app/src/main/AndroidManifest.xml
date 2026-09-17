@@ -41,7 +41,13 @@
             <!-- Open a .gpx/.kml from a file manager, a download or an attachment.
                  content:// only: no app has been able to hand out a file:// URI since
                  Android 7, and accepting one would let any app point MeteoRide at its
-                 own private files. -->
+                 own private files.
+                 The MIME list matches the share filter above on purpose. Providers
+                 hand a GPX over as plain XML or octet-stream often enough that the
+                 narrow list left MeteoRide missing from "Open with" for a file that
+                 imported fine when shared. What is not a route is read, recognised as
+                 not a route and dropped by MeteoRideShareStore.ingest, which checks the
+                 content, not the type the provider claimed. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -49,6 +55,9 @@
                 <data android:scheme="content" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/vnd.google-earth.kml+xml" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="text/xml" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
             <!-- meteoride:// — same custom scheme the iOS build uses. -->

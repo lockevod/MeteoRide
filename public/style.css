@@ -3469,3 +3469,96 @@ html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-
 }
 .ride-alerts-status:empty { display: none; }
 .ride-alerts-hint { color: #a04a00; }
+
+
+/* ---------------------------------------------------------------- touch targets
+
+   On the website every one of these is hit with a mouse, where 22px of select is a
+   dense, precise, perfectly good target, and the whole controls row fits on one line
+   because of it. In the app they are hit with a thumb. Apple asks for 44pt and Google
+   for 48dp, and the numbers are not decoration: below them the miss rate climbs, and
+   it climbs worst for the people who already find small targets hard.
+
+   So the floor is raised for the app alone, through the class native.js sets before
+   the first paint. The look is unchanged — same fonts, same borders, same colours,
+   same layout — the boxes just stop being shorter than a fingertip. Height becomes a
+   minimum rather than a fixed value so a control whose content needs more room can
+   still take it. `#controlsPanel` already scrolls in the app, which is what absorbs
+   the extra height.
+
+   If these ever have to shrink again, shrink the padding or the font, not the floor.
+*/
+
+html.cw-native #controlsPanel .params input[type="text"],
+html.cw-native #controlsPanel .params input[type="number"],
+html.cw-native #controlsPanel .params input[type="datetime-local"],
+html.cw-native #controlsPanel .params select,
+html.cw-native #intervalSelect,
+html.cw-native .speed-presets {
+  height: auto;
+  min-height: 44px;
+}
+
+/* The settings panel is a second screenful of controls and was missed the first time
+   round: its inputs, selects and buttons live in `#configMenu`, not in
+   `#controlsPanel .params`, so none of the rules above reached them. The API key field
+   and its check button are the ones a new user touches first. */
+html.cw-native #configMenu input:not([type="checkbox"]):not([type="radio"]),
+html.cw-native #configMenu select,
+html.cw-native #configMenu button {
+  height: auto;
+  min-height: 44px;
+}
+
+/* A checkbox stays its own size — growing the box would look broken — but its label is
+   the target people actually aim at, so that is what gets the room. */
+html.cw-native #configMenu label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* The compare-dates control is 28x28 on the website and square, so both axes move. */
+html.cw-native .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html.cw-native header nav button {
+  min-height: 44px;
+  /* The settings button is as square as the compare toggle (it was ~32x27), so it
+     needs the floor on both axes. Height alone left it 32 wide. */
+  min-width: 44px;
+}
+
+/* A folder glyph on its own is not a call to action: the app opens on an empty map
+   and the one thing to do next has no name. The label is the `upload_label` string
+   the settings already use, so there is no new wording to translate. Website
+   untouched — its row is tight on purpose and a mouse hovers for the tooltip. */
+.file-btn-text {
+  display: none;
+}
+
+/* `!important` here only because `.small-file-btn` pins width, height and padding with
+   `!important` of its own (style.css:1489). Without matching it the button stayed 28px
+   wide with no padding while the label inside kept `white-space: nowrap`, so the text
+   spilled out of the button and over `#recentRoutesContainer` — the app shipped a
+   broken control while three tests reported green, because a span that overflows is
+   still "visible". Those `!important`s are the website's and are left alone. */
+html.cw-native .file-btn.small-file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto !important;
+  min-width: 44px;
+  height: auto !important;
+  min-height: 44px;
+  padding: 0 12px !important;
+}
+
+html.cw-native .file-btn-text {
+  display: inline;
+  font-size: 14px;
+  white-space: nowrap;
+}

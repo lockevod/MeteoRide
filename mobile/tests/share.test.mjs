@@ -150,3 +150,150 @@ test('an oversized body whose cancel fails is still refused as too large', async
   assert.equal((await onRequest({ request: post(body), env })).status, 413);
   assert.equal(env.SHARED_GPX.store.size, 0);
 });
+
+/* ---------- the rate limit ---------- */
+
+/**
+ * Stands in for Cloudflare's per-colo cache: a Map keyed by the request URL. It offers
+ * `open()` as well as `default`, because production takes the `open('ratelimit')` path
+ * and a stub without it would leave that path untested.
+ */
+function cacheStub({ putThrows = false } = {}) {
+  const store = new Map();
+  const api = {
+    match: async (req) => {
+      const body = store.get(req.url);
+      return body === undefined ? undefined : new Response(body);
+    },
+    put: async (req, res) => {
+      if (putThrows) throw new Error('cache unavailable');
+      store.set(req.url, await res.text());
+    },
+  };
+  return { store, default: api, open: async () => api };
+}
+
+const fromIp = (ip, body) => post(body, { 'cf-connecting-ip': ip });
+const ROUTE = '<gpx><trk></trk></gpx>';
+
+test('one client hammering /share is cut off, and nothing more is written', async () => {
+  const env = { SHARED_GPX: kv() };
+  globalThis.caches = cacheStub();
+  try {
+    let accepted = 0;
+    let refused = 0;
+    for (let i = 0; i < 20; i++) {
+      const res = await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+      if (res.status === 429) refused++; else accepted++;
+    }
+    assert.ok(refused > 0, 'twenty requests from one address were all accepted');
+    assert.equal(accepted, env.SHARED_GPX.store.size, 'a refused request still wrote to KV');
+    assert.ok(accepted <= 13, `${accepted} stores got through before the limit bit`);
+  } finally {
+    delete globalThis.caches;
+  }
+});
+
+test('the limit is per client, not a queue everyone shares', async () => {
+  const env = { SHARED_GPX: kv() };
+  globalThis.caches = cacheStub();
+  try {
+    for (let i = 0; i < 20; i++) await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+    const other = await onRequest({ request: fromIp('198.51.100.2', ROUTE), env });
+    assert.equal(other.status, 201, 'a second address was refused because of the first');
+  } finally {
+    delete globalThis.caches;
+  }
+});
+
+test('with no cache to count in, a share still goes through', async () => {
+  // Nothing sets globalThis.caches here: a local run, or Cloudflare changing its mind
+  // about the binding. Failing closed would take the feature down instead.
+  const env = { SHARED_GPX: kv() };
+  const res = await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+  assert.equal(res.status, 201);
+  assert.equal(env.SHARED_GPX.store.size, 1);
+});
+
+test('a request with no client IP is let through rather than throttled by guesswork', async () => {
+  // Only Cloudflare sets cf-connecting-ip, and it cannot be spoofed — but if it is ever
+  // absent there is nothing to key on, and keying on something a client controls would
+  // let one forged value throttle everybody.
+  const env = { SHARED_GPX: kv() };
+  globalThis.caches = cacheStub();
+  try {
+    for (let i = 0; i < 20; i++) {
+      const res = await onRequest({ request: post(ROUTE), env });
+      assert.equal(res.status, 201, `request ${i + 1} was refused with no IP to count`);
+    }
+  } finally {
+    delete globalThis.caches;
+  }
+});
+
+test('a counter that throws fails open, and says so', async () => {
+  // Failing closed would take the feature down whenever the cache hiccups. Failing open
+  // is right, but it must be loud: a rate limiter that quietly stopped working looks
+  // exactly like one that works.
+  const env = { SHARED_GPX: kv() };
+  globalThis.caches = cacheStub({ putThrows: true });
+  const errors = [];
+  const realError = console.error;
+  console.error = (...args) => errors.push(args.join(' '));
+  try {
+    const res = await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+    assert.equal(res.status, 201);
+    assert.ok(
+      errors.some((line) => /rate counter unavailable/.test(line)),
+      'the limiter broke without logging anything'
+    );
+  } finally {
+    console.error = realError;
+    delete globalThis.caches;
+  }
+});
+
+test('steady legitimate traffic from one address is never throttled', async () => {
+  // The failure this replaces: one request every 30 s from a shared address, each
+  // refreshing the counter's expiry, so the count climbed for ever and everyone behind
+  // that address was eventually locked out without ever approaching the limit.
+  const env = { SHARED_GPX: kv() };
+  globalThis.caches = cacheStub();
+  const realNow = Date.now;
+  let clock = realNow();
+  Date.now = () => clock;
+  try {
+    for (let i = 0; i < 40; i++) {
+      const res = await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+      assert.equal(res.status, 201, `request ${i + 1} was refused after ${i * 30}s of steady use`);
+      clock += 30_000;
+    }
+  } finally {
+    Date.now = realNow;
+    delete globalThis.caches;
+  }
+});
+
+test('a burst inside one window is still cut off, and the next window is clean', async () => {
+  const env = { SHARED_GPX: kv() };
+  globalThis.caches = cacheStub();
+  const realNow = Date.now;
+  let clock = realNow();
+  Date.now = () => clock;
+  try {
+    let refused = 0;
+    for (let i = 0; i < 20; i++) {
+      const res = await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+      if (res.status === 429) refused++;
+    }
+    assert.ok(refused > 0, 'twenty requests in one instant were all accepted');
+
+    // The window ends; the address is not serving a sentence for it.
+    clock += 61_000;
+    const after = await onRequest({ request: fromIp('203.0.113.7', ROUTE), env });
+    assert.equal(after.status, 201, 'the client was still blocked a full window later');
+  } finally {
+    Date.now = realNow;
+    delete globalThis.caches;
+  }
+});

@@ -32,4 +32,23 @@
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
+
+  <!-- Privacidad: una por plataforma. Las de las apps son las URL que se dan a
+       App Store Connect y a Play Console. -->
+  <url>
+    <loc>https://app.meteoride.cc/privacy-web.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://app.meteoride.cc/privacy-ios.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://app.meteoride.cc/privacy-android.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
 </urlset>

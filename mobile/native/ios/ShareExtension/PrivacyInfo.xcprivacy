@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ShareExtension target. An app extension is its own bundle with its own manifest; the
+  App target's does not cover it. docs/IOS.md step 5 wires it up.
+
+  Shorter than the app's, and deliberately so. The extension compiles one shared file,
+  MeteoRideShareStore.swift, whose only required-reason call is the `.modificationDate`
+  read that prunes the inbox in the App Group container — C617.1. Not DDA9.1, which is
+  for *displaying* a timestamp to the person, and not 3B52.1, which is for files the
+  person granted access to through something like a document picker.
+  No Capacitor plugins here, so no UserDefaults. It collects nothing: the received
+  route is written to the shared folder and nothing leaves the device.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

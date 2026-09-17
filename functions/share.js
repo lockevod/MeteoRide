@@ -15,6 +15,14 @@ export async function onRequest(context) {
       return fetch(request);
     }
 
+    // Before the body is read, because reading it is most of what an abuser costs.
+    if (await overRateLimit(request)) {
+      return new Response('Too many requests', {
+        status: 429,
+        headers: { ...corsHeaders(), 'retry-after': String(RATE_WINDOW_SECONDS) }
+      });
+    }
+
   // Keep shared GPX in KV for a configurable period (env.SHARED_TTL_SECONDS) default 2 minutes
   const ttlEnv = env.SHARED_TTL_SECONDS || env.SHARED_TTL || ''; 
   const parsed = parseInt(String(ttlEnv || '' ).trim(), 10);
@@ -163,6 +171,70 @@ async function readCapped(request, limit) {
       return null;
     }
     chunks.push(value);
+  }
+}
+
+/*
+ * Anyone can POST 2.5 MB here and it lands in KV. The TTL bounds how long a route is
+ * kept, not how many are written, so the endpoint had no ceiling at all: a loop is
+ * someone else's storage and request bill.
+ *
+ * The counter lives in the Cloudflare cache rather than in KV, so throttling costs no
+ * KV writes of its own — paying for the counter per request would be its own small
+ * version of the problem. Every request counts, not only the ones that store: reading
+ * the body is the expensive part and a rejected request has already been read.
+ *
+ * ponytail: the cache is per data centre, so a flood spread across colos still gets
+ * RATE_LIMIT per colo, and the count is read-then-write rather than atomic, so a burst
+ * of simultaneous requests can overshoot by a few. It stops one client hammering one
+ * endpoint, which is the case that actually happens. A real global ceiling is a
+ * Cloudflare rate-limiting or WAF rule on /share, configured in the dashboard — see
+ * AGENTS.md. This is the floor under that, not a replacement for it.
+ */
+const RATE_LIMIT = 12;
+const RATE_WINDOW_SECONDS = 60;
+
+async function overRateLimit(request) {
+  const ip = request.headers.get('cf-connecting-ip');
+  // No IP to key on: nothing to limit by, and guessing from a client-supplied header
+  // would let one forged value throttle everyone. Cloudflare always sets this one, and
+  // sets it itself — a client cannot spoof it.
+  if (!ip || !globalThis.caches) return false;
+  try {
+    // A namespace of its own rather than the zone's fetch cache, and a key on this
+    // origin. `caches.default` with an off-zone key such as `https://rate.invalid/…`
+    // is not a documented pattern and may simply be rejected, which — with the catch
+    // below — would leave the limiter looking implemented and doing nothing.
+    const cache = globalThis.caches.open
+      ? await globalThis.caches.open('ratelimit')
+      : globalThis.caches.default;
+    const key = new Request(new URL(`/__ratelimit/${encodeURIComponent(ip)}`, request.url).toString());
+    const seen = await cache.match(key);
+    const now = Date.now();
+    // A fixed window with its own start time, not a counter whose expiry every request
+    // pushes out. That earlier shape punished exactly the wrong people: one request
+    // every 30 seconds from a shared address never comes close to twelve in a minute,
+    // but each one refreshed the entry, the count climbed for ever, and everybody
+    // behind that address was eventually locked out and kept out. Here the count
+    // belongs to a window, and a request arriving after the window ends starts a new
+    // one — so the limit means what it says, twelve in any sixty seconds.
+    let { n = 0, t = now } = seen ? await seen.json().catch(() => ({})) : {};
+    if (!Number.isFinite(n) || !Number.isFinite(t) || now - t >= RATE_WINDOW_SECONDS * 1000) {
+      n = 0;
+      t = now;
+    }
+    n += 1;
+    await cache.put(key, new Response(JSON.stringify({ n, t }), {
+      // Twice the window so the entry outlives its own start time; the timestamp is
+      // what decides, and an entry evicted early only means a fresh window.
+      headers: { 'cache-control': `max-age=${RATE_WINDOW_SECONDS * 2}` }
+    }));
+    return n > RATE_LIMIT;
+  } catch (err) {
+    // A share must not fail because the counter did — but this must never be silent.
+    // A rate limiter that quietly stopped working looks exactly like one that works.
+    console.error('share: rate counter unavailable, letting the request through', err);
+    return false;
   }
 }
 

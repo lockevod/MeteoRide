@@ -41,10 +41,18 @@ public class MeteoRideSharePlugin extends Plugin {
         call.resolve(result);
     }
 
+    /**
+     * `count` is what is waiting in the inbox; `incoming` is what is still being read.
+     * The web layer needs both: a launch that carried a route has an empty inbox for as
+     * long as the read takes, and treating that as "nothing arrived" is what sends the
+     * map to the phone's position — and asks for the location permission — on the one
+     * launch where the user had already said what they wanted to see.
+     */
     @PluginMethod
     public void pendingCount(PluginCall call) {
         JSObject result = new JSObject();
         result.put("count", MeteoRideShareStore.pendingCount(getContext()));
+        result.put("incoming", MainActivity.incomingCount());
         call.resolve(result);
     }
 

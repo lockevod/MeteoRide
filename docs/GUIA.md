@@ -504,6 +504,14 @@ al final de la página de ayuda.
 
 ## 13. Privacidad y datos
 
+La política en sí — qué recibe cada proveedor, cuánto lo conserva y cómo borrar todo
+lo que queda en el dispositivo — está en
+[la de la web](https://app.meteoride.cc/privacy-web.html),
+[la de iOS](https://app.meteoride.cc/privacy-ios.html) y
+[la de Android](https://app.meteoride.cc/privacy-android.html) — una por plataforma, que
+es lo que se da a cada tienda, y las apps son más cerradas que la web. Esta
+sección es el resumen; la que tiene que estar bien es la política.
+
 **MeteoRide funciona completamente en tu dispositivo.** Toda la configuración,
 las preferencias y los datos se almacenan únicamente en tu navegador, mediante
 localStorage e IndexedDB.

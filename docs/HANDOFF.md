@@ -379,8 +379,8 @@ decodificación UTF-8 de iOS y el efecto secundario del guardián de Recientes e
 Una sola lista con todo lo que queda por hacer, lo que se ha decidido no arreglar y lo que no
 se ha comprobado. Se actualiza al cerrar cada fase, para poder hacer el resumen final desde aquí
 sin reconstruirlo de los ledgers (que no están en git). La infraestructura y las ideas siguen
-en `AGENTS.md → Open work`. Última actualización: ronda de correcciones de cierre (revisión de toda la rama, dos
-revisiones adversariales internas y una revisión adversarial externa).
+en `AGENTS.md → Open work`. Última actualización: revisión externa de publicación del 17/09/2026
+(Codex), de la que se han cerrado cuatro hallazgos y queda abierto lo que se lista abajo.
 
 ### Pendiente por fase del rediseño
 
@@ -395,6 +395,99 @@ revisiones adversariales internas y una revisión adversarial externa).
 ### Hallazgos de la revisión del 14/09 aún abiertos
 
 - Ninguno: los seis están corregidos (§9).
+
+### Revisión externa de publicación del 17/09 (Codex): qué queda abierto
+
+Nueve hallazgos. Cerrados F1 (faltaban los manifiestos de privacidad de iOS), F2 (no había
+política de privacidad publicable, y los documentos de tienda recomendaban declarar «no se
+recopilan datos»), F4 (el drenado entregaba diez de once rutas), F6 (el filtro `ACTION_VIEW`
+era más estrecho que el de compartir), F8 (Atrás salía de la app con el panel de configuración
+abierto) y F9 (nombres de bandeja iOS que podían colisionar entre la app y la extensión).
+
+Sobre F1, y esto conviene recordarlo: el informe recomendaba `C617.1` y `CA92.1`, yo lo
+«corregí» a `DDA9.1` y `54BD.1` a partir de una extracción mal emparejada de la página de
+Apple, y la revisión adversarial de Codex lo cazó. Leída la documentación JSON por
+estructura, los códigos buenos son los del informe: `C617.1` (metadatos de ficheros del
+contenedor de la app o del App Group) y `CA92.1` (*user defaults* solo de la app).
+`54BD.1` es información del teclado activo y no pinta nada aquí. El test lleva ahora la
+tabla real por categoría y falla ante un código de otra categoría. Comprobado con un
+archive sin firmar: los dos manifiestos aparecen con los códigos buenos en la raíz de
+`App.app` y de `ShareExtension.appex`.
+
+Siguen abiertos:
+
+- **Los formularios de tienda, que son manuales.** Las tres políticas (`public/privacy-ios.html`, `-android`, `-web`) ya dicen qué
+  declarar y `docs/IOS.md` y `docs/ANDROID.md` lo traducen a cada ficha, pero App Privacy
+  y Data Safety hay que rellenarlos en las consolas. No se ha inspeccionado lo que haya
+  declarado allí ahora mismo.
+- **La regla de rate limiting de Cloudflare.** `functions/share.js` ya trae un freno por
+  IP contado en la caché de Cloudflare, con su techo escrito en el código: la caché es
+  por centro de datos y la cuenta no es atómica. El techo global es una regla de rate
+  limiting o WAF sobre `/share` en el panel, que no vive en este repositorio (no hay
+  `wrangler.toml`) y que nadie puede verificar desde aquí.
+- **Nada de esto se ha probado en un dispositivo.** Lo que sigue pendiente de F3, F5 y F7
+  no es código sino medida: matar el proceso durante una importación lenta y comprobar
+  que la ruta se recupera y no se duplica; medir en un iPhone que la lectura fuera del
+  hilo principal quita de verdad el riesgo de watchdog; y pasar VoiceOver y TalkBack por
+  encima de los controles ya agrandados. Los stubs de Playwright no prueban el puente
+  nativo, y el simulador no ejecuta tareas en segundo plano.
+- **Un fichero que no es una ruta se rechaza en silencio.** Ampliar `ACTION_VIEW` a
+  `application/octet-stream` hace que MeteoRide aparezca en «Abrir con» para casi
+  cualquier fichero desconocido. Lo que no es una ruta se lee, se reconoce y se descarta
+  en `MeteoRideShareStore.ingest`, pero solo con un `Log.w`: desde fuera, la app se abre
+  y no hace nada. Falta decírselo al usuario (un aviso, o un evento `sharedRouteRejected`
+  que el `native.js` convierta en un `setNotice`). No es una regresión —el filtro de
+  compartir ya aceptaba ese tipo— pero esta ampliación lo hace mucho más visible.
+### Revisión adversarial de Codex (17/09): lo que queda de ella
+
+Diez hallazgos. Cerrados: los códigos de razón de los manifiestos (yo los había «corregido»
+mal, ver arriba), el anuncio iOS por fichero en vez de por lote, no dar el intent por
+atendido si el registro durable no se pudo escribir, la ventana fija del limitador de
+`/share`, el botón Volver de la política (le faltaba `?return=true`), los controles del
+panel de configuración bajo el suelo táctil, y las tres afirmaciones de la política que el
+código contradecía. Quedan estos, todos con su razón para quedarse:
+
+- **Un fallo transitorio de lectura pierde la ruta para siempre.** `deliver` borra la
+  entrada del registro tanto si la lectura fue bien como si falló, así que un
+  `IOException` pasajero del proveedor gasta el único intento. Distinguir «fallo
+  reintentable» de «rechazo definitivo» pide un contador de intentos en el registro, que
+  cambia su formato y sus tests. Se decidió un intento para no reintentar en bucle una
+  URI caducada en cada arranque; el término medio está sin hacer.
+- **La entrega es «al menos una vez», no «exactamente una vez».** Si el proceso muere
+  entre que `store()` publica el fichero en la bandeja y `forgetIntake` borra la entrada,
+  el siguiente arranque la entrega otra vez. La ventana son microsegundos y lo contrario
+  —borrar antes— pierde rutas, que es el fallo que todo esto viene a evitar.
+- **El plugin `CapacitorHttp` puede hacer peticiones al margen de la CSP de la página.**
+  Está registrado por Capacitor y construye su `URLSession` sin consultarla, así que la
+  CSP no es una imposibilidad técnica para todo el proceso. Por eso las políticas dicen
+  «estos tres son los únicos servicios a los que la app se conecta» —una afirmación sobre
+  lo que hace— y no «no puede conectarse a ningún otro». No hay indicio de uso de ese
+  camino aquí; es la redacción lo que se ajustó.
+- **El reclamo del registro de entrada no tiene test automático.** Lo que impide que una
+  ruta se entregue dos veces es que `deliver` salte cualquier URI que `isPendingIntake` ya
+  no encuentre. Las dos funciones necesitan `Context` y aquí no hay Robolectric, así que
+  el primitivo del registro sí está probado (`ledger_aDeliveredUriCanNoLongerBeClaimed`)
+  pero el punto de llamada solo está verificado leyéndolo. Un test instrumentado que
+  encole un reintento y un intent con la misma URI cerraría el hueco.
+- **`public/style.css` tiene una llave sin cerrar y pierde unas 80 líneas.** El bloque
+  `#controlsPanel .params input…, select {` que abre en la línea 2106 no se cierra: la
+  declaración `height: 22px` de la 2111 va seguida de un comentario y de un selector
+  nuevo. La profundidad de llaves sube a 2 en la 2111 y no vuelve a 0 hasta la 2191, así
+  que todo lo que hay en medio —`.recent-routes-hash-badge`, el `@media (max-width: 420px)`,
+  `.recent-routes-button`, `.recent-routes-menu`— lo consume el parser como declaraciones
+  inválidas y lo tira. Es anterior a este trabajo y **no lo he tocado a propósito**:
+  cerrar la llave son dos caracteres, pero activa de golpe CSS que lleva tiempo muerto y
+  nadie ha visto cómo queda. Merece su propio cambio, mirando la pantalla.
+- **Los tests de Android no están en CI.** `.github/workflows/tests.yml` corre `npm test`
+  en ubuntu; los JUnit del ledger se ejecutan a mano (ver `AGENTS.md`, que explica los dos
+  flags de JDK que hacen falta en esta máquina).
+
+Cerrados en esta ronda, además de los cinco de antes: **F3** (registro durable de entrada
+en `incoming-routes.pending`, con reintento en cada arranque y sin duplicar lo entregado),
+**F5** (la lectura de iOS sale del hilo principal y la llegada se anuncia con
+`sharedRouteAvailable`, como en Android), **F7** (suelo de 44px en los controles dentro de
+la app, medido por tests, y nombre visible para abrir ruta) y el freno de `/share`. Con los
+cinco de la ronda anterior, los nueve hallazgos del informe quedan cerrados.
 
 ### La ayuda dentro de la app
 
