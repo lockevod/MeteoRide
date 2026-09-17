@@ -463,21 +463,32 @@ código contradecía. Quedan estos, todos con su razón para quedarse:
   «estos tres son los únicos servicios a los que la app se conecta» —una afirmación sobre
   lo que hace— y no «no puede conectarse a ningún otro». No hay indicio de uso de ese
   camino aquí; es la redacción lo que se ajustó.
+- **Copias de seguridad del sistema.** Android declara `allowBackup="true"` sin
+  exclusiones, así que ajustes y ficheros —incluida la clave sin cifrar— pueden subir a
+  la copia automática de Google; en iOS, UserDefaults entra en la copia del dispositivo.
+  Las políticas ya lo dicen. Queda por decidir si conviene excluirlo con
+  `dataExtractionRules`/`fullBackupContent`: excluir la clave significa excluir el blob
+  de ajustes entero, así que el usuario perdería su configuración al restaurar.
 - **El reclamo del registro de entrada no tiene test automático.** Lo que impide que una
   ruta se entregue dos veces es que `deliver` salte cualquier URI que `isPendingIntake` ya
   no encuentre. Las dos funciones necesitan `Context` y aquí no hay Robolectric, así que
   el primitivo del registro sí está probado (`ledger_aDeliveredUriCanNoLongerBeClaimed`)
   pero el punto de llamada solo está verificado leyéndolo. Un test instrumentado que
   encole un reintento y un intent con la misma URI cerraría el hueco.
-- **`public/style.css` tiene una llave sin cerrar y pierde unas 80 líneas.** El bloque
-  `#controlsPanel .params input…, select {` que abre en la línea 2106 no se cierra: la
-  declaración `height: 22px` de la 2111 va seguida de un comentario y de un selector
-  nuevo. La profundidad de llaves sube a 2 en la 2111 y no vuelve a 0 hasta la 2191, así
-  que todo lo que hay en medio —`.recent-routes-hash-badge`, el `@media (max-width: 420px)`,
-  `.recent-routes-button`, `.recent-routes-menu`— lo consume el parser como declaraciones
-  inválidas y lo tira. Es anterior a este trabajo y **no lo he tocado a propósito**:
-  cerrar la llave son dos caracteres, pero activa de golpe CSS que lleva tiempo muerto y
-  nadie ha visto cómo queda. Merece su propio cambio, mirando la pantalla.
+- **`public/style.css` tiene reglas anidadas por accidente, y corregirlo no es poner una
+  llave.** Corrección de lo que decía aquí antes: yo afirmé que el bloque de la línea 2106
+  no cerraba y que se descartaban ~80 líneas. Es falso, y lo desmontó la re-revisión de
+  Codex. El bloque **cierra en la 2179** y el `@media` de la 2076 cierra en la 2191. Lo
+  que pasa es otra cosa: las reglas de 2113–2175 quedan **anidadas** dentro del selector
+  de inputs/selects, y con CSS nesting eso es válido — se convierten en descendientes de
+  esos controles, así que no alcanzan al botón de recientes ni a su menú, pero tampoco se
+  tiran. Las de 2182–2190 son hermanas dentro del `@media` y funcionan.
+  Y el arreglo no es añadir una llave tras la 2111: entonces la de la 2179 cerraría el
+  `@media`, las reglas de 2182–2190 pasarían a ámbito global y la 2191 sobraría. Hay que
+  decidir dónde pertenecen las declaraciones 2176–2178 y recolocar el cierre. Sigue sin
+  tocarse: desanidarlo activaría sobre los elementos reales los estilos de recientes
+  (altura 36px, hover/focus, tooltip, z-index, reglas de ocultación) que nadie ha visto
+  aplicados. Merece su propio cambio, mirando la pantalla.
 - **Los tests de Android no están en CI.** `.github/workflows/tests.yml` corre `npm test`
   en ubuntu; los JUnit del ledger se ejecutan a mano (ver `AGENTS.md`, que explica los dos
   flags de JDK que hacen falta en esta máquina).

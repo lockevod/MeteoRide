@@ -44,6 +44,16 @@
       privacyLink.setAttribute('href', `privacy-${platform}.html?return=true`);
     }
 
+    // A policy links to the other two. Without carrying the parameter over, the next
+    // page decides it was not opened from the app and hides its own back button, which
+    // on iOS leaves the reader with no way back at all.
+    if (new URLSearchParams(window.location.search).get('return') === 'true') {
+      document.querySelectorAll('a[href^="privacy-"]').forEach((a) => {
+        const href = a.getAttribute('href') || '';
+        if (!href.includes('return=')) a.setAttribute('href', `${href}${href.includes('?') ? '&' : '?'}return=true`);
+      });
+    }
+
     const params = new URLSearchParams(window.location.search);
     if (params.get('return') === 'true') {
       const backBtn = document.getElementById('backBtn');

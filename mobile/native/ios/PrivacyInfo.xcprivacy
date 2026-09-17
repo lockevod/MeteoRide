@@ -26,13 +26,21 @@
       defaults shared with an App Group, and emphatically not 54BD.1, which is about
       active keyboard information and has nothing to do with user defaults.
 
-  The collected-data section must agree with the App Privacy answers in App Store
-  Connect; public/privacy-ios.html is what both are filled from. Precise location covers
-  the route's own coordinates, which go to Open-Meteo on every forecast — the device's
-  position is read only to centre the map and never leaves. Other data covers the
-  OpenWeather key, which the user supplies and which identifies them to OpenWeather.
-  "Data not collected" would be false: Open-Meteo's logs may hold coordinates for 90
-  days, so this is not ephemeral processing either.
+  NSPrivacyCollectedDataTypes is deliberately absent, and its absence is not a claim
+  that nothing is collected. Apple takes an app's own collection declaration through the
+  App Privacy questionnaire in App Store Connect, which is where the nuance fits and
+  where docs/IOS.md says what to answer. This file cannot hold it: the route's
+  coordinates go to Open-Meteo unlinked, but the same coordinates go to OpenWeather
+  alongside the user's own API key, which OpenWeather can tie to its own customer — so
+  the data is linked on one provider's path and not on the other's, and a single
+  NSPrivacyCollectedDataTypeLinked boolean must be one or the other. Declaring
+  everything unlinked contradicted what public/privacy-ios.html says about that key;
+  declaring everything linked would overstate the default path, which is the one nearly
+  everyone uses. The form, where both paths can be described, is the honest place.
+
+  What must NOT happen either way is ticking "Data Not Collected": the route's
+  coordinates leave the device on every forecast and Open-Meteo's logs may hold them for
+  up to 90 days, so the ephemeral-processing exemption does not apply.
 -->
 <plist version="1.0">
 <dict>
@@ -40,33 +48,6 @@
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
-	<key>NSPrivacyCollectedDataTypes</key>
-	<array>
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array>
-				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			</array>
-		</dict>
-		<dict>
-			<key>NSPrivacyCollectedDataType</key>
-			<string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
-			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
-			<key>NSPrivacyCollectedDataTypePurposes</key>
-			<array>
-				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			</array>
-		</dict>
-	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>

@@ -305,7 +305,42 @@
     }
   }
 
-  window.cwMirrorSettings = mirrorSettings;
+  /*
+   * Clearing the OpenWeather key has to reach the armed watch, and it cannot wait for a
+   * forecast to do it. The watch carries its own copy of the key (`buildWatch`), and it
+   * is only rewritten when a computation publishes and `cw:forecast` re-arms it. With a
+   * prepared snapshot on screen and no coverage, `startForecast` refuses to recompute
+   * (app.js), so nothing re-arms: the user clears the field, the settings say the key is
+   * gone, and the next background run still sends the old one to OpenWeather. The
+   * privacy policy says clearing the field removes the key, so it has to be true here.
+   *
+   * Only ever clears. Adding a key needs no help: the next forecast arms with it.
+   */
+  async function revokeWatchKey(json) {
+    if (!runnerPlugin()) return;
+    let key = '';
+    try { key = String((JSON.parse(String(json)) || {}).alertsKey || ''); } catch (_) { return; }
+    // Still wanted and still there: leave the stored watch alone.
+    if (key && alertsWanted()) return;
+    try {
+      await queueWatch(async () => {
+        const stored = await runnerCall('loadWatch', {}).catch(() => null);
+        if (!stored || !stored.owKey) return;
+        stored.owKey = '';
+        await runnerCall('saveWatch', { watch: stored });
+        log('the stored watch no longer carries an OpenWeather key');
+      });
+    } catch (e) {
+      log('could not revoke the stored key', e);
+    }
+  }
+
+  window.cwMirrorSettings = (json) => {
+    const mirrored = mirrorSettings(json);
+    revokeWatchKey(json);
+    return mirrored;
+  };
+  window.cwRevokeWatchKey = revokeWatchKey;
 
   /* ---------- coming back to the app later ---------- */
 

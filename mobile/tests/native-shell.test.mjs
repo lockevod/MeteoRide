@@ -12,8 +12,9 @@ import vm from 'node:vm';
 const NATIVE_JS = join(dirname(fileURLToPath(import.meta.url)), '../../public/scripts/native.js');
 
 /** Loads native.js against a stub Android bridge and returns its window. */
-async function loadNative({ plugins = {}, configOpen = false } = {}) {
+async function loadNative({ plugins = {}, configOpen = false, alertsOn = false } = {}) {
   const menu = { style: { display: configOpen ? 'block' : 'none' } };
+  const rideAlerts = { checked: alertsOn };
   const routes = [];
 
   const window = {
@@ -34,7 +35,11 @@ async function loadNative({ plugins = {}, configOpen = false } = {}) {
     documentElement: { classList: { add() {} } },
     addEventListener() {},
     querySelector: () => null,
-    getElementById: (id) => (id === 'configMenu' ? menu : null),
+    getElementById: (id) => {
+      if (id === 'configMenu') return menu;
+      if (id === 'rideAlerts') return rideAlerts;
+      return null;
+    },
   };
 
   const sandbox = { window, document, console, localStorage: { getItem: () => null }, navigator: { onLine: true } };
@@ -124,4 +129,63 @@ test('Back still leaves the app from a clear index', async () => {
   window.cwHandleBack({ canGoBack: false });
   assert.equal(exited, true, 'Back no longer leaves the app');
   assert.equal(window.history.backs, 0);
+});
+
+/* ---------- the key the watch keeps its own copy of ---------- */
+
+/** A background runner whose stored watch can be read back by the test. */
+function runnerStub(watch) {
+  const calls = [];
+  return {
+    calls,
+    stored: () => watch,
+    dispatchEvent: async ({ event, details }) => {
+      calls.push(event);
+      if (event === 'loadWatch') return watch;
+      if (event === 'saveWatch') { watch = details.watch; return {}; }
+      return {};
+    },
+  };
+}
+
+test('clearing the OpenWeather key strips it from the armed watch, with no forecast needed', async () => {
+  // The hole this closes: the watch carries its own copy of the key and only rewrites it
+  // when a computation re-arms it. Offline with a prepared snapshot on screen, the
+  // recompute is refused, nothing re-arms, and the next background run sends the old key
+  // to OpenWeather — while the settings, and the privacy policy, say it is gone.
+  const runner = runnerStub({ fingerprint: 'abc', owKey: 'the-old-key', points: [] });
+  const { window } = await loadNative({
+    plugins: { CapacitorBackgroundRunner: runner },
+    alertsOn: true,
+  });
+
+  await window.cwRevokeWatchKey(JSON.stringify({ alertsKey: '' }));
+
+  assert.equal(runner.stored().owKey, '', 'the stored watch still carries the deleted key');
+  assert.ok(runner.calls.includes('saveWatch'), 'nothing was written back');
+});
+
+test('a key that is still set and still wanted is left alone', async () => {
+  const runner = runnerStub({ fingerprint: 'abc', owKey: 'the-key', points: [] });
+  const { window } = await loadNative({
+    plugins: { CapacitorBackgroundRunner: runner },
+    alertsOn: true,
+  });
+
+  await window.cwRevokeWatchKey(JSON.stringify({ alertsKey: 'the-key' }));
+
+  assert.equal(runner.stored().owKey, 'the-key', 'a key in use was revoked');
+  assert.ok(!runner.calls.includes('saveWatch'), 'the watch was rewritten for nothing');
+});
+
+test('turning the alerts off revokes the key even while it is still typed in', async () => {
+  const runner = runnerStub({ fingerprint: 'abc', owKey: 'the-key', points: [] });
+  const { window } = await loadNative({
+    plugins: { CapacitorBackgroundRunner: runner },
+    alertsOn: false,
+  });
+
+  await window.cwRevokeWatchKey(JSON.stringify({ alertsKey: 'the-key' }));
+
+  assert.equal(runner.stored().owKey, '', 'alerts were off and the watch kept the key');
 });

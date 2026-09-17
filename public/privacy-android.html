@@ -100,7 +100,7 @@
       </tr>
       <tr>
         <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
-        <td>Lo mismo, y además tu clave de API, que te identifica ante ellos como su cliente y permite asociar la petición a tu cuenta.</td>
+        <td>Las coordenadas de los puntos de tu ruta —no la fecha y hora elegidas: su API devuelve su propia ventana— y tu clave de API, que te identifica ante ellos como su cliente y permite asociar la petición a tu cuenta.</td>
         <td>Si eliges OpenWeather como proveedor, <strong>y también si activas los avisos oficiales con una clave guardada, sea cual sea el proveedor elegido</strong>. Sin clave no se le llama nunca.</td>
       </tr>
       <tr>
@@ -110,24 +110,25 @@
       </tr>
     </table>
     <p><strong>Open-Meteo declara</strong> que sus registros pueden contener coordenadas y que los borra a los 90 días. No es un tratamiento efímero, y por eso esta política no dice que «no se recopilan datos» sin más: MeteoRide no los recopila, pero los proveedores reciben y registran las peticiones que MeteoRide les hace en tu nombre.</p>
-    <p><strong>Esos tres son los únicos servicios a los que la app se conecta.</strong> No descarga código ni recursos de ninguna parte: todas las bibliotecas viajan dentro del paquete que instalas, y la política de seguridad de contenido de la app lleva esa misma lista cerrada.</p>
+    <p><strong>Esos tres son los únicos servicios a los que la app se conecta.</strong> No descarga código de ninguna parte —todas las bibliotecas y recursos de la interfaz viajan dentro del paquete que instalas; lo único que se trae de la red son los datos de previsión y las teselas del mapa de la tabla de arriba—, y la política de seguridad de contenido de la app lleva esa misma lista cerrada.</p>
   </details>
 
   <details class="section" open>
     <summary><h2>Tu ubicación y tus notificaciones</h2></summary>
     <p><strong>Ubicación:</strong> si das permiso, se usa una sola vez al abrir la app y solo para centrar el mapa donde estás, cuando todavía no hay ninguna ruta cargada. Esa posición no se guarda ni se envía a ningún sitio, y no forma parte de la consulta meteorológica: la previsión se pide por los puntos de la ruta. Eso sí, centrar el mapa hace que se pidan a OpenStreetMap las teselas de esa zona, así que la zona en la que estás llega a sus servidores igual que cualquier otra que mires. Puedes negar el permiso y la app funciona igual.</p>
-    <p><strong>Notificaciones:</strong> los avisos de lluvia o viento se generan en tu dispositivo y no pasan por ningún servidor de notificaciones push ni por el autor de la app. Pero no salen de la nada: con el vigilante activado, el sistema despierta a la app cada cierto tiempo —cuándo lo decide el sistema, no la app— y en cada despertar <strong>se descarga una previsión nueva</strong> de Open-Meteo para tu ruta, y los avisos oficiales de OpenWeather si los tienes activados. Es decir, hay peticiones a los proveedores mientras la app está en segundo plano.</p>
+    <p><strong>Notificaciones:</strong> los avisos de lluvia o viento se generan en tu dispositivo y no pasan por ningún servidor de notificaciones push ni por el autor de la app. Pero no salen de la nada: con el vigilante activado, el sistema despierta a la app cada cierto tiempo —cuándo lo decide el sistema, no la app— y, <strong>cuando la salida ya está dentro de su horizonte de un día</strong>, en cada despertar <strong>se descarga una previsión nueva</strong> de Open-Meteo para tu ruta, y los avisos oficiales de OpenWeather si los tienes activados. Con la salida más lejos no pide nada. Es decir, hay peticiones a los proveedores mientras la app está en segundo plano.</p>
   </details>
 
   <details class="section" open>
     <summary><h2>Qué se guarda en tu dispositivo</h2></summary>
-    <p>Todo lo siguiente vive solo en tu teléfono. Nadie más lo lee:</p>
+    <p>Todo lo siguiente vive en tu teléfono y nadie más lo lee mientras siga ahí:</p>
     <ul>
       <li>Tus ajustes: idioma, unidades, proveedor, intervalos. Se copian a SharedPreferences, el almacén del sistema, porque el navegador interno puede vaciarse solo cuando falta espacio.</li>
       <li>Las rutas recientes, la ruta preparada para usar sin cobertura y la caché de previsiones y de mapas.</li>
       <li>Tu clave de OpenWeather, si pones una. <strong>Se guarda sin cifrar</strong>: usa una clave gratuita y con los permisos mínimos, o quédate con Open-Meteo, que no necesita ninguna.</li>
       <li>Las rutas que te llegan desde otra app por «Compartir» y «Abrir con» esperan en un directorio privado de la app hasta que se cargan. Lo que lleve ahí más de 24 horas sin recogerse se borra la próxima vez que la app mira esa carpeta.</li>
     </ul>
+    <p><strong>Con una excepción que conviene saber: las copias de seguridad del sistema.</strong> La app declara <code>allowBackup="true"</code>, así que Android puede subir sus ajustes y ficheros a la copia automática de tu cuenta de Google. Eso queda fuera del control de la app y no lo gestiona el autor. Si te preocupa —sobre todo por la clave, que se guarda sin cifrar—, desactiva la copia de seguridad del dispositivo o no guardes clave. Borrar los datos de la app o desinstalarla <em>no</em> borra una copia ya hecha; eso se hace desde la gestión de copias de seguridad de tu cuenta de Google.</p>
   </details>
 
   <details class="section" open>
@@ -165,7 +166,7 @@
       </tr>
       <tr>
         <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
-        <td>The same, plus your API key, which identifies you to them as their customer and lets them tie the request to your account.</td>
+        <td>The coordinates of your route's points — not the date and time you chose: their API returns its own window — and your API key, which identifies you to them as their customer and lets them tie the request to your account.</td>
         <td>If you pick OpenWeather as the provider, <strong>and also if you turn on official warnings with a key saved, whichever provider is selected</strong>. With no key it is never called.</td>
       </tr>
       <tr>
@@ -175,20 +176,21 @@
       </tr>
     </table>
     <p><strong>Open-Meteo states</strong> that its logs may contain coordinates and that it deletes them after 90 days. That is not ephemeral processing, which is why this policy does not simply claim "no data collected": MeteoRide collects none, but the providers receive and log the requests MeteoRide makes on your behalf.</p>
-    <p><strong>Those three are the only services the app connects to.</strong> It downloads no code and no assets from anywhere: every library travels inside the bundle you install, and the app's content security policy carries that same closed list.</p>
+    <p><strong>Those three are the only services the app connects to.</strong> It downloads no code from anywhere — every library and interface asset travels inside the bundle you install, and the only things fetched from the network are the forecast data and the map tiles in the table above —, and the app's content security policy carries that same closed list.</p>
 
     <h3>Your location and your notifications</h3>
     <p><strong>Location:</strong> with your permission it is read once when the app opens, only to centre the map on where you are while no route is loaded yet. That position is not stored and not sent anywhere, and it is not part of the weather query: the forecast is asked for the route's points. Centring the map does request the OpenStreetMap tiles for that area, though, so the area you are in reaches their servers like any other you look at. Deny the permission and the app works the same.</p>
-    <p><strong>Notifications:</strong> rain and wind alerts are produced on your device and never pass through a push server or through the app's author. They do not come from nowhere, though: with the ride watch armed, the system wakes the app up from time to time — when is the system's decision, not the app's — and each time it <strong>downloads a fresh forecast</strong> from Open-Meteo for your route, plus OpenWeather's official warnings if you have those on. So there are requests to the providers while the app is in the background.</p>
+    <p><strong>Notifications:</strong> rain and wind alerts are produced on your device and never pass through a push server or through the app's author. They do not come from nowhere, though: with the ride watch armed, the system wakes the app up from time to time — when is the system's decision, not the app's — and, <strong>once the departure is inside its one-day horizon</strong>, each wake-up <strong>downloads a fresh forecast</strong> from Open-Meteo for your route, plus OpenWeather's official warnings if you have those on. With the departure further off it asks for nothing. So there are requests to the providers while the app is in the background.</p>
 
     <h3>What is stored on your device</h3>
-    <p>All of the following lives only on your phone. Nobody else reads it:</p>
+    <p>All of the following lives on your phone, and nobody else reads it while it stays there:</p>
     <ul>
       <li>Your settings: language, units, provider, intervals. They are copied to SharedPreferences, the system store, because the embedded browser can clear itself when the device runs short of space.</li>
       <li>Recent routes, the route prepared for use without coverage, and the forecast and map caches.</li>
       <li>Your OpenWeather key, if you enter one. <strong>It is stored unencrypted</strong>: use a free key with minimal permissions, or stay with Open-Meteo, which needs none.</li>
       <li>Routes that reach you from another app through "Share" and "Open with" wait in a private directory of the app until they are loaded. Anything left there uncollected for more than 24 hours is deleted the next time the app looks in that folder.</li>
     </ul>
+    <p><strong>With one exception worth knowing about: system backups.</strong> The app declares <code>allowBackup="true"</code>, so Android may upload its settings and files to the automatic backup on your Google account. That is outside the app's control and is not handled by its author. If it worries you — especially for the key, which is stored unencrypted — turn the device backup off, or keep no key. Clearing the app's data or uninstalling it does <em>not</em> delete a backup already made; that is done from your Google account's backup management.</p>
 
     <h3>How to delete it</h3>
     <ul>

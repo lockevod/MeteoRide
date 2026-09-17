@@ -631,6 +631,23 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   cannot tell you a code is the right one *for this app*; only the reason text can.
   Verified by unsigned archive on 17/09/2026: both manifests land at the bundle roots
   (`App.app/PrivacyInfo.xcprivacy`, `App.app/PlugIns/ShareExtension.appex/…`).
+  `NSPrivacyCollectedDataTypes` is absent on purpose and the file explains it: the same
+  coordinates are unlinked going to Open-Meteo and linked going to OpenWeather beside
+  the user's own key, and one boolean cannot say both. That answer belongs in App Store
+  Connect, where both paths can be described.
+- **Clearing the OpenWeather key has to reach the armed watch by itself.** The watch
+  keeps its own copy (`buildWatch`'s `owKey`) and it is only rewritten when a
+  computation publishes and `cw:forecast` re-arms. With a prepared snapshot on screen
+  and no coverage, `startForecast` refuses to recompute, so nothing re-arms and the next
+  background run still sends the deleted key to OpenWeather — while the settings, and
+  the privacy policy, say it is gone. `revokeWatchKey` runs on every settings save and
+  only ever clears; adding a key needs no help, the next forecast arms with it.
+- **`allowBackup="true"` means "only on your phone" is not true.** Android's automatic
+  backup can upload the settings blob — the unencrypted OpenWeather key inside it — to
+  the user's Google account, and iOS's `UserDefaults` goes into the device backup. The
+  policies say so. Excluding it would mean excluding the whole settings blob, so the
+  user would lose their configuration on a restore; that trade is still open
+  (`docs/HANDOFF.md` §10).
 - **The web view origin in the app is `capacitor://localhost`.** Weather providers
   must send permissive CORS headers. Open-Meteo and OpenWeather do.
 - **The share extension cannot call `UIApplication.open`.** It tries

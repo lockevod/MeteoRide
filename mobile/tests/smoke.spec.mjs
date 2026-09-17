@@ -6700,6 +6700,27 @@ test('in the app every control is at least 44px to a thumb', async ({ page }) =>
   expect(small, `settings controls below the floor: ${JSON.stringify(small)}`).toEqual([]);
 });
 
+test('the recent-routes control clears the floor once there is a route to list', async ({ page }) => {
+  // It only exists after a route has been saved, so a test that measures a fresh
+  // install never sees it — which is how it stayed 28x32 through the first fix. It is
+  // built in ui.js with inline padding, so nothing in the stylesheet reached it either.
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => window.getRecentRoutes().length)).toBe(1);
+
+  await page.goto('/index.html');
+  await mapReady(page);
+  const button = page.locator('.recent-routes-button');
+  await expect(button).toBeVisible();
+  const box = await button.boundingBox();
+  expect(Math.round(box.width), `the recent-routes button is ${Math.round(box.width)}px wide`).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box.height), `the recent-routes button is ${Math.round(box.height)}px tall`).toBeGreaterThanOrEqual(44);
+  expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+});
+
 test('the app names the first step instead of showing a bare folder glyph', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);

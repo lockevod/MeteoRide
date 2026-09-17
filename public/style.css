@@ -3518,6 +3518,22 @@ html.cw-native #configMenu label {
   min-height: 44px;
 }
 
+/* The recent-routes button is built in ui.js with inline padding, so it never matched
+   any selector above: 18px of icon plus 4px of padding a side plus borders is 28 wide
+   and 32 tall. `min-width`/`min-height` still win over inline padding, which is why
+   they are what this uses. Its menu items are targets too. */
+html.cw-native .recent-routes-button {
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+html.cw-native .recent-routes-menu button,
+html.cw-native .recent-routes-menu a,
+html.cw-native .recent-routes-menu li {
+  min-height: 44px;
+}
+
 /* The compare-dates control is 28x28 on the website and square, so both axes move. */
 html.cw-native .icon-btn {
   min-width: 44px;

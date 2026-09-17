@@ -440,6 +440,15 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   There is one policy per platform on purpose — Android has its own, the website has a
   third — so a reviewer reads only what applies to the thing being submitted. Fill the
   form from it, not from memory, and update both together.
+- **The manifest does not answer the collection question; the form does.**
+  `PrivacyInfo.xcprivacy` carries only `NSPrivacyAccessedAPITypes`. Its optional
+  collected-data section was removed on purpose and the file says why: the route's
+  coordinates go to Open-Meteo unlinked, but the same coordinates go to OpenWeather
+  beside the user's own key, which OpenWeather can tie to its customer — linked on one
+  path, not on the other, and the manifest has one boolean. Answer it in App Store
+  Connect, where both paths can be described: **Location — Precise Location**, for App
+  Functionality, not used for tracking, and say in the reviewer notes that linkage
+  applies only when the user supplies their own OpenWeather key.
 - **Which way to err.** Over-declaring costs a row on the privacy label; under-declaring
   is what gets an app rejected, or pulled after it is live. A weather app declaring
   Location for App Functionality is unremarkable — most of the App Store's weather
@@ -449,7 +458,9 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   partners to access it for longer than necessary to service the request in real time",
   and OpenWeather is not the developer's partner — the user holds that account
   themselves and supplies their own key. Declaring it as Other Data is the conservative
-  reading and what the manifest does; leaving it out is defensible. Location is not
+  reading; leaving it out is defensible. Whichever you pick, say the same thing in the
+  policy: an adversarial review caught the manifest calling that data unlinked while
+  `privacy-ios.html` explained that the key identifies the user to OpenWeather. Location is not
   arguable: route coordinates leave the device on every forecast and Open-Meteo's logs
   can hold them for 90 days, which is past "real time".
 - **The policy separates the apps from the website on purpose.** app.meteoride.cc loads
