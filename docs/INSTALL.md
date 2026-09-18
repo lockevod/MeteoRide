@@ -83,7 +83,7 @@ What the native build adds:
 
 The project lives in `mobile/`. Per-platform instructions:
 
-- [IOS.md](IOS.md) — build, Xcode setup and the Swift share extension.
+- [IOS.md](IOS.md) — build, Xcode setup and how another app opens a route in MeteoRide.
 - [ANDROID.md](ANDROID.md) — build and the share intents, already wired.
 
 ```bash

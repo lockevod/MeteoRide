@@ -45,7 +45,7 @@ npm run android             # build + cap sync + abre Android Studio
 | Capacidad | Dónde | Estado |
 |---|---|---|
 | Shell nativo: barra de estado, splash, enlaces externos al navegador, botón atrás Android, safe areas | `public/scripts/native.js`, `public/style.css` (`html.cw-native`) | probado en Chromium; iOS visto en simulador por el autor |
-| Recibir GPX/KML desde otras apps (share sheet, "Abrir en") | iOS: `mobile/native/ios/**` (share extension + App Group + plugin). Android: `mobile/android/.../MainActivity.java`, `MeteoRideShareStore.java`, `MeteoRideSharePlugin.java`, intent filters | JS probado; Swift **nunca compilado**; Java compila contra stubs |
+| Recibir GPX/KML desde otras apps (share sheet, "Abrir en") | iOS: `mobile/native/ios/**` (`CFBundleDocumentTypes` + `SceneDelegate` + App Group + plugin; **sin share extension**, ver §10). Android: `mobile/android/.../MainActivity.java`, `MeteoRideShareStore.java`, `MeteoRideSharePlugin.java`, intent filters | JS probado; Swift **nunca compilado**; Java compila contra stubs |
 | Enviar la ruta cargada a otra app (Hammerhead, Files…) | botón 📤 en `native.js` (Filesystem CACHE + Share) | probado |
 | Ajustes persistentes fuera del web view | `cwSettings` espejado a Preferences; restore al arrancar | probado |
 | Sin cobertura: último pronóstico (≤12 h) etiquetado, ruta restaurada al abrir, botón 📴 que fija la caché, teselas del mapa cacheadas (IndexedDB), aviso "mapa sin conexión", mensajes de proveedor caído | `public/scripts/utils.js`, `tile-cache.js`, `native.js` | probado; CORS de teselas OSM **sin verificar en dispositivo** |
@@ -102,7 +102,9 @@ Los pasos 1–9 de `docs/IOS.md` ya están hechos en el Mac del autor y el proye
   cuenta de desarrollador de pago; con eso basta para simulador y para App Groups.
 - `Minimum Deployments` se bajó a **iOS 16** (Xcode proponía 26.5 por defecto).
 - `ShareViewController.swift` se añadió por referencia ("Reference files in place"),
-  no copiado, para que editar el fichero del repo actualice el target.
+  no copiado. **Obsoleto**: la extensión se retiró el 18/09 y el fichero está borrado
+  (ver §10). El criterio de referenciar en vez de copiar sigue valiendo para los fuentes
+  que quedan.
 
 Queda del lado del autor: probar en iPhone real (las tareas en segundo plano **nunca**
 se ejecutan en el simulador) y firma de release de Android.
@@ -120,7 +122,7 @@ compilado contra stubs; nombres de API de Capacitor 8.5.2 cotejados con las fuen
 android` ejecutado y los gradle generados commiteados.
 
 Verificado por el autor en su Mac: el Swift **compila** (plugin, view controller,
-share extension, parche del plugin, `backgroundRefreshStatus`), la app arranca en el
+share extension —retirada después, ver §10—, parche del plugin, `backgroundRefreshStatus`), la app arranca en el
 simulador, carga un GPX desde Archivos, calcula previsión y muestra el toggle de
 alertas con su aviso de límites del sistema.
 
@@ -411,8 +413,9 @@ estructura, los códigos buenos son los del informe: `C617.1` (metadatos de fich
 contenedor de la app o del App Group) y `CA92.1` (*user defaults* solo de la app).
 `54BD.1` es información del teclado activo y no pinta nada aquí. El test lleva ahora la
 tabla real por categoría y falla ante un código de otra categoría. Comprobado con un
-archive sin firmar: los dos manifiestos aparecen con los códigos buenos en la raíz de
-`App.app` y de `ShareExtension.appex`.
+archive sin firmar: los dos manifiestos aparecían con los códigos buenos en la raíz de
+`App.app` y de `ShareExtension.appex`. La extensión se retiró después (§10), así que
+queda uno.
 
 Siguen abiertos:
 
@@ -454,10 +457,12 @@ del test, y una vez medido resultó que su regla era redundante, así que se ret
 brújula, 26×26 justo al lado del zoom que acababa de crecer, no la vio nadie hasta barrer
 todos los controles visibles y medirlos.
 
-Tras ese barrido no queda ningún control interactivo por debajo de 44px en la pantalla del
-mapa. Las dos excepciones son los enlaces de atribución (autoría y OpenStreetMap, 31×8 y
-50×8): son el texto legal que exige la política de teselas de OSM, no controles, y
-agrandarlos taparía mapa sin que nadie los busque con el pulgar. Dos de los siete merecen recordarse:
+Tras ese barrido no quedó ningún control interactivo por debajo de 44px en la pantalla del
+mapa — y eso resultó ser demasiado: ver «El suelo táctil: dos rondas de más y una
+corrección», más abajo, donde todo baja a un único suelo de 28px. Las dos
+excepciones son los enlaces de atribución (autoría y OpenStreetMap, 31×8 y 50×8): son el
+texto legal que exige la política de teselas de OSM, no controles, y agrandarlos taparía
+mapa sin que nadie los busque con el pulgar. Dos de los siete merecen recordarse:
 
 - **R1 era una regresión introducida por el propio arreglo anterior.** `revokeWatchKey`
   leía `alertsKey`, que es un campo del *snapshot*, no de lo que `saveSettings` persiste
@@ -481,6 +486,531 @@ recientes abierto (R5), permisos persistentes de URI que no se liberaban tras im
 Sigue abierto de esa revisión: la atomicidad del contador de `/share` —documentada en el
 código y cubierta por la regla WAF que falta— y todo lo que solo se puede comprobar en un
 dispositivo.
+
+### El suelo táctil: dos rondas de más y una corrección (17/09)
+
+La primera ronda puso **44px a todo** lo que se pudiera tocar en la app. Visto en el
+teléfono, el resultado era malo en tres sitios a la vez: el panel de controles ocupaba
+306px de una pantalla de 664 —casi la mitad de la app gastada en un formulario que se
+rellena una vez—, los botones de zoom y de recentrar del mapa se convertían en losas, y
+con el botón de debug visible la barra de cabecera se ensanchaba tanto que «MeteoRide»
+se envolvía debajo de su propio logo (53px de cabecera pasaban a 74).
+
+La segunda ronda lo partió en dos escalones, 44 para el mapa y 36 para el panel. Seguía
+siendo demasiado grande, y no arreglaba la cabecera.
+
+Lo que hay ahora: **un solo suelo de 28px y nada más tocado**. En la práctica mueve dos
+cosas y solo dos —los selectores de 22px y la brújula de 26— y deja como estaban el par
+de zoom (30), el recentrar (30), el conmutador de comparar (28), el botón de cargar (28)
+y los controles de ajustes (28-30). La app vuelve a parecerse a la web, que es de lo que
+se trataba.
+
+Sobre los 28px conviene ser exacto, porque es fácil venderlo como más de lo que es: **es
+una decisión de usabilidad, no un certificado**. Lo comprobable es que 28 supera el
+umbral de tamaño que sí es normativo —WCAG 2.2 AA, criterio 2.5.8: 24×24 px CSS; los
+44×44 son el 2.5.5, que es AAA—. Los 44pt de Apple son recomendación de las HIG y los
+48dp de Google son recomendación de Material: ninguno es un motivo de rechazo enumerado,
+pero cumplir un criterio de tamaño **tampoco demuestra que ninguna tienda lo acepte**.
+Nadie ha probado un rechazo por 28px, y nadie ha probado lo contrario.
+
+#### Lo que aprendieron los tests
+
+- **El techo importa tanto como el suelo.** Ninguna de las dos rondas anteriores tenía
+  nada que fallara al subir los tamaños. Ahora ningún control del panel puede pasar de
+  32px, y ese barrido alcanza controles que ninguna lista enumera.
+- **Un número de píxeles para el panel entero no sirve.** Los dos proyectos de Playwright
+  ni siquiera miden lo mismo —Pixel 7 da 412×839 y iPhone 14 da 390×664— y `.params` hace
+  `flex-wrap` con etiquetas `nowrap`, así que 22px de ancho cambian una fila entera: los
+  mismos estilos daban 104px en Chromium y 152px en WebKit. Un número calibrado en uno es
+  un flake o es letra muerta en el otro, y con el idioma pasa igual.
+- **La cabecera no la vigilaba nadie.** Todos los tests medían controles sueltos, nunca la
+  barra donde viven. Hay uno nuevo, a 320px y en español, que comprueba que el título
+  queda **a la derecha** del logo. La versión vertical de esa comprobación no valía nada:
+  el logo es lo bastante alto como para solaparse con el nombre aunque el nombre haya
+  caído a una segunda línea, y pasaba tan contenta con la cabecera a 74px.
+- **`.recent-routes-button` vive dentro del panel**, al lado del botón de carga. Se había
+  quedado en 44 —era lo más alto de esa fila, así que cargar una ruta hacía crecer el
+  panel— y ningún test lo veía, porque todos miden una instalación recién puesta, donde
+  ese botón todavía no existe. El barrido del techo se repite con una ruta cargada.
+- **Las filas del menú de recientes necesitan `#controlsPanel` en el selector.** El menú
+  está dentro de `.params`, así que el suelo con ID le ganaba a la regla de 44px por
+  especificidad y las filas salían a 28 con la regla ahí al lado aparentando funcionar.
+  Se quedan en 44 a propósito: el menú es una capa por encima de la página, su altura no
+  cuesta nada, y una lista que se recorre con el pulgar es justo donde se falla.
+
+#### El botón de cargar fichero
+
+El glifo de carpeta llevó un rato con la etiqueta «Cargar fichero» visible al lado, para
+que lo único que hay que hacer en un mapa vacío tuviera nombre. Le nombraba y le costaba
+una fila entera, en la app y en la web. El nombre sigue estando: el `<span>` lleva
+`.sr-only`, y el control en el que aterriza de verdad un lector de pantalla es `#gpxFile`
+—el input está fuera de pantalla con `opacity: 0`, no con `display:none`, así que sigue
+en el árbol de accesibilidad y lo nombra su `<label for>`—. El `title` ya lleva
+`data-i18n-title`, porque desde que no hay texto visible es la única pista que le queda a
+un ratón.
+
+El test se lo pregunta con `toHaveAccessibleName`. La primera versión contaba caracteres
+de `textContent` y aceptaba cualquier rectángulo de 1px o menos: con `display:none`
+devuelto al `<span>`, el texto seguía en `textContent`, el rectángulo pasaba a 0×0 y el
+test pasaba mientras la regresión volvía. La mutación de `display:none` ahora falla en
+los dos motores. La web tiene su propio guardián, que también faltaba: el `toBeHidden()`
+anterior había que quitarlo —Playwright considera *visible* un elemento de 1×1
+recortado— y no lo sustituía nada.
+
+#### El mapa y los controles de Leaflet
+
+El mapa tenía un techo de `62vh` heredado de la web, donde existe para que no se coma una
+ventana de escritorio alta. En la app no hacía nada bueno: `main` ya es exactamente la
+pantalla menos la cabecera y el mapa es el único hijo que crece, así que el techo solo
+dejaba hueco —62vh de 874px son 542, el mapa tenía 614 para coger, y los otros 72 se
+quedaban vacíos debajo—. Quitado: ahora coge la holgura cuando la hay y se la devuelve a
+la tabla cuando se carga una ruta, que es para lo que están el `flex: 1.8` y el suelo de
+150px. El test comprueba que no quedan más de 24px muertos bajo el mapa; con el techo
+puesto otra vez, falla en WebKit (58px). En Chromium el proyecto es más ancho y el techo
+no llega a morder, así que ahí no salta: una de las dos basta.
+
+Debajo del mapa quedaban además dos cosas. Una, `@media (max-width: 900px) #map {
+margin-bottom: 1rem }`: en la web separa el mapa de lo que venga después, y en la app no
+viene nada —la tabla de previsión vive dentro de `#controlsPanel`, encima—, así que eran
+16px de fondo de página contra el borde inferior. Dos, el `padding-bottom` de `main`, que
+era el inset del indicador de inicio entero; ahora se le restan 8px por el mismo argumento
+que en la cabecera. Lo que **no** se devuelve es el resto: los ~20pt de abajo son la zona
+de gesto del sistema, y un mapa dibujado ahí es un mapa que cuesta arrastrar.
+
+Ese `max()` de abajo, a diferencia del de la cabecera, **no se puede testear**: sin inset
+la respuesta correcta es 0 y CSS recorta el negativo a 0 también, así que desde fuera no
+se distinguen. Se escribió la aserción, pasaba en los dos casos, y se borró.
+
+Los tres botones de las barras de Leaflet —el par de zoom y el de recentrar— quedan a
+28×28 exactos. Eran content-box, así que los 28px de la web más 1px de borde a cada lado
+los dibujaban a 30, y el de arriba a 31 porque además lleva el separador de la barra: el
+par se veía desigual. **El de recentrar necesita `.leaflet-bar a` en el selector**: es un
+`<a>` dentro de una barra de Leaflet, así que `.leaflet-touch .leaflet-bar a { width:
+30px }` de la hoja de estilos de Leaflet le gana a un selector de dos clases. La primera
+versión de la regla se leía perfectamente y no hacía nada, y una aserción que solo mira
+el suelo se quedaba tan tranquila con los 30. Ahora hay techo además de suelo.
+
+#### La cabecera y la isla
+
+`env(safe-area-inset-top)` no reserva la isla: reserva toda la banda de la barra de
+estado, y en un iPhone con Dynamic Island el borde inferior de la isla queda unos puntos
+por encima de esa línea. Maquetar por debajo del inset entero dejaba la barra de
+herramientas visiblemente descolgada. Ahora se le restan 8px, que cierran el hueco sin
+llegar a la isla: la isla está centrada y mide unos 37pt, el título y los iconos están en
+los dos extremos, y la fila sigue empezando por debajo.
+
+Es `max(0.15rem, calc(env(...) - 0.5rem))` y no un `calc` a secas porque en un aparato sin
+inset —Android sin muesca, y la página abierta en un navegador— la resta se va a negativo
+y la cabecera se queda sin padding superior. **Es el único número de aquí que ningún test
+cubre**: Playwright da el inset como 0, así que el caso interesante no se puede simular.
+Lo que sí comprueba el test es que el respaldo aguanta, y quitar el `max()` lo tumba.
+
+Dos precisiones que dejó la revisión externa, y conviene no perderlas:
+
+- Respecto al código anterior la cabecera no sube lo que se le resta al inset, sino eso
+  más los 0,15rem que antes se sumaban. Con el recorte actual de 4px son **6,4**.
+- **El recorte de arriba bajó de 8px a 4.** 8 estaba pensado mirando solo la Dynamic
+  Island. Un iPhone 12/13/14 da un inset de 47pt sobre un alojamiento de sensores que
+  llega a 44: 47−8 mete los 5px de arriba de la fila dentro de esa banda, y la muesca
+  está centrada, justo donde llega un título de esta longitud a 320px. Con 4 la isla se
+  libra de sobra (59−4 = 55 contra un borde inferior de ~48) y la muesca se falla por
+  1pt, que no lo ve nadie.
+- Ni arriba ni abajo hay **nada medido en un dispositivo**. El razonamiento sobre la
+  geometría de la isla es geometría, no una captura; la fórmula de abajo tampoco garantiza
+  conservar los ~20pt del gesto del sistema en todos los aparatos (con un inset de 24px y
+  `1rem = 16px` deja 16). Se aplica a **todos** los nativos, no solo a los que tienen
+  isla. El revisor externo recomendaba conservar el inset entero hasta tener medidas; se
+  mantiene el recorte porque es lo que se pidió expresamente y dos veces, pero queda dicho
+  que está sin verificar en hardware.
+
+#### Plegar los controles (app, 17/09)
+
+Con una ruta cargada el panel lleva el nombre de la ruta, la tarjeta de resumen y la tabla
+de previsión, y el mapa está clavado en su suelo de 150px con ~130px de controles encima.
+Ahora esos controles se pliegan a una tira de una línea que sigue diciendo a qué están
+puestos: `09/17, 23:45 · 12 km/h · 15 min · OpenMeteo`. No se esconde información, se
+resume — la tira nombra el proveedor y la hora de salida, que son las dos cosas por las que
+volverías a abrirla. Medido: el bloque de parámetros pasa de ~130px a 32px.
+
+La fila del botón de cargar y el menú de recientes se queda **fuera** del pliegue y comparte
+línea con la tira: cambiar de ruta es lo único que merece hacerse desde un panel plegado y
+no cuesta nada dejarlo ahí.
+
+**El disparo es lo que importa y el obvio era el malo.** «Al cargar la ruta» pliega justo
+cuando todavía se está ajustando la hora — lo dijo el autor antes de que se escribiera una
+línea. Cargar una ruta solo **arma** el pliegue; lo que lo dispara es el primer toque en el
+mapa o en la tabla, que es el momento de haber dejado de configurar y haberse puesto a
+mirar. Una vez por ruta, y volver a abrirlo a mano lo desarma hasta que se cargue otra
+ruta distinta — de ahí que se compare `snapshot.route.fingerprint` y no se rearme en cada
+`cw:forecast`.
+
+Está construido en `native.js`, no en `index.html`: la web no cambia en nada, no tiene el
+problema y no quiere la solución. Un `<button>` con `aria-expanded`, no un `<details>`,
+porque el `<details>` habría obligado a reestructurar el HTML compartido; el triángulo lo
+dibuja el CSS con `::before` para que el nombre accesible sean los valores y no «triángulo
+negro apuntando a la derecha, 17/09».
+
+Cuatro cosas que el CSS y los tests aprendieron por las malas:
+
+- **`display: none !important`.** `.provider-row` lleva `style="display:flex"` en el
+  marcado, y un estilo en línea gana a cualquier selector sin `!important`. Sin él la fila
+  del proveedor se quedaba en pantalla mientras todo lo demás se plegaba, y un test que
+  solo mirase si la clase estaba puesta pasaba tan contento.
+- **`flex: 1 1 0` y no `1 1 auto`.** Con `auto` la tira pide el ancho de su texto, y un
+  contenedor con `flex-wrap` prefiere envolver antes que encogerla: la tira se llevaba la
+  línea entera y empujaba abajo la fila de carga. El pliegue ahorraba una fila y gastaba
+  otra.
+- **Se afirma que encoge el bloque de controles, no que crece el mapa.** Con una previsión
+  larga el sitio se lo queda la tabla y el mapa sigue en su suelo de 150px — que es la
+  maquetación funcionando— y en el más bajo de los dos viewports de test «el mapa creció»
+  era falso mientras el pliegue hacía exactamente su trabajo.
+- **Rearmar en cada `cw:forecast` pasa todo lo demás.** La mutación que lo probó no la
+  cazaba ninguna aserción hasta que se añadió el caso concreto: reabrir a mano, cambiar el
+  intervalo, mirar el mapa — y se había vuelto a plegar solo.
+
+#### El fallo que este trabajo introdujo y casi se publica
+
+La primera versión de la tira pedía el idioma con `window.loadSettings()`. **`loadSettings`
+no es un getter**: recorre una lista de campos y hace `el.value = s[id]` (`utils.js:528`)
+para la velocidad, la fecha, el intervalo y el proveedor, y además no devuelve nada, así
+que leerle `.language` lanza un `TypeError` que el `try/catch` se tragaba. Como la tira se
+refresca en cada `input`, **cada pulsación en la casilla de velocidad restauraba el valor
+guardado**: la edición se deshacía mientras se escribía, sin un solo mensaje en consola.
+
+Merece la pena por cómo estuvo a punto de colarse. Los tests fallaban por esto y se
+interpretó al revés: se dio por hecho que era la app pisando sus propias ediciones al
+restaurar los ajustes, se ajustaron los tests para no chocar con ello y **se escribió en
+este documento como un comportamiento anterior, sin corregir**. Lo era todo menos eso.
+Comprobado después del arreglo: dos ediciones seguidas —preselección de velocidad y luego
+intervalo— se quedan las dos puestas.
+
+La lección de test: hacía falta que hubiera una velocidad **guardada** para que el fallo
+mordiera, porque `loadSettings` solo reescribe un campo si hay algo almacenado para él.
+Sobre un perfil recién hecho la versión rota parecía correcta, y la primera versión del
+test nuevo pasaba con el fallo puesto.
+
+Lo encontró la revisión adversarial externa, no la propia.
+
+#### Otras cuatro de la misma revisión
+
+- **La tira mentía con la velocidad.** Etiquetaba `mph` si en ajustes había millas, sin
+  convertir el número. La casilla está en km/h haga lo que haga ese ajuste —`app.js:713`
+  la lee tal cual y divide kilómetros entre ella—, así que el resumen atribuía al cálculo
+  una velocidad un 61% mayor que la usada. Ahora dice `km/h` siempre, que es lo que el
+  número es. El test lo comprueba con millas elegidas.
+- **Una ruta nueva heredaba el pliegue de la anterior.** Armar no era suficiente: la clase
+  se quedaba donde estaba, así que la ruta siguiente empezaba con los controles ocultos y
+  el único flujo que esto existe para proteger —cargar ruta y luego cambiar la hora—
+  arrancaba detrás de un toque que nadie había pedido. Ahora un fingerprint distinto
+  despliega además de armar.
+- **El pliegue se disparaba con el foco dentro.** Tocar el mapa es también como se cierra
+  el teclado del móvil, y plegar entonces se lleva por delante el campo que se estaba
+  editando, con el elemento enfocado dentro de un subárbol que pasa a `display: none`.
+  Ahora el disparo se salta si `document.activeElement` está dentro del panel: el primer
+  toque cierra el teclado, el segundo pliega.
+- **El disparo de la tabla no lo probaba nadie.** Los dos listeners se enganchan en el
+  arranque y todos los tests tocaban `#map`, así que `['#map', '.wtc-wrap']` podía perder
+  su segunda entrada sin que nada se quejara. Hay un test por cada mitad.
+
+`aria-controls` apuntaba a `#controlsPanel` entero, que incluye el nombre de la ruta, la
+tarjeta de resumen y la tabla —nada de lo cual controla ese botón—. Ahora apunta a las
+filas, que llevan un id puesto desde `native.js`.
+
+#### Una tercera vuelta de revisión, y lo que dejó
+
+La revisión Claude sobre el mismo diff encontró los mismos cuatro fallos que la externa
+—ya corregidos cuando llegó— y además **siete mutaciones que pasaban todos los tests**.
+Todas caen ahora:
+
+1. **Borrar el bloque que formatea la fecha.** Nada leía la hora en la tira, siendo la
+   mitad de la razón por la que existe.
+2. **Clavar `aria-expanded` en `"true"`.** A un lector de pantalla se le decía que los
+   controles estaban abiertos mientras estaban en `display: none`.
+3. **Devolver `aria-controls` a `controlsPanel`.** El arreglo recién hecho no lo vigilaba
+   nadie.
+4. **Quitar el `aria-label`.** Y aquí había un error de bulto en el comentario: el
+   contenido generado por `::before` **sí** entra en el nombre accesible (algoritmo
+   accname, paso 2F). Lo que mantiene el triángulo fuera no es el CSS, es el `aria-label`.
+   Y la aserción que decía vigilarlo leía `textContent`, que nunca puede contener
+   contenido de un pseudoelemento: pasaba siempre. Ahora se comprueba el nombre accesible
+   de verdad, con `toHaveAccessibleName`. De paso, el `aria-label` usaba `', '` donde el
+   texto visible usa `' · '`, lo que incumple WCAG 2.5.3 (Label in Name): el texto visible
+   tiene que estar dentro del nombre accesible o el control por voz no lo encuentra.
+5. **Quitar el recorte del título de la cabecera.** Comparar rectángulos no lo ve: el
+   texto desbordado se pinta fuera de su caja mientras la caja conserva su ancho, y
+   `html.cw-native` es `overflow: hidden`, así que la página tampoco crece. Se mide el
+   recorte en sí, con una aserción previa que comprueba que a 320px el nombre de verdad no
+   cabe — si no, no estaría probando nada.
+6. **Quitar el `summarise()` final.** Los valores se escriben en los controles por código
+   al arrancar, y asignar `el.value` no dispara `change` ni `input`: sin esa llamada la
+   tira estaba en blanco hasta la primera edición. Todas las demás aserciones ocurrían
+   después de una edición, así que ninguna se enteraba.
+7. **`flex: 1 1 100%` → `0 0 auto` en el estado abierto.** Solo se había mutado la mitad
+   plegada de ese par de reglas.
+
+Dos cosas que el CSS prometía y no hacía, también suyas:
+
+- **`text-overflow: ellipsis` sobre un contenedor flex no hace nada.** `.params-strip` es
+  un `display: flex`, así que su texto es un ítem flex anónimo y se cortaba a hueso a
+  mitad de carácter. El texto vive ahora en un `<span>` que sí es un contenedor de bloque.
+- **`min-width: 0` en la tira plegada estaba muerto**: `#controlsPanel .params button` lo
+  fija en 28px desde un selector más específico. Retirado.
+
+Y dos aclaraciones que no cambian código:
+
+- **El disparo no siempre es el primer toque.** Un `select` o un campo de fecha conservan
+  el foco después de usarse, así que el toque que cierra el teclado se lo come la guarda
+  de foco y pliega el siguiente. Es lo que se quiere; el texto que decía «el primer
+  toque» estaba mal y está corregido.
+- **Tocar los controles de Leaflet también pliega.** `disableClickPropagation` engancha
+  `mousedown touchstart dblclick contextmenu`, no `pointerdown`, así que el zoom, la
+  brújula, el recentrar y los enlaces de atribución burbujean hasta `#map`. Se deja así:
+  todos ellos son mirar el mapa.
+
+#### La web sí cambió, aunque a mejor
+
+El requisito era «la web no se toca» y conviene no dejarlo implícito: `index.html:261`
+cambia `display:none` por `.sr-only` en la etiqueta del botón de carga, así que el nombre
+accesible de `#gpxFile` pasa de `📁` a `📁 Cargar fichero` **también en la web**, y el
+`data-i18n-title` traduce allí el tooltip. La maquetación no se mueve —hay una aserción de
+≤1×1 px que lo comprueba— y los dos cambios son mejoras, pero son cambios.
+
+#### La tabla vacía bajo el aviso (18/09)
+
+Cuando el proveedor no contesta, la app publica igualmente: el aviso forma parte de lo que
+publica. Pero **también montaba la tabla**. Reproducido a 390px: cinco filas de guiones,
+una tarjeta de resumen que decía `Temp: - Viento: - Lluvia: -`, y 270px de pantalla
+quitados al mapa —de 268px a 202— para enseñar que no se sabe nada. El aviso ya lo dice en
+una línea.
+
+El arreglo está en el único sitio donde tenía que estar: `renderWeatherTable` **ya** tenía
+una salida temprana para «no hay ruta ni datos» que limpia la tabla y el resumen, y lo que
+faltaba era una condición más. `anyReading(weatherData)` es la misma noción que el
+`usableSteps` que decide el aviso (`forecast-rules.js`), una etapa más tarde: cuando se
+pinta la tabla los payloads ya son campos. Se mantienen en paralelo a propósito — una
+tabla de guiones debajo de «el proveedor no responde» son los dos contradiciéndose sobre
+si hay previsión.
+
+**Datos parciales siguen pintando.** Esto no es «esconde la tabla si algo falla»: un paso
+contestado es una previsión, y los huecos que tenga al lado se ven. Solo desaparece la
+tabla que no tiene nada. Hay un test por cada mitad y la mutación `some` → `every` tumba el
+segundo.
+
+Tres cosas que costaron una vuelta cada una:
+
+- **El resumen hay que quitarlo, no vaciarlo.** `.compact-summary` lleva borde y relleno
+  propios; vaciado queda una caja en blanco sin nada que decir.
+- **El test tiene que empezar con una tabla de verdad en pantalla.** Arrancando sin
+  cobertura no se construye nunca ninguna, así que afirmar que no está no afirma nada: la
+  mutación de vaciar-en-vez-de-quitar pasaba. Ahora carga una ruta que funciona y **luego**
+  se cae el proveedor.
+- **Y tiene que ser otra ruta, no otro intervalo.** Las respuestas de la misma ruta están
+  en caché, así que recalcularla se sirve de ahí y con toda la razón no dice nada. Lo que
+  llega de verdad al proveedor es un sitio donde la app no ha estado.
+
+#### Lo que la revisión adversarial le encontró al arreglo
+
+Las dos revisiones —Claude y Codex, por separado— dieron con los mismos tres problemas, y
+los tres eran consecuencia directa de quitar la tabla. Quitar la única cosa que había en
+pantalla obliga a que lo que queda hable, y no siempre hablaba.
+
+- **Se podía quedar una pantalla sin tabla y sin motivo.** `decideNotice` solo explicaba
+  una tabla vacía cuando había habido fallos de transporte (`!usableSteps &&
+  transportFailures > 0`), y hay maneras de terminar sin lecturas **sin que falle ninguna
+  petición**: un 200 que llega con `hourly.time` y los valores a null —un modelo truncado,
+  una fusión que dejó huecos—, o una salida fuera del horizonte, donde ni se pide nada.
+  Había hasta un test unitario afirmando que ese caso devuelve `null`. Con la tabla de
+  guiones eso era defendible: las columnas vacías eran el mensaje. Sin ella es una ruta en
+  el mapa y ninguna explicación. Ahora **toda** forma de acabar sin lecturas dice algo, con
+  una cadena nueva (`no_forecast_data`), y el horizonte se dice tanto si `noticeAll` está
+  puesto como si no. Medido después: una salida a 20 días no llega siquiera a ese camino,
+  porque la app rechaza la fecha antes con su propio mensaje; la rama es cinturón y
+  tirantes, y se prueba directamente en `forecast-outcome.test.mjs`.
+- **En m/s y en mph el fallo seguía vivo.** `windToUnits` dividía y multiplicaba lo que le
+  dieran, y `null / 3.6` es 0. Un paso sin viento salía con viento cero, así que
+  `anyReading` lo daba por bueno y la tabla de guiones se dibujaba igual —el fallo
+  original, intacto para quien no use km/h— mientras el aviso decía que el proveedor no
+  responde. Y la celda ponía «0» en vez de «-», que es otra mentira sobre el mismo hueco.
+  Corregido en la raíz: `windToUnits` devuelve null si no le dan un número.
+- **El corte se llevaba por delante una comparación.** La salida temprana corre **antes**
+  de `compareOwnsTable()`. En modo comparación la previsión ordinaria sigue llenando
+  `weatherData` por detrás, así que una vacía llegaba a esa salida y borraba la comparación
+  —buena— y su tarjeta de resumen. La comprobación de «sin lecturas» va ahora después de
+  respetar quién es el dueño de la tabla.
+
+Cinco tests nuevos, cinco mutaciones, las cinco caen: `windToUnits` devuelto a la coerción,
+el aviso de resultado vacío quitado, el predicado reducido a solo temperatura, el orden de
+la comparación invertido, y la salida temprana sin la condición. La del orden es de las que
+convence: **la suite entera pasaba con ella puesta** antes de escribir el test.
+
+#### Qué cuenta como previsión, decidido y en un solo sitio (18/09)
+
+La primera versión preguntaba por temperatura **o** viento. La decisión del autor:
+**temperatura, viento o lluvia** son los valores clave; la humedad no cuenta por sí sola.
+
+La lluvia cuenta como cantidad **o** probabilidad, y la probabilidad es la mitad que
+importa: `mergeAromeWithStandard` rellena `precipitation_probability`, `weathercode` y
+`cloud_cover` desde la respuesta estándar de Open-Meteo sobre las horas de AROME, así que
+la única forma real de acabar con lluvia y sin temperatura es que AROME no cubra esas horas
+y la fusión sí traiga la probabilidad. Contar solo los milímetros habría dejado fuera
+exactamente ese caso.
+
+**Había cuatro copias de la pregunta y tres respuestas distintas.** `usableSteps` en
+`forecast-rules.js`, `anyReading` en `app.js`, el recuento de `showComparisonNotice` y
+—la peor— `hasAny` en `compare.js`, que pedía **solo temperatura**. Consecuencias medidas:
+
+- Un proveedor que contesta con viento pero sin temperatura desaparecía entero de la
+  comparación. Anterior a todo esto.
+- Y al empezar a contar la lluvia para el aviso, apareció un agujero nuevo: `hasAny`
+  tiraba las filas de solo lluvia, pero `showComparisonNotice` contaba sobre los datos
+  **sin filtrar**, veía la lluvia y por tanto no decía nada. Reproducido: comparación con
+  respuestas de solo lluvia = 1 fila, 20px, cero proveedores, **ningún aviso**. Justo el
+  «en blanco y en silencio» que esta ronda existía para eliminar.
+
+Ahora hay **una** función, `cwForecastRules.hasReading(step)`, exportada y usada por las
+cuatro. Acepta las dos formas del paso —`wind` en el extracto crudo, `windSpeed` en el
+procesado— porque la misma pregunta se hace en tres etapas distintas. Cuatro mutaciones,
+las cuatro caen; la de `hasAny` **pasaba la suite entera** antes de escribir su test.
+
+#### La regla, afinada después de dos revisiones (18/09)
+
+La primera versión de `hasReading` contaba temperatura, viento, lluvia **o probabilidad**,
+cualquiera de ellos con ser un número finito. Las dos revisiones la rompieron por los dos
+extremos y la regla quedó así:
+
+    temperatura o viento, siempre que estén — 0 °C y 0 km/h son lecturas
+    lluvia, SOLO por encima de cero
+    la probabilidad sola no cuenta
+
+Los dos recortes son deliberados y los dos salieron de un contraejemplo concreto:
+
+- **«0 mm» es la ausencia de lluvia, no una previsión.** Contándola, un paso sin
+  temperatura, sin viento y con una hora seca bloqueaba la sustitución por una previsión
+  preparada (`app.js:1209`) y hacía que el aviso sin cobertura dejara de decir que no había
+  nada (`native.js:434`). El usuario perdía una previsión de verdad a cambio de una tabla
+  de guiones.
+- **Una probabilidad sin cantidad la tabla principal no sabe dibujarla**: `formatRainCell`
+  devuelve «-» si no hay cantidad. Contándola se pintaba una fila entera de guiones, que es
+  exactamente la pantalla que el guardián de la tabla vacía existe para evitar. La
+  comparación sí la dibuja (`0.0 (80%)`), así que si algún día se quiere también en la
+  tabla, esto y `formatRainCell` se mueven juntos o vuelven a contradecirse.
+
+Y había una **quinta** copia: `hasData`, en `forecast-rules.js`, que decidía
+`preparedCoverage` y pedía temperatura o viento. Ahora es `hasReading`.
+
+Un intento fallido que conviene no repetir: la primera reacción al caso de la probabilidad
+fue cambiar `Number(step.precipitation) === 0` por `step.precipitation === 0` en
+`aromeCodeAndDay`, para que una probabilidad baja sobreviviera cuando no hay cantidad. Eso
+**contradice una decisión deliberada con test propio** (`extraction.test.mjs`: la tabla y la
+comparación discrepaban y se las hizo coincidir ahí). Revertido.
+
+#### La comparación, mirada de verdad (18/09)
+
+Se dio por rota y no lo estaba. La conclusión anterior —«con respuestas de solo lluvia la
+comparación sigue saliendo vacía»— era un **plazo confundido con un defecto**: la aserción
+corría antes de que la comparación repintara. Instrumentado con una espera larga, salían
+tres filas, dos proveedores y los pasos con `precipitation: 2` y `precipProb: 80`. Queda
+escrito porque es el mismo error que ya había costado un rato en el test que fallaba bajo
+carga, y van dos.
+
+Lo que sí estaba mal, y ahora tiene test:
+
+- **`hasAny` pedía temperatura y nada más**, así que un proveedor con lluvia o viento y sin
+  temperatura no entraba en la comparación. Con la definición compartida entra.
+- **`buildCompareCell` pedía lo mismo**, así que una fila admitida se dibujaba entera a
+  guiones. Medido con la regla vieja puesta: todas las celdas de previsión «-» mientras
+  `.summary-cell` seguía diciendo `2mm (80%)`.
+- **La fila de cadena (OW→AROME→Open-Meteo) estaba exenta del filtro**, admitida hubiera
+  llegado algo a ella o no, y sin un comentario que dijera por qué. Lo que compraba eso era
+  una columna de guiones: con clave configurada y OpenWeather callado, todos sus pasos
+  vuelven en blanco y la fila se pintaba igual. Ahora obedece la misma regla que las otras
+  tres.
+- **El aviso contaba las filas que llegaron, no las pintadas.** Una comparación que sale
+  vacía ya no sale además en silencio.
+
+Tres avisos sobre los tests de aquí, los tres aprendidos con tests que no probaban nada:
+
+- **Borrar la caché de la misma ruta no basta.** La comparación volvía con las temperaturas
+  originales en las celdas. Hace falta una ruta que la app no haya visto nunca.
+- **`#weatherTable td` incluye `.summary-cell`**, que se construye con su propio array y
+  trae el número aunque todas las celdas de previsión sean guiones. Dos veces di por buena
+  una mutación por esto. El selector lleva ahora `:not(.summary-cell)`.
+- **«Tiene un porcentaje» no es «tiene datos».** OpenWeather contesta con temperatura,
+  viento y un 5% de probabilidad, y por debajo del 10% la celda no lo imprime: una fila
+  perfectamente buena sin ningún porcentaje. El invariante es que ninguna fila admitida sea
+  todo guiones.
+
+Un cambio queda **sin prueba** y se dice: el constructor de la cadena (`src.temp != null` →
+`hasReading`). En el escenario del test la cadena resuelve a OpenWeather, que sí trae
+temperatura, así que su puerta nunca ve un paso sin ella. Es la misma definición que el
+resto y por eso se deja, pero ninguna mutación lo tumba.
+
+#### Lo que quedó dicho antes de mirarlo, y era falso
+
+La sección anterior de este documento decía que `compare.js` seguía sin pintar respuestas de
+solo lluvia y que la causa estaba «más arriba». No lo estaba: estaba en las tres puertas de
+arriba, y la impresión de que seguía roto venía de un test con el plazo corto. Corregido
+arriba; se deja la nota para que nadie vuelva a partir de la afirmación equivocada.
+
+#### El test que fallaba bajo carga: no era el código, era el arnés
+
+`the map still works when storage is unavailable` fallaba en `expect(crashes).toEqual([])`.
+Reproducido 2 de 3 veces con `--workers=16`, y 5 de 28 con `--repeat-each=14`; suelto, nunca.
+
+No era una excepción de la aplicación. Lo que recogía el colector eran mensajes de WebKit
+sobre peticiones que la propia suite aborta:
+
+    "/api.open-meteo.com/v1/forecast?... due to access control checks."
+
+WebKit los entrega como `pageerror`; Chromium no dice nada. Con la máquina cargada el
+aborto cae dentro de la ventana en la que el test mira. Filtrado por la frase exacta de
+WebKit —estrecho a propósito, una excepción de verdad tiene que seguir tumbando el test—
+en `appCrash`, que usan tanto ese test como `watchForBreakage`. Con el filtro: 28 de 28.
+Sin él: 5 fallos de 28.
+
+Conviene recordar la conclusión general más que el caso: **medir antes de llamarlo flake**.
+La primera vez que apareció se anotó como «flaky, sin explicar» y se siguió adelante; era
+reproducible en dos minutos en cuanto se saturó la máquina a propósito.
+
+#### La pantalla de arranque: era la de Capacitor (18/09)
+
+El icono de la app era el correcto y, al pulsarlo, salían un par de segundos de **pantalla
+blanca con el logo de Capacitor** —su cruz azul— antes de cargar el mapa. Las fechas lo
+contaban solas: `AppIcon-512@2x.png` del 14/09 (lo escribe `npm run icons`),
+`Splash.imageset/splash-*.png` y los `splash.png` de Android del 11/09, la plantilla
+intacta. `install-icons.mjs` instalaba el **icono** en los dos proyectos y no tocaba —ni
+mencionaba— la pantalla de arranque. El `backgroundColor: "#0B6297"` del
+`capacitor.config.json` tampoco ayudaba: el marcador de posición es un PNG blanco a sangre
+y tapa el fondo.
+
+Ahora lo escribe el mismo script. `render(source, size)` pasa a ser una envoltura sobre
+`renderOnto(source, ancho, alto, cover)`, que dibuja en un lienzo de cualquier forma con
+`cover` diciendo qué fracción del **lado corto** ocupa el dibujo. El icono es ese mismo
+render en cuadrado y a 1:1, así que sale byte a byte como salía —hay un test que lo compara
+con el anterior precisamente para eso—. La pantalla de arranque usa 0,28: el marcador de
+Capacitor era una veinteava parte, un logo perdido en un campo blanco, y llenar la pantalla
+sería un muro de icono.
+
+Los dos instaladores **leen los tamaños que trajo la plantilla** en vez de codificarlos, lo
+mismo que el lado del icono lee `Contents.json`: iOS, los nombres del `Contents.json` del
+imageset (tres ranuras, un cuadrado de 2732 que el sistema recorta); Android, la cabecera
+de cada `splash.png` que ya existe, para devolver uno de la misma forma. Once ficheros, de
+320×480 a 1920×1280, portrait y landscape, sin que el script tenga que saber qué es un
+`drawable-land-xxxhdpi`.
+
+Cuatro tests nuevos, tres mutaciones, las tres caen: ignorar `cover` (el dibujo llena la
+pantalla), no centrar, y volver a un lienzo cuadrado.
+
+Un detalle de sintaxis que costó un minuto y volverá a morder: escribir `drawable*/splash
+.png` dentro de un comentario de bloque lo cierra ahí mismo.
+
+#### Lo que no arregla esto
+
+En español, a 402px, «Velocidad» no cabe en la misma línea que «Fecha»: son unos 11px de
+más. **La web hace exactamente lo mismo** —medido, con y sin la clase `cw-native`—, así
+que no lo causa nada de esto; es un problema de anchura en un idioma más largo que el
+inglés, donde sí caben. Si hay que juntarlas habrá que estrechar el campo de fecha o
+acortar la etiqueta, no tocar las alturas.
 
 ### Revisión adversarial de Codex (17/09): lo que queda de ella
 
@@ -564,8 +1094,8 @@ código contradecía. Quedan estos, todos con su razón para quedarse:
 Cerrados en esta ronda, además de los cinco de antes: **F3** (registro durable de entrada
 en `incoming-routes.pending`, con reintento en cada arranque y sin duplicar lo entregado),
 **F5** (la lectura de iOS sale del hilo principal y la llegada se anuncia con
-`sharedRouteAvailable`, como en Android), **F7** (suelo de 44px en los controles dentro de
-la app, medido por tests, y nombre visible para abrir ruta) y el freno de `/share`. Con los
+`sharedRouteAvailable`, como en Android), **F7** (suelo táctil de 28px medido por tests, ver más
+abajo, y nombre accesible para abrir ruta) y el freno de `/share`. Con los
 cinco de la ronda anterior, los nueve hallazgos del informe quedan cerrados.
 
 ### La ayuda dentro de la app
@@ -1046,3 +1576,123 @@ Queda en pie el motivo por el que esto necesitó una nota a mano: el test compru
 enlace está en la página y que el fichero existe en el árbol de trabajo, no que la URL
 resuelva. Si algún día las guías se mueven de sitio dentro del repositorio, el test seguirá
 verde y los enlaces volverán a romperse.
+
+### Compartir desde otra app: por qué se retiró la share extension (18/09)
+
+**Síntoma.** Compartir una ruta desde Hammerhead no abría MeteoRide. La hoja se cerraba y
+no pasaba nada — pero la ruta estaba dentro la siguiente vez que se abría la app a mano.
+
+**Dos fallos, y cada uno tapaba al otro.**
+
+1. `cc.meteoride.gpx` estaba declarado en `UTImportedTypeDeclarations` y se pasó a
+   `UTExportedTypeDeclarations`. **Corrección posterior (revisión de Codex): esto casi con
+   seguridad no era el fallo.** Apple dice que una declaración importada existe justamente
+   para que el sistema conozca un tipo "aunque la app propietaria no esté instalada", así
+   que la vinculación `.gpx` probablemente funcionaba desde el principio. Exportado sigue
+   siendo lo correcto —el tipo es nuestro— pero es una decisión de corrección, no una
+   causa demostrada: los dos cambios se hicieron juntos y nunca se separaron.
+2. La share extension se llevaba la pulsación. **Esto sí está aislado**: es lo único que
+   se retiró para la prueba en dispositivo. Los dos mecanismos ponen un MeteoRide en la
+   hoja, con el mismo nombre y el mismo icono, indistinguibles mirándolos. El log del
+   dispositivo lo cerró: `activityType: cc.meteoride.app.ShareExtension`, hospedada dentro
+   del proceso de Hammerhead, guardando el fichero y completando, sin ningún lanzamiento de
+   app en toda la captura. Y una share extension no puede abrir su app contenedora: Apple
+   le da `NSExtensionContext.open` solo a los widgets de Hoy, e iOS 18 rechaza el truco de
+   la cadena de respondedores.
+
+**Arreglo.** UTI exportado, y fuera la extensión. Probado en dispositivo quitando el
+`.appex` de *Embed Foundation Extensions* — reversible, sin borrar el target — y funcionó a
+la primera. Los ficheros de la extensión se han borrado del repositorio.
+
+**Lo que sigue sin confirmarse, y da igual.** Se
+[dice](https://developer.apple.com/forums/thread/735383) que desde iOS 16 la presencia de
+una extensión *elimina* la entrada de documento de la misma app. Ese hilo no tiene
+respuesta de Apple y aquí no se ha separado de la hipótesis del icono equivocado. Para la
+decisión de no llevar extensión, cuál de las dos sea es indiferente.
+
+**Deuda que queda.**
+
+- El App Group tiene un solo miembro. Se queda: `MeteoRideShareStore` vive en su
+  contenedor y moverlo huerfanaría cualquier ruta ya guardada.
+- `meteoride://` sigue declarado en iOS y ya no lo abre nadie. En Android sí está vivo.
+- El tercer campo del nombre de fichero del buzón iOS (8 hex de un UUID) existía porque
+  dos procesos escribían esa carpeta. Ahora escribe uno. Se deja por no renombrar ficheros
+  que una app instalada pueda tener ya.
+- `LSHandlerRank` es `Alternate` para una entrada que cubre a la vez el UTI propio y el KML
+  de Google. Lo honesto sería partirla en dos y poner `Owner` en la nuestra. No se ha
+  tocado porque funciona y no había motivo para mover dos cosas a la vez.
+- Nada de esto se compila aquí. `mobile/tests/document-open.test.mjs` **parsea** los
+  plists y falla ante siete mutaciones comprobadas, entre ellas la causa raíz original
+  (borrar la vinculación `.gpx`), y sigue verde ante un reordenado de claves.
+
+**Lo que encontró la revisión adversarial de esta misma ronda, ya corregido.**
+
+- **KML tenía el mismo fallo y nadie lo había visto.** `CFBundleDocumentTypes` lista
+  `com.google.earth.kml` y *ese identificador no lo declaraba nadie*: iOS no trae tipo KML
+  propio y la app tampoco lo declaraba. Ahora va en `UTImportedTypeDeclarations`
+  —importado, porque este sí es de otro—. Hasta ahora `.kml` solo vinculaba si alguna otra
+  app instalada lo exportaba, y la extensión borrada lo tapaba aceptando cualquier fichero.
+- **El test no cazaba lo que decía cazar.** La primera versión usaba regex y pasaba con un
+  typo de sufijo en cualquiera de las dos mitades y con la vinculación `.gpx` borrada. Mi
+  comprobación por mutación no lo detectó porque elegí un renombrado que no contenía la
+  subcadena. Reescrito con un parser.
+- **Las copias del sistema no se borraban nunca.** Con
+  `LSSupportsOpeningDocumentsInPlace: false` iOS copia cada documento abierto a
+  `Documents/Inbox` de la app y entrega esa copia, que es nuestra. Nadie la borraba: la
+  poda de 24 horas solo barre la carpeta del App Group. Cada ruta abierta se quedaba en el
+  sandbox para siempre, hasta 25 MiB cada una. `ingest` la descarta ahora, acepte o
+  rechace el fichero, y solo si está bajo ese directorio.
+- **`MeteoRideShareStore.swift` mandaba crear el target borrado.** Su cabecera decía "este
+  fichero tiene que pertenecer a AMBOS targets". Corregido.
+- **La política de privacidad publicada describía la extensión**, en los dos idiomas, y es
+  el documento que lee un revisor de Apple. Corregida.
+- Barrido de documentación: una docena de menciones obsoletas en `AGENTS.md`, `docs/IOS.md`
+  (incluidas dos contradicciones dentro del mismo fichero), `docs/INSTALL.md` y
+  `public/scripts/native.js`.
+
+### Revisión adversarial de Codex sobre la retirada de la extensión (18/09)
+
+Siete hallazgos. Cuatro arreglados, uno corregido como error de relato, dos abiertos.
+
+**Arreglados.**
+
+- **Alto — la limpieza que acababa de añadir borraba la entrega aunque fallase guardarla.**
+  El `defer` estaba puesto antes de leer y de guardar, así que una ruta válida en
+  `Documents/Inbox` se borraba también si la lectura daba error o no había espacio:
+  `ingest` devolvía `false`, nadie anunciaba nada y desaparecía la única copia. Ahora solo
+  se descarta ante una respuesta **definitiva** —guardada, o rechazada por lo que el
+  fichero es—; un fallo de E/S la conserva.
+- **Medio — nada recogía `Documents/Inbox` al arrancar.** Quedaban sin recuperar la ruta
+  cuya lectura interrumpió una terminación, las que fallaron por algo pasajero y todo lo
+  acumulado antes de que existiera esta limpieza. `SceneDelegate` llama ahora a
+  `recoverSystemInbox()` al arrancar, en la misma cola serial y después de las URL que
+  trajo el lanzamiento. Lo que pase de 24 horas se tira sin leer, que es la política que ya
+  tenía la carpeta del App Group y lo que evita reintentar para siempre un fichero que
+  falla siempre. Ojo: los 25 MiB limitan lo que se **acepta**, no el tamaño de la copia que
+  iOS ya escribió; el único tope de esas es la edad.
+- **Medio — el parser del test aprobaba un plist distinto del que creía comprobar.**
+  `<array/>` se leía como `false` y satisfacía la aserción booleana; el CDATA de
+  `<string>gpx<![CDATA[wrong]]></string>` se descartaba en silencio; una etiqueta con
+  atributos se saltaba entera. Ahora los tres fallan a gritos, con sus propias aserciones.
+  Añadidos MIME, `CFBundleTypeRole`, y una comparación contra el `Info.plist` generado —
+  que es el que se compila y no estaba cubierto por nada.
+- **Medio — el proyecto Xcode se renombró a `MeteoRide.xcodeproj` y `build-www.mjs`
+  buscaba `App.xcodeproj`.** Ajeno a esta tanda: la sincronización de `MARKETING_VERSION`
+  llevaba siendo un no-op silencioso. Ahora busca el `.xcodeproj` que haya.
+
+**Corregido como error de relato.** Ver arriba: el cambio de UTI importado a exportado
+probablemente no era el fallo, y yo lo conté como tal. Rectificado en el plist, en
+`docs/IOS.md`, en `docs/HANDOFF.md` y en los comentarios del test.
+
+**Abiertos, decididos y no arreglados.**
+
+- **Alto, preexistente — `nextPending()` borra la entrega antes de que JavaScript la haya
+  guardado de forma duradera.** Matar el proceso entre ese borrado y el commit en IndexedDB
+  pierde la ruta. Arreglarlo de verdad pide un protocolo de acuse entre el nativo y el web
+  con identificador estable para no duplicar al reintentar, y eso es un cambio de diseño,
+  no un parche. No se toca en esta tanda; queda aquí escrito. Afecta igual a Android.
+- **Bajo — el proyecto Xcode local conserva restos de la extensión**: el esquema
+  `ShareExtension.xcscheme` apunta a un target que ya no existe, y `project.pbxproj` guarda
+  referencias al `ShareViewController.swift` borrado. No vuelven a incrustar nada —la fase
+  de *embed* está vacía— pero el esquema es inválido. `mobile/ios/` no está en git, así que
+  esto es limpieza a mano en Xcode, junto con borrar el target.
