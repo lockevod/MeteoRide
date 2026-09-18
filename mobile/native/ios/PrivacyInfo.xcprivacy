@@ -10,9 +10,12 @@
 
   FileTimestamp
     C617.1 — metadata of files inside the app container, the app group container or
-      the CloudKit container. That is MeteoRideShareStore pruning the shared inbox: it
-      reads `.modificationDate` to drop anything the web layer never collected in 24
-      hours, and the folder is in the App Group container. It is also the reason
+      the CloudKit container. That is MeteoRideShareStore, which reads
+      `.modificationDate` in two places, and the reason names all three containers
+      because two of them are used: `prune` drops anything the web layer never collected
+      in 24 hours from the folder in the App Group container, and `recoverSystemInbox`
+      applies the same 24-hour rule to the copies iOS leaves in Documents/Inbox, which is
+      the app container. It is also the reason
       @capacitor/filesystem's README asks for, and for the same kind of access.
       Not DDA9.1, which is for *displaying* a timestamp to the person — nothing here
       shows one. Not 3B52.1 either, which is for files the person specifically granted
