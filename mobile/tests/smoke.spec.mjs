@@ -18,11 +18,38 @@ async function goOffline(page) {
   });
 }
 
+/** WebKit reports a request this suite aborted as a page error, worded "…due to access
+ *  control checks." — the network stub talking, not the app throwing. It is invisible on
+ *  Chromium, and on WebKit it only lands inside a collector's window when the machine is
+ *  loaded enough to shift the timing, which made `the map still works when storage is
+ *  unavailable` fail two runs in three at --workers=16 while passing alone.
+ *
+ *  Anchored at BOTH ends, and `\S+` for the URL: WebKit's message is a bare address and
+ *  then the phrase, so `Error('the forecast failed due to access control checks.')` —
+ *  words, with spaces — is not swallowed. Matching the phrase alone would have made this
+ *  filter a hole in the oracle rather than a filter. */
+const appCrash = (message) => !/^\S+ due to access control checks\.?$/.test(String(message || '').trim());
+
+test('the crash filter silences the stub and nothing else', () => {
+  // `const appCrash = () => false` disables every `expect(crashes).toEqual([])` in this
+  // file and the suite stays green, so the filter needs assertions of its own.
+  const webkitNoise = '/api.open-meteo.com/v1/forecast?latitude=41.4&x=1 due to access control checks.';
+  expect(appCrash(webkitNoise), 'the suite aborting its own request is not a crash').toBe(false);
+  expect(appCrash('https://tile.openstreetmap.org/1/2/3.png due to access control checks'), 'no full stop').toBe(false);
+
+  // Prose is not a URL. An application error that quotes the same phrase must survive,
+  // which is what anchoring at both ends with \S+ buys over matching the phrase alone.
+  expect(appCrash('Forecast request failed due to access control checks.'), 'a real error was swallowed').toBe(true);
+  expect(appCrash('TypeError: undefined is not an object')).toBe(true);
+  expect(appCrash('Boom')).toBe(true);
+  expect(appCrash('')).toBe(true);
+});
+
 /** Uncaught exceptions and failed same-origin requests: both mean the bundle is broken. */
 function watchForBreakage(page) {
   const crashes = [];
   const missing = [];
-  page.on('pageerror', (e) => crashes.push(e.message));
+  page.on('pageerror', (e) => { if (appCrash(e.message)) crashes.push(e.message); });
   page.on('response', (r) => {
     if (r.status() >= 400 && r.url().startsWith('http://127.0.0.1')) {
       missing.push(`${r.status()} ${r.url()}`);
@@ -3892,7 +3919,7 @@ test('a ?gpx_url= that is not a GPX fails with a notice and puts nothing on scre
 // nothing else waits on its download: one that fails must not surface as an unhandled rejection.
 test('a link replaced before it reads whose download fails leaves nothing unhandled', async ({ page }) => {
   const crashes = [];
-  page.on('pageerror', (e) => crashes.push(e.message));
+  page.on('pageerror', (e) => { if (appCrash(e.message)) crashes.push(e.message); });
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
@@ -4086,6 +4113,220 @@ test('an empty table says why', async ({ page }) => {
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect(page.locator('.notice')).toContainText(/not responding|no responde/);
   expect(await shownTemperatures(page)).toEqual([]);
+});
+
+/** What is actually drawn: the table's rows and the compact summary card above it. */
+const tableDrawn = (page) =>
+  page.evaluate(() => ({
+    rows: document.querySelectorAll('#weatherTable tr').length,
+    summary: !!document.getElementById('compactSummary'),
+    map: Math.round(document.getElementById('map').getBoundingClientRect().height),
+  }));
+
+test('nothing came back, so there is no table to draw', async ({ page }) => {
+  // The notice said why and the table was built anyway: five rows of "-", a summary card
+  // reading "Temp: - Wind: - Rain: -", and 270px of a phone screen taken off the map to
+  // show that nothing is known. Saying it once, in the notice, is the whole of it.
+  const control = { celsius: 21, offline: false };
+  await stubProvider(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  const before = (await tableDrawn(page)).map;
+
+  // A working forecast first, so there is a real table and a real summary card on screen
+  // when the provider goes. Starting offline never builds either, and an assertion that
+  // they are gone then is an assertion about something that was never there.
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await tableDrawn(page)).rows).toBeGreaterThan(0);
+  expect((await tableDrawn(page)).summary).toBe(true);
+
+  // A different route, not a different interval: the same route's answers are in the
+  // cache, so a recomputation of it is served from there and quite rightly says nothing.
+  // Somewhere the app has never been is what actually reaches the provider.
+  control.offline = true;
+  await pickText(page, 'otra.gpx', routeAt('Otra', 41.40));
+  await expect(page.locator('.notice')).toContainText(/not responding|no responde/);
+
+  const drawn = await tableDrawn(page);
+  expect(drawn.rows, `${drawn.rows} rows of nothing`).toBe(0);
+  expect(drawn.summary, 'a summary card with no values in it').toBe(false);
+  // And the map keeps the room. Without this the assertions above pass while an empty
+  // table sits there at zero rows but full height.
+  expect(drawn.map, `the map is ${drawn.map}px against ${before}px with no route at all`)
+    .toBeGreaterThanOrEqual(before - 40);
+});
+
+test('a gap in some columns is still worth a table', async ({ page }) => {
+  // The other half of the same rule, and the one that says it did not go too far: this
+  // is not "hide the table when anything fails". One step answered is a forecast, and
+  // the gaps beside it are worth seeing. Only a table with nothing in it goes.
+  let asked = 0;
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    asked += 1;
+    return asked === 1
+      ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(21)) })
+      : route.abort();
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(async () => (await tableDrawn(page)).rows, { message: 'the table went with the gaps' })
+    .toBeGreaterThan(0);
+  expect(asked, 'the route asked for one answer only, so this proves nothing').toBeGreaterThan(1);
+  expect((await tableDrawn(page)).summary).toBe(true);
+  expect(await shownTemperatures(page)).not.toEqual([]);
+});
+
+/** Times present, every value missing: a 200 that carries nothing, which is what a
+ *  truncated model run or a merge that left nulls looks like from here. */
+function forecastOfNulls() {
+  const body = forecastAt(20);
+  for (const k of Object.keys(body.hourly)) if (k !== 'time') body.hourly[k] = body.hourly.time.map(() => null);
+  return body;
+}
+
+/* The guard above withholds the table when there is nothing in it, which leaves the notice
+ * as the only thing on screen that knows why. So the notice has to be there — in EVERY way
+ * of ending with no readings, not just the one that was reported. Two of these said nothing
+ * at all when this was written: a start beyond the forecast horizon with "show all notices"
+ * off (no request is made, so nothing fails), and a 200 carrying null values. */
+test('there is never a route on the map with no table and no reason', async ({ page }) => {
+  const cases = [
+    ['the provider unreachable', async () => {
+      await page.route((url) => url.hostname === 'api.open-meteo.com', (r) => r.abort());
+    }],
+    ['an answer with no values in it', async () => {
+      await page.route((url) => url.hostname === 'api.open-meteo.com', (r) =>
+        r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastOfNulls()) }));
+    }],
+  ];
+
+  for (const [what, stub] of cases) {
+    await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+    await stub();
+    await page.goto('/index.html');
+    await mapReady(page);
+    // Quietly: the setting that hides the informational notices must not hide this one.
+    await page.evaluate(() => { document.getElementById('noticeAll').checked = false; window.saveSettings(); });
+    await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+    await expect.poll(async () => {
+      const rows = (await tableDrawn(page)).rows;
+      const said = await page.locator('.notice').isVisible().catch(() => false);
+      return rows > 0 || said;
+    }, { message: `with ${what}, the app showed no table and said nothing` }).toBe(true);
+    await page.unrouteAll();
+  }
+});
+
+test('a start past the forecast horizon is refused out loud, not left blank', async ({ page }) => {
+  // Both reviews called this the way to reach "no table and no notice": a start beyond the
+  // horizon skips every step before a request is made, so nothing fails, and the horizon
+  // notice itself used to sit behind "show all notices". Measured, the app never gets
+  // there — it refuses the date first, with its own message. The branch added to
+  // `decideNotice` for this is belt and braces, and is covered directly in
+  // forecast-outcome.test.mjs; what this test pins down is that the refusal is still
+  // spoken with the informational notices turned off, which is what makes the screen
+  // legible now that the empty table is gone.
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => {
+    document.getElementById('noticeAll').checked = false;
+    const far = new Date(Date.now() + 20 * 24 * 3600 * 1000);
+    far.setMinutes(0, 0, 0);
+    document.getElementById('datetimeRoute').value = far.toISOString().slice(0, 16);
+    window.saveSettings();
+  });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect(page.locator('.notice')).toContainText(/14 days|14 días/);
+  expect((await tableDrawn(page)).rows, 'a table for a date the app refused').toBe(0);
+});
+
+test('a forecast with wind and no temperature is still a forecast', async ({ page }) => {
+  // The predicate is `temp OR wind`. Dropping either half passes every other test here,
+  // because the shared fixture fills both — and the app would then hide a table it has
+  // readings for.
+  const windOnly = forecastAt(20);
+  windOnly.hourly.temperature_2m = windOnly.hourly.time.map(() => null);
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(windOnly) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(async () => (await tableDrawn(page)).rows, { message: 'the wind went with the temperature' })
+    .toBeGreaterThan(0);
+  expect(await shownTemperatures(page), 'the temperatures are supposed to be missing here').toEqual([]);
+});
+
+test('rain with no temperature and no wind is still a forecast', async ({ page }) => {
+  // The third of the three a ride is planned around, and the one that was missing. A step
+  // can carry a rain probability and nothing else: `mergeAromeWithStandard` fills
+  // `precipitation_probability`, `weathercode` and `cloud_cover` from the standard
+  // Open-Meteo answer onto AROME's hours, so an AROME run that misses those hours leaves
+  // exactly that. Counted as no forecast it cost the whole table — and, because nothing
+  // failed, it did so without a notice.
+  const rainOnly = forecastAt(20);
+  for (const k of ['temperature_2m', 'wind_speed_10m', 'wind_gusts_10m']) {
+    rainOnly.hourly[k] = rainOnly.hourly.time.map(() => null);
+  }
+  rainOnly.hourly.precipitation = rainOnly.hourly.time.map(() => 2);
+  rainOnly.hourly.precipitation_probability = rainOnly.hourly.time.map(() => 80);
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rainOnly) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect.poll(async () => (await tableDrawn(page)).rows, { message: 'the rain went with the temperature' })
+    .toBeGreaterThan(0);
+  // And it is the rain that is on screen, not an empty table that happened to be drawn.
+  await expect(page.locator('#weatherTable')).toContainText('80');
+  expect(await shownTemperatures(page), 'the temperatures are supposed to be missing here').toEqual([]);
+});
+
+test('humidity on its own is not a forecast', async ({ page }) => {
+  // The other side of the line the user drew: temperature, wind or rain are the values a
+  // ride turns on; humidity, cloud cover and a weather code are not worth a table of
+  // their own. Without this the widening would have been "anything at all counts".
+  const damp = forecastAt(20);
+  for (const k of ['temperature_2m', 'wind_speed_10m', 'wind_gusts_10m', 'precipitation', 'precipitation_probability']) {
+    damp.hourly[k] = damp.hourly.time.map(() => null);
+  }
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(damp) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect(page.locator('.notice')).toBeVisible();
+  expect((await tableDrawn(page)).rows, 'a table for a column of humidity').toBe(0);
+});
+
+test('a missing wind is missing in every unit, not calm in two of them', async ({ page }) => {
+  // `windToUnits` divided and multiplied whatever it was given, and `null / 3.6` is 0. In
+  // m/s and mph a step with no wind came out with a wind of zero, so the table was drawn —
+  // the reported bug, still alive for anyone not on km/h — and the cell read "0" rather
+  // than "-", which is a different lie about the same hole.
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastOfNulls()) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('windUnits').value = 'ms'; window.saveSettings(); });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+
+  await expect(page.locator('.notice')).toBeVisible();
+  const drawn = await tableDrawn(page);
+  expect(drawn.rows, `${drawn.rows} rows of zeroes in m/s`).toBe(0);
 });
 
 test('a provider that recovers through the chain says nothing', async ({ page }) => {
@@ -4429,7 +4670,7 @@ test('the map still works when storage is unavailable', async ({ page }) => {
   });
 
   const crashes = [];
-  page.on('pageerror', (e) => crashes.push(e.message));
+  page.on('pageerror', (e) => { if (appCrash(e.message)) crashes.push(e.message); });
 
   await page.goto('/index.html');
   await mapReady(page);
@@ -5398,6 +5639,135 @@ test('with compare selected, a new route publishes its forecast and then launche
   expect(await page.evaluate(() => window.__published)).toEqual(['b.gpx']);
   expect(await comparisonsLaunched(page)).toBe(1);
   expect(await compareShown(page)).toBe(true);
+});
+
+test('a comparison of rain-only answers paints the rain', async ({ page }) => {
+  // `compare.js` decided three separate times whether a step counted, and one of them
+  // (`hasAny`) asked for a temperature and nothing else. So a provider answering with rain
+  // and no temperature was dropped from the table while the notice — which counted the
+  // rows BEFORE that filter — saw the rain and stayed quiet. Measured: one row, 20px, no
+  // providers, no notice.
+  //
+  // What is asserted here is the invariant, not which of the two happens: the comparison
+  // may decide it has nothing worth painting, but then it has to say so. Painting the rain
+  // as well needs more of `compare.js` than this change touches — `buildCompareCell` and
+  // the chain builder each had their own temperature test — and that is written up in
+  // HANDOFF as open rather than half-done here.
+  const control = { rainOnly: false };
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
+    const body = forecastAt(20);
+    if (control.rainOnly) {
+      for (const k of ['temperature_2m', 'wind_speed_10m', 'wind_gusts_10m']) {
+        body.hourly[k] = body.hourly.time.map(() => null);
+      }
+      body.hourly.precipitation = body.hourly.time.map(() => 2);
+      body.hourly.precipitation_probability = body.hourly.time.map(() => 80);
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  // OpenWeather answers too, so the chain row has a real provider under it for the hours
+  // it resolves to OpenWeather. Left unstubbed, those requests fail and the chain row is
+  // admitted empty — which is its own finding, written up in HANDOFF, and would make this
+  // test fail for a reason that has nothing to do with rain.
+  await stubOpenWeather(page, {});
+  await page.goto('/index.html');
+  await mapReady(page);
+  // With a key the comparison also builds the OW→AROME→Open-Meteo chain row, which has a
+  // gate of its own: the chain copies a step out of another provider's row and used to
+  // take only the ones with a temperature. Without the key that row is left out and the
+  // gate is never exercised.
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; window.saveSettings(); });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+
+  // A route the app has never seen, so nothing is answered from a cache. Clearing the
+  // cache on the same route was not enough: the comparison came back with the original
+  // temperatures still in its cells, and the test was measuring nothing.
+  control.rainOnly = true;
+  await pickText(page, 'lluvia.gpx', routeAt('Lluvia', 41.40));
+  await expect(routeName(page)).toHaveText('Lluvia');
+
+  // Painted, and painted with the rain. An earlier version of this settled for "or it says
+  // why", because the assertion ran before the comparison had repainted and the emptiness
+  // looked permanent — a deadline mistaken for a defect, which is how compare.js nearly
+  // got written up as broken when it was not.
+  await expect.poll(async () => (await tableDrawn(page)).rows, { timeout: 15000 }).toBeGreaterThan(1);
+
+  // In a FORECAST cell, and `.summary-cell` is NOT one. Measured with the temperature test
+  // put back into `buildCompareCell`: every forecast cell reads "-" while `.summary-cell`
+  // still reads "2mm (80%)", because the summary is built from its own array. Searching
+  // `#weatherTable td` found that one and called the mutation clean — twice.
+  const rainCells = await page.evaluate(() =>
+    [...document.querySelectorAll('#weatherTable td:not(.summary-cell)')]
+      .map((td) => td.textContent.replace(/\s+/g, ' ').trim())
+      .filter((t) => /\d+%/.test(t)));
+  expect(rainCells.length, 'no forecast cell carries the rain the row was admitted for').toBeGreaterThan(0);
+  expect(rainCells.join(' | ')).toContain('80%');
+
+  // Every provider row that was admitted, chain included: a row in the table with nothing
+  // in its cells is the same defect as no row at all, one provider at a time.
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll('#weatherTable tbody tr')].map((tr) => ({
+      label: (tr.querySelector('th') || {}).textContent?.replace(/\s+/g, ' ').trim().slice(0, 24) || '?',
+      // Anything other than a dash. Asking for a percentage was wrong: OpenWeather answers
+      // here with a temperature, a wind and a 5% chance, and 5% is below the threshold at
+      // which the cell prints it — a perfectly good row with no percentage in it.
+      filled: [...tr.querySelectorAll('td:not(.summary-cell)')]
+        .some((td) => td.textContent.replace(/\s+/g, '').replace(/^(OPM|ARM|OWM|OMT|OARM)/, '') !== '-'),
+    })));
+  const empty = rows.filter((r) => !r.filled).map((r) => r.label);
+  expect(empty, `rows admitted with nothing in them: ${JSON.stringify(rows)}`).toEqual([]);
+});
+
+test('a provider that answered nothing is left out of the comparison, not shown empty', async ({ page }) => {
+  // The chain row (OW→AROME→Open-Meteo) was admitted whether or not anything reached it,
+  // with no comment saying why. With a key configured and OpenWeather silent, every step
+  // it copies comes back blank, so the comparison showed a provider column of dashes.
+  // Measured before the fix: `OPW-AromeHD` present, every cell "-".
+  await stubProvider(page, { celsius: 21, offline: false });
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; window.saveSettings(); });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  await selectProvider(page, 'compare');
+  await expect.poll(() => compareShown(page)).toBe(true);
+
+  const rows = await page.evaluate(() =>
+    [...document.querySelectorAll('#weatherTable tbody tr')].map((tr) => ({
+      label: (tr.querySelector('th') || {}).textContent?.replace(/\s+/g, ' ').trim().slice(0, 24) || '?',
+      filled: [...tr.querySelectorAll('td:not(.summary-cell)')]
+        .some((td) => td.textContent.replace(/\s+/g, '').replace(/^(OPM|ARM|OWM|OMT|OARM)/, '') !== '-'),
+    })));
+  expect(rows.length, 'the comparison painted nothing at all').toBeGreaterThan(0);
+  expect(rows.filter((r) => !r.filled), `rows shown with nothing in them: ${JSON.stringify(rows)}`).toEqual([]);
+});
+
+test('a comparison on screen is not wiped by an ordinary forecast that came back empty', async ({ page }) => {
+  // The guard that withholds an empty table went into the early bail, which runs BEFORE
+  // `compareOwnsTable()`. In compare mode the ordinary Open-Meteo computation keeps
+  // filling `window.weatherData` behind the comparison, so an empty one — a provider that
+  // stopped answering, a cache miss — reached that bail and took the comparison and its
+  // summary card down with it, while the comparison itself was perfectly good.
+  await routeInCompareMode(page, {});
+  const before = await tableDrawn(page);
+  expect(before.rows).toBeGreaterThan(0);
+
+  // What a failed ordinary computation leaves behind: the steps are there, the readings
+  // are not. `window.weatherData` is the array the table and the markers read (app.js).
+  await page.evaluate(() => {
+    window.weatherData = (window.weatherData || []).map((s) => ({ ...s, temp: null, windSpeed: null }));
+    window.renderWeatherTable();
+  });
+
+  expect(await compareShown(page), 'the comparison was cleared by the ordinary forecast').toBe(true);
+  const after = await tableDrawn(page);
+  expect(after.rows, `the comparison went from ${before.rows} rows to ${after.rows}`).toBe(before.rows);
+  expect(after.summary, 'the comparison lost its summary card').toBe(before.summary);
 });
 
 test('a comparison still fetching when the speed changes never paints; the one after the new forecast does', async ({ page }) => {
@@ -6766,11 +7136,14 @@ test('the app fits the screen even with a taller header and a notice showing', a
   expect(await overflowBelow(page, '.wtc-wrap')).toBeLessThanOrEqual(1);
 });
 
-/* Apple asks for 44pt and Google for 48dp, and a control below that is missed by a
- * thumb often enough to matter — worst for whoever already finds small targets hard.
- * The website is dense on purpose and stays so; the floor is the app's alone, which
- * is why this measures with the bridge installed. A review measured 22px selects,
- * a 28x28 compare button and a ~32x27 settings button here. */
+/* A control below a fingertip is missed often enough to matter — worst for whoever
+ * already finds small targets hard. The website is dense on purpose and stays so; the
+ * floor is the app's alone, which is why this measures with the bridge installed. A
+ * review measured 22px selects, a 28x28 compare button and a ~32x27 settings button.
+ *
+ * The floor is two numbers, not one (style.css, "touch targets"): 44px for whatever
+ * floats over the map or sits in the header, 36px for the controls panel, where 44
+ * everywhere cost 306px of a 664px screen. 36 clears WCAG 2.2 AA SC 2.5.8 (24x24). */
 const boxOf = (page, selector) =>
   page.evaluate((sel) => {
     const el = document.querySelector(sel);
@@ -6779,45 +7152,87 @@ const boxOf = (page, selector) =>
     return { width: Math.round(width), height: Math.round(height) };
   }, selector);
 
-test('in the app every control is at least 44px to a thumb', async ({ page }) => {
+/* Every interactive thing inside the controls row, with its measured height. The
+ * ceiling matters as much as the floor here — twice the floor has been raised too far
+ * and the panel ate the screen — and a pixel count for the whole panel cannot do the
+ * job, because it cannot be asserted across both engines. They are not even the same
+ * size: Pixel 7 gives 412x839 and iPhone 14 gives 390x664, and `.params` is
+ * `flex-wrap: wrap` with nowrap labels, so 22px of width flips a wrap and costs a whole
+ * row. A number calibrated on one is either a flake or dead weight on the other, and
+ * the same goes for a language change, since Spanish is longer than English. "No
+ * control in the panel is taller than 32px" says the same thing everywhere. */
+const panelControls = (page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('#controlsPanel .params input, #controlsPanel .params select, #controlsPanel .params button, #controlsPanel .params label.file-btn')]
+      .filter((el) => el.offsetParent !== null && el.type !== 'file')
+      .map((el) => ({ what: el.id || el.className, height: Math.round(el.getBoundingClientRect().height) })));
+
+test('in the app every control clears the floor, and none of them grows past it', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
 
-  for (const selector of ['#datetimeRoute', '#apiSource', '#toggleConfig', '.file-btn.small-file-btn']) {
+  // One floor, 28px, for everything the app draws — panel, settings, map controls and
+  // the header toolbar alike. Two earlier rounds gave the map and the header 44 and the
+  // panel 36; both were too big, and the second broke the header outright. Square
+  // controls have to clear it on both axes: the narrow selects had a height floor and
+  // no width for a while, which left 32px of dropdown to aim at.
+  const everywhere = ['#datetimeRoute', '#cyclingSpeed', '#apiSource', '#intervalSelect', '.speed-presets',
+    '.file-btn.small-file-btn', '#toggleCompareDates', '#toggleConfig',
+    '.leaflet-control-zoom-in', '.leaflet-control-zoom-out', '.leaflet-control-recenter-button', '.compass-button'];
+  for (const selector of everywhere) {
     const box = await boxOf(page, selector);
     expect(box, `${selector} is not on the page any more`).not.toBeNull();
-    expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
+    expect(box.width, `${selector} is ${box.width}px wide`).toBeGreaterThanOrEqual(28);
+    expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(28);
   }
 
-  // Both axes for the square ones. Height alone left the settings button 32 wide.
-  for (const selector of ['#toggleConfig', '#toggleCompareDates']) {
+  // And nothing in the panel grows back past 32. This is the assertion that fails when
+  // the floor is raised again, and it reaches controls no list here names.
+  const tall = (await panelControls(page)).filter((c) => c.height > 32);
+  expect(tall, `panel controls over the ceiling: ${JSON.stringify(tall)}`).toEqual([]);
+
+  // The three buttons in Leaflet's bars sit ON the floor, not above it, and they sit on
+  // it together. Content-box drew the pair at 30 and 31, and the recentre button needed
+  // `.leaflet-bar a` in its selector to outrank Leaflet's own 30px — without it the rule
+  // read correctly and did nothing, and a floor-only assertion was happy either way.
+  for (const selector of ['.leaflet-control-zoom-in', '.leaflet-control-zoom-out', '.leaflet-control-recenter-button']) {
     const box = await boxOf(page, selector);
-    expect(box.width, `${selector} is ${box.width}px wide`).toBeGreaterThanOrEqual(44);
+    expect(box.width, `${selector} is ${box.width}px wide`).toBeLessThanOrEqual(28);
+    expect(box.height, `${selector} is ${box.height}px tall`).toBeLessThanOrEqual(28);
   }
 
-  // The map's own controls and the two narrow selects. These were the remainder of the
-  // same finding: a media query shrinks Leaflet's zoom pair to 28px for the website, and
-  // the selects had a height floor but no width, leaving 32px of dropdown to aim at.
-  for (const selector of ['.leaflet-control-zoom-in', '.leaflet-control-zoom-out', '.leaflet-control-recenter-button', '.compass-button', '#intervalSelect', '.speed-presets']) {
+  // Compare mode adds a second date row and a second icon button, both hidden until it
+  // is on — measuring with it off is how a control keeps its old size unnoticed.
+  await page.locator('#toggleCompareDates').click();
+  await expect(page.locator('#datetimeRoute2')).toBeVisible();
+  for (const selector of ['#datetimeRoute2', '#compareDatesNow']) {
     const box = await boxOf(page, selector);
     expect(box, `${selector} is not on the page any more`).not.toBeNull();
-    expect(box.width, `${selector} is ${box.width}px wide`).toBeGreaterThanOrEqual(44);
-    expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(44);
+    expect(box.height, `${selector} is ${box.height}px tall`).toBeGreaterThanOrEqual(28);
   }
-
-  // Square controls have to clear the floor on both axes, not just vertically. This
-  // is the one the review measured at 28x28; #compareDatesNow is its sibling and is
-  // hidden until compare mode is on, so a rect taken from it would be 0 and prove
-  // nothing.
-  const compare = await boxOf(page, '#toggleCompareDates');
-  expect(compare, 'the compare-dates toggle is not on the page any more').not.toBeNull();
-  expect(compare.height, `the compare toggle is ${compare.height}px tall`).toBeGreaterThanOrEqual(44);
-  expect(compare.width, `the compare toggle is ${compare.width}px wide`).toBeGreaterThanOrEqual(44);
+  expect((await boxOf(page, '#compareDatesNow')).width).toBeGreaterThanOrEqual(28);
 
   // And it all still fits: raising the floor must not push the table off the screen.
   expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
+
+  // The map takes whatever is left instead of stopping at a ceiling. On the website
+  // `max-height: 60vh` keeps it from swallowing a tall desktop window; in the app it
+  // only left a gap, because `main` is already the screen minus the header and the map
+  // is the only child that grows — 62vh of an 874px screen is 542px against the 614px
+  // going spare, so 72px sat empty under it.
+  // Nothing under it either: the website's `#map { margin-bottom: 1rem }` separates the
+  // map from what follows, and in the app nothing follows — the forecast table lives
+  // inside `#controlsPanel`, above. Playwright reports `env(safe-area-inset-bottom)` as
+  // 0, so on a phone this number is the home-indicator band and cannot be measured here;
+  // 8 is enough to catch the margin coming back.
+  const slack = await page.evaluate(() => {
+    const r = (s) => document.querySelector(s).getBoundingClientRect();
+    return Math.round(r('main').bottom - r('#map').bottom);
+  });
+  expect(slack, `${slack}px of nothing under the map`).toBeLessThanOrEqual(8);
+
 
   // The settings panel is a second screenful of controls, and measuring with it closed
   // is how the first version of this test called itself "every control" while the API
@@ -6829,7 +7244,7 @@ test('in the app every control is at least 44px to a thumb', async ({ page }) =>
     return inside
       .filter((el) => el.type !== 'checkbox' && el.type !== 'radio' && el.offsetParent !== null)
       .map((el) => ({ id: el.id || el.className || el.tagName, height: Math.round(el.getBoundingClientRect().height) }))
-      .filter((c) => c.height < 44);
+      .filter((c) => c.height < 28);
   });
   expect(small, `settings controls below the floor: ${JSON.stringify(small)}`).toEqual([]);
 });
@@ -6850,8 +7265,14 @@ test('the recent-routes control clears the floor once there is a route to list',
   const button = page.locator('.recent-routes-button');
   await expect(button).toBeVisible();
   const box = await button.boundingBox();
-  expect(Math.round(box.width), `the recent-routes button is ${Math.round(box.width)}px wide`).toBeGreaterThanOrEqual(44);
-  expect(Math.round(box.height), `the recent-routes button is ${Math.round(box.height)}px tall`).toBeGreaterThanOrEqual(44);
+  // The same 28 as everything else: it sits inside the panel, beside the upload button,
+  // and at 44 it was the tallest thing on that row, so loading a route silently grew the
+  // panel. The sweep in the test above runs on a fresh install, where this button does
+  // not exist yet, so the ceiling is swept here too with the panel populated.
+  expect(Math.round(box.width), `the recent-routes button is ${Math.round(box.width)}px wide`).toBeGreaterThanOrEqual(28);
+  expect(Math.round(box.height), `the recent-routes button is ${Math.round(box.height)}px tall`).toBeGreaterThanOrEqual(28);
+  const tall = (await panelControls(page)).filter((c) => c.height > 32);
+  expect(tall, `with a route loaded, panel controls over the ceiling: ${JSON.stringify(tall)}`).toEqual([]);
   expect(await overflowBelow(page, 'main')).toBeLessThanOrEqual(1);
 });
 
@@ -6878,27 +7299,378 @@ test('each recent route is a real button, tall enough and reachable by keyboard'
   expect(await row.evaluate((el) => el.tabIndex)).toBeGreaterThanOrEqual(0);
 });
 
-test('the load label is readable against its own button', async ({ page }) => {
-  // It inherited white from `.file-btn` onto the grey `.small-file-btn` repaints: a
-  // contrast ratio of 1.10:1, a label nobody can read, and no test looks at colour.
+/* ---------- folding the controls away (app only) ----------
+ *
+ * With a route drawn the panel carries the route name, the summary card and the forecast
+ * table, and the map is pinned at its 150px floor with ~130px of controls above it. The
+ * fold turns those into a one-line strip that still names the values.
+ *
+ * The rule the tests are here to pin down is WHEN it springs. Loading a route must not
+ * fold anything — that is exactly when the start time gets adjusted — so a route only
+ * arms it. The first touch on the map or the table is what folds it: the moment of
+ * having stopped setting up and started looking. Once per route, and reopening it by
+ * hand stops it happening again until a different route is loaded. */
+const stripOf = (page) => page.locator('#paramsStrip');
+
+/** Done setting up, now looking. The blur is the part a phone does by itself: a real tap
+ *  on the map moves focus out of whatever field had it, while a dispatched `pointerdown`
+ *  does not, so without this the tests sit for ever inside the "a control has the focus,
+ *  leave it alone" guard and prove only that the guard exists. */
+const lookAt = async (page, selector) => {
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.locator(selector).dispatchEvent('pointerdown');
+};
+const folded = (page) => page.evaluate(() => document.querySelector('#controlsPanel .params').classList.contains('params-folded'));
+
+async function withForecast(page) {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(20)) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await installNativeBridge(page);
+  await page.addInitScript(() => {
+    window.__forecasts = 0;
+    document.addEventListener('cw:forecast', () => { window.__forecasts++; });
+  });
+  await page.goto('/index.html');
+  await mapReady(page);
+}
+
+const forecastsSeen = (page) => page.evaluate(() => window.__forecasts);
+
+test('the strip says what the controls are set to, without opening them', async ({ page }) => {
+  await withForecast(page);
+
+  const strip = stripOf(page);
+  await expect(strip).toBeVisible();
+
+  // Filled from the start, before anything is touched. The values are written into the
+  // controls programmatically at boot, which fires neither `change` nor `input`, so the
+  // only thing that puts them on the strip is the one `summarise()` call at the end of
+  // `setupParamsFold`. Without it the strip is blank until the first edit — and every
+  // other assertion here happens after an edit, so every one of them would still pass.
+  expect((await strip.textContent()).trim().length, 'the strip starts empty').toBeGreaterThan(8);
+
+  // It controls the rows, not the whole panel: `#controlsPanel` also holds the route
+  // name, the summary card and the forecast table, which this button does not fold.
+  const controls = await strip.getAttribute('aria-controls');
+  expect(controls, 'aria-controls names something that is not what folds').toBe(
+    await page.evaluate(() => document.querySelector('#controlsPanel .params').id));
+  expect(controls).not.toBe('controlsPanel');
+
+  // This once read "one change, not a chain", because two edits in a row left the first
+  // one undone — which was taken for the app racing its own settings restore and written
+  // up as pre-existing. It was neither: the strip was calling `loadSettings()` on every
+  // event, and that writes the stored values back into the form. Chained edits stick now.
+  // One edit is still enough to show the strip follows the controls.
+  await page.selectOption('#intervalSelect', '30');
+  await expect(page.locator('#intervalSelect')).toHaveValue('30');
+  await expect(strip).toContainText('30 min');
+
+  // And the rest of it tracks the controls rather than a set of constants: read what
+  // they hold and require the strip to say the same. Everything a folded panel hides —
+  // when, how fast, how often, from whom.
+  const live = await page.evaluate(() => ({
+    speed: document.getElementById('cyclingSpeed').value,
+    interval: document.getElementById('intervalSelect').value,
+    provider: document.getElementById('apiSource').selectedOptions[0].textContent.trim(),
+  }));
+  const text = await strip.textContent();
+  expect(text, `the strip reads "${text}"`).toContain(`${live.speed} km/h`);
+  expect(text).toContain(`${live.interval} min`);
+  expect(text).toContain(live.provider);
+
+  // The departure time, which is half the reason the strip exists — and which nothing
+  // asserted for a while: deleting the block that formats it left every test green.
+  const when = await page.inputValue('#datetimeRoute');
+  const clock = when.slice(11, 16);                    // "2026-09-17T21:45" -> "21:45"
+  expect(text, `the strip reads "${text}" for a departure at ${when}`)
+    .toMatch(new RegExp(clock.replace(':', '[.:]') + '|' + String(Number(clock.slice(0, 2)) % 12 || 12) + '[.:]' + clock.slice(3)));
+
+  // The ACCESSIBLE NAME, not the text: `::before` generated content counts towards the
+  // name (accname step 2F), so reading `textContent` for the triangle proved nothing —
+  // it can never contain pseudo-element content and the assertion passed either way.
+  // What keeps the triangle out is the `aria-label`, and this is what guards it.
+  await expect(strip).toHaveAccessibleName(text.trim());
+
+  // Miles chosen and the speed box still says km/h, because that is what the number in
+  // it is: app.js divides kilometres by it whatever this setting says. Labelling it mph
+  // put a unit next to a figure it is not in and overstated the speed by 61%.
+  await page.evaluate(() => {
+    document.getElementById('distanceUnits').value = 'mi';
+    window.saveSettings();
+  });
+  await page.selectOption('#intervalSelect', '15');
+  const metric = await strip.textContent();
+  expect(metric, `with miles chosen the strip reads "${metric}"`).toContain(`${live.speed} km/h`);
+  expect(metric).not.toContain('mph');
+});
+
+test('loading a route does not fold the controls; the first touch on the map does', async ({ page }) => {
+  await withForecast(page);
+  expect(await folded(page), 'folded before there was anything to fold').toBe(false);
+
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+
+  // The whole point: the route is in, the forecast is on screen, and the controls are
+  // still open, because this is when the start time gets adjusted.
+  expect(await folded(page), 'the controls folded while the route was still being set up').toBe(false);
+  await page.fill('#cyclingSpeed', '18');
+  expect(await folded(page), 'editing a control folded it').toBe(false);
+
+  // Focus is still in the speed box from the edit above, and on a phone the first tap on
+  // the map is how the keyboard gets dismissed. Folding then would take away the very
+  // field being edited, with the focused element inside a subtree going `display: none`.
+  await page.locator('#map').dispatchEvent('pointerdown');
+  await page.waitForTimeout(150);
+  expect(await folded(page), 'it folded the control that had the focus').toBe(false);
+
+  const paramsTall = () => page.evaluate(() => Math.round(document.querySelector('#controlsPanel .params').getBoundingClientRect().height));
+  const tallBefore = await paramsTall();
+  await lookAt(page, '#map');
+  await expect.poll(() => folded(page), { message: 'touching the map did not fold the controls' }).toBe(true);
+
+  // And it says so. Pinning `aria-expanded` at "true" passed every other assertion here
+  // while telling a screen-reader user the controls are open and `display: none`.
+  await expect(stripOf(page)).toHaveAttribute('aria-expanded', 'false');
+
+  // Folded means gone, not merely invisible: a select nobody can see must not be a thing
+  // the keyboard or a screen reader can land on.
+  await expect(page.locator('#apiSource')).toBeHidden();
+  // Except the one row kept out of it, so another route is still one tap away — and it
+  // has to be ON the strip's line, not under it. With `flex: 1 1 auto` the strip asked
+  // for its whole text and the wrapping container gave it the line to itself, pushing
+  // that row down: the fold then saved one row and spent one, for nothing.
+  await expect(page.locator('.file-btn.small-file-btn')).toBeVisible();
+  const line = await page.evaluate(() => {
+    const top = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().top);
+    return Math.abs(top('#paramsStrip') - top('.params-keep'));
+  });
+  expect(line, 'the upload row sits below the strip instead of beside it').toBeLessThanOrEqual(8);
+
+
+  const tallAfter = await paramsTall();
+  expect(tallAfter, `the controls are ${tallAfter}px folded against ${tallBefore}px open`)
+    .toBeLessThan(tallBefore - 60);
+
+  // Open, the opposite has to hold: the strip takes the whole line so the controls wrap
+  // under it rather than trailing off its end. Only the folded half of that pair of flex
+  // rules was ever mutated; this is its twin.
+  await stripOf(page).click();
+  const spread = await page.evaluate(() => {
+    const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+    return { strip: Math.round(r('#paramsStrip').width), rows: Math.round(r('#controlsPanel .params').width) };
+  });
+  expect(spread.strip, `the open strip is ${spread.strip}px of a ${spread.rows}px row`)
+    .toBeGreaterThan(spread.rows - 24);
+
+  // And the point of the exercise: the controls give back most of their height. What
+  // takes it is not asserted here — with a long forecast the table wants it and the map
+  // stays on its 150px floor, which is the layout working as intended, and on the
+  // shorter of the two test viewports that made "the map grew" false while the fold was
+  // doing exactly its job.
+});
+
+test('typing in the controls is not undone by the strip refreshing itself', async ({ page }) => {
+  // The strip refreshes on every `input`, which put it one function call away from the
+  // worst kind of bug: its first version asked `window.loadSettings()` for the language,
+  // and that is not a getter — it writes the stored values back into the form. Every
+  // keystroke in the speed box restored the saved speed, and the `catch` around it hid
+  // the TypeError that followed. Nothing here noticed, because the fold tests only ever
+  // asked whether the panel had folded.
+  await withForecast(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+
+  // A speed has to be STORED first, or the bug cannot bite: `loadSettings` only writes a
+  // field back when there is something saved for it, so on a fresh profile the broken
+  // version looked fine. The preset dropdown is the path that saves one.
+  await page.selectOption('#speedPresets', '20');
+  await expect(page.locator('#cyclingSpeed')).toHaveValue('20');
+
+  await page.fill('#cyclingSpeed', '27');
+  await expect(page.locator('#cyclingSpeed')).toHaveValue('27');
+  await expect(stripOf(page)).toContainText('27 km/h');
+
+  // The date is written back by the same call, and it is the one the strip formats.
+  const when = await page.inputValue('#datetimeRoute');
+  await page.fill('#cyclingSpeed', '28');
+  expect(await page.inputValue('#datetimeRoute'), 'the date was rewritten behind the edit').toBe(when);
+});
+
+test('the forecast table folds the controls too, not just the map', async ({ page }) => {
+  // Both halves of the trigger are wired at boot and only one of them was ever tested,
+  // so `['#map', '.wtc-wrap']` could have lost its second entry and every fold test
+  // would still have passed. The table is also the half that has to survive a render.
+  await withForecast(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+  await expect(page.locator('#weatherTable')).toBeVisible();
+
+  await lookAt(page, '.wtc-wrap');
+  await expect.poll(() => folded(page), { message: 'touching the table did not fold the controls' }).toBe(true);
+});
+
+test('a route arriving while the panel is folded gets it back open', async ({ page }) => {
+  // Arming the fold for the new route is not enough on its own: the class stays where it
+  // was, so the next route began with its controls already hidden and the one flow this
+  // feature exists to protect — load a route, then change the departure time — started
+  // behind a tap nobody asked for.
+  await withForecast(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+  await lookAt(page, '#map');
+  await expect.poll(() => folded(page)).toBe(true);
+
+  const before = await forecastsSeen(page);
+  await pickText(page, 'otra.gpx', routeAt('Otra', 41.40));
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(before);
+  await expect.poll(() => folded(page), { message: 'the new route inherited the fold' }).toBe(false);
+  await expect(page.locator('#datetimeRoute')).toBeVisible();
+});
+
+test('reopened by hand, it folds again the next time you look at the map', async ({ page }) => {
+  // It used to latch: once per route, and reopening the strip stopped it happening again
+  // until a different route was loaded. Changed on the author's call — a fold that fires
+  // once is a rule you cannot rely on, and giving the map its room back is the point.
+  // What did NOT change is the focus guard, which is the thing that stops it taking away
+  // a control while it is being used.
+  await withForecast(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+
+  await lookAt(page, '#map');
+  await expect.poll(() => folded(page)).toBe(true);
+
+  await stripOf(page).click();
+  expect(await folded(page), 'the strip did not reopen').toBe(false);
+
+  // The whole of this test: the second look folds it again, and so does the third.
+  await lookAt(page, '#map');
+  await expect.poll(() => folded(page), { message: 'reopened, it never folded again' }).toBe(true);
+  await stripOf(page).click();
+  await lookAt(page, '.wtc-wrap');
+  await expect.poll(() => folded(page), { message: 'the table half stopped folding after the first time' }).toBe(true);
+
+  // Still not while a control has the focus: reopen, put the focus in the speed box, and
+  // the tap that would dismiss a keyboard leaves the controls alone.
+  await stripOf(page).click();
+  await page.locator('#cyclingSpeed').focus();
+  await page.locator('#map').dispatchEvent('pointerdown');
+  await page.waitForTimeout(150);
+  expect(await folded(page), 'it folded the control that had the focus').toBe(false);
+});
+
+test('the website has no strip and no fold: it is built in native.js, not in the page', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await expect(page.locator('#paramsStrip')).toHaveCount(0);
+  await expect(page.locator('#apiSource')).toBeVisible();
+  // And the markup carries no trace of it either, so nothing can fold by accident.
+  expect(await readFile(join(PUBLIC, 'index.html'), 'utf8')).not.toContain('paramsStrip');
+});
+
+/* The header is the one thing the floor broke outright, and nothing was watching it:
+ * every test measured single controls, never the bar they sit in. The app puts five
+ * buttons there where the website has three — native.js inserts two, and debug is the
+ * fifth — and at 44px each the toolbar came to 213px of a 402px screen, so "MeteoRide"
+ * wrapped under its own logo and the header went from 53px to 74. Spanish and a narrow
+ * phone are what make it tight, so that is what this measures. */
+test.describe('the header toolbar', () => {
+  // 320px is the narrowest phone still in use, and it is where this has teeth: at 390
+  // the bar fits either way, so a test there passes whether the fix is present or not.
+  test.use({ locale: 'es-ES', viewport: { width: 320, height: 700 } });
+
+  test('stays one row with every button the app can put in it', async ({ page }) => {
+    await installNativeBridge(page);
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    await page.locator('#toggleDebug').evaluate((el) => el.classList.remove('debug-hidden'));
+
+    const shown = await page.locator('header nav button:visible').count();
+    expect(shown, 'the app is not showing the five buttons this is here to measure').toBeGreaterThanOrEqual(5);
+
+    // One row means the name starts to the RIGHT of the logo. The vertical version of
+    // this check is worthless: the logo is tall enough that the two boxes still overlap
+    // vertically when the name has dropped to a second line, and it passed happily
+    // through a 74px header. Sideways there is no such ambiguity, and it depends on no
+    // font, language or pixel count.
+    const rows = await page.evaluate(() => {
+      const r = (s) => document.querySelector(s).getBoundingClientRect();
+      const logo = r('.app-logo');
+      const name = r('.app-name');
+      return { beside: name.left >= logo.right, header: Math.round(r('header').height) };
+    });
+    expect(rows.beside, 'the title wrapped under its own logo').toBe(true);
+    expect(rows.header, `the header is ${rows.header}px tall`).toBeLessThanOrEqual(60);
+
+    // Not wrapping is half of it: without the ellipsis the name simply runs on, over the
+    // toolbar and off the page. The guard that used to catch that went out with a
+    // deleted test and nothing replaced it.
+    const wide = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, view: window.innerWidth }));
+    expect(wide.scroll, `the page is ${wide.scroll}px wide in a ${wide.view}px window`).toBeLessThanOrEqual(wide.view + 1);
+    const clip = await page.evaluate(() => {
+      const el = document.querySelector('.app-name');
+      const cs = getComputedStyle(el);
+      return { overflow: cs.overflow, ellipsis: cs.textOverflow, tight: el.scrollWidth > el.clientWidth };
+    });
+    // Comparing rectangles cannot see this: overflowing text paints outside its box while
+    // the box keeps its own width, and `html.cw-native` is `overflow: hidden` so the page
+    // never grows either. Removing the clip left both of those assertions green with the
+    // title painted straight over the toolbar. The clipping itself is what to measure —
+    // and the first line is what stops that being vacuous, by proving the name really
+    // does not fit at this width.
+    expect(clip.tight, 'the name fits at 320px, so this proves nothing').toBe(true);
+    expect(clip.overflow, 'the name is not clipped').toBe('hidden');
+    expect(clip.ellipsis).toBe('ellipsis');
+
+    // The header pulls 8px back out of `env(safe-area-inset-top)`, which is the gap
+    // between the Dynamic Island and the toolbar. Playwright reports that inset as 0,
+    // so the phone case cannot be simulated here — but the subtraction going negative
+    // can, and without the `max()` around it this is -8px and the header loses its top
+    // padding on every device that has no inset at all.
+    const pad = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('header')).paddingTop));
+    expect(pad, `the header top padding computed to ${pad}px`).toBeGreaterThan(0);
+  });
+});
+
+test('the upload control is a named icon, not a row of text', async ({ page }) => {
+  // The glyph got a visible "Upload file" label for a while so the one thing to do on
+  // an empty map had a name. It named it and cost a whole row. The name stays, read
+  // aloud rather than drawn: `.sr-only` on the span, which is why this asks the
+  // accessibility tree instead of looking at the pixels.
   await installNativeBridge(page);
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
 
-  const ratio = await page.evaluate(() => {
+  // The control a screen reader actually lands on is `#gpxFile`, not the label: the
+  // file input is moved off-screen with `opacity: 0` (style.css:1160), which keeps it
+  // in the accessibility tree, and `<label for>` is what names it. So the name is asked
+  // of the input, through the accname algorithm, rather than counted as characters of
+  // `textContent` — that first version passed with `display: none` put back on the
+  // span, because hidden text is still text content while it is no longer a name.
+  await expect(page.locator('#gpxFile')).toHaveAccessibleName(/upload file|cargar fichero/i);
+
+  const drawn = await page.evaluate(() => {
     const el = document.querySelector('.file-btn-text');
-    const box = document.querySelector('.file-btn.small-file-btn');
-    const rgb = (v) => v.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
-    const lum = ([r, g, b]) => {
-      const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-    };
-    const a = lum(rgb(getComputedStyle(el).color));
-    const b = lum(rgb(getComputedStyle(box).backgroundColor));
-    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    const { width, height } = el.getBoundingClientRect();
+    return { width: Math.round(width), height: Math.round(height) };
   });
-  expect(ratio, `the label sits at ${ratio.toFixed(2)}:1 against its button`).toBeGreaterThanOrEqual(4.5);
+  expect(drawn.width, `the label is drawing ${drawn.width}px wide`).toBeLessThanOrEqual(1);
+  expect(drawn.height, `the label is drawing ${drawn.height}px tall`).toBeLessThanOrEqual(1);
+
+  // A square button, on the same line as the provider select rather than below it.
+  const box = await boxOf(page, '.file-btn.small-file-btn');
+  expect(Math.abs(box.width - box.height), `the button is ${box.width}x${box.height}`).toBeLessThanOrEqual(2);
+  const rows = await page.evaluate(() => {
+    const top = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().top);
+    return Math.abs(top('.file-btn.small-file-btn') - top('#apiSource'));
+  });
+  expect(rows, 'the upload button took a row of its own').toBeLessThanOrEqual(8);
 });
 
 test('Back closes the recent-routes menu before it leaves the app', async ({ page }) => {
@@ -6924,41 +7696,23 @@ test('Back closes the recent-routes menu before it leaves the app', async ({ pag
   expect(exited.left, 'Back left the app with the recents menu open').toBe(0);
 });
 
-test('the app names the first step instead of showing a bare folder glyph', async ({ page }) => {
-  await installNativeBridge(page);
-  await goOffline(page);
-  await page.goto('/index.html');
-  await mapReady(page);
-
-  const label = page.locator('.file-btn.small-file-btn .file-btn-text');
-  await expect(label).toBeVisible();
-  expect((await label.textContent()).trim().length).toBeGreaterThan(3);
-
-  // "Visible" is not "fits". A `!important` width elsewhere once pinned the button to
-  // 28px while this label, `white-space: nowrap`, spilled out of it and over the recent
-  // routes control — and `toBeVisible()` was perfectly happy about it. Measure instead.
-  const fit = await page.evaluate(() => {
-    const el = document.querySelector('.file-btn.small-file-btn');
-    const text = el.querySelector('.file-btn-text');
-    return {
-      button: Math.round(el.getBoundingClientRect().right),
-      label: Math.round(text.getBoundingClientRect().right),
-      scroll: document.documentElement.scrollWidth,
-      view: window.innerWidth,
-    };
-  });
-  expect(fit.label, 'the label spills out of its own button').toBeLessThanOrEqual(fit.button);
-  expect(fit.scroll, 'the controls row pushed the page wider than the screen').toBeLessThanOrEqual(fit.view);
-});
-
 test('the website keeps its tight controls: the floor is the app\'s alone', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
   await mapReady(page);
 
-  await expect(page.locator('.file-btn.small-file-btn .file-btn-text')).toBeHidden();
   const box = await boxOf(page, '#apiSource');
-  expect(box.height, 'the website picked up the app-only touch floor').toBeLessThan(44);
+  expect(box.height, 'the website picked up the app-only touch floor').toBeLessThan(28);
+
+  // And the upload label stays unpainted here too. The old assertion was
+  // `toBeHidden()`, which had to go — Playwright calls a 1x1 clipped element visible —
+  // and nothing replaced it, so the website had no guard against the label coming back.
+  const drawn = await page.evaluate(() => {
+    const { width, height } = document.querySelector('.file-btn-text').getBoundingClientRect();
+    return { width: Math.round(width), height: Math.round(height) };
+  });
+  expect(drawn.width, `the website is drawing the label ${drawn.width}px wide`).toBeLessThanOrEqual(1);
+  expect(drawn.height, `the website is drawing the label ${drawn.height}px tall`).toBeLessThanOrEqual(1);
 });
 
 /* ---------- the help page ---------- */

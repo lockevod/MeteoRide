@@ -37,8 +37,9 @@
 
   /* ---------- shared GPX handoff ---------- */
 
-  // The iOS share extension (and "Open in MeteoRide") drops files in a shared
-  // container; the MeteoRideShare plugin hands them over one at a time.
+  // "Open in MeteoRide" drops files in a container the native side owns (an App Group
+  // on iOS, a private dir on Android); the MeteoRideShare plugin hands them over one at
+  // a time.
   let consuming = false;
   let askedAgain = false;
 
@@ -120,7 +121,7 @@
     const app = plugins.App;
     if (!app) return;
     try {
-      // Opened through meteoride:// (share extension) or a file:// URL.
+      // Opened through meteoride:// (Android) or a file:// URL.
       app.addListener('appUrlOpen', (data) => {
         log('appUrlOpen', data && data.url);
         consumePendingShare();
@@ -1125,6 +1126,155 @@
     }, true);
   }
 
+  /* ---------- folding the controls away ---------- */
+
+  /* Once a route is drawn the panel holds the route name, the summary card and the
+     forecast table, and the map is pinned at its 150px floor with the five controls
+     still taking ~130px above it. This folds them to a one-line strip that says what
+     they are set to, so nothing is hidden, only summarised — the strip names the
+     provider and the start time, which are the two things you would reopen it to check.
+
+     App only, and it is built here rather than in `index.html` on purpose: nothing about
+     the page changes for the website, which has the room and does not want it.
+
+     The fold is NEVER automatic while the controls are being used. Loading a route is
+     not the signal — that is exactly when the time gets adjusted — so it only arms the
+     fold. What springs it is a touch on the map or the table with no control holding the
+     focus: that is the moment of having stopped setting up and started looking. Note
+     that this is not always the FIRST touch. A select or a date field keeps the focus
+     after being used, so the tap that dismisses the keyboard is swallowed by the guard
+     in `spring()` and the one after it folds — which is the point of the guard.
+
+     It happens EVERY time, not once per route: open the strip by hand, look at the map
+     again, and it folds again. `spring()` below says why that is the rule. */
+  function setupParamsFold() {
+    const params = document.querySelector('#controlsPanel .params');
+    const gpx = document.getElementById('gpxFile');
+    if (!params || !gpx || document.getElementById('paramsStrip')) return;
+
+    // The row with the upload button and the recent-routes menu stays out of the fold:
+    // switching route is the one thing worth doing straight from a folded panel, and it
+    // costs nothing, because the strip and that row share a line.
+    const keep = gpx.closest('.param-row');
+    if (keep) keep.classList.add('params-keep');
+
+    const strip = document.createElement('button');
+    strip.type = 'button';
+    strip.id = 'paramsStrip';
+    strip.className = 'params-strip';
+    // The text lives in its own span because `text-overflow: ellipsis` needs a block
+    // container: on the flex button itself the text is an anonymous flex item, and a
+    // folded strip hard-clipped mid-character instead of ellipsising.
+    const text = document.createElement('span');
+    text.className = 'params-strip-text';
+    strip.appendChild(text);
+    strip.setAttribute('aria-expanded', 'true');
+    // The rows, not the whole panel: `#controlsPanel` also holds the route name, the
+    // summary card and the forecast table, none of which this button controls.
+    params.id = params.id || 'paramsRows';
+    strip.setAttribute('aria-controls', params.id);
+    params.insertBefore(strip, params.firstChild);
+
+    let armedFor = null;      // the route fingerprint the fold is armed for
+
+    // NOT `window.loadSettings()`. Despite the name it is not a getter: it writes the
+    // stored values back into the form (`el.value = s[id]`, utils.js:528) for the speed,
+    // the date, the interval and the provider, and then returns nothing. Calling it from
+    // the `input` handler below meant every keystroke in the speed box put the saved
+    // value back — the edit was undone as it was typed, and the `catch` swallowed the
+    // TypeError from reading `.language` off undefined so nothing said a word.
+    const lang = () =>
+      document.getElementById('language')?.value || document.documentElement.lang || 'en';
+
+    function summarise() {
+      const parts = [];
+      const when = document.getElementById('datetimeRoute')?.value;
+      if (when) {
+        const d = new Date(when);
+        if (!isNaN(d)) {
+          try {
+            parts.push(d.toLocaleString(lang(), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
+          } catch (_) { parts.push(when.replace('T', ' ')); }
+        }
+      }
+      // Always km/h. The box holds km/h whatever `distanceUnits` says — app.js:713 reads
+      // it raw and divides kilometres by it — so labelling it mph for someone who picked
+      // miles put a number next to a unit it is not in, and overstated it by 61%.
+      const speed = document.getElementById('cyclingSpeed')?.value;
+      if (speed) parts.push(speed + ' km/h');
+      const interval = document.getElementById('intervalSelect')?.value;
+      if (interval) parts.push(interval + ' min');
+      const provider = document.getElementById('apiSource');
+      if (provider?.selectedOptions?.[0]) parts.push(provider.selectedOptions[0].textContent.trim());
+      const line = parts.join(' \u00b7 ');
+      text.textContent = line;
+      // This `aria-label` is not decoration, and it is not a duplicate of the text: it is
+      // what keeps the disclosure triangle out of the accessible name. Generated content
+      // from `::before` IS part of that name (accname step 2F, implemented by all three
+      // engines), so without this a screen reader announces "black down-pointing small
+      // triangle, 17/09...". Same separator as the visible text on purpose — WCAG 2.5.3
+      // (Label in Name) wants the visible string inside the accessible one, or speech
+      // input cannot match what it can see.
+      strip.setAttribute('aria-label', line);
+    }
+
+    function fold(on) {
+      params.classList.toggle('params-folded', on);
+      strip.setAttribute('aria-expanded', String(!on));
+      summarise();
+    }
+
+    strip.addEventListener('click', () => {
+      fold(!params.classList.contains('params-folded'));
+    });
+
+    // Any change to a control refreshes the strip, including the ones made while it is
+    // folded: the compare toggle moves the dates. Note this does NOT cover the values
+    // written in programmatically at boot — assigning `el.value` fires neither event —
+    // which is what the `summarise()` at the end of this function is for.
+    params.addEventListener('change', summarise);
+    params.addEventListener('input', summarise);
+
+    document.addEventListener('cw:forecast', (ev) => {
+      summarise();
+      const print = ev?.detail?.snapshot?.route?.fingerprint || null;
+      if (!print || print === armedFor) return;
+      armedFor = print;                       // a different route: arm again
+      // And open them. Arming alone left the next route inheriting the fold from the
+      // last one, so the very flow this exists to protect — load a route, then change
+      // the departure time — started with the controls already hidden, without the map
+      // or the table having been touched. This is the one place the fold moves without
+      // being asked, and it will also reopen a panel folded by hand: a different route
+      // is a different setup, and starting it with the controls hidden is the worse of
+      // the two surprises.
+      fold(false);
+    });
+
+    /* Every time, not once. This used to latch: the first touch after a route folded the
+       panel, and reopening it by hand stopped it happening again until a different route
+       was loaded. The argument for that was that taking away something the user has just
+       asked for is how a control loses their trust; the argument against it, which is the
+       one that won, is that the fold is how the map gets its room back and a rule that
+       only fires once is a rule you cannot rely on. Opening the strip and looking at the
+       map again folds it again.
+
+       The focus guard stays, and it is the whole of what is left: tapping the map is also
+       how a phone keyboard gets dismissed, and folding then takes away the field being
+       edited, with the focused element inside a subtree going `display: none`. */
+    const spring = () => {
+      if (!armedFor) return;
+      if (params.classList.contains('params-folded')) return;
+      if (params.contains(document.activeElement)) return;
+      fold(true);
+    };
+    for (const sel of ['#map', '.wtc-wrap']) {
+      const el = document.querySelector(sel);
+      if (el) el.addEventListener('pointerdown', spring, { passive: true });
+    }
+
+    summarise();
+  }
+
   /* ---------- boot ---------- */
 
   async function boot() {
@@ -1137,6 +1287,7 @@
     relaxFilePicker();
     watchConnectivity();
     setupRideAlerts();
+    setupParamsFold();
     hideSplash();
 
     // Neither waits for the other. The restore asks for its route at once; a route shared from

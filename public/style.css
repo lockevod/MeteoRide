@@ -3323,10 +3323,27 @@ html.cw-native body {
 }
 
 /* Tight to the top: on a phone every pixel above the map is a pixel of map. The
-   inset is not padding we chose, it is the notch, so only the 0.5rem the website
-   adds is worth trimming. */
+   inset is not padding we chose, it is the notch — but it is not the notch either.
+   `env(safe-area-inset-top)` reserves the whole status-bar band, and on a Dynamic
+   Island phone the island's bottom edge sits a few points above that line, so laying
+   the toolbar out below the full inset left it visibly marooned under the island.
+   Taking a little back closes the gap without reaching it. 8px was the first attempt and
+   it is wrong for the phone that is NOT an island phone: an iPhone 12/13/14 reports a
+   47pt inset over a sensor housing that reaches 44, so 47-8 puts the top of the header
+   row 5px inside the cutout band — and the notch is centred, exactly where a title of
+   this length arrives at 320px. 4px clears the island by a mile (59-4 = 55 against a
+   bottom edge around 48) and misses the housing by 1pt, which is nothing anyone sees.
+
+   Neither figure has been measured on a device. This is geometry from the published
+   insets, not a screenshot.
+
+   `max()` rather than `calc()` because on a device with no inset — Android without a
+   notch, and the page opened in a browser — the subtraction goes negative and the
+   header loses its top padding entirely. This is the one number here that no test
+   covers: Playwright reports `env(safe-area-inset-top)` as 0, so the interesting case
+   cannot be simulated. What the test below does check is that the fallback holds. */
 html.cw-native header {
-  padding-top: calc(0.15rem + env(safe-area-inset-top));
+  padding-top: max(0.15rem, calc(env(safe-area-inset-top) - 0.25rem));
   padding-bottom: 0.15rem;
   padding-left: calc(0.6rem + env(safe-area-inset-left));
   padding-right: calc(0.6rem + env(safe-area-inset-right));
@@ -3334,10 +3351,20 @@ html.cw-native header {
 
 /* Added to the page's own padding, not in place of it: an earlier version set the
    sides to the inset alone, which is zero in portrait, and the text sat on the edge.
-   The bottom keeps the home-indicator inset and nothing else. */
+
+   The bottom is the home-indicator inset less 8px, by the same argument as the header
+   and the island: the inset reserves the whole band, the indicator is a thin pill at
+   the very bottom of it, and the map is the only thing that ever reaches down there.
+   What is NOT given back is the rest — the bottom ~20pt is the system's swipe-up
+   gesture area, and a map drawn under it is a map that is hard to pan.
+
+   `max()` because on a device with no inset the subtraction goes negative. Unlike the
+   header's, this one cannot be tested: with no inset the correct answer is 0 and CSS
+   clamps the negative to 0 too, so the two are indistinguishable from the outside. An
+   assertion was written here and then deleted, because it passed either way. */
 html.cw-native main {
   padding-top: 0;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: max(0px, calc(env(safe-area-inset-bottom) - 0.5rem));
   padding-left: calc(0.5rem + env(safe-area-inset-left));
   padding-right: calc(0.5rem + env(safe-area-inset-right));
   gap: 0.35rem;
@@ -3369,10 +3396,41 @@ html.cw-native main {
 
 /* 300px is a third of a phone screen and cannot shrink, so a notice appearing pushed
    the table off the bottom. Let the map give up the space instead — it is the one
-   element here that reads fine at any height. */
+   element here that reads fine at any height.
+
+   The ceiling is gone. On the website 60vh stops the map swallowing a tall desktop
+   window, but in the app `main` is already exactly the screen minus the header, and the
+   map is the only child that grows — so the cap did nothing but leave a gap: 62vh of a
+   874px screen is 542px, the map had 614px to take, and the other 72 sat empty under it.
+   Without the cap the map takes the slack when there is slack and gives it straight back
+   to the table when a route is loaded, which is what `flex: 1.8` and the floor below are
+   for. */
 html.cw-native #map {
   min-height: 150px;   /* low enough to give way when a notice appears */
-  max-height: 62vh;    /* and the ceiling the website already used, not lower */
+  max-height: none;
+  /* `@media (max-width: 900px) #map { margin-bottom: 1rem }` separates the map from
+     whatever the website puts under it. In the app there is nothing under it — the
+     forecast table lives inside `#controlsPanel`, above — so that margin was 16px of
+     page background along the bottom edge and nothing else. */
+  margin-bottom: 0;
+}
+
+/* Leaflet's zoom anchors are content-box, so the website's 28px plus a 1px border
+   either side drew them at 30 — and 31 for the top one, which also carries the bar's
+   divider, so the pair was visibly uneven. This is the whole change: they land on 28,
+   which is the floor, not under it.
+
+   The recentre button needs its own selector with `.leaflet-bar a` in it. It is an
+   anchor inside a Leaflet bar, so `.leaflet-touch .leaflet-bar a { width: 30px }` from
+   Leaflet's own stylesheet applies to it at (0,2,1) and beat the two-class selector the
+   zoom pair is happy with — the rule was there, looked right, and did nothing. */
+html.cw-native .leaflet-control-zoom .leaflet-control-zoom-in,
+html.cw-native .leaflet-control-zoom .leaflet-control-zoom-out,
+html.cw-native .leaflet-bar a.leaflet-control-recenter-button {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  line-height: 26px;
 }
 
 /* Last resort: if the controls still do not fit, they scroll rather than vanish. */
@@ -3475,39 +3533,39 @@ html.cw-native #weatherTableContainer.dates-col-collapsed #weatherTable.compare-
 
    On the website every one of these is hit with a mouse, where 22px of select is a
    dense, precise, perfectly good target, and the whole controls row fits on one line
-   because of it. In the app they are hit with a thumb. Apple asks for 44pt and Google
-   for 48dp, and the numbers are not decoration: below them the miss rate climbs, and
-   it climbs worst for the people who already find small targets hard.
+   because of it. In the app they are hit with a thumb, and 22px is where the miss rate
+   starts to climb — worst for whoever already finds small targets hard.
 
-   So the floor is raised for the app alone, through the class native.js sets before
-   the first paint. The look is unchanged — same fonts, same borders, same colours,
-   same layout — the boxes just stop being shorter than a fingertip. Height becomes a
-   minimum rather than a fixed value so a control whose content needs more room can
-   still take it. `#controlsPanel` already scrolls in the app, which is what absorbs
-   the extra height.
+   This has been through two rounds and both were wrong in the same direction. The
+   first put a 44px floor (Apple's HIG figure) on every control in the app: the
+   controls panel went from 192px to 306px of a 664px screen, the map's zoom pair and
+   recentre button turned into slabs, and with the debug button on the header toolbar
+   grew so wide that "MeteoRide" wrapped under its own logo. The second split it into
+   44 for the map and 36 for the panel, which was less bad and still too big.
 
-   If these ever have to shrink again, shrink the padding or the font, not the floor.
+   So: one floor, 28px, and nothing else touched. It clears the size threshold that is
+   actually normative — WCAG 2.2 AA, SC 2.5.8, 24x24 CSS px; the 44x44 figure is SC
+   2.5.5, which is AAA — and it leaves the app looking like the website, which is the
+   point. In practice it moves two things and only two: the 22px selects and the 26px
+   compass. The zoom pair (30), the recentre button (30), the compare toggle (28), the
+   upload button (28) and the settings controls (28-30) were already above it and are
+   left exactly as the website draws them.
+
+   If a control ever has to go under 28 for space, it must still clear 24, and a note
+   here should say which one and why.
 */
 
-html.cw-native #controlsPanel .params input[type="text"],
-html.cw-native #controlsPanel .params input[type="number"],
-html.cw-native #controlsPanel .params input[type="datetime-local"],
+html.cw-native #controlsPanel .params input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 html.cw-native #controlsPanel .params select,
-html.cw-native #intervalSelect,
-html.cw-native .speed-presets {
-  height: auto;
-  min-height: 44px;
-}
-
-/* The settings panel is a second screenful of controls and was missed the first time
-   round: its inputs, selects and buttons live in `#configMenu`, not in
-   `#controlsPanel .params`, so none of the rules above reached them. The API key field
-   and its check button are the ones a new user touches first. */
+html.cw-native #controlsPanel .params button,
 html.cw-native #configMenu input:not([type="checkbox"]):not([type="radio"]),
 html.cw-native #configMenu select,
-html.cw-native #configMenu button {
-  height: auto;
-  min-height: 44px;
+html.cw-native #configMenu button,
+html.cw-native .recent-routes-button,
+html.cw-native header nav button,
+html.cw-native .icon-btn {
+  min-width: 28px;
+  min-height: 28px;
 }
 
 /* A checkbox stays its own size — growing the box would look broken — but its label is
@@ -3515,111 +3573,127 @@ html.cw-native #configMenu button {
 html.cw-native #configMenu label {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: 28px;
 }
 
-/* The map's own controls: Leaflet's zoom pair and the recentre button, which a media
-   query shrinks to 28px on a phone for the website's sake. They sit over the map, so
-   growing them costs map rather than layout, and they are the controls a thumb reaches
-   for while riding. `.leaflet-touch` raises specificity on Leaflet's own rules, hence
-   naming the container here. */
-html.cw-native .leaflet-control-zoom .leaflet-control-zoom-in,
-html.cw-native .leaflet-control-zoom .leaflet-control-zoom-out {
-  /* Leaflet's bar puts a 1px border between the two, and its anchors are content-box,
-     so without this the top one comes out 44x45 and the pair is visibly uneven. */
-  box-sizing: border-box;
-  width: 44px;
-  height: 44px;
-  line-height: 44px;
-}
-/* The compass, the one control on the map this round would otherwise have left behind —
-   26x26, sitting right beside the zoom pair that just grew to 44. `!important` because
-   the website's rule above uses it on width and height. The icon inside keeps its 22px:
-   the target grows, the drawing does not. */
+/* The compass is the one map control below the floor: 26x26 beside a 30px zoom pair.
+   `!important` because the website's own rule uses it on both axes. The icon inside
+   keeps its 22px — the target grows, the drawing does not. */
 html.cw-native .leaflet-compass .compass-button {
-  width: 44px !important;
-  height: 44px !important;
+  width: 28px !important;
+  height: 28px !important;
 }
 
-/* The recentre button is not listed here on purpose: it also carries `.icon-btn`, which
-   the rule below already floors at 44px. Measuring it proved the rule here was dead —
-   removing it changed nothing — and a line that looks load-bearing and is not is how a
-   reader comes to trust the wrong thing. The test measures the button, so if it ever
-   loses `.icon-btn` that shows up as a failure rather than as silence. */
-
-/* Width as well as height for the two narrow selects. 32px of dropdown is a target a
-   thumb misses; the row has the room because the date field above it is what sets the
-   width of the panel. */
-html.cw-native #intervalSelect,
-html.cw-native .speed-presets {
-  min-width: 44px;
-}
-
-/* The recent-routes button is built in ui.js with inline padding, so it never matched
-   any selector above: 18px of icon plus 4px of padding a side plus borders is 28 wide
-   and 32 tall. `min-width`/`min-height` still win over inline padding, which is why
-   they are what this uses. Its menu items are targets too. */
-html.cw-native .recent-routes-button {
-  min-width: 44px;
-  min-height: 44px;
-  justify-content: center;
-}
-
-/* The rows are `.recent-routes-menu-item` buttons built in ui.js; naming the class is
-   what makes this reach them, and the previous element-name selectors did not. */
-html.cw-native .recent-routes-menu-item,
-html.cw-native .recent-routes-menu button,
-html.cw-native .recent-routes-menu a,
-html.cw-native .recent-routes-menu li {
+/* The rows of the recent-routes menu are `.recent-routes-menu-item` buttons built in
+   ui.js. They keep more room than the floor asks for because the menu is a popup over
+   the page, so its height costs nothing, and a list of routes is scrolled and tapped —
+   exactly where a short row is missed. The menu lives inside `.params`, so this needs
+   `#controlsPanel` to outrank the floor above it: as plain classes it lost, and the
+   rows came out 28px with the rule sitting right there looking like it worked. */
+html.cw-native #controlsPanel .recent-routes-menu-item,
+html.cw-native #controlsPanel .recent-routes-menu button,
+html.cw-native #controlsPanel .recent-routes-menu a,
+html.cw-native #controlsPanel .recent-routes-menu li {
   min-height: 44px;
 }
 
-/* The compare-dates control is 28x28 on the website and square, so both axes move. */
-html.cw-native .icon-btn {
-  min-width: 44px;
-  min-height: 44px;
-}
-
-html.cw-native header nav button {
-  min-height: 44px;
-  /* The settings button is as square as the compare toggle (it was ~32x27), so it
-     needs the floor on both axes. Height alone left it 32 wide. */
-  min-width: 44px;
-}
-
-/* A folder glyph on its own is not a call to action: the app opens on an empty map
-   and the one thing to do next has no name. The label is the `upload_label` string
-   the settings already use, so there is no new wording to translate. Website
-   untouched — its row is tight on purpose and a mouse hovers for the tooltip. */
-.file-btn-text {
-  display: none;
-}
-
-/* `!important` here only because `.small-file-btn` pins width, height and padding with
-   `!important` of its own (style.css:1489). Without matching it the button stayed 28px
-   wide with no padding while the label inside kept `white-space: nowrap`, so the text
-   spilled out of the button and over `#recentRoutesContainer` — the app shipped a
-   broken control while three tests reported green, because a span that overflows is
-   still "visible". Those `!important`s are the website's and are left alone. */
-html.cw-native .file-btn.small-file-btn {
-  display: inline-flex;
+/* Not a target-size rule, a wrapping one: the header is a single row that cannot wrap,
+   and the app puts more buttons in it than the website does — native.js inserts two
+   (see the note at `html.cw-native header nav` above) and debug makes five. `min-width:
+   0` alone was not enough, because the line break happened between the logo and the
+   name, where an ellipsis inside the name can do nothing about it. As a flex row there
+   is no such break to take, so the title gives way by truncating. The gap replaces the
+   whitespace between the two tags, which flex would otherwise eat. */
+html.cw-native header h1 {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: auto !important;
-  min-width: 44px;
-  height: auto !important;
-  min-height: 44px;
-  padding: 0 12px !important;
+  gap: 10px;
+  min-width: 0;
 }
 
-html.cw-native .file-btn-text {
-  display: inline;
-  font-size: 14px;
+html.cw-native header h1 .app-name {
+  min-width: 0;
   white-space: nowrap;
-  /* `.file-btn` is a blue button with white text; `.small-file-btn` repaints the box
-     light grey but not the colour, so this label inherited white on #f3f4f6 — a
-     contrast ratio of 1.10:1, which is a label nobody can read. WCAG asks 4.5:1 for
-     text this size; #243746 on that grey is about 11:1. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The folder glyph got a visible "Upload file" label for a while, so that the one
+   thing to do on an empty map had a name. It cost a whole row of a panel that was
+   already too tall, on both the phone and the website. The name is still there — the
+   span carries `.sr-only`, so VoiceOver and TalkBack read the translated string, and
+   `#gpxFile` is what they land on — but the button is a square icon again, the size
+   the website draws it. Nothing here resizes it: 28px is what it already was. */
+
+/* ---------------------------------------------------------------- folding controls
+
+   The strip native.js inserts at the top of `.params`, and the folded state it toggles
+   on that container. App only: on the website the button is never built, so none of
+   this has anything to match. See `setupParamsFold` in native.js for when it springs.
+
+   `.params` is already `display: flex; flex-wrap: wrap`, which is what makes the two
+   states fall out of one rule each: open, the strip takes the whole line and everything
+   below it wraps as before; folded, the strip shrinks to its text and the upload row —
+   the one row kept out of the fold — comes up beside it. */
+html.cw-native .params-strip {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 8px 2px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
   color: #243746;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The disclosure triangle. `::before` rather than a character in the text so that the
+   accessible name stays the values and nothing else — a screen reader announcing
+   "triangle 17/09" is what putting it in `textContent` buys. */
+html.cw-native .params-strip::before {
+  content: "\25be";
+  font-size: 11px;
+  line-height: 1;
+  color: #4a5a70;
+}
+
+html.cw-native .params-folded .params-strip {
+  /* `1 1 0` and not `1 1 auto`: with `auto` the basis is the text's own width, and a
+     wrapping flex container wraps rather than shrink it — the strip took the line to
+     itself and pushed the upload row below, which is the row the fold was supposed to
+     save. From zero it shrinks, and the span inside ellipsises. */
+  flex: 1 1 0;
+}
+
+/* The ellipsis belongs here and not on the button. `text-overflow` needs a block
+   container, and `.params-strip` is a flex box, so its text is an anonymous flex item
+   that hard-clips mid-character instead. A `min-width: 0` on the button would have been
+   dead anyway: `#controlsPanel .params button` floors it at 28px from a selector this
+   one cannot outrank. */
+html.cw-native .params-strip-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+html.cw-native .params-folded .params-strip::before {
+  content: "\25b8";
+}
+
+/* Everything except the strip and the row that was kept out of it. `display: none` and
+   not a height of 0, so the controls leave the tab order and the accessibility tree
+   with the pixels — a select nobody can see is not a control anybody should land on.
+
+   `!important` because `.provider-row` carries `style="display:flex"` in the markup
+   (index.html), and an inline style beats any selector without it. Without it the
+   provider row stayed on screen while everything around it folded, and the test that
+   only asked whether the class had been applied was perfectly happy. */
+html.cw-native .params-folded > .param-row:not(.params-keep),
+html.cw-native .params-folded > .wrap-break {
+  display: none !important;
 }
