@@ -484,8 +484,15 @@ URL means widening it again.
 ## Publishing: the run, in order
 
 Everything below the fold in this file is *why*. This is *what to do*, once, in order.
-Numbers as they stand today: version **1.0.0**, build **2**, bundle id **cc.meteoride.app**,
-project `mobile/ios/App/App.xcodeproj`.
+Bundle id **cc.meteoride.app**, project `mobile/ios/App/App.xcodeproj`.
+
+The numbers are deliberately not written here, because a number in a document rots: this
+line used to say "build 2" long after it was 4. `MARKETING_VERSION` is derived from
+`mobile/package.json` on every build by `build-www.mjs`, so change it there and nowhere
+else. `CURRENT_PROJECT_VERSION` is the build number, it lives only in the Xcode project,
+and the only authority on which ones are spent is App Store Connect → TestFlight: a
+repeated (version, build) pair is refused at upload. Bump it when that list already shows
+the one you are about to send.
 
 **Do not rename that project.** It was called `MeteoRide.xcodeproj` for a while and the
 only visible sign was a line in the middle of `cap sync`'s output:
