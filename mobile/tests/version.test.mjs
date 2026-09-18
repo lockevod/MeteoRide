@@ -39,11 +39,24 @@ test('Android versionName matches mobile/package.json', async () => {
 });
 
 test('iOS MARKETING_VERSION matches mobile/package.json', async (t) => {
-  const pbxprojPath = join(MOBILE, 'ios/App/App.xcodeproj/project.pbxproj');
-  if (!existsSync(pbxprojPath)) {
+  // Two different situations, and conflating them cost this test its job for days. A
+  // missing `mobile/ios/` means nothing to check yet: skip. A PRESENT `mobile/ios/` whose
+  // project is not `App.xcodeproj` means the project was renamed in Xcode — and then this
+  // test skipped, announcing "run cap add ios first", which was false, while `cap sync`
+  // stopped writing Package.swift and build-www stopped syncing MARKETING_VERSION for the
+  // very same reason. Capacitor hardcodes the name; that case has to be loud.
+  const appDir = join(MOBILE, 'ios/App');
+  if (!existsSync(appDir)) {
     t.skip('mobile/ios/ is not present — run `cap add ios` (or `npm run add:ios`) first');
     return;
   }
+  const pbxprojPath = join(appDir, 'App.xcodeproj/project.pbxproj');
+  assert.ok(
+    existsSync(pbxprojPath),
+    'mobile/ios/App exists but App.xcodeproj does not: the Xcode project has been renamed. ' +
+    'Capacitor hardcodes App/App.xcodeproj, so Package.swift and MARKETING_VERSION both ' +
+    'stop being written. Rename it back; the app name lives in CFBundleDisplayName.'
+  );
   const version = await packageVersion();
   const pbxproj = await readFile(pbxprojPath, 'utf8');
   const marketingVersions = [...pbxproj.matchAll(/MARKETING_VERSION = ([^;]+);/g)].map((m) => m[1]);

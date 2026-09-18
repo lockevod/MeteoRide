@@ -116,10 +116,13 @@ async function writeVersionFile() {
   log(`wrote scripts/version.js (${version})`);
 }
 
-/* Capacitor generates `App.xcodeproj`, but the project can be renamed in Xcode — this
- * one is `MeteoRide.xcodeproj` — and the hardcoded path then matched nothing, so the
- * version sync below silently became a no-op that nobody would notice until a build
- * shipped with the wrong MARKETING_VERSION. Found by review, not by a failure. */
+/* Capacitor generates `App.xcodeproj` and hardcodes that name, but the project CAN be
+ * renamed in Xcode, and this one was for a while. A hardcoded path here then matched
+ * nothing and the version sync below silently became a no-op that nobody would notice
+ * until a build shipped with the wrong MARKETING_VERSION. Found by review, not by a
+ * failure. The project has been renamed back — Capacitor stops writing Package.swift
+ * otherwise — so this lookup is belt and braces, and the belt is docs/IOS.md saying
+ * not to rename it. */
 function findIosPbxproj() {
   const app = join(MOBILE, 'ios/App');
   if (!existsSync(app)) return null;

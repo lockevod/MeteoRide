@@ -1676,9 +1676,21 @@ Siete hallazgos. Cuatro arreglados, uno corregido como error de relato, dos abie
   atributos se saltaba entera. Ahora los tres fallan a gritos, con sus propias aserciones.
   Añadidos MIME, `CFBundleTypeRole`, y una comparación contra el `Info.plist` generado —
   que es el que se compila y no estaba cubierto por nada.
-- **Medio — el proyecto Xcode se renombró a `MeteoRide.xcodeproj` y `build-www.mjs`
-  buscaba `App.xcodeproj`.** Ajeno a esta tanda: la sincronización de `MARKETING_VERSION`
-  llevaba siendo un no-op silencioso. Ahora busca el `.xcodeproj` que haya.
+- **Medio — el proyecto Xcode se había renombrado a `MeteoRide.xcodeproj`.** Ajeno a esta
+  tanda, y con tres víctimas, todas silenciosas:
+  1. `cap sync` dejaba de escribir `CapApp-SPM/Package.swift` —el fichero que lista las
+     dependencias SPM de cada plugin— con un `[error] ENOENT` en mitad de su salida que
+     no rompe nada hasta que se añade o se sube un plugin, y entonces el build de iOS
+     simplemente no se entera.
+  2. La sincronización de `MARKETING_VERSION` en `build-www.mjs` era un no-op.
+  3. **Y `tests/version.test.mjs` existía justamente para cazar (2), pero saltaba**
+     anunciando "ejecuta `cap add ios` primero", que era falso.
+
+  Capacitor codifica `App/App.xcodeproj` a fuego (`@capacitor/cli/dist/config.js`), así que
+  el proyecto se ha renombrado de vuelta: `Package.swift` y la versión vuelven a escribirse.
+  El nombre visible de la app sale de `CFBundleDisplayName`, no del proyecto. El test
+  distingue ahora "iOS sin generar" (salta) de "iOS generado con el proyecto renombrado"
+  (falla, y dice por qué), y `docs/IOS.md` lo advierte en la receta de publicación.
 
 **Corregido como error de relato.** Ver arriba: el cambio de UTI importado a exportado
 probablemente no era el fallo, y yo lo conté como tal. Rectificado en el plist, en

@@ -485,7 +485,22 @@ URL means widening it again.
 
 Everything below the fold in this file is *why*. This is *what to do*, once, in order.
 Numbers as they stand today: version **1.0.0**, build **2**, bundle id **cc.meteoride.app**,
-project `mobile/ios/App/MeteoRide.xcodeproj`.
+project `mobile/ios/App/App.xcodeproj`.
+
+**Do not rename that project.** It was called `MeteoRide.xcodeproj` for a while and the
+only visible sign was a line in the middle of `cap sync`'s output:
+
+```
+[error] Unable to write to .../ios/App/CapApp-SPM/Package.swift. Verify it is not already open.
+Error: ENOENT: no such file or directory, open '.../ios/App/App.xcodeproj/project.pbxproj'
+```
+
+Capacitor hardcodes `App/App.xcodeproj` (`@capacitor/cli/dist/config.js`), so with any
+other name it stops regenerating `Package.swift` — the file that lists every plugin's SPM
+dependency. Nothing breaks until a plugin is added or upgraded, and then the iOS build
+quietly does not see it. `build-www.mjs`'s `MARKETING_VERSION` sync was silently a no-op
+for the same reason, which is why the app name belongs in `CFBundleDisplayName` (it is
+already `MeteoRide` there) and not in the project's file name.
 
 ### Before Xcode is opened
 
