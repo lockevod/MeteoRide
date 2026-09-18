@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 const MOBILE = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = join(MOBILE, '../public/icons/icon-1024.png');
 const APPICON = join(MOBILE, 'ios/App/App/Assets.xcassets/AppIcon.appiconset');
+const SPLASH = join(MOBILE, 'ios/App/App/Assets.xcassets/Splash.imageset');
 const ANDROID_RES = join(MOBILE, 'android/app/src/main/res');
 
 /**
@@ -185,19 +186,32 @@ export function contentBox({ width, height, rgba }) {
  * is not what iOS shows for the installed web app, and looks wrong beside it.
  */
 export function render(source, size) {
+  return renderOnto(source, size, size);
+}
+
+/**
+ * The same drawing on a canvas of any shape, with `cover` saying how much of the
+ * SHORTER side the artwork's longer side takes. `render` is this at 1:1 on a square,
+ * which is why it comes out byte for byte as it did before this existed.
+ *
+ * The splash wants the other end of that range. A launch image is not an icon blown
+ * up to the screen: the artwork sits small and centred on the app's colour, which is
+ * also what makes one image work at 320x480 and at 1920x1280 without redrawing it.
+ */
+export function renderOnto(source, canvasW, canvasH, cover = 1, background = BACKGROUND) {
   const { width, height, rgba } = source;
   const box = contentBox(source);
-  const scale = size / Math.max(box.width, box.height);
+  const scale = (Math.min(canvasW, canvasH) * cover) / Math.max(box.width, box.height);
   const drawW = Math.max(1, Math.round(box.width * scale));
   const drawH = Math.max(1, Math.round(box.height * scale));
-  const offsetX = Math.round((size - drawW) / 2);
-  const offsetY = Math.round((size - drawH) / 2);
+  const offsetX = Math.round((canvasW - drawW) / 2);
+  const offsetY = Math.round((canvasH - drawH) / 2);
 
-  const out = Buffer.alloc(size * size * 3);
-  for (let i = 0; i < size * size; i++) {
-    out[i * 3] = BACKGROUND[0];
-    out[i * 3 + 1] = BACKGROUND[1];
-    out[i * 3 + 2] = BACKGROUND[2];
+  const out = Buffer.alloc(canvasW * canvasH * 3);
+  for (let i = 0; i < canvasW * canvasH; i++) {
+    out[i * 3] = background[0];
+    out[i * 3 + 1] = background[1];
+    out[i * 3 + 2] = background[2];
   }
 
   for (let y = 0; y < drawH; y++) {
@@ -215,13 +229,13 @@ export function render(source, size) {
           const a = rgba[i + 3] / 255;
           // Over the background rather than over black, which is what discarding
           // the channel would leave around the soft edges.
-          r += rgba[i] * a + BACKGROUND[0] * (1 - a);
-          g += rgba[i + 1] * a + BACKGROUND[1] * (1 - a);
-          b += rgba[i + 2] * a + BACKGROUND[2] * (1 - a);
+          r += rgba[i] * a + background[0] * (1 - a);
+          g += rgba[i + 1] * a + background[1] * (1 - a);
+          b += rgba[i + 2] * a + background[2] * (1 - a);
           n++;
         }
       }
-      const to = ((y + offsetY) * size + (x + offsetX)) * 3;
+      const to = ((y + offsetY) * canvasW + (x + offsetX)) * 3;
       out[to] = Math.round(r / n);
       out[to + 1] = Math.round(g / n);
       out[to + 2] = Math.round(b / n);
@@ -307,7 +321,96 @@ async function main() {
   log(`source ${source.width}x${source.height}`);
   if (hasIos) await installIos(source);
   else log('no iOS project, skipping it');
-  if (hasAndroid) await installAndroid(source, ANDROID_RES);
+  if (existsSync(SPLASH)) await installIosSplash(source);
+  if (hasAndroid) {
+    await installAndroid(source, ANDROID_RES);
+    await installAndroidSplash(source, ANDROID_RES);
+  }
+}
+
+/**
+ * How much of the shorter side of a launch image the artwork takes. Capacitor's own
+ * placeholder is about a twentieth, which is a logo lost on a white field; filling the
+ * screen would be a wall of icon. A bit over a quarter reads as an app opening.
+ *
+ * iOS gets a much smaller number for the same result on screen. Android picks a bitmap
+ * already shaped like the device, so what is drawn is what is shown. iOS has one square
+ * image and the storyboard scales it to FILL (`scaleAspectFill`, LaunchScreen.storyboard),
+ * so a 2732 square on a 430x932 phone is scaled by 932/2732 and cropped left and right:
+ * the artwork ends up sized against the screen's LONG side. 0.28 there came out at about
+ * 60% of the width. 0.13 lands near a quarter of the width on a phone and a sixth on an
+ * iPad, which is the same drawing Android gets.
+ */
+const SPLASH_COVER = 0.28;
+const SPLASH_COVER_IOS = 0.13;
+
+/**
+ * The launch image's field, which is NOT `BACKGROUND`. `BACKGROUND` (#1E5F8F) is the blue
+ * behind the icon, chosen to sit under the artwork; the app's own colour is #0B6297 — the
+ * header in `style.css`, `theme-color` in `index.html`, and `backgroundColor` three times
+ * in `capacitor.config.json`, which is what the window and the splash plugin paint. A
+ * launch image in the icon's blue puts a visible step of colour between the image and the
+ * window behind it, and again when the plugin hides the image.
+ */
+const SPLASH_BACKGROUND = [0x0b, 0x62, 0x97];
+
+/**
+ * The launch image, which nothing was writing. `install-icons` replaced the app icon and
+ * left `Splash.imageset` and the Android `splash.png` drawables exactly as the template
+ * shipped them: the Capacitor logo, a blue cross, on white. So the app's own icon was
+ * right on the home screen and tapping it showed somebody else's mark on a white screen
+ * for as long as the web view took to paint. `backgroundColor` in `capacitor.config.json`
+ * does not help — the placeholder is an opaque full-bleed PNG and covers it.
+ *
+ * Android reads the size of every bitmap the template shipped and replaces each in place.
+ * iOS does NOT: it writes one square for every slot, because the storyboard scales and
+ * crops a single image to whatever the device is, and the three slots the template lists
+ * are the same picture at 1x/2x/3x. The filename is read only to pick the side length, so
+ * a template that ever ships a non-square name would still get a square — deliberate, and
+ * the reason this says so rather than claiming to honour the template's shape.
+ */
+export async function installIosSplash(source) {
+  const contents = JSON.parse(await readFile(join(SPLASH, 'Contents.json'), 'utf8'));
+  const names = [...new Set((contents.images || []).map((i) => i.filename).filter(Boolean))];
+  if (!names.length) throw new Error('Splash Contents.json names no image files');
+
+  // One square canvas for every slot. iOS scales and crops it to whatever the device is,
+  // and a square big enough for the largest iPad covers every phone in both orientations.
+  const side = Math.max(...names.map((n) => parseInt(/(\d+)x\d+/.exec(n)?.[1] || '0', 10)), 2732);
+  const png = encodePng(side, side, renderOnto(source, side, side, SPLASH_COVER_IOS, SPLASH_BACKGROUND));
+  for (const name of names) await writeFile(join(SPLASH, name), png);
+  log(`wrote ${names.length} iOS splash image${names.length === 1 ? '' : 's'} at ${side}px`);
+}
+
+export async function installAndroidSplash(source, res) {
+  // Android keeps a separate bitmap per density AND per orientation, at sizes the
+  // template chose. Read each one's header and write a replacement of the same shape,
+  // so nothing here has to know what `drawable-land-xxxhdpi` is supposed to be.
+  // Every `drawable` variant, not a list of the qualifiers seen today: `drawable-night`,
+  // `drawable-v24` and `drawable-anydpi-v26` are all resource folders Android would pick
+  // over the plain one, and a pattern that names only `land`/`port` and a density would
+  // leave the placeholder in place in any of them while reporting the others written.
+  // Nothing is written where there is no `splash.png` to replace.
+  const folders = (await readdir(res)).filter((d) => d === 'drawable' || d.startsWith('drawable-'));
+  let written = 0;
+  for (const folder of folders) {
+    const file = join(res, folder, 'splash.png');
+    if (!existsSync(file)) continue;
+    const before = await readFile(file);
+    // Read the header only once it is certain there is one: a truncated file, or anything
+    // that is not a PNG under that name, otherwise throws out of `readUInt32BE` and takes
+    // the whole run with it — the size check below would come far too late.
+    if (before.length < 24 || before.readUInt32BE(0) !== 0x89504e47) {
+      log(`note: ${folder}/splash.png is not a readable PNG and was left alone`);
+      continue;
+    }
+    const w = before.readUInt32BE(16);
+    const h = before.readUInt32BE(20);
+    if (!w || !h) { log(`note: ${folder}/splash.png has no readable size and was left alone`); continue; }
+    await writeFile(file, encodePng(w, h, renderOnto(source, w, h, SPLASH_COVER, SPLASH_BACKGROUND)));
+    written++;
+  }
+  log(written ? `wrote ${written} Android splash images` : 'no Android splash images found');
 }
 
 async function installIos(source) {
