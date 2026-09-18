@@ -2,14 +2,18 @@ import Foundation
 
 /// Drop box for routes that arrive from outside the app.
 ///
-/// Two producers write here: the share extension (a GPX shared from Files, Mail,
-/// Komoot, Strava…) and the main app when another app opens a .gpx/.kml "in"
-/// MeteoRide. The web layer drains it through `MeteoRideSharePlugin`.
+/// One producer writes here: the app itself, when another app opens a .gpx/.kml "in"
+/// MeteoRide through `CFBundleDocumentTypes` → `SceneDelegate`. The web layer drains it
+/// through `MeteoRideSharePlugin`.
 ///
-/// This file must belong to BOTH targets: the app and the share extension.
+/// There was a share extension once, and it was a second producer over the same App
+/// Group folder — which is what the UUID token in `inboxFileName` is left over from. It
+/// was removed because its share-sheet entry is indistinguishable from the document one
+/// and takes the tap, and no app extension can open its containing app. Do not add one
+/// back; docs/IOS.md step 5 has the whole account.
 enum MeteoRideShareStore {
 
-    /// Must match the App Group enabled on both targets.
+    /// Must match the App Group enabled on the App target.
     static let appGroupId = "group.cc.meteoride.app"
 
     private static let folderName = "IncomingRoutes"
@@ -85,14 +89,73 @@ enum MeteoRideShareStore {
         let scoped = fileURL.startAccessingSecurityScopedResource()
         defer { if scoped { fileURL.stopAccessingSecurityScopedResource() } }
 
+        // `LSSupportsOpeningDocumentsInPlace` is false, so the system COPIES each opened
+        // document into this app's own Documents/Inbox and hands over the copy. That copy
+        // is ours, and nothing else ever deletes it — the 24-hour prune only sweeps the
+        // App Group folder — so left alone every route ever opened stays in the sandbox
+        // for good, at up to 25 MiB each.
+        //
+        // Discarded only on a DEFINITIVE answer: stored, or rejected for what the file
+        // is. A read that fails is not a verdict — no space, an iCloud download that has
+        // not finished, a bad moment — and deleting there would destroy the only copy of
+        // a route the user did ask for, silently, with `ingest` returning false and
+        // nothing announced. Those stay for `recoverSystemInbox` to retry.
         guard let data = readCapped(fileURL) else { return false }
-        return accepts(name: fileURL.lastPathComponent, data: data)
-            && store(data: data, suggestedName: fileURL.lastPathComponent) != nil
+        guard accepts(name: fileURL.lastPathComponent, data: data) else {
+            discardSystemInboxCopy(fileURL)
+            return false
+        }
+        guard store(data: data, suggestedName: fileURL.lastPathComponent) != nil else { return false }
+        discardSystemInboxCopy(fileURL)
+        return true
+    }
+
+    /// Ingests the copies sitting in `Documents/Inbox` that no run ever collected, and
+    /// returns how many routes that recovered. Three things end up stranded there and
+    /// nothing else would ever look: a read interrupted by the app being killed mid-
+    /// ingest, a read that failed for a reason that may not repeat, and — once —
+    /// everything that piled up before any of this deleted them at all.
+    ///
+    /// Anything past `maxAge` is dropped unread, which is the policy the App Group folder
+    /// already has and what stops a file that fails every single time from being retried
+    /// for ever. Note the age is the only bound here: the 25 MiB cap limits what is
+    /// ACCEPTED, not the size of a copy the system has already written.
+    @discardableResult
+    static func recoverSystemInbox() -> Int {
+        let fm = FileManager.default
+        guard let inbox = systemInboxURL,
+              let names = try? fm.contentsOfDirectory(atPath: inbox.path) else { return 0 }
+        var recovered = 0
+        for name in names.sorted() {
+            let url = inbox.appendingPathComponent(name)
+            let modified = (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            if let modified, Date().timeIntervalSince(modified) > maxAge {
+                try? fm.removeItem(at: url)
+                continue
+            }
+            if ingest(fileURL: url) { recovered += 1 }
+        }
+        return recovered
+    }
+
+    /// Where the system leaves the copies it makes of opened documents.
+    private static var systemInboxURL: URL? {
+        try? FileManager.default
+            .url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+            .appendingPathComponent("Inbox")
+    }
+
+    /// Deletes a file only when it sits in this app's own `Documents/Inbox`, which is
+    /// where the system leaves the copies it makes. Guarded on that directory precisely
+    /// so a URL another app still owns — in-place, or security-scoped — is never touched.
+    private static func discardSystemInboxCopy(_ fileURL: URL) {
+        guard let inbox = systemInboxURL?.resolvingSymlinksInPath().path else { return }
+        guard fileURL.resolvingSymlinksInPath().path.hasPrefix(inbox + "/") else { return }
+        try? FileManager.default.removeItem(at: fileURL)
     }
 
     /// Reads at most `maxBytes`, giving up as soon as the file turns out to be bigger.
-    /// `Data(contentsOf:)` would load all of it first, and the share extension has a
-    /// small memory budget.
+    /// `Data(contentsOf:)` would load all of it first, and a route can be 25 MiB.
     static func readCapped(_ fileURL: URL) -> Data? {
         guard let stream = InputStream(url: fileURL) else { return nil }
         stream.open()

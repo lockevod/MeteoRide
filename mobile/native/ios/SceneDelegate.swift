@@ -29,6 +29,20 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // on a background queue and announces itself when done; see ingestIncoming.
         ingestIncoming(connectionOptions.urlContexts)
 
+        // ADDED: copies iOS left in Documents/Inbox that no run ever collected — a read
+        // interrupted by the app being killed mid-ingest, one that failed for a reason
+        // that may not repeat, and whatever piled up before the store began removing
+        // them at all. Same serial queue and enqueued after the URLs this launch
+        // carried, so a route just shared is still stored and announced first, and the
+        // sweep cannot ingest it twice: by the time it lists the folder, that file is
+        // gone. Launch only — `openURLContexts` means the app was already running, and
+        // this will have run then.
+        SceneDelegate.intake.async {
+            for _ in 0 ..< MeteoRideShareStore.recoverSystemInbox() {
+                MeteoRideSharePlugin.notifyRouteAvailable()
+            }
+        }
+
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 

@@ -1,10 +1,13 @@
 <!--
   Reference snippet — merge these keys into ios/App/App/Info.plist.
-  They declare the meteoride:// scheme the share extension calls, register the app
-  as a handler for .gpx/.kml files, explain the location prompt, and let the ride
-  watch run in the background.
+  They register the app as a handler for .gpx/.kml files — which is what makes another
+  app able to open a route in MeteoRide — declare the meteoride:// scheme, explain the
+  location prompt, and let the ride watch run in the background.
 -->
 
+<!-- Android uses this scheme; on iOS nothing opens it any more, now that the share
+     extension is gone. Kept so both platforms declare the same thing, and because
+     SceneDelegate ignores non-file URLs by design. -->
 <key>CFBundleURLTypes</key>
 <array>
 	<dict>
@@ -19,8 +22,22 @@
 	</dict>
 </array>
 
-<!-- GPX has no system UTI, so declare one and hang the .gpx extension off it. -->
-<key>UTImportedTypeDeclarations</key>
+<!-- GPX has no system UTI, so declare one and hang the .gpx extension off it.
+
+     EXPORTED, because the type is ours. Apple: an exported declaration "means that the
+     type is available for use by all other parties"; an imported one is for "a type that
+     the bundle does not own, but would like to see available on the system". Nobody else
+     is ever going to export `cc.meteoride.gpx`, so exported is the honest declaration,
+     and where both exist the exported one takes precedence.
+
+     This was CHANGED from imported while chasing a bug, and it is worth writing down that
+     it was probably not the bug. Apple says an imported declaration exists precisely so
+     the system knows a type "even if the actual [owning] application is not available",
+     so the .gpx binding was most likely working all along. What was actually verified on
+     a device is narrower: removing the share extension made sharing from Hammerhead open
+     MeteoRide. The two changes were made together and never separated, so this one is a
+     correctness decision, not a demonstrated cause. -->
+<key>UTExportedTypeDeclarations</key>
 <array>
 	<dict>
 		<key>UTTypeIdentifier</key>
@@ -40,6 +57,37 @@
 			<key>public.mime-type</key>
 			<array>
 				<string>application/gpx+xml</string>
+			</array>
+		</dict>
+	</dict>
+</array>
+
+<!-- KML is Google's type, not ours, so it is IMPORTED — the mirror image of the rule
+     above. It still has to be declared by somebody: iOS ships no built-in KML
+     identifier, and `CFBundleDocumentTypes` below names `com.google.earth.kml`, so
+     without this the .kml half had exactly the fault the .gpx half had — an identifier
+     bound to nothing. Importing is how an app says "I handle someone else's type"; if
+     another installed app does export it, the system merges rather than conflicts. -->
+<key>UTImportedTypeDeclarations</key>
+<array>
+	<dict>
+		<key>UTTypeIdentifier</key>
+		<string>com.google.earth.kml</string>
+		<key>UTTypeDescription</key>
+		<string>Keyhole Markup Language</string>
+		<key>UTTypeConformsTo</key>
+		<array>
+			<string>public.xml</string>
+		</array>
+		<key>UTTypeTagSpecification</key>
+		<dict>
+			<key>public.filename-extension</key>
+			<array>
+				<string>kml</string>
+			</array>
+			<key>public.mime-type</key>
+			<array>
+				<string>application/vnd.google-earth.kml+xml</string>
 			</array>
 		</dict>
 	</dict>

@@ -1,10 +1,9 @@
-/* The two iOS privacy manifests.
+/* The iOS privacy manifest.
  *
  * Apple rejects an upload that calls a required-reason API without declaring it, and
  * nothing in this repository builds iOS, so a missing or wrong declaration would only
- * surface at App Store Connect. `mobile/ios/` is generated and not in git; these files
- * are the tracked source of that declaration, and docs/IOS.md steps 4 and 5 add them
- * to the two targets.
+ * surface at App Store Connect. `mobile/ios/` is generated and not in git; this file
+ * is the tracked source of that declaration, and docs/IOS.md step 4 adds it to the target.
  *
  * The check that matters most is the last one: a plugin added later can bring a new
  * required-reason category with it, and the only sign is a line in its README.
@@ -17,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 const MOBILE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const APP = join(MOBILE, 'native/ios/PrivacyInfo.xcprivacy');
-const EXTENSION = join(MOBILE, 'native/ios/ShareExtension/PrivacyInfo.xcprivacy');
+const APP_XML = await readFile(APP, 'utf8');
 
 /* Apple's published reasons per category, from
  * developer.apple.com/documentation/bundleresources/app-privacy-configuration/
@@ -57,26 +56,36 @@ function declarations(xml) {
   return out;
 }
 
-test('both manifests declare a file-timestamp reason, and only reasons Apple publishes', async () => {
-  for (const [what, path] of [['App', APP], ['ShareExtension', EXTENSION]]) {
-    const declared = declarations(await readFile(path, 'utf8'));
-    const timestamps = declared.NSPrivacyAccessedAPICategoryFileTimestamp;
-    assert.ok(
-      timestamps && timestamps.length,
-      `${what} declares no file-timestamp reason, but it compiles MeteoRideShareStore, ` +
-      'whose prune reads .modificationDate'
-    );
-    for (const [category, reasons] of Object.entries(declared)) {
-      assert.ok(REASONS[category], `${what} declares an unknown category: ${category}`);
-      assert.ok(reasons.length, `${what} declares ${category} with no reason at all`);
-      for (const reason of reasons) {
-        assert.ok(
-          REASONS[category].includes(reason),
-          `${what} declares ${reason} under ${category}; Apple lists ${REASONS[category].join(', ')}`
-        );
-      }
+test('the manifest declares a file-timestamp reason, and only reasons Apple publishes', async () => {
+  // One manifest, not two: the share extension had its own and is gone, and its single
+  // reason (C617.1, for MeteoRideShareStore.prune) is one the App manifest already makes.
+  const declared = declarations(await readFile(APP, 'utf8'));
+  const timestamps = declared.NSPrivacyAccessedAPICategoryFileTimestamp;
+  assert.ok(
+    timestamps && timestamps.length,
+    'the manifest declares no file-timestamp reason, but the app compiles ' +
+    'MeteoRideShareStore, whose prune reads .modificationDate'
+  );
+  for (const [category, reasons] of Object.entries(declared)) {
+    assert.ok(REASONS[category], `unknown category declared: ${category}`);
+    assert.ok(reasons.length, `${category} declared with no reason at all`);
+    for (const reason of reasons) {
+      assert.ok(
+        REASONS[category].includes(reason),
+        `${reason} declared under ${category}; Apple lists ${REASONS[category].join(', ')}`
+      );
     }
   }
+});
+
+test('the manifest declares nothing beyond what the app actually does', () => {
+  // The deleted extension's manifest had this exact-set guard and the App's never did,
+  // so removing it would have dropped the check entirely. A category added here without
+  // a caller is a claim about the app that a reviewer can hold it to.
+  assert.deepEqual(
+    Object.keys(declarations(APP_XML)).sort(),
+    ['NSPrivacyAccessedAPICategoryFileTimestamp', 'NSPrivacyAccessedAPICategoryUserDefaults']
+  );
 });
 
 test('the App manifest covers every category the installed plugins ask for', async () => {
@@ -93,14 +102,5 @@ test('the App manifest covers every category the installed plugins ask for', asy
   assert.deepEqual(
     [...new Set(missing)], [],
     'a plugin requires a privacy declaration the App manifest does not make'
-  );
-});
-
-test('the extension declares nothing it has no plugins for', async () => {
-  const declared = declarations(await readFile(EXTENSION, 'utf8'));
-  assert.deepEqual(
-    Object.keys(declared), ['NSPrivacyAccessedAPICategoryFileTimestamp'],
-    'the extension compiles one shared file and links no Capacitor plugin; ' +
-    'anything else declared here is either untrue or a change that needs this test updated'
   );
 });

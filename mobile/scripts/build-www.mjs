@@ -10,7 +10,7 @@
  * (pinned in package.json, taken from node_modules) into www/vendor/, and rewrites
  * index.html to point at those copies.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -116,7 +116,16 @@ async function writeVersionFile() {
   log(`wrote scripts/version.js (${version})`);
 }
 
-const IOS_PBXPROJ = join(MOBILE, 'ios/App/App.xcodeproj/project.pbxproj');
+/* Capacitor generates `App.xcodeproj`, but the project can be renamed in Xcode — this
+ * one is `MeteoRide.xcodeproj` — and the hardcoded path then matched nothing, so the
+ * version sync below silently became a no-op that nobody would notice until a build
+ * shipped with the wrong MARKETING_VERSION. Found by review, not by a failure. */
+function findIosPbxproj() {
+  const app = join(MOBILE, 'ios/App');
+  if (!existsSync(app)) return null;
+  const project = readdirSync(app).find((d) => d.endsWith('.xcodeproj'));
+  return project ? join(app, project, 'project.pbxproj') : null;
+}
 
 /**
  * mobile/ios/ is fully gitignored — Capacitor regenerates it with `cap add ios` and
@@ -126,7 +135,8 @@ const IOS_PBXPROJ = join(MOBILE, 'ios/App/App.xcodeproj/project.pbxproj');
  * before `cap add ios` has ever run, and idempotent once it has.
  */
 async function writeIosMarketingVersion() {
-  if (!existsSync(IOS_PBXPROJ)) return;
+  const IOS_PBXPROJ = findIosPbxproj();
+  if (!IOS_PBXPROJ || !existsSync(IOS_PBXPROJ)) return;
   const { version } = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
   const src = await readFile(IOS_PBXPROJ, 'utf8');
   const out = src.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${version};`);
