@@ -1691,6 +1691,20 @@ probablemente no era el fallo, y yo lo conté como tal. Rectificado en el plist,
   pierde la ruta. Arreglarlo de verdad pide un protocolo de acuse entre el nativo y el web
   con identificador estable para no duplicar al reintentar, y eso es un cambio de diseño,
   no un parche. No se toca en esta tanda; queda aquí escrito. Afecta igual a Android.
+
+  **Cuán probable es, medido antes de aparcarlo (18/09).** Poco. `nextPending()` borra el
+  fichero *y devuelve el texto en la misma llamada*, así que cuando desaparece la ruta ya
+  está en memoria de JavaScript; lo que falta es que `importIt` la escriba en IndexedDB,
+  unos milisegundos síncronos sin red, sin usuario y sin esperar al mapa. Para perderla el
+  proceso tiene que morir justo ahí. El único escenario que no es mala suerte pura es
+  **jetsam por memoria**, y se concentra donde más duele: al arrancar, con el mapa cargando
+  y hasta 25 MiB de ruta ya en memoria, en un dispositivo viejo.
+
+  La consecuencia también es menor de lo que suena: el fichero original de la app emisora
+  no se toca, así que el usuario vuelve a compartir. No es pérdida de datos, es una ruta
+  que hay que mandar otra vez. Lo que sí es cierto es que **nada la recupera**: al guardar
+  bien, la copia del buzón del sistema ya se ha borrado. La ventana es estrecha y no tiene
+  red debajo.
 - **Bajo — el proyecto Xcode local conserva restos de la extensión**: el esquema
   `ShareExtension.xcscheme` apunta a un target que ya no existe, y `project.pbxproj` guarda
   referencias al `ShareViewController.swift` borrado. No vuelven a incrustar nada —la fase
