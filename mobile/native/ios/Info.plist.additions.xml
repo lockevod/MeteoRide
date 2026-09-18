@@ -5,6 +5,17 @@
   location prompt, and let the ride watch run in the background.
 -->
 
+<!-- The two names iOS shows, both MeteoRide, neither of them the project's file name.
+     `CFBundleDisplayName` is the one under the icon; `CFBundleName` is the short one iOS
+     falls back to where the long one will not fit, and Capacitor's template leaves it as
+     $(PRODUCT_NAME), which resolves to "App". The Xcode project must stay App.xcodeproj —
+     Capacitor hardcodes that path and stops writing Package.swift otherwise, see
+     docs/IOS.md — so this is where the app gets its name instead. Keep both in step. -->
+<key>CFBundleDisplayName</key>
+<string>MeteoRide</string>
+<key>CFBundleName</key>
+<string>MeteoRide</string>
+
 <!-- Android uses this scheme; on iOS nothing opens it any more, now that the share
      extension is gone. Kept so both platforms declare the same thing, and because
      SceneDelegate ignores non-file URLs by design. -->

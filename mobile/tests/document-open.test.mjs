@@ -219,6 +219,9 @@ test('the plist Xcode builds agrees with the tracked one', async (t) => {
   for (const key of [
     'UTExportedTypeDeclarations', 'UTImportedTypeDeclarations',
     'CFBundleDocumentTypes', 'LSSupportsOpeningDocumentsInPlace', 'CFBundleURLTypes',
+    // The names too: they live only in the generated plist unless the fragment carries
+    // them, and `cap add ios` would put Capacitor's "App" back without a word.
+    'CFBundleDisplayName', 'CFBundleName',
   ]) {
     assert.deepEqual(shipped[key], plist[key], `${key} has drifted between the tracked and the built plist`);
   }
