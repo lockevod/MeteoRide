@@ -1917,21 +1917,55 @@ function buildCombinedHeaderHTML(summaryHTML, sunHTML) {
   `;
 }
 
+/**
+ * A step the table has something to show for: temperature, wind or rain. This is the
+ * same question `usableSteps` asks to decide the notice (forecast-rules.js, where the
+ * definition and the reasoning live), one stage later — by the time the table is drawn
+ * the payloads have been turned into fields. They are kept in step on purpose: a table
+ * full of dashes under "the provider is not responding" is the two of them disagreeing
+ * about whether there is a forecast, and so is an empty screen that says nothing.
+ */
+function anyReading(steps) {
+  return (steps || []).some((s) => cwForecastRules.hasReading(s));
+}
+
 function renderWeatherTable() {
   // NEW: no-op when no route/data loaded (align with interval change behavior)
   // Do not build headers/rows if there is no track or weatherData yet.
-  if (!Array.isArray(weatherData) || weatherData.length === 0 || !trackLayer) {
+  //
+  // Nor, further down and after compare mode has had its say, when every step came back
+  // empty. A computation that reached nobody still
+  // publishes, because the notice is part of what it publishes — and the table used to
+  // be built anyway: five rows of "-", a summary card reading "Temp: - Wind: - Rain: -",
+  // and 270px of a phone screen taken off the map to show that nothing is known. The
+  // notice says it in one line. Partial data is a different thing and still draws: a gap
+  // in one column is worth seeing, a table of gaps is not.
+  const clearTable = () => {
     const table = document.getElementById("weatherTable");
     if (table) table.innerHTML = "";
-    // Optional: clear compact summary content if present
+    // The summary card is built further down this same function, so it has to go the
+    // same way. Removed rather than emptied: `.compact-summary` carries its own border
+    // and padding, and an empty one is a blank box with nothing to say.
     const cs = document.getElementById("compactSummary");
-    if (cs) cs.innerHTML = "";
+    if (cs && cs.parentElement) { try { cs.parentElement.removeChild(cs); } catch (_) { cs.innerHTML = ""; } }
     try { window._autoScrolledWeather = false; } catch {}
+  };
+
+  if (!Array.isArray(weatherData) || weatherData.length === 0 || !trackLayer) {
+    clearTable();
     return;
   }
 
   // In compare mode the comparison table stays until the next comparison paints over it.
   if (compareOwnsTable()) return;
+
+  // Only now. A failed ordinary computation must not wipe a comparison that is still on
+  // screen waiting for its own replacement — the bail above already ran before this
+  // check, and putting the empty-result test up there took the comparison with it.
+  if (!anyReading(weatherData)) {
+    clearTable();
+    return;
+  }
 
   // Leave compare mode: remove body flag so compact summary shows metrics again
   try { document.body.classList.remove("compare-active"); } catch {}

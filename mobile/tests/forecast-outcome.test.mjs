@@ -48,7 +48,26 @@ test('an empty table whose requests failed says why: offline, rejected, or not r
 
 test('failed requests on a table that still has data are not an empty-table notice', () => {
   assert.equal(rules.decideNotice(outcome({ usableSteps: 4, transportFailures: 1, lastFailStatus: 'network' }), {}), null);
-  assert.equal(rules.decideNotice(outcome({ usableSteps: 0, transportFailures: 0 }), {}), null);
+});
+
+/* This line used to assert `null`: no readings, nothing failed, nothing to say. That was
+   defensible while the page drew a table of dashes — the empty columns were the message.
+   They are not drawn any more (`renderWeatherTable`, app.js), so silence here is a route
+   on a map and no explanation anywhere. Every way of ending with no readings now speaks. */
+test('a computation that ends with no readings says so even though nothing failed', () => {
+  assert.deepEqual(plain(rules.decideNotice(outcome({ usableSteps: 0, transportFailures: 0 }), {})),
+    { parts: [['no_forecast_data', {}]], type: 'warn' });
+
+  // The horizon is the common way in, and it is said whether or not every notice is
+  // wanted: behind `noticeAll` it is a footnote about a few missing columns, and here it
+  // is the only thing on screen that knows why there is no forecast at all.
+  for (const noticeAll of [false, true]) {
+    assert.deepEqual(plain(rules.decideNotice(outcome({ usableSteps: 0, beyondHorizon: true, openMeteoMaxDays: 14 }), { noticeAll })),
+      { parts: [['horizon_exceeded', { days: 14 }]], type: 'warn' });
+  }
+
+  // A table with something in it is none of this function's business here.
+  assert.equal(rules.decideNotice(outcome({ usableSteps: 1, transportFailures: 0 }), {}), null);
 });
 
 test('data read from the cache without connection says how old it is', () => {
@@ -112,6 +131,59 @@ test('detailed mode adds the horizon notices and the errors that did not force a
     { parts: [['provider_http_error', { prov: 'Open-Meteo', status: '500' }]], type: 'error' });
   // A missing key still outranks the error flags, as before.
   assert.equal(decide({ missingKey: true, providers: { openweather: { invalidKey: true } } }, true).parts[0][0], 'provider_key_missing');
+});
+
+test('hasReading is asked directly, in both the shapes it is handed', () => {
+  // Everything else here goes through `usableSteps` -> `extractStep`, so only the RAW
+  // shape (`wind`) is ever exercised. Dropping `windSpeed` — which would empty the main
+  // table and every comparison for a provider with no temperature — passed the whole node
+  // suite. These ask the predicate itself, in both shapes.
+  const has = rules.hasReading;
+  assert.equal(has({ temp: 12 }), true, 'a temperature');
+  assert.equal(has({ temp: 0 }), true, 'zero degrees is a reading');
+  assert.equal(has({ wind: 5 }), true, 'the raw shape calls it wind');
+  assert.equal(has({ windSpeed: 5 }), true, 'the processed shape calls it windSpeed');
+  assert.equal(has({ windSpeed: 0 }), true, 'no wind is a reading; a missing one is not');
+  assert.equal(has({ precipitation: 2 }), true, 'rain');
+
+  assert.equal(has({ precipitation: 0 }), false,
+    'zero millimetres is the absence of rain, not a forecast: counting it stopped a prepared snapshot being replayed');
+  assert.equal(has({ precipProb: 80 }), false,
+    'a probability with no amount is what `formatRainCell` draws as "-": counting it drew a row of dashes');
+  assert.equal(has({ humidity: 60, cloudCover: 40, weatherCode: 3 }), false, 'not on their own');
+  assert.equal(has({ temp: null, windSpeed: null }), false);
+  assert.equal(has(null), false);
+  assert.equal(has({}), false);
+
+  // The coercions that make the obvious one-liner accept junk: Number() turns all three
+  // of these into 0.
+  for (const junk of [false, [], '  ', 'abc', NaN, undefined]) {
+    assert.equal(has({ temp: junk }), false, `${JSON.stringify(junk)} is not a temperature`);
+  }
+  assert.equal(has({ temp: '12' }), true, 'a number as a string still is one');
+});
+
+test('usableSteps counts rain on its own, but never humidity on its own', () => {
+  // Temperature, wind or rain are what a ride is planned around; humidity and cloud cover
+  // ride along with them. The case this exists for: `mergeAromeWithStandard` fills
+  // `precipitation_probability`, `weathercode` and `cloud_cover` from the standard
+  // Open-Meteo answer onto AROME's hours, so an AROME run that misses those hours can
+  // leave a step with a rain probability and nothing else. Counted as no forecast, that
+  // step used to cost the whole table — and, since nothing failed, without a notice.
+  const time = new Date('2026-09-20T09:00:00Z');
+  const step = (drop) => [{ provider: 'openmeteo', time, payload: openMeteo({ minutely: false, drop }) }];
+
+  // The fixture's precipitation series is `i % 5 === 0 ? 0 : i / 10`, so pick an hour with
+  // rain in it rather than one of the zeroes: at 09:00 UTC this is a real amount, and it
+  // is the only thing left once temperature and wind are dropped.
+  assert.equal(rules.usableSteps(step(['temperature_2m', 'wind_speed_10m'])), 1, 'rain alone is a forecast');
+  assert.equal(rules.usableSteps(step(['temperature_2m', 'precipitation', 'precipitation_probability'])), 1,
+    'wind alone is a forecast');
+  assert.equal(rules.usableSteps(step(['wind_speed_10m', 'precipitation', 'precipitation_probability'])), 1,
+    'a temperature alone is a forecast');
+  assert.equal(
+    rules.usableSteps(step(['temperature_2m', 'wind_speed_10m', 'precipitation', 'precipitation_probability'])), 0,
+    'humidity, cloud cover and a weather code on their own are not a forecast');
 });
 
 test('usableSteps counts steps with a temperature or wind at their time, cached or not', () => {

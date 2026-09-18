@@ -264,7 +264,9 @@ var cwForecastRules = (function () {
     };
   }
 
-  const hasData = (r) => !!r && (Number.isFinite(r.temp) || Number.isFinite(r.wind));
+  // Was a fifth copy of the same question, narrower than the rest (temperature or wind).
+  // One definition now: a replay covers a step when that step has a reading.
+  const hasData = hasReading;
 
   /**
    * How many steps of a snapshot a replay can show whatever the start within the margin: a step
@@ -415,15 +417,64 @@ var cwForecastRules = (function () {
   /* ---------- what a computation produced, and what to say about it ---------- */
 
   /**
-   * Steps the table can show: the answer holds a temperature or a wind for the step's
-   * time. A step served from cache counts; an HTTP 200 with nothing in it does not.
+   * Is there a forecast for this step? Temperature, wind or rain — the three a ride is
+   * planned around. Humidity, cloud cover and the rest ride along with them and are not
+   * enough on their own: a column saying only "60%" of humidity is not worth a table.
+   *
+   * Rain counts as an amount OR a probability, and the probability is the half that
+   * matters here. `mergeAromeWithStandard` fills `precipitation_probability`,
+   * `weathercode` and `cloud_cover` from the standard Open-Meteo answer onto AROME's
+   * hours, so the one real way to end up with rain and no temperature is AROME missing
+   * the hours while the merge supplies the probability. Counting millimetres alone would
+   * leave exactly that case out.
+   *
+   * THIS IS THE SHARED DEFINITION. `anyReading` in app.js asks it of a processed step
+   * and decides whether to draw the table; `showComparisonNotice` in compare.js counts
+   * it over the comparison's rows. All three have to say the same thing, or the page
+   * shows a table under a notice saying there is no forecast, or hides one without a
+   * word. A step served from cache counts; an HTTP 200 with nothing in it does not.
    */
+  /**
+   * THE definition, in one place. It takes a step in either shape — the raw extract
+   * (`wind`) or the processed one the table and the comparison hold (`windSpeed`) —
+   * because the same question gets asked at three different stages and the answers have
+   * to match. They did not: this used to be written out four times, `compare.js` asked
+   * for a temperature and nothing else, and its notice counted over different rows than
+   * its table painted. Rain-only answers came out as a comparison with no table and no
+   * notice at all.
+   */
+  function hasReading(s) {
+    if (!s) return false;
+    // `Number(false)`, `Number([])` and `Number(' ')` are all 0, so the obvious one-liner
+    // accepts junk while looking like it rejects it. Nothing sends those today; this is
+    // the shared definition, so it is written to mean what it says.
+    const num = (v) => (typeof v === 'number'
+      ? Number.isFinite(v)
+      : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)));
+
+    // Temperature and wind count whenever they are there: 0 °C and 0 km/h are readings.
+    // RAIN COUNTS ONLY ABOVE ZERO, and a probability does not count at all. Both of those
+    // are deliberate, and both were found the hard way:
+    //
+    //  - "0 mm" is the absence of rain, not a forecast. Counting it meant a step with no
+    //    temperature, no wind and a dry hour blocked the substitution of a prepared
+    //    snapshot (app.js) and stopped the offline notice reporting an empty result
+    //    (native.js) — the user losing a real forecast in favour of a table of dashes.
+    //  - A probability with no amount is something the main table cannot draw at all:
+    //    `formatRainCell` (app.js) returns "-" when there is no amount. Counting it drew
+    //    a full row of dashes, which is the screen the empty-table guard exists to stop.
+    //    The comparison does render `0.0 (80%)`, so if that is ever wanted in the table
+    //    too, this and `formatRainCell` move together or they go back to disagreeing.
+    return num(s.temp) || num(s.wind) || num(s.windSpeed)
+      || (num(s.precipitation) && Number(s.precipitation) > 0);
+  }
+
   function usableSteps(steps) {
     let n = 0;
     for (const s of steps || []) {
       if (!s || s.payload == null) continue;
       const r = extractStep(s.payload, { provider: s.provider, time: s.time, payloadUnits: s.payloadUnits });
-      if (r && (Number.isFinite(r.temp) || Number.isFinite(r.wind))) n++;
+      if (hasReading(r)) n++;
     }
     return n;
   }
@@ -465,6 +516,25 @@ var cwForecastRules = (function () {
       return say('warn', ['prepared_replayed', { age: formatAge(Math.max(0, now - preparedAt)), at }]);
     }
     if (o.staleAgeMs > 0) return say('warn', ['offline_stale_forecast', { age: formatAge(o.staleAgeMs) }]);
+
+    /* Nothing to show, and nothing above explained why. This has to say something, because
+       the table is no longer drawn when there is nothing in it (`renderWeatherTable`,
+       app.js): an empty result used to explain itself with five columns of dashes, and
+       the notice is now the only thing left to do it. Two ways in, and neither of them
+       fails a request, so neither reaches the branch at the top of this function:
+
+         - a start beyond the forecast horizon, where every step is skipped before a
+           request is made. `horizon_exceeded` is also said further down, behind
+           `noticeAll` — which is the right place for it when it costs a few columns, and
+           the wrong one when it costs the whole forecast.
+         - an answer that arrives, 200 and all, carrying no readings for these steps: a
+           truncated model run, a merge that left nulls.
+
+       Below this point every branch assumes there is a table to talk about. */
+    if (!o.usableSteps) {
+      if (o.beyondHorizon) return say('warn', ['horizon_exceeded', { days: o.openMeteoMaxDays }]);
+      return say('warn', ['no_forecast_data', {}]);
+    }
 
     // OpenWeather is the only provider left that needs a key, so missingKey never fires for another one.
     const keyed = 'OpenWeather';
@@ -617,7 +687,7 @@ var cwForecastRules = (function () {
   return {
     parseProviderTime, nearestIndex, extractStep, routeLine, mergeAromeWithStandard,
     effectiveStart, retime, preparedCoverage, usablePrepared, REPLAY,
-    usableSteps, decideNotice, alertId, alertsInWindow,
+    usableSteps, hasReading, decideNotice, alertId, alertsInWindow,
     fingerprint, shouldPublish, shouldPublishComparison, uniqueRouteName,
   };
 })();

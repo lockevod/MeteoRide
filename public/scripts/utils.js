@@ -223,6 +223,7 @@
       recenter_route: "Recentrar ruta",
       toggle_debug_label: "Debug",
       provider_unreachable: "No se ha podido obtener la previsión: el proveedor no responde.",
+      no_forecast_data: "El proveedor no ha devuelto datos para esta ruta ni para esta hora.",
       provider_not_responding: "{prov} no responde.",
       provider_rejected: "El proveedor ha rechazado la petición. Revisa tu API key en ajustes.",
       prepare_offline: "Preparar ruta para ir sin cobertura",
@@ -344,6 +345,7 @@
       recenter_route: "Recentre route",
       toggle_debug_label: "Debug",
       provider_unreachable: "Could not get the forecast: the provider is not responding.",
+      no_forecast_data: "The provider returned no data for this route at this time.",
       provider_not_responding: "{prov} is not responding.",
       provider_rejected: "The provider rejected the request. Check your API key in settings.",
       prepare_offline: "Save this route for riding without coverage",
@@ -829,10 +831,16 @@
     if (speedKmh < 50) return "fuerte";
     return "muy_fuerte"; // NEW: elevated winds (purple)
   }
-  function windToUnits(val, unit) { 
-    if (unit === "ms") return val / 3.6; 
-    if (unit === "mph") return val * 0.621371; // NEW: kmh to mph
-    return val; // kmh
+  // A step with no wind has to come out of here with no wind. `null / 3.6` is 0 and
+  // `null * 0.621371` is 0, so with m/s or mph chosen a missing reading was turned into
+  // a calm one: the table drew "0" where km/h drew a dash, and the check that decides
+  // whether there is a forecast at all saw a number where there was nothing.
+  function windToUnits(val, unit) {
+    const n = Number(val);
+    if (val === null || val === undefined || val === "" || !Number.isFinite(n)) return null;
+    if (unit === "ms") return n / 3.6;
+    if (unit === "mph") return n * 0.621371; // NEW: kmh to mph
+    return n; // kmh
   }
 
   // NEW: pick which wind value drives the marker intensity (auto policy)

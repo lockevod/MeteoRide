@@ -180,12 +180,15 @@
   // failed and that came out empty says why, data read from the cache without connection says how
   // old it is, and otherwise every provider that failed is named (`failedProviders`), after the
   // missing OpenWeather key when a date comparison asked Open-Meteo for lack of it. A step counts
-  // when any painted row has a temperature or a wind for it.
+  // when any painted row has a temperature, a wind or a rain for it — the same definition as
+  // `cwForecastRules.usableSteps`, which is where it is written down and argued. The three
+  // places that ask it have to agree; a comparison counting one thing while the notice counts
+  // another is a table under a notice that says there is nothing to show.
   function showComparisonNotice(recorder, rows, run, { failedProviders = {}, missingKey = false } = {}) {
     const length = Math.max(0, ...rows.map((r) => (r ? r.length : 0)));
     let usableSteps = 0;
     for (let i = 0; i < length; i++) {
-      if (rows.some((r) => r && r[i] && (r[i].temp != null || r[i].windSpeed != null))) usableSteps++;
+      if (rows.some((r) => r && cwForecastRules.hasReading(r[i]))) usableSteps++;
     }
     if (!window.cwShowForecastNotice) return;
     window.cwShowForecastNotice({
@@ -236,6 +239,11 @@
     const baseProvs = provs.filter(p => p !== 'ow2_arome_openmeteo'); // NEW: exclude chain from direct fetch
 
     const compareData = {};
+    // Which providers have anything worth a row. This asked for a temperature and nothing
+    // else, so a provider answering with wind or rain but no temperature was dropped from
+    // the comparison altogether — and once rain started counting towards the notice, such
+    // an answer painted no table and said nothing, because the notice counted rows the
+    // table had already thrown away. Same definition as everywhere else now.
     const hasAny = {};
     for (const p of provs) compareData[p] = [];
 
@@ -301,7 +309,7 @@
           // Store actual provider in step.provider so consumers see the real data source
           s.provider = effProv;
           compareData[prov].push(s);
-          if (s && s.temp != null) hasAny[prov] = true;
+          if (cwForecastRules.hasReading(s)) hasAny[prov] = true;
           continue;
         }
 
@@ -322,7 +330,7 @@
             // operate on the real data source rather than the logical row label.
             s.provider = effProv;
             compareData[prov].push(s);
-            if (s && s.temp != null) hasAny[prov] = true;
+            if (cwForecastRules.hasReading(s)) hasAny[prov] = true;
           } else {
             compareData[prov].push(blankStep(prov, p));
           }
@@ -347,7 +355,7 @@
           let effProv = resolver(chainId, base.time, now, { lat: base.lat, lon: base.lon }) || 'openmeteo';
           if (!compareData[effProv] || !compareData[effProv][i]) effProv = 'openmeteo';
           const src = (compareData[effProv] && compareData[effProv][i]) ? compareData[effProv][i] : null;
-          if (src && src.temp != null) {
+          if (cwForecastRules.hasReading(src)) {
             // src already uses provider=effProv; clone but mark requested provider as chainId
             const clone = { ...src, provider: src._effProv || src.provider, _reqProv: chainId, _effProv: effProv };
             arr.push(clone);
@@ -360,10 +368,14 @@
       }
     }
 
-    // Filter providers without any usable data
+    // Filter providers without any usable data. The chain used to be exempt — admitted
+    // whether or not anything got into it — with nothing saying why. What that bought was
+    // a row of dashes: with a key configured and OpenWeather not answering, the chain's
+    // steps all come back blank and its row was shown anyway, one provider column with
+    // nothing in it. It obeys the same rule as the other three now.
     const order = ["aromehd","openweather","openmeteo","ow2_arome_openmeteo"];
     const filtered = {};
-    order.forEach(k => { if (compareData[k] && (hasAny[k] || k === 'ow2_arome_openmeteo')) filtered[k] = compareData[k]; });
+    order.forEach(k => { if (compareData[k] && hasAny[k]) filtered[k] = compareData[k]; });
 
     // Baseline for summary (prefer OM). Markers are disabled in compare mode.
     const baseline = filtered.openmeteo || filtered.aromehd || filtered.openweather || [];
@@ -385,8 +397,12 @@
 
     // Build table
     renderCompareTable(filtered, baseline, units);
+    // `filtered`, not `compareData`: what is PAINTED, not what came back. Counting the
+    // unfiltered rows meant the notice could see readings the table had already thrown
+    // away, and say nothing about a comparison that had come out empty — a blank
+    // comparison in silence, which is the one outcome that must not happen.
     // Without an OpenWeather key its row is left out (getCompareProviders) on purpose, and nothing is said.
-    showComparisonNotice(recorder, Object.values(compareData), run, { failedProviders });
+    showComparisonNotice(recorder, Object.values(filtered), run, { failedProviders });
     } finally {
       // Only this comparison's claim: a newer one, or a computation, holds its own.
       window.cw.releaseLoading("compare:" + run.comparisonId);
@@ -1030,7 +1046,11 @@
   }
 
   function buildCompareCell(step) {
-    if (!step || step.temp == null) return "-";
+    // The same rule that admits the row, so that what gets in also gets drawn. Asking for
+    // a temperature here undid the widening one line at a time: a provider with rain or
+    // wind and no temperature was let into the comparison and then rendered as a column
+    // of dashes. Everything below already copes with a missing value on its own.
+    if (!cwForecastRules.hasReading(step)) return "-";
     // Support chain: underlying effective provider stored in _effProv
     const prov = step.provider;
     const eff = step._effProv || prov;
