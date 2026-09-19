@@ -56,3 +56,13 @@ test('the bundled route file is in the shipped app and is a real track', async (
   expect(points, 'too few points to be a usable ride').toBeGreaterThan(50);
   expect(gpx).toContain('<trkseg>');
 });
+
+test('the button ships hidden, so it is never drawn over a route still being restored', async ({ request }) => {
+  // Shown only once the app knows there is nothing to replace (ui.js offerExample). Drawn
+  // by default, it sat over the map for as long as the recent routes took to read, and a
+  // tap in that window replaced the route being restored with the example.
+  const html = await (await request.get('/index.html')).text();
+  const tag = html.match(/<button[^>]*id="exampleRoute"[^>]*>/);
+  expect(tag, 'the example-route button is gone from the page').not.toBeNull();
+  expect(tag[0]).toMatch(/\shidden[\s>]/);
+});

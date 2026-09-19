@@ -481,7 +481,6 @@
     }
   }
 
-  // Upload lastGPXFile to a share-server instance (defaults to same-origin path `/share` so Caddy can proxy to the internal server)
   /* `uploadGPXToShareServer` lived here: ~135 lines POSTing a GPX to a share server for
    * the iOS Shortcuts hand-off, exported on window.cw and called from nowhere. It carried
    * user-facing notices in Spanish tagged [MODHH] inside an otherwise translated app, and
@@ -1827,6 +1826,9 @@
         await migrateFromLocalStorage();
         recentRoutesCache = await idbGetAllRoutes();
         console.log('[MeteoRide] initUI: loaded recentRoutesCache length=', recentRoutesCache.length);
+        // Read: the restore can go on (see below). Before the duplicate cleanup, which only
+        // drops older copies and would otherwise eat into the restore's five seconds.
+        window.cwRecentRoutesRead = true;
         
         // Clean any duplicate routes
         await cleanDuplicateRoutes();
@@ -1842,12 +1844,10 @@
       // deadline — so a fresh install spent five seconds behind a "Loading…" overlay that
       // also swallowed taps, waiting for routes that were never going to appear. Waiting
       // on "read" rather than on "non-empty" ends that wait the moment the truth is known.
+      // Set here too for the fallback path; the normal path set it before the cleanup.
       window.cwRecentRoutesRead = true;
-      // Someone with routes of their own has no use for the example; this is the first
-      // moment that is known, the check in the button's setup runs before the read ends.
-      const exampleBtn = document.getElementById("exampleRoute");
-      if (exampleBtn && recentRoutesCache.length) exampleBtn.hidden = true;
       updateRecentRoutesUI();
+      offerExample();
     });
 
 
@@ -1858,34 +1858,44 @@
      * Without it the whole app sits behind a file picker showing an empty folder, and
      * nothing below the map can be reached at all.
      *
-     * It hides itself once the app has a route or any recent one, so it is a way in rather
-     * than a permanent button. The file ships in the bundle; no network, so it works on a
-     * plane. */
+     * It ships hidden and is only offered with nothing to replace: the recent routes read
+     * and empty, no route on screen and no route request under way. Any request hides it at
+     * once (the restore of a stored route, a shared file, a pick, a link), and it is offered
+     * again only if that request ended with still nothing on screen. So it can never stand
+     * in for a route the user has or is about to have. The file ships in the bundle; no
+     * network, so it works on a plane. */
     const exampleEl = document.getElementById("exampleRoute");
+    const hideExample = () => { if (exampleEl) exampleEl.hidden = true; };
+    function offerExample() {
+      if (!exampleEl) return;
+      exampleEl.hidden = !(window.cwRecentRoutesRead && !getRecentRoutes().length
+        && !window.lastGPXFile && !window.cw.hasRouteRequestPending());
+    }
     if (exampleEl) {
-      const hideExample = () => { exampleEl.hidden = true; };
-      // `cw:forecast` is the only event the app publishes, and it fires once a forecast is
-      // on screen — which is exactly when a way in is no longer needed.
-      document.addEventListener('cw:forecast', hideExample, { once: true });
+      document.addEventListener('cw:route-requested', hideExample);
+      document.addEventListener('cw:route-settled', offerExample);
       // It sits inside the map container: without this a tap on it is also a tap on the map.
       if (window.L) L.DomEvent.disableClickPropagation(exampleEl);
       exampleEl.addEventListener('click', async () => {
+        // A route arrived between the button being drawn and this tap: it stays.
+        if (window.lastGPXFile || window.cw.hasRouteRequestPending()) { hideExample(); return; }
         exampleEl.disabled = true;
         try {
           const res = await fetch('assets/example-route.gpx');
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const text = await res.text();
-          hideExample();
           window.cwReceiveRoute({
             source: 'example',
             name: 'Example ride - Barcelona seafront',
             text,
-            importOn: 'arrival',
+            // Kept among the recent routes only once it has opened, like a link.
+            importOn: 'commit',
           });
         } catch (e) {
           console.warn('[MeteoRide] example route failed', e);
-          exampleEl.disabled = false;
           if (window.setNotice) window.setNotice(window.t ? window.t('example_route_failed') : 'The example route could not be opened.', 'warn');
+        } finally {
+          exampleEl.disabled = false;
         }
       });
     }

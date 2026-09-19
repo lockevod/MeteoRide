@@ -3419,7 +3419,6 @@ document.addEventListener("DOMContentLoaded", () => {
 // Global variable to store active weather alerts
 window.activeWeatherAlerts = [];
 
-// Test function for weather alerts (for development)
 /* Five window.* debug helpers lived here: testWeatherAlerts, testAlertIndicator,
  * forceCreateIcon, testRouteNamePosition and debugAlertPosition. They shipped in the
  * app, wrote strings like "Ruta de Prueba - Cycling Route" into the live interface and

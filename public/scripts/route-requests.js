@@ -230,7 +230,17 @@ var cwCreateRouteCoordinator = function (deps) {
   });
   window.cw = window.cw || {};
   Object.assign(window.cw, {
-    requestRoute: coordinator.requestRoute,
+    // Every request is announced as it is made and again once it has ended, so that what
+    // only makes sense with no route (the example-route button) can step aside and come back
+    // without knowing every way a route arrives. The call is synchronous up to the first wait,
+    // so `lastRouteRequestId()` right after asking is still the caller's own.
+    requestRoute: (request) => {
+      const announce = (type) => { try { document.dispatchEvent(new CustomEvent(type)); } catch (_) { /* never stops a request */ } };
+      announce('cw:route-requested');
+      const outcome = coordinator.requestRoute(request);
+      outcome.then(() => announce('cw:route-settled'));
+      return outcome;
+    },
     hasRouteRequests: coordinator.hasRouteRequests,
     hasRouteRequestPending: coordinator.hasRouteRequestPending,
     lastRouteRequestId: coordinator.lastRouteRequestId,

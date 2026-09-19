@@ -3143,6 +3143,41 @@ const holdRecentRead = (page) =>
     });
   });
 
+/* The example-route button is a way in for someone with no route. It must never be offered
+ * while there is one to replace: a tap makes a newer request, which supersedes whatever is
+ * on screen or still being read, and the example would then be the route kept for next time. */
+test('the example route is not offered while a stored route is being restored, nor after', async ({ page }) => {
+  await seedRecentRoute(page);
+  await holdRecentRead(page);
+  await page.reload();
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.__recentReads)).toBe(1);
+  // The restore is reading the user's route: this is the window a tap used to steal.
+  await expect(page.locator('#exampleRoute')).toBeHidden();
+  await page.evaluate(() => window.__openRecentRead());
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequestPending())).toBe(false);
+  await expect(page.locator('#exampleRoute')).toBeHidden();
+});
+
+test('the example route steps aside for a route that opens without a forecast, and comes back after one that fails', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const button = page.locator('#exampleRoute');
+  await expect(button).toBeVisible();
+
+  // A file that is not a route: nothing on screen afterwards, so the way in is offered again.
+  await pickText(page, 'broken.gpx', 'this is not a route');
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+  await expect(button).toBeVisible();
+
+  // A real route with no coverage: on screen, but no forecast is ever published.
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => page.evaluate(() => !!window.lastGPXFile)).toBe(true);
+  await expect(button).toBeHidden();
+});
+
 // Spec §6: the recent route is read after the shared one has already published, and the
 // shared one still wins.
 test('a route shared while the last recent route is still being read at start-up wins', async ({ page }) => {
@@ -4516,6 +4551,8 @@ test('a clean install does not wait for recent routes it does not have', async (
   await installNativeBridge(page);
   await page.goto('/index.html');
   await mapReady(page);
+  // The restore did ask: "not pending" is also what a start-up that never asked looks like.
+  expect(await page.evaluate(() => window.cw.hasRouteRequests())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequestPending()), { timeout: 2000 }).toBe(false);
 });
 
