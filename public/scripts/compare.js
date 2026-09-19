@@ -468,8 +468,8 @@
   const dtB = document.getElementById("datetimeRoute2")?.value || "";
 
   // Validate date ranges for both dates
-  const validationA = validateDateRange(dtA, 'fecha A');
-  const validationB = validateDateRange(dtB, 'fecha B');
+  const validationA = validateDateRange(dtA, 'field_date_a');
+  const validationB = validateDateRange(dtB, 'field_date_b');
 
   if (!validationA.valid) {
     const table = document.getElementById("weatherTable");

@@ -365,7 +365,7 @@ function segmentRouteByTime(geojson, settings) {
   const startDateTime = new Date(settings.start);
 
   // Validate date range (today to today + 14 days)
-  const dateValidation = window.validateDateRange(startDateTime, 'fecha de salida');
+  const dateValidation = window.validateDateRange(startDateTime, 'field_start_date');
   if (!dateValidation.valid) {
     logDebug(dateValidation.error, true);
     if (window.setNotice) window.setNotice(dateValidation.error, 'error');

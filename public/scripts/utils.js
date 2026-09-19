@@ -300,6 +300,9 @@
       date_invalid: "La {field} tiene un formato inválido.",
       date_too_early: "La {field} no puede ser anterior al día actual.",
       date_too_late: "La {field} no puede ser posterior a 14 días desde hoy.",
+      field_start_date: "fecha de salida",
+      field_date_a: "fecha A",
+      field_date_b: "fecha B",
       // Route validation messages
       no_route_loaded: "No hay ruta cargada. Por favor, carga una ruta GPX primero.",
       // Weather alerts messages
@@ -421,6 +424,9 @@
       date_invalid: "The {field} has an invalid format.",
       date_too_early: "The {field} cannot be earlier than today.",
       date_too_late: "The {field} cannot be later than 14 days from today.",
+      field_start_date: "departure date",
+      field_date_a: "first date",
+      field_date_b: "second date",
       // Route validation messages
       no_route_loaded: "No route loaded. Please load a GPX route first.",
       // Weather alerts messages
@@ -714,7 +720,13 @@
     }
   }
 
-  function validateDateRange(dateString, fieldName = 'fecha') {
+  /* `fieldName` is interpolated into a sentence that IS translated, so passing a literal
+   * leaks one language into the other: an English device showed "The fecha de salida
+   * cannot be later than 14 days from today." Callers pass a translation key instead, and
+   * it is resolved here. Found by an App Store review pass, and it was reachable in three
+   * taps. */
+  function validateDateRange(dateString, fieldKey = 'field_start_date') {
+    const fieldName = window.t ? window.t(fieldKey) : fieldKey;
     if (!dateString) return { valid: false, error: window.t ? window.t('date_empty', { field: fieldName }) : `La ${fieldName} no puede estar vacía.` };
 
     const selected = new Date(dateString);
