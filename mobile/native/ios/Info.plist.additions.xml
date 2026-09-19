@@ -157,7 +157,7 @@
 
 <!-- Ride alerts: the background task the runner schedules. The identifier must equal
      plugins.BackgroundRunner.label in mobile/capacitor.config.json. Xcode adds
-     UIBackgroundModes itself when "Background fetch" and "Background processing" are
+     UIBackgroundModes itself when "Background fetch" is
      ticked under Signing & Capabilities → Background Modes; listed here so a hand-edited
      plist ends up the same. -->
 <key>BGTaskSchedulerPermittedIdentifiers</key>
@@ -167,7 +167,6 @@
 <key>UIBackgroundModes</key>
 <array>
 	<string>fetch</string>
-	<string>processing</string>
 </array>
 
 <!-- Location purpose strings. The app only ever asks for "when in use" — `centreOnUser`

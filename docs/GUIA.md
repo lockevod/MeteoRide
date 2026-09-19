@@ -243,9 +243,10 @@ El tiempo no se puede inventar, pero lo ya descargado no se tira:
 - Al abrir la app vuelve la última ruta con su tabla, sin tener que cargar nada.
 - Si el pronóstico es antiguo se sigue mostrando, indicando cuántas horas tiene.
   Deja de hacerlo a las doce horas.
-- Las teselas del mapa que ya has mirado se guardan en el teléfono y vuelven a
-  salir sin conexión. En una zona que no hayas abierto antes el fondo sale en
-  blanco y el mapa lo indica.
+- El fondo del mapa necesita conexión. Las teselas que has mirado se guardan solo
+  el tiempo que permite el servidor del mapa (las condiciones de OpenStreetMap
+  prohíben el uso sin conexión), así que sin cobertura el fondo puede salir en
+  blanco; el mapa lo indica, y la ruta y la tabla se ven igual.
 - Si no hay datos, lo dice: no se queda una pantalla vacía sin explicación.
 
 El botón **📴** guarda el pronóstico de la ruta que tengas cargada y lo protege
@@ -255,8 +256,7 @@ del borrado automático de la caché. Púlsalo en casa antes de salir.
 
 - Sin ruta cargada, el mapa se abre donde estás en lugar de en Barcelona.
 - La app arranca en el idioma del teléfono mientras no elijas uno a mano.
-- Las unidades, el idioma, tu clave de API, las rutas recientes y las teselas que
-  ya has mirado se guardan fuera del navegador interno, de una forma que WebKit
+- Las unidades, el idioma, tu clave de API y las rutas recientes se guardan fuera del navegador interno, de una forma que WebKit
   sí conserva: no se pierden si el sistema libera espacio y en iPhone siguen ahí
   al volver a abrir la app. Antes no.
 - La primera vez que el mapa te busca, el sistema pide el permiso de ubicación
@@ -553,7 +553,8 @@ que no las requieren (Open-Meteo, AROME-HD).
 - Preferencias de velocidad e intervalos.
 - Caché temporal de datos meteorológicos (~30 minutos).
 - Las últimas 5 rutas GPX cargadas.
-- En la app nativa, además, las teselas del mapa que ya has mirado.
+- En la app nativa, además, las teselas del mapa que has mirado, cada una hasta la
+  caducidad que le dio su servidor.
 
 Si necesitas garantías de privacidad más estrictas, puedes ejecutar MeteoRide
 completamente en local (abriendo `index.html` sin usar las funciones de

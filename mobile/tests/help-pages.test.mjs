@@ -221,3 +221,12 @@ test('the policies do not repeat the claims the code contradicted', async () => 
       `${policy} stopped saying the map goes to the network first`);
   }
 });
+
+/* OpenStreetMap's tile policy forbids offline use of its tiles. The cache keeps a viewed
+ * tile only until the server's expiry (tile-cache.js), so the help must not sell the
+ * map as something that works without a connection. Both pages used to. */
+test('neither page promises the map background without a connection', async () => {
+  for (const [name, html] of [['help.html', await read('help.html')], ['help_en.html', await read('help_en.html')]]) {
+    assert.doesNotMatch(html, /teselas[^<]*sin conexión|tiles[^<]*offline|y teselas siguen|and tiles are still|mapa[^<.]*(funciona|sirve)[^<.]*sin conexión|map[^<.]*works[^<.]*offline/i, `${name} promises offline map tiles`);
+  }
+});

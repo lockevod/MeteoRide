@@ -4,9 +4,12 @@
  * loading a route, taking the server away and reopening produced nothing. So tiles are
  * kept here instead, in IndexedDB, as they are viewed.
  *
- * This caches what the user actually looked at. It never fetches ahead, which is the
- * line OpenStreetMap's tile policy draws: caching what you requested is fine, bulk
- * downloading is not.
+ * This caches what the user actually looked at, and only for as long as the tile server
+ * says. OpenStreetMap's tile policy allows re-visits from a local cache that honours the
+ * server's caching headers (or keeps a tile at least 7 days when they cannot be read),
+ * and forbids bulk downloading and offline use beyond that. So nothing is fetched ahead,
+ * every tile carries the expiry its response gave it, and an expired tile is never
+ * served, with or without a connection. A blank map out of coverage is then correct.
  *
  * Reading a tile's bytes needs a cross-origin fetch, and if the tile server does not
  * allow one this falls back to a plain <img>, which is exactly how the map worked
@@ -19,6 +22,34 @@
   const TRIM_TO = 1000;        // how far down to go once over the cap
   const MAX_TILE_BYTES = 512 * 1024;
   const NO_CORS_KEY = 'cw_tiles_no_cors';
+  const DEFAULT_TTL_MS = 7 * 24 * 3600 * 1000;   // the policy's floor when headers are missing
+  const SWEPT_KEY = 'cw_tiles_swept';
+  const SWEEP_EVERY_MS = 24 * 3600 * 1000;
+
+  /** When a response stops being fresh, from its own headers; null = do not keep it.
+   *  Cache-Control and Expires are CORS-safelisted, so a cross-origin read sees them. */
+  function expiryOf(res, now) {
+    const cc = (res.headers.get('Cache-Control') || '').toLowerCase();
+    // no-cache means "revalidate before every use", which a tile shown offline cannot be.
+    if (/\bno-store\b|\bno-cache\b/.test(cc)) return null;
+    // ponytail: max-age counts from receipt, because Age (how long a CDN or the web
+    // view's HTTP cache already held the response) is not CORS-readable and OSM does not
+    // expose it. A tile can so outlive its freshness by up to that age. This cache is
+    // only read when the network fails, and OSM sends stale-if-error=604800, which lets
+    // a stale tile be used on error for 7 more days; if a server ever sends max-age with
+    // no stale-if-error, expose Age there or halve max-age here.
+    const maxAge = cc.match(/(?:^|[,\s])max-age\s*=\s*(\d+)/);
+    if (maxAge) return Number(maxAge[1]) > 0 ? now + Number(maxAge[1]) * 1000 : null;
+    const expiresHeader = res.headers.get('Expires');
+    if (expiresHeader !== null) {
+      // An Expires that does not parse means "already expired" (RFC 9111 §5.3).
+      const expires = Date.parse(expiresHeader);
+      return !Number.isNaN(expires) && expires > now ? expires : null;
+    }
+    return now + DEFAULT_TTL_MS;
+  }
+  // A record written before expiries were stored: treated as kept for the default.
+  const expiryOfRecord = (r) => (typeof r.exp === 'number' ? r.exp : (r.ts || 0) + DEFAULT_TTL_MS);
 
   let dbPromise = null;
   let writesSinceTrim = 0;
@@ -58,7 +89,7 @@
       try {
         const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(url);
         req.onsuccess = () => {
-          const r = req.result;
+          const r = req.result && expiryOfRecord(req.result) > Date.now() ? req.result : null;
           // A record from an older Android/web build still has `blob` directly; a new
           // one has the raw bytes, rebuilt into a Blob here (cheap, and creating one in
           // memory works fine on WebKit — only storing one in IndexedDB does not).
@@ -69,8 +100,8 @@
     });
   }
 
-  async function writeTile(url, blob) {
-    if (!blob || blob.size === 0 || blob.size > MAX_TILE_BYTES) return;
+  async function writeTile(url, blob, exp) {
+    if (!exp || !blob || blob.size === 0 || blob.size > MAX_TILE_BYTES) return;
     const db = await openDb();
     if (!db) return;
     try {
@@ -81,7 +112,7 @@
       // Running out of storage surfaces on the transaction, not on the call, and an
       // unhandled one is noisy. Nothing to do about it beyond not caching this tile.
       tx.onerror = () => { console.warn('[cw] tile not cached:', tx.error && tx.error.name); };
-      tx.objectStore(STORE).put({ url, bytes, type: blob.type, ts: Date.now() });
+      tx.objectStore(STORE).put({ url, bytes, type: blob.type, ts: Date.now(), exp });
     } catch (_) { return; }
     // Trimming walks the whole store, so do it occasionally rather than every write.
     if (++writesSinceTrim >= 100) { writesSinceTrim = 0; trim(db); }
@@ -92,15 +123,25 @@
       const store = db.transaction(STORE, 'readwrite').objectStore(STORE);
       const countReq = store.count();
       countReq.onsuccess = () => {
-        let over = countReq.result - TRIM_TO;
-        if (countReq.result <= MAX_TILES || over <= 0) return;
+        // Over the cap, down to TRIM_TO; under it, nothing to drop but expired tiles.
+        let over = countReq.result > MAX_TILES ? countReq.result - TRIM_TO : 0;
+        const now = Date.now();
+        // The sweep for expired tiles walks every record, bytes and all, and holds up the
+        // first tile reads of a cold start; readTile refuses expired tiles by itself, so
+        // the sweep only frees space and once a day is plenty.
+        let swept = 0;
+        try { swept = Number(localStorage.getItem(SWEPT_KEY)) || 0; } catch (_) {}
+        const sweep = now - swept > SWEEP_EVERY_MS;
+        if (!over && !sweep) return;
+        if (sweep) { try { localStorage.setItem(SWEPT_KEY, String(now)); } catch (_) {} }
         // Oldest first, which for map tiles is a good enough approximation of
-        // "least likely to be looked at again".
+        // "least likely to be looked at again". Expired tiles go wherever they are.
         const cursorReq = store.index('ts').openCursor();
         cursorReq.onsuccess = (ev) => {
           const cursor = ev.target.result;
-          if (!cursor || over-- <= 0) return;
-          cursor.delete();
+          if (!cursor || (over <= 0 && !sweep)) return;
+          if (over > 0) { over--; cursor.delete(); }
+          else if (expiryOfRecord(cursor.value) <= now) cursor.delete();
           cursor.continue();
         };
       };
@@ -152,7 +193,7 @@
       const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
-      writeTile(url, blob);
+      writeTile(url, blob, expiryOf(res, Date.now()));
       return showBlob(tile, blob, done);
     } catch (e) {
       if (await useCached(tile, url, done)) return;

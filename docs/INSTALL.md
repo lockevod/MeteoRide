@@ -50,7 +50,7 @@ site deployed on a server, or just use <https://app.meteoride.cc>.
 3. Or click the Share button and select "Add to Dock".
 
 The PWA cannot do what the native app does: no system share sheet, no background
-weather-change alerts, no offline map tiles. See [GUIDE.md §6](GUIDE.md#6-in-the-iphone-and-android-app).
+weather-change alerts, no forecast kept for use out of signal. See [GUIDE.md §6](GUIDE.md#6-in-the-iphone-and-android-app).
 
 ---
 

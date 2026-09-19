@@ -268,11 +268,11 @@ const NATIVE_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
+  "img-src 'self' data: blob: https://tile.openstreetmap.org",
   "font-src 'self' data:",
   // The tile host is here as well as in img-src because the caching tile layer reads
   // tiles with fetch in order to store them.
-  `connect-src 'self' ${FORECAST_APIS.join(' ')} https://*.tile.openstreetmap.org`,
+  `connect-src 'self' ${FORECAST_APIS.join(' ')} https://tile.openstreetmap.org`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",

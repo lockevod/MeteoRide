@@ -765,7 +765,12 @@ for recent routes it does not have", checked by mutation against the old poll), 
 that a first run *with* coverage stays quiet. A restore replaced by a route picked during that wait (its request resolves
 `'superseded'`) says nothing either: the screen and the notice belong to that request.
 
-The map background is kept too, by `scripts/tile-cache.js`. Do not count on the web
+The map background is kept too, by `scripts/tile-cache.js`, but only within
+OpenStreetMap's tile policy: each tile until the expiry its response gave it
+(`Cache-Control` max-age, `Expires`, else 7 days; `no-store`/`no-cache` are not kept),
+and an expired tile is never served, offline included, since the policy forbids offline
+use. The help must not promise the map without a connection (`help-pages.test.mjs`).
+Do not count on the web
 view's own HTTP cache for it: serving tiles from a real server, loading a route, taking
 the server away and reopening produced zero tiles from cache. It has also been seen
 doing the opposite, keeping tiles across a reload in another setup, so treat it as
@@ -776,9 +781,12 @@ oldest-first, and trimmed again whenever the database is opened: a session that 
 fewer tiles than the write counter's threshold would otherwise never trim at all, and
 the store would grow without bound across sessions.
 
-Only what the user looked at is stored, never fetched ahead. That is the line
-OpenStreetMap's tile policy draws: caching what you requested is fine, bulk downloading
-is not. Do not add prefetching.
+Only what the user looked at is stored, never fetched ahead, and only until the expiry
+its response gave it. That is the line OpenStreetMap's tile policy draws: caching what
+you requested per its headers is fine; bulk downloading and offline use are not. Do not
+add prefetching, and do not serve an expired tile. Tiles come from the bare
+`tile.openstreetmap.org` (the policy retired the a/b/c subdomains); the CSP in
+`build-www.mjs` and `public/_headers` names that host exactly.
 
 Reading a tile's bytes needs a cross-origin `fetch`, which is why `connect-src` names
 the tile host as well as `img-src`. Whether the real tile servers allow that read has
@@ -1086,7 +1094,10 @@ Things that were decided rather than discovered:
   than silently losing itself on an upgrade. The runner also schedules five seconds
   out rather than "now": the iOS plugin clamps a past date to now and then builds a
   `DateInterval` whose end is before its start, a precondition failure that kills
-  the runner. `timeSensitive` also needs the capability in Xcode. On Android
+  the runner. Ride alerts now request `active`, so they respect Focus and notification
+  summaries: a change up to 24 hours away is not necessarily urgent. The old generic
+  interruption-level patch remains compatible, but no Time Sensitive entitlement is
+  needed. On Android
   loudness is the channel's: the web view creates a high-importance channel with
   `@capacitor/local-notifications` and the runner posts to it by id, but only when the
   app confirmed the channel exists — Android drops a notification whose channel does
@@ -2024,3 +2035,16 @@ suite and reporting only the second number is how a real regression gets buried.
   `scripts/patch-background-runner.mjs` to rewrite someone else's source would buy
   maintenance on every plugin update in exchange for no change in behaviour. Suppress
   warnings for dependency targets in Xcode if they get in the way.
+
+
+### App Review corrections (19/09/2026)
+
+Ride-change notifications use `active`, not `timeSensitive`: the watch checks rides up to
+24 hours ahead, whereas Time Sensitive is for events requiring immediate attention.
+The iOS runner schedules `BGAppRefreshTaskRequest` only, so `UIBackgroundModes` needs
+`fetch`, not `processing`. The local target no longer carries the Time Sensitive entitlement.
+`appendUserAgent` (top level, so iOS and Android alike) identifies MeteoRide to the tile service. Open-Meteo credit is
+linked beside the table (outside the replaceable table markup) and on the map; both
+help languages explain the CC BY 4.0 data licence and MeteoRide's transformations.
+The submission text is in `docs/APP-REVIEW-REPLY.md`; its recording and device fields
+must be completed from the actual build sent to Apple, never from browser tests.

@@ -282,8 +282,9 @@ and it lives in the group container; the entitlement is the app's own now, with 
 The forecast watch runs in `@capacitor/background-runner`, which needs three things
 the template project does not have:
 
-1. *Signing & Capabilities* → **Background Modes** → tick *Background fetch* and
-   *Background processing*. (This writes the `UIBackgroundModes` array from the
+1. *Signing & Capabilities* → **Background Modes** → tick *Background fetch*.
+   *Background processing* is not needed: the installed runner schedules only
+   `BGAppRefreshTaskRequest`, not `BGProcessingTaskRequest`. (This writes the `UIBackgroundModes` array from the
    additions file into `Info.plist`; merging the file does the same.)
 2. `BGTaskSchedulerPermittedIdentifiers` from `Info.plist.additions.xml`, holding
    `cc.meteoride.app.watch`. It must equal `plugins.BackgroundRunner.label` in
@@ -294,14 +295,10 @@ the template project does not have:
    task is never registered and iOS never calls it. Do not add that file to the
    target; it would collide with the real one.
 
-For alerts that break through Focus modes, also add *Signing & Capabilities* →
-**Time Sensitive Notifications**. The runner posts every alert with
-`interruptionLevel: "timeSensitive"`; without the capability iOS silently delivers
-it as an ordinary banner, and without the `postinstall` patch in
-`mobile/scripts/patch-background-runner.mjs` the plugin drops the field altogether
-(`npm install` applies the patch; `git status` inside `node_modules` is not tracked,
-so nothing to commit). Critical alerts are deliberately not used: they need a
-per-app entitlement from Apple.
+Ride alerts use ordinary local notifications (`interruptionLevel: "active"`), so they
+respect Focus and scheduled summaries. A change can concern a ride up to 24 hours away;
+that does not justify Time Sensitive delivery. Do not add the Time Sensitive Notifications
+capability; remove it from an older checkout's entitlements. Critical alerts are not used.
 
 Two things the user controls and the app cannot: **Background App Refresh**
 (Settings → General, and per app) and **Low Power Mode**. With refresh off the task
@@ -455,10 +452,11 @@ in from another app takes precedence over it.
 The 📴 button saves the forecast for the route you have loaded, so the entries survive
 the clear-out that runs when storage fills up. Press it at home before leaving.
 
-Map tiles you have already looked at are kept on the device and come back without a
-connection, so the area you studied at home still has a background. A stretch you never
-opened will be blank, and the map says so: tiles are only stored as you view them,
-never downloaded ahead, which is what OpenStreetMap's terms allow.
+Map tiles are kept only as OpenStreetMap's tile policy allows: as they are viewed, never
+downloaded ahead, and each only until the expiry its response gave it (`Cache-Control`
+/ `Expires`, or 7 days without them). An expired tile is not served even without a
+connection, because the policy forbids offline use; out of coverage the background may be
+blank, and the map says so.
 
 ## Ride alerts
 

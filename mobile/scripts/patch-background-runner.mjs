@@ -4,12 +4,11 @@
  * `npm install`. The runner is what delivers a ride alert while the app is in the
  * background, and its notification API is what these touch:
  *
- * iOS — CapacitorNotifications.schedule() ignores `interruptionLevel`, so every alert
- * would be an ordinary banner: silenced by a Focus mode and easy to miss under a
- * locked screen. The @capacitor/local-notifications plugin supports the field, but
- * it cannot be called from the runner. `timeSensitive` still needs the "Time
- * Sensitive Notifications" capability on the App target (docs/IOS.md); without it
- * iOS quietly downgrades to `active`.
+ * iOS — CapacitorNotifications.schedule() ignores `interruptionLevel`. This patch
+ * passes the selected level through. MeteoRide currently requests `active`: forecast
+ * changes up to 24 hours away must respect Focus and notification summaries, and
+ * need no Time Sensitive capability. The patch also keeps older installed copies
+ * compatible; its support for other levels does not mean the app requests them.
  *
  * Android — `scheduleAt` arrives as the ISO string JSON makes of a Date, which ends
  * in Z, and the plugin parses it with a SimpleDateFormat that treats the Z as a

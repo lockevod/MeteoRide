@@ -99,7 +99,7 @@ test('a worsening forecast becomes one notification and moves the baseline', asy
   const n = h.scheduled[0];
   assert.equal(n.title, 'test.gpx · Cambia el tiempo en tu ruta');
   assert.match(n.body, /Lluvia a las 10:00/);
-  assert.equal(n.interruptionLevel, 'timeSensitive');
+  assert.equal(n.interruptionLevel, 'active', 'a forecast change hours away must respect Focus');
   assert.equal('channelId' in n, false, 'no channel unless the app confirmed one');
   assert.ok(n.scheduleAt instanceof Date && n.scheduleAt.getTime() > Date.now() + 1000, 'never "now"');
   assert.ok(Number.isInteger(n.id) && n.id > 0 && n.id < 2147483647, 'an Android-sized id');

@@ -701,7 +701,8 @@
     return el;
   }
 
-  // Tiles viewed earlier are kept, so being offline no longer means a blank map.
+  // Tiles viewed recently are kept until their server's expiry (tile-cache.js), so a map
+  // seen shortly before losing coverage keeps its background; past that it is blank.
   // The badge follows what happened to the tiles rather than the connection, read
   // from the DOM rather than counted from events: the first load finishes before
   // there is anything to attach a listener to.

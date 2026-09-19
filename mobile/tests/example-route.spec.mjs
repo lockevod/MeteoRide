@@ -42,6 +42,12 @@ test('the example route is reachable, loads, and produces a forecast', async ({ 
     'the bundled route did not reach the table: a reviewer would see an empty app'
   ).toBeVisible({ timeout: 25000 });
 
+  const credit = page.locator('#weatherAttribution');
+  await expect(credit).toBeVisible();
+  await expect(page.locator('#map a[href="https://open-meteo.com/"]')).toBeVisible();
+  await expect(credit.locator('a[href="https://open-meteo.com/"]')).toBeVisible();
+  await expect(credit.locator('a[href="https://creativecommons.org/licenses/by/4.0/"]')).toBeVisible();
+
   // Once there is a forecast on screen the way in has done its job and gets out of the way.
   await expect(button).toBeHidden();
 });

@@ -764,7 +764,15 @@ test('the bundle carries its own content security policy', async ({ page }) => {
     // afford to name its hosts. Bare `https:` would give that away.
     expect(policy).toMatch(/connect-src 'self' https:\/\/\S/);
     expect(policy).not.toMatch(/connect-src[^;]*https:(?:\s|;|$)/);
+    // The tile host exactly: `*.tile.openstreetmap.org` does not match the bare host the
+    // map now uses, and the app reads tiles with fetch (connect-src) but falls back to a
+    // plain <img> (img-src), so a stale entry in either one only shows on that path.
+    for (const dir of ['img-src', 'connect-src']) {
+      expect(policy, `${name} ${dir}`).toMatch(new RegExp(`${dir}[^;]*\\shttps://tile\\.openstreetmap\\.org(\\s|;|$)`));
+    }
   }
+  const headers = await readFile(join(WWW, '../../public/_headers'), 'utf8');
+  expect(headers, 'the website CSP').toMatch(/img-src[^;]*\shttps:\/\/tile\.openstreetmap\.org(\s|;)/);
 
   // It has to actually apply, not merely be present.
   await goOffline(page);
@@ -4777,6 +4785,141 @@ test('map tiles already seen survive losing coverage', async ({ page }) => {
   await expect(page.locator('#cwMapOffline')).toBeHidden();
 });
 
+/** Every stored tile record, read straight from IndexedDB. */
+const storedTiles = (page) => page.evaluate(() => new Promise((resolve, reject) => {
+  const open = indexedDB.open('cw_tiles', 1);
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const all = open.result.transaction('tiles').objectStore('tiles').getAll();
+    all.onsuccess = () => { resolve(all.result.map(({ url, ts, exp }) => ({ url, ts, exp }))); open.result.close(); };
+    all.onerror = () => reject(all.error);
+  };
+}));
+
+// OpenStreetMap's tile policy: cache what was viewed, honouring the server's caching
+// headers (or at least 7 days when they cannot be read), and no offline use beyond
+// that. The cache used to keep every tile until the 1,200 cap pushed it out, and served
+// it with no connection however old it was.
+test('a stored tile past its expiry is not served, not even with no connection', async ({ page }) => {
+  const control = { celsius: 18, offline: false };
+  await installNativeBridge(page);
+  await stubProvider(page, control);
+  await stubTiles(page, control);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await storedTiles(page)).length).toBeGreaterThan(0);
+
+  // Every tile the server gave a week to has now run out.
+  await page.evaluate(() => new Promise((resolve) => {
+    const open = indexedDB.open('cw_tiles', 1);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('tiles', 'readwrite');
+      const store = tx.objectStore('tiles');
+      // Half as records from before expiries were stored (no exp, 8 days old), half with
+      // an expiry just gone: both must count as expired.
+      store.getAll().onsuccess = (e) => e.target.result.forEach((r, i) => {
+        if (i % 2) store.put({ ...r, exp: Date.now() - 1000 });
+        else { const { exp, ...legacy } = r; store.put({ ...legacy, ts: Date.now() - 8 * 24 * 3600 * 1000 }); }
+      });
+      tx.oncomplete = () => { open.result.close(); resolve(); };
+    };
+  }));
+
+  // Same session, coverage gone, tiles drawn again: the read itself refuses them.
+  control.offline = true;
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true });
+    window.cwTileLayer.redraw();
+  });
+  await page.waitForTimeout(1000);
+  await expect(tilesDrawn(page)).toHaveCount(0);
+
+  // Cold start out of coverage a day later (the sweep runs at most daily): the expired
+  // tiles are gone from storage altogether.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true });
+    localStorage.removeItem('cw_tiles_swept');
+  });
+  await page.reload();
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+  await expect.poll(async () => (await storedTiles(page)).length).toBe(0);
+  await expect(tilesDrawn(page)).toHaveCount(0);
+  // A blank map is labelled as such, as for a tile never seen.
+  await expect(page.locator('#cwMapOffline')).toBeVisible();
+});
+
+test('a stored tile keeps the lifetime its server gave it', async ({ page }) => {
+  let headers = { 'Cache-Control': 'public, max-age=60' };
+  await installNativeBridge(page);
+  await stubProvider(page, { celsius: 18, offline: false });
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (route) => route.fulfill({
+    status: 200,
+    contentType: 'image/svg+xml',
+    headers: { 'Access-Control-Allow-Origin': '*', ...headers },
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e8e0d8"/></svg>',
+  }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  // Wait for the previous phase's writes to land before clearing, or a late one leaks in.
+  const clear = async () => { await page.waitForTimeout(500); await page.evaluate(() => window.cwClearTileCache()); };
+  const lifetimes = async () => (await storedTiles(page)).map((r) => r.exp - r.ts);
+  const pan = () => page.evaluate(() => { const m = window.cw.map || window.map; m.setView([41.0 + Math.random(), 1.0 + Math.random()], 13); });
+
+  // max-age wins.
+  await clear(); await pan();
+  await expect.poll(async () => (await lifetimes()).length).toBeGreaterThan(0);
+  // Within a second: the expiry is set when the response arrives, the stamp when it is stored.
+  for (const life of await lifetimes()) expect(Math.abs(life - 60 * 1000)).toBeLessThan(1000);
+
+  // No caching headers at all: the policy's floor of 7 days.
+  headers = {};
+  await clear(); await pan();
+  await expect.poll(async () => (await lifetimes()).length).toBeGreaterThan(0);
+  for (const life of await lifetimes()) expect(Math.abs(life - 7 * 24 * 3600 * 1000)).toBeLessThan(1000);
+
+  // Expires alone is taken as given.
+  const expires = Date.now() + 2 * 3600 * 1000;
+  headers = { Expires: new Date(expires).toUTCString() };
+  await clear(); await pan();
+  await expect.poll(async () => (await storedTiles(page)).length).toBeGreaterThan(0);
+  for (const r of await storedTiles(page)) expect(Math.abs(r.exp - expires)).toBeLessThan(1000);
+
+  // An Expires that does not parse means already expired: not kept.
+  headers = { Expires: 'garbage' };
+  await clear(); await pan();
+  await expect(tilesDrawn(page)).not.toHaveCount(0);
+  await page.waitForTimeout(1000);
+  expect(await storedTiles(page)).toEqual([]);
+
+  // A tile the server says not to keep is not kept.
+  headers = { 'Cache-Control': 'no-store' };
+  await clear(); await pan();
+  await expect(tilesDrawn(page)).not.toHaveCount(0);
+  await page.waitForTimeout(1000);
+  expect(await storedTiles(page)).toEqual([]);
+});
+
+// The tile policy asks for the bare host: the a/b/c subdomains "may be slower or withdrawn
+// without notice". The app used {s}.tile.openstreetmap.org, and its CSP allowed only that.
+for (const native of [true, false]) {
+  test(`map tiles come from tile.openstreetmap.org itself (${native ? 'app' : 'website'})`, async ({ page }) => {
+    const hosts = new Set();
+    if (native) await installNativeBridge(page);
+    await page.route((url) => url.hostname.endsWith('openstreetmap.org'), (route) => {
+      hosts.add(new URL(route.request().url()).hostname);
+      return route.fulfill({ status: 200, contentType: 'image/svg+xml', headers: { 'Access-Control-Allow-Origin': '*' },
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"/>' });
+    });
+    await page.goto('/index.html');
+    await mapReady(page);
+    // Drawn, so the CSP let the bare host through too.
+    await expect(tilesDrawn(page)).not.toHaveCount(0);
+    expect([...hosts]).toEqual(['tile.openstreetmap.org']);
+  });
+}
+
 test('the website keeps the plain tile layer', async ({ page }) => {
   await goOffline(page);
   await page.goto('/index.html');
@@ -4802,7 +4945,8 @@ test('the tile cache stays bounded across sessions', async ({ page }) => {
     });
     const store = db.transaction('tiles', 'readwrite').objectStore('tiles');
     for (let i = 0; i < 1400; i++) {
-      store.put({ url: `https://x/${i}.png`, bytes: new Uint8Array([116]).buffer, type: 'text/plain', ts: 1000 + i });
+      // Far from expiry, so what goes is decided by the cap alone.
+      store.put({ url: `https://x/${i}.png`, bytes: new Uint8Array([116]).buffer, type: 'text/plain', ts: 1000 + i, exp: Date.now() + 1e9 });
     }
     await new Promise((res) => { store.transaction.oncomplete = res; });
     db.close();
@@ -6289,6 +6433,8 @@ test('in the app, compare-by-dates collapses the sticky first column once scroll
   await openCompareDates(page);
   await runCompareDates(page);
   await expect.poll(() => datesShown(page)).toBe(true);
+
+  await expect(page.locator('#weatherAttribution a[href="https://open-meteo.com/"]')).toBeVisible();
 
   const container = page.locator('#weatherTableContainer');
   await expect.poll(() => container.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);

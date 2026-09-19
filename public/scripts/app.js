@@ -2889,12 +2889,14 @@ function initMap() {
     attributionControl: true  // Ensure attribution control is enabled
   }).setView([41.3874, 2.1686], 14);
 
-  const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  // The bare host, as OpenStreetMap's tile policy asks: the a/b/c subdomains "may be
+  // slower or withdrawn without notice". The CSP in build-www.mjs and _headers matches it.
+  const tileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
   const tileOptions = {
     attribution: '<span class="map-provider">| © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>',
   };
-  // In the app, tiles are kept as they are viewed so the map still has a background
-  // after losing coverage. On the website nothing changes: the plain layer is used,
+  // In the app, tiles are kept as they are viewed, each only until its server's expiry
+  // (tile-cache.js), so a recently seen area keeps its background for a while. On the website nothing changes: the plain layer is used,
   // because the caching one reads tiles with fetch and that depends on the tile
   // server allowing cross-origin reads, which has not been verified in production.
   const tileLayer = (window.CW_NATIVE && window.cwCreateTileLayer
@@ -2968,7 +2970,7 @@ function initMap() {
       
       // Crear estructura HTML con clases específicas para el CSS
       attribution.innerHTML = `
-        <span class="lockevod-credit">© <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a></span><span class="separator"> | </span><span class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span>
+        <span class="lockevod-credit">© <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer">Lockevod</a></span><span class="separator"> | </span><span class="osm-credit">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</span><span class="separator"> | </span><span class="weather-credit"><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a></span>
       `;
       
       // Add to map container

@@ -236,9 +236,10 @@ away:
   anything.
 - An old forecast is still shown, labelled with how many hours old it is. It
   stops at twelve.
-- Map tiles you have already looked at are kept on the phone and come back
-  offline. In an area you never opened, the background is blank and the map says
-  so.
+- The map background needs a connection. Tiles you looked at are kept only for as
+  long as the map server allows (OpenStreetMap's terms forbid offline use), so out
+  of signal the background may be blank; the map says so, and the route and the
+  table still show.
 - When there is no data at all, it says so rather than leaving an empty screen
   with no explanation.
 
@@ -535,7 +536,8 @@ not require them (Open-Meteo, AROME-HD).
 - Speed and interval preferences.
 - Temporary weather data cache (~30 minutes).
 - The last 5 GPX routes loaded.
-- In the native app, also the map tiles you have already looked at.
+- In the native app, also the map tiles you looked at, each until the expiry its
+  server gave it.
 
 If you need stricter privacy guarantees, you can run MeteoRide entirely locally
 (opening `index.html` without using the share/upload features) or deploy your

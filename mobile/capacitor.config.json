@@ -2,6 +2,7 @@
   "appId": "cc.meteoride.app",
   "appName": "MeteoRide",
   "webDir": "www",
+  "appendUserAgent": "MeteoRide/1.0 (+https://app.meteoride.cc)",
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#0B6297",

@@ -48,7 +48,7 @@ npm run android             # build + cap sync + abre Android Studio
 | Recibir GPX/KML desde otras apps (share sheet, "Abrir en") | iOS: `mobile/native/ios/**` (`CFBundleDocumentTypes` + `SceneDelegate` + App Group + plugin; **sin share extension**, ver §10). Android: `mobile/android/.../MainActivity.java`, `MeteoRideShareStore.java`, `MeteoRideSharePlugin.java`, intent filters | JS probado; Swift **nunca compilado**; Java compila contra stubs |
 | Enviar la ruta cargada a otra app (Hammerhead, Files…) | botón 📤 en `native.js` (Filesystem CACHE + Share) | probado |
 | Ajustes persistentes fuera del web view | `cwSettings` espejado a Preferences; restore al arrancar | probado |
-| Sin cobertura: último pronóstico (≤12 h) etiquetado, ruta restaurada al abrir, botón 📴 que fija la caché, teselas del mapa cacheadas (IndexedDB), aviso "mapa sin conexión", mensajes de proveedor caído | `public/scripts/utils.js`, `tile-cache.js`, `native.js` | probado; CORS de teselas OSM **sin verificar en dispositivo** |
+| Sin cobertura: último pronóstico (≤12 h) etiquetado, ruta restaurada al abrir, botón 📴 que fija la caché, teselas vistas guardadas hasta su caducidad (IndexedDB, política de OSM), aviso "mapa sin conexión", mensajes de proveedor caído | `public/scripts/utils.js`, `tile-cache.js`, `native.js` | probado; CORS de teselas OSM **sin verificar en dispositivo** |
 | Mapa centrado en la posición del móvil si no hay ruta | `native.js` `centreOnUser` | probado |
 | **Alertas de ruta** en segundo plano (lluvia nueva, viento, avisos oficiales) con toggle | ver sección 4 | JS y runner probados en Node; nativo sin ejecutar |
 | Seguridad: CSP web y app, sanitizado de GPX, `/share` endurecido, sin enlace de pago en la app | `public/_headers`, `functions/`, `gpx-share.js`, build | probado |
@@ -1821,3 +1821,52 @@ de licencias (empieza por `@capacitor/android`) y cita los rótulos como salen e
 **No se cambia:** `AROMEHD_MAX_HOURS` sigue en 48; la cadena corta a 36 h y bajarlo dejaría
 vacía la columna de AROME entre 36 y 48 h en la comparación. Codex lo leyó como que la app usa
 48 h; el comentario ahora lo explica.
+
+### Correcciones de preparación para App Review (19/09, build 7)
+
+Las alertas por cambios de previsión usan ahora `active`: pueden referirse a una salida
+muchas horas después y deben respetar Focus y los resúmenes. Se ha quitado el entitlement
+Time Sensitive del proyecto iOS local. `UIBackgroundModes` queda en `fetch`, tanto en la
+plantilla como en el proyecto local; esto sustituye la decisión histórica de conservar
+`processing` descrita arriba. La configuración añade un User-Agent identificable de
+MeteoRide para los mosaicos de OpenStreetMap. Open-Meteo aparece enlazado junto al mapa y
+la tabla, con CC BY 4.0 en la tabla y explicación del procesamiento en ambas ayudas.
+
+`docs/APP-REVIEW-REPLY.md` contiene el borrador revisado; requiere vídeo real del build 7,
+modelo/iOS y contraste con el mensaje original de Apple antes de enviarlo.
+
+Verificación nueva: 290 pruebas Node y 649 de navegador aprobadas, una omitida; pruebas
+de regresión de alertas y atribución fallaron antes de corregirlas y pasan después.
+Build de simulador, archive 1.0.0 (7) y exportación App Store Connect correctos. El IPA
+tiene firma Apple Distribution válida, `get-task-allow=false`, familia iPhone, sólo
+`fetch`, sin Time Sensitive ni extensión de compartir. Los recursos del archive
+coinciden con `mobile/www`, incluido `THIRD-PARTY-NOTICES.txt`.
+
+Archive conservado en Xcode: `~/Library/Developer/Xcode/Archives/2026-09-19/MeteoRide-1.0.0-7-AppReview.xcarchive`.
+IPA local, ignorado por Git: `mobile/ios/releases/1.0.0-7/MeteoRide.ipa`.
+Carga del build 7 en App Store Connect completada el 19/09 a las 16:24 (hora local):
+`Upload succeeded`, paquete procesándose. No se ha enviado a revisión ni publicado.
+La herramienta de interfaz no pudo seleccionar Simulator: instalar y lanzar la app
+funcionó, pero no se certifica inspección visual nativa. Pendientes: dispositivo real
+con TestFlight, compatibilidad iPad, vídeo, cuestionario App Privacy y respuesta original.
+
+### Caducidad de las teselas (19/09, después del build 7)
+
+La revisión final encontró que `tile-cache.js` guardaba cada tesela hasta el tope de 1200 y la
+servía sin conexión aunque fuera de hace meses, y que la ayuda lo anunciaba («vuelven a salir
+sin conexión»). La política de teselas de OpenStreetMap prohíbe el uso sin conexión y pide
+respetar las cabeceras de caché. Ahora cada tesela guarda la caducidad de su respuesta
+(`max-age`, `Expires`, o 7 días sin cabeceras; `no-store`/`no-cache` no se guardan), una caducada
+no se sirve nunca y la poda la borra. La ayuda, las guías, IOS.md y el README ya no prometen
+el mapa sin conexión. **El build 7 subido no lleva este cambio**: no afecta a la respuesta a
+Apple (el texto no promete mapas sin conexión), pero hay que incluirlo en el siguiente build.
+
+Revisión adversarial (Claude y Codex) de este cambio: el mapa pedía las teselas a los
+subdominios `{s}.tile.openstreetmap.org`, que la política ya no admite; ahora usa
+`tile.openstreetmap.org` y la CSP (app y web) nombra ese host exacto. El User-Agent
+identificativo pasa al nivel superior de `capacitor.config.json`, así que también lo envía
+Android. Un `Expires` que no se entiende cuenta como caducado. El barrido de caducadas corre
+como mucho una vez al día (la lectura ya las rechaza). Codex señaló que `max-age` cuenta desde
+la recepción sin descontar `Age`: esa cabecera no es legible por CORS, y OSM envía
+`stale-if-error=604800`, que autoriza servir una tesela caducada 7 días más cuando falla la
+red, que es cuando esta caché se lee; queda explicado en el código.

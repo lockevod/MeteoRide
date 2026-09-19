@@ -56,9 +56,9 @@ function notify(watch, message) {
     // scripts/patch-background-runner.mjs), and fires a past time immediately.
     scheduleAt: new Date(Date.now() + 5000),
     threadIdentifier: 'cw_watch',
-    // Honoured by the plugin once the mobile/scripts/patch-background-runner.mjs
-    // patch is in, and needs the Time Sensitive Notifications entitlement in Xcode.
-    interruptionLevel: 'timeSensitive',
+    // Forecast changes can concern a ride up to a day away. Respect Focus and
+    // notification summaries instead of treating every change as immediately urgent.
+    interruptionLevel: 'active',
   };
   // Only when the app confirmed the high-importance channel exists: Android drops a
   // notification whose channel does not.

@@ -47,7 +47,7 @@ user guide: what to do, without the why.
   speed up reloads and stay inside API limits.
 - **Native apps**: system share sheet both ways, `.gpx` / `.kml` file handler,
   background alerts when the forecast for a planned route turns worse, and a
-  forecast and map tiles that survive going out of signal.
+  forecast that survives going out of signal.
 - **Privacy-focused**: it runs on your device. Only coordinates, times and your
   own API key reach the weather providers.
 - **Open source**: MIT licensed.
