@@ -42,7 +42,16 @@ docs/ANDROID.md    Android build
   `mobile/scripts/build-www.mjs`; the build fails otherwise, on purpose.
   Each vendored package also ships its licence as `www/vendor/<dir>/LICENSE.txt`: the
   package's own file, or `mobile/licenses/<package>.txt` when it has none (Weather Icons:
-  OFL for the font, MIT for the CSS). A new library with neither stops the build.
+  OFL for the font, MIT for the CSS), plus any `mobile/licenses/<package>+*.txt` (pako's
+  zlib notice). A new library with neither stops the build. `www/THIRD-PARTY-NOTICES.txt`
+  gathers everything the app ships: every runtime dependency, `@capacitor/ios` and
+  `@capacitor/android` (devDependencies, but compiled in), and every other file in
+  `mobile/licenses/` (marker icons, Cordova's Apache code, the ion-ios SPM libraries).
+  A new native dependency with its own licence needs a file there.
+- The same `www/` ships to iOS and Android, so platform-specific text in the help and
+  policy pages is hidden at runtime, not stripped: `help.js` sets `cw-native` and
+  `cw-ios`/`cw-android` on `<html>`, and the pages hide `.web-only`, `.ios-only` and
+  `.android-only`. App Review rejects an iOS app whose pages mention Android (2.3.10).
 - User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
 - **The help pages are the short version; `docs/GUIA.md` and `docs/GUIDE.md` are the
   long one.** `public/help.html` and `public/help_en.html` answer "what do I do" in

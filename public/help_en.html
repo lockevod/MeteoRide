@@ -159,6 +159,9 @@
         /* And the other way round: how to install the web app from a browser is a
            recipe the app's reader has already followed. */
         html.cw-native .web-only { display: none; }
+        /* A tip for one platform is noise on the other, and App Review reads a mention of
+           another platform as metadata that does not belong in the app (2.3.10). */
+        html.cw-ios .android-only, html.cw-android .ios-only { display: none; }
         /* Every section is a <details> written open. The website leaves it open and
            takes no clicks on the summary, so the page reads exactly as it always did.
            Inside the app help.js closes them and the reader gets an index to tap
@@ -191,7 +194,7 @@
 
     <details class="section" open>
         <summary><h2>🚀 Introduction</h2></summary>
-        <p>MeteoRide loads your GPX/KML route and tells you the weather you will meet on each stretch: temperature, wind, rain, humidity, cloud, light and UV. It works on the web and as an iPhone and Android app.</p>
+        <p>MeteoRide loads your GPX/KML route and tells you the weather you will meet on each stretch: temperature, wind, rain, humidity, cloud, light and UV. <span class="web-only">It works on the web and as an iPhone and Android app.</span></p>
         <p>This help answers "what do I do". The detail —each provider's limits, what is stored and where, how it behaves out of signal— is in the <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">user guide</a>.</p>
     </details>
 
@@ -254,16 +257,16 @@
     </details>
 
     <details class="section app-only" open>
-        <summary><h2>📱 In the iPhone and Android app</h2></summary>
+        <summary><h2>📱 In the app</h2></summary>
         <p>Things a browser cannot do, which is why you only see them here.</p>
 
         <h3>📤 Sharing routes</h3>
         <p>With a route loaded, the <strong>📤</strong> button sends it to another app: your head unit, Files, mail. The other way round too: share a GPX from Komoot, Strava or Files and pick MeteoRide. The file never leaves the device.</p>
 
         <h3>🔔 Alerts when the weather changes</h3>
-        <p>Once you work out a route, the app keeps watching it and tells you if it turns worse for the hours you will be out: rain appears, wind or strong gusts appear, or an official warning is issued that overlaps your ride. Switch it on under <strong>Settings → Alerts → "Tell me if the weather on the route changes"</strong>.</p>
+        <p>Once you work out a route, the app keeps watching it and tells you if it turns worse for the hours you will be out: rain appears, wind or strong gusts appear, or an official warning is issued that overlaps your ride. It is on from the start; switch it off under <strong>Settings → Alerts → "Tell me if the weather on the route changes"</strong>.</p>
         <div class="warning">
-            <strong>Worth knowing:</strong> the check is run by the operating system, not by the app. On iPhone it needs <em>Background App Refresh</em>; on Android, that the battery manager does not kill it. When the system is not going to run it, the app says so under the toggle.
+            <strong>Worth knowing:</strong> the check is run by the operating system, not by the app. <span class="ios-only">On iPhone it needs <em>Background App Refresh</em>.</span><span class="android-only">On Android it needs the battery manager not to kill it.</span> When the system is not going to run it, the app says so under the toggle.
         </div>
 
         <h3>🚴 Out of signal</h3>

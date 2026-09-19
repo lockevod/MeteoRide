@@ -10,7 +10,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -66,4 +66,22 @@ test('every vendored library ships with its licence', async () => {
     if (size < 200) missing.push(dir.name);
   }
   assert.deepEqual(missing, [], 'vendored without its licence; see copyVendorLicences in build-www.mjs');
+});
+
+test('the notices file names every shipped package and carries every kept licence', async () => {
+  // The vendor folders are not all that ships: pako is also under Zlib, the start and end
+  // markers are BSD-2 icons from another project, and Capacitor, its plugins and the Apache
+  // Cordova code inside it are compiled into the app. A second external review found all of
+  // these missing after the vendor licences were fixed.
+  const notices = await readFile(join(WWW, 'THIRD-PARTY-NOTICES.txt'), 'utf8');
+  const pkg = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
+  const shipped = [...Object.keys(pkg.dependencies), '@capacitor/ios', '@capacitor/android'];
+  const unnamed = shipped.filter((name) => !notices.includes(`\n== ${name} `));
+  assert.deepEqual(unnamed, [], 'shipped without a section in THIRD-PARTY-NOTICES.txt');
+  const kept = await readdir(join(MOBILE, 'licenses'));
+  const dropped = [];
+  for (const n of kept) {
+    if (!notices.includes((await readFile(join(MOBILE, 'licenses', n), 'utf8')).trim())) dropped.push(n);
+  }
+  assert.deepEqual(dropped, [], 'a licence kept in mobile/licenses is not in THIRD-PARTY-NOTICES.txt');
 });

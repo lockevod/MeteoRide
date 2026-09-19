@@ -7857,6 +7857,22 @@ test('the English help page says the same', async ({ page }) => {
   }
 });
 
+// App Review rejects an iOS app whose own pages talk about another platform (2.3.10), and
+// the help and the iOS policy both did: "an iPhone and Android app", the Android battery
+// tip, a link to the Android policy. The same www/ ships to Android, so the text stays and
+// help.js hides it by platform; innerText is what a reader on an iPhone actually sees.
+test('the pages an iPhone reader can open never mention Android', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  for (const name of ['help.html', 'help_en.html', 'privacy-ios.html']) {
+    await page.goto(`/${name}`);
+    await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
+    const seen = await page.locator('body').innerText();
+    expect(seen, `${name} shows Android to an iPhone reader`).not.toMatch(/android/i);
+    if (name.startsWith('help')) expect(seen).toMatch(/Background App Refresh|Actualización en segundo plano/);
+  }
+});
+
 test('the list of pinned cache keys left by an older version is removed at start-up, and the cache itself stays', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('cw_offline_pinned', JSON.stringify(['cw_weather_old']));

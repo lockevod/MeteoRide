@@ -26,7 +26,7 @@ for (const path of PAGES) {
     await expect(page.locator('details.section')).not.toHaveCount(0);
 
     // How to install the PWA: the website is where that belongs.
-    await expect(page.locator('.web-only')).toBeVisible();
+    await expect(page.locator('details.web-only')).toBeVisible();
     // And the app-only section is the one thing the website does not show.
     await expect(page.locator('.app-only')).toBeHidden();
   });
@@ -41,7 +41,7 @@ for (const path of PAGES) {
     await expect(page.locator('details.section')).not.toHaveCount(0);
 
     // Installing the PWA from inside the app is meaningless.
-    await expect(page.locator('.web-only')).toBeHidden();
+    await expect(page.locator('details.web-only')).toBeHidden();
     await expect(page.locator('.app-only')).toBeVisible();
     // innerText, not textContent: what the reader can actually see. The section is
     // still in the page, hidden by CSS, which is the whole mechanism under test.

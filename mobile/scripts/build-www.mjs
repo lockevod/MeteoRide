@@ -172,23 +172,61 @@ async function copyVendor() {
     }
   }
   await copyVendorLicences();
+  await writeNotices();
   log(`vendored ${VENDOR.length} libraries into www/vendor`);
 }
 
-// Every vendored library travels with its licence: MIT, BSD and the OFL of the icon font
-// all ask for the notice to accompany the copies, and a vendored file alone does not carry
-// it. The package's own licence file when it has one; otherwise a copy kept in
-// mobile/licenses/<package>.txt (Weather Icons ships none). A library with neither stops
-// the build rather than shipping without its terms.
+// Every third-party component travels with its licence: MIT, BSD, Zlib, Apache and the OFL
+// of the icon font all ask for the notice to accompany the copies. A package's licence is
+// its own file in node_modules or, when it ships none, mobile/licenses/<package>.txt
+// (Weather Icons); any mobile/licenses/<package>+*.txt is appended (pako's zlib notice).
+// A package with neither stops the build rather than shipping without its terms.
+const LICENCES = join(MOBILE, 'licenses');
+const licenceName = (pkg) => pkg.replace('/', '-');
+
+async function licenceText(pkg) {
+  const own = (await readdir(join(MODULES, pkg))).find((n) => /^(licen[cs]e|copying)(\.|$)/i.test(n));
+  const base = own ? join(MODULES, pkg, own) : join(LICENCES, `${licenceName(pkg)}.txt`);
+  if (!existsSync(base)) throw new Error(`no licence for ${pkg}: add mobile/licenses/${licenceName(pkg)}.txt`);
+  const extras = (await readdir(LICENCES)).filter((n) => n.startsWith(`${licenceName(pkg)}+`)).sort();
+  const parts = [await readFile(base, 'utf8')];
+  for (const n of extras) parts.push(await readFile(join(LICENCES, n), 'utf8'));
+  return parts.join('\n\n');
+}
+
 async function copyVendorLicences() {
   const dirs = new Map();
   for (const entry of VENDOR) dirs.set(entry.from.split('/')[0], entry.to.split('/')[1]);
   for (const [pkg, dir] of dirs) {
-    const own = (await readdir(join(MODULES, pkg))).find((n) => /^(licen[cs]e|copying)(\.|$)/i.test(n));
-    const src = own ? join(MODULES, pkg, own) : join(MOBILE, 'licenses', `${pkg}.txt`);
-    if (!existsSync(src)) throw new Error(`no licence for vendored ${pkg}: add mobile/licenses/${pkg}.txt`);
-    await cp(src, join(OUT, 'vendor', dir, 'LICENSE.txt'));
+    await writeFile(join(OUT, 'vendor', dir, 'LICENSE.txt'), await licenceText(pkg));
   }
+}
+
+/**
+ * www/THIRD-PARTY-NOTICES.txt: one file with the licence of everything third-party the app
+ * ships, web and native. That is every runtime dependency in package.json, plus
+ * @capacitor/ios and @capacitor/android, which are devDependencies only because the CLI
+ * installs them, but whose code is compiled into the app. Every other file in
+ * mobile/licenses is a component that has no package here (the marker icons, Cordova's
+ * Apache code inside Capacitor, the ion-ios libraries SPM fetches) and is added as is.
+ */
+async function writeNotices() {
+  const pkgJson = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
+  const pkgs = [...Object.keys(pkgJson.dependencies), '@capacitor/ios', '@capacitor/android'].sort();
+  const used = new Set();
+  const sections = [];
+  for (const pkg of pkgs) {
+    const { version } = JSON.parse(await readFile(join(MODULES, pkg, 'package.json'), 'utf8'));
+    for (const n of await readdir(LICENCES)) {
+      if (n === `${licenceName(pkg)}.txt` || n.startsWith(`${licenceName(pkg)}+`)) used.add(n);
+    }
+    sections.push(`== ${pkg} ${version} ==\n\n${await licenceText(pkg)}`);
+  }
+  for (const n of (await readdir(LICENCES)).sort()) {
+    if (!used.has(n)) sections.push(`== ${basename(n, '.txt')} ==\n\n${await readFile(join(LICENCES, n), 'utf8')}`);
+  }
+  const head = 'MeteoRide includes the third-party components below, each under its own licence.';
+  await writeFile(join(OUT, 'THIRD-PARTY-NOTICES.txt'), [head, ...sections].join('\n\n\n'));
 }
 
 /**

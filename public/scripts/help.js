@@ -21,6 +21,8 @@
       // store's form links to and a reviewer should not have to skip past the other
       // two. The link below is pointed at the right one once the body exists.
       platform = typeof cap.getPlatform === 'function' ? cap.getPlatform() : '';
+      // cw-ios / cw-android: the pages hide the other platform's tips by it.
+      if (platform) document.documentElement.classList.add(`cw-${platform}`);
     }
   } catch (_) { /* a plain browser: leave the section hidden */ }
 
