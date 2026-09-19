@@ -54,14 +54,18 @@ dice conservarlas en sus registros hasta 90 días, y eso ya no es un tratamiento
 - **Privacy Policy URL:** `https://app.meteoride.cc/privacy-ios.html`.
 - **Do you or your third-party partners collect data from this app?** Yes.
 - **Location → Precise Location.** Purpose: **App Functionality**, solo esa.
-  Linked to the user's identity: **No** (la ruta viaja sin cuenta ni identificador; la clave
-  de OpenWeather, solo si el usuario pone la suya, se trata abajo).
+  Linked to the user's identity: **Yes**. Por defecto la ruta va a Open-Meteo sin identidad,
+  pero con la clave de OpenWeather del usuario las mismas coordenadas le llegan a OpenWeather
+  asociadas a su cuenta; la respuesta tiene que cubrir ese caso.
   Used for tracking: **No**.
-- **Other Data → Other Data Types** (la clave de OpenWeather del usuario). Es el caso
-  discutible: la clave es del propio usuario y OpenWeather no es socio del desarrollador,
-  pero la identifica ante OpenWeather. Declararla es la lectura prudente: Purpose **App
-  Functionality**, Linked **Yes**, Tracking **No**. Omitirla es defendible; si se omite,
-  no hay que tocar nada más.
+- **Identifiers → User ID** (la clave de OpenWeather del usuario, que le identifica ante
+  OpenWeather como cliente). Purpose: **App Functionality**. Linked: **Yes**. Tracking: **No**.
+  Encaja en User ID («account ID… that can be used to identify a particular user or
+  account») mejor que en Other Data. Vincular la ubicación no la cubre: es otro dato que sale
+  del dispositivo.
+- Criterio: ante la duda, declarar (`docs/IOS.md`). La alternativa mínima —tratar
+  OpenWeather como servicio del propio usuario, ubicación no vinculada y clave sin declarar— es
+  defendible, pero no se mezclan: o las dos cosas o ninguna.
 - Nada más: sin contacto, sin identificadores, sin uso, sin diagnósticos, sin compras, sin
   contenido de usuario (el GPX no sale del dispositivo, solo coordenadas muestreadas).
 - El `PrivacyInfo.xcprivacy` del paquete solo declara las API de acceso requerido; no

@@ -566,7 +566,8 @@ already `MeteoRide` there) and not in the project's file name.
     icon, sharing a route in from another app, and the touch targets on a real screen.
 12. **App Privacy.** The one place to get wrong. Do not answer "Data Not Collected" —
     see [App Store review](#app-store-review) below, which explains exactly what to
-    declare (**Location — Precise Location**, App Functionality, not for tracking) and
+    declare (**Location — Precise Location** and **Identifiers — User ID**, both App
+    Functionality, linked, not for tracking) and
     why the obvious answer is the wrong one. The privacy policy URL is
     `https://app.meteoride.cc/privacy-ios.html`.
 13. **The listing.** Screenshots for 6.7" and 6.5" (iPhone) at minimum; description;
@@ -613,10 +614,10 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   times to Open-Meteo — which states its logs may hold coordinates and that it deletes
   them after 90 days, so it is not the ephemeral processing that would exempt them.
   What to declare instead: **Location — Precise Location**, for App Functionality and
-  not used for tracking. Whether to mark it *linked* is the one judgement call, and the
-  bullets below give it: unlinked is true of the default Open-Meteo path, linked is true
-  once the user supplies their own OpenWeather key, and the manifest deliberately does
-  not answer it — the form does. The device's own position is read
+  not used for tracking, and **linked** (decided 19/09/2026): unlinked is true of the
+  default Open-Meteo path, but once the user supplies their own OpenWeather key the same
+  coordinates reach OpenWeather tied to that account, and the answer has to cover it. The
+  manifest deliberately does not answer it — the form does. The device's own position is read
   only to centre the map, is never transmitted and is not the basis of the forecast
   call — say so in the notes rather than leaving the reviewer to guess.
 - `public/privacy-ios.html` is the policy the questionnaire has to agree with, and it
@@ -641,9 +642,12 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   collected when it leaves the device "in a way that allows you and/or your third-party
   partners to access it for longer than necessary to service the request in real time",
   and OpenWeather is not the developer's partner — the user holds that account
-  themselves and supplies their own key. Declaring it as Other Data is the conservative
-  reading; leaving it out is defensible. Whichever you pick, say the same thing in the
-  policy: an adversarial review caught the manifest calling that data unlinked while
+  themselves and supplies their own key. Decided (19/09/2026): declare it, as
+  **Identifiers — User ID** (an account ID that identifies the user to OpenWeather), App
+  Functionality, linked, not for tracking. Leaving both it out and Location unlinked is the
+  defensible minimal reading; mixing the two (the key linked, Location not) is not, since
+  the key is exactly what links the coordinates. Whichever you pick, say the same thing in
+  the policy: an adversarial review caught the manifest calling that data unlinked while
   `privacy-ios.html` explained that the key identifies the user to OpenWeather. Location is not
   arguable: route coordinates leave the device on every forecast and Open-Meteo's logs
   can hold them for 90 days, which is past "real time".
