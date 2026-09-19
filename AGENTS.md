@@ -261,9 +261,9 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   shown. Android was never affected (its permission dialog is already tied to the app,
   not the page origin), and the plugin adds nothing to its manifest — the two
   `ACCESS_*_LOCATION` permissions were already declared for the old web-view path. It
-  runs alongside the route restore, not after it, because on a first run the restore
-  waits seconds for routes that do not exist; a position is only applied while the map
-  is still unclaimed, and a route fits itself afterwards regardless.
+  runs alongside the route restore, not after it, because the restore waits on reading
+  the recent routes, which a slow store can stretch; a position is only applied while the
+  map is still unclaimed, and a route fits itself afterwards regardless.
 - **The root `.gitignore` ignores every nested `.gitignore`** (line 6). So the one
   `cap add android` generates never reaches a clone, and on a fresh checkout the
   files `cap sync android` writes — `app/src/main/assets/`, `res/xml/config.xml`,
@@ -406,6 +406,12 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
 
 ## Gotchas found the hard way
 
+- **`cw.hasRouteRequests()` never goes back to `false`.** It means "a route has been asked
+  for at some point", not "one is under way"; for that use `cw.hasRouteRequestPending()`.
+  And the pending one starts `false` too, before any request exists, so a test polling it
+  for `false` passes on a start-up that never asked at all: assert `hasRouteRequests()` first.
+  A first version of the clean-install test polled the wrong one and failed against correct
+  code (19/09/2026).
 - **Capacitor does not auto-register a plugin that lives in the app target.** On iOS
   it registers exactly what the CLI wrote into the generated `capacitor.config.json`
   `packageClassList`, which is rebuilt from the installed npm packages on every
@@ -719,10 +725,16 @@ otherwise the most recent route, with the cached forecast behind it. Native only
 website's opening behaviour is unchanged.
 
 A first run out of coverage has nothing to restore and no way to fetch anything, so
-it says that rather than sitting blank. The wait for the recent-route list is five
-seconds: generous for an IndexedDB read, short enough that an empty install is not left
-in silence. Both directions are tested, including that a first run *with* coverage
-stays quiet. A restore replaced by a route picked during that wait (its request resolves
+it says that rather than sitting blank. The restore waits for the recent-route list to be
+**read**, not to be non-empty: `initUI` sets `window.cwRecentRoutesRead` inside its
+`enqueueRecents` job right after `idbGetAllRoutes()` (and again after the localStorage
+fallback), before `cleanDuplicateRoutes`, which only drops older copies and would otherwise
+eat into the budget. The wait is capped at five seconds, which now only matters for a slow
+store. Until 19/09/2026 it polled `getRecentRoutes()` for a non-empty list, so every clean
+install sat out the whole five seconds behind a loading overlay that also swallowed taps —
+the first thing an App Store reviewer saw. Tested both ways ("a clean install does not wait
+for recent routes it does not have", checked by mutation against the old poll), including
+that a first run *with* coverage stays quiet. A restore replaced by a route picked during that wait (its request resolves
 `'superseded'`) says nothing either: the screen and the notice belong to that request.
 
 The map background is kept too, by `scripts/tile-cache.js`. Do not count on the web
@@ -773,7 +785,10 @@ brought nothing, so that waits for the drain. Three tests pin the order: a share
 publishes while the recent route is still being read wins; a share still being read when
 the recent routes turn up is not replaced; and a drain that outlasts the restore still wins,
 which fails against the old order (restore only after the drain). While it waits, the
-restore holds the loading indicator — up to five seconds on a first run.
+restore holds the loading indicator, for as long as the recent routes take to read (at once
+on a clean install, five seconds at most). The test of a restore replaced during that wait
+holds the read open with a getter on `window.cwRecentRoutesRead`: with nothing stored the
+restore now ends before any pick could reach it.
 
 ## The forecast cache without coverage
 
@@ -1480,6 +1495,43 @@ a way the old code survived, which is why it answers the held opens one at a tim
 
 Phase 6 added the start-time rule and replaying a prepared snapshot ("Behaving like an app rather
 than a page" and "Preparing and replaying").
+
+### The example route
+
+A first-time user has no GPX, and neither does an App Store reviewer: before 19/09/2026 the
+whole app sat behind a file picker opening on an empty folder. `#exampleRoute` ("Try an
+example route" / "Probar una ruta de ejemplo") is a pill in the middle of `#map` that loads
+`public/assets/example-route.gpx` (generated, not copied from anyone: 42.5 km out and back along the
+coast south-west of Barcelona towards Castelldefels, 181 points; the track is illustrative and
+cuts through the port and the airport area, not a surveyed path), bundled so it works with no network. It sits on
+the map rather than in the controls because in the controls it pushed the upload icon onto
+a row of its own (the layout test catches that).
+
+The rule is that it never stands in for a route the user has or is about to have:
+
+- It ships `hidden` in `index.html` and is offered only by `offerExample()` in `ui.js`:
+  recents read and empty, no `window.lastGPXFile`, no route request pending.
+- The page's `window.cw.requestRoute` (the wrapper at the bottom of `route-requests.js`)
+  dispatches `cw:route-requested` when a request is made and `cw:route-settled` when it ends.
+  Any request hides the button; each settle re-decides. So a restore, a share, a link, a pick
+  all hide it, and a request that fails with nothing on screen brings it back. The wrapper
+  calls the coordinator synchronously, so `lastRouteRequestId()` right after asking is still
+  the caller's own (native.js relies on that).
+- A tap asks for the route at once, through `cwReceiveRoute` with `fetchText`: the file is
+  read inside the request, so anything asked for afterwards is the newer request and wins.
+  The first version fetched first and asked after, and a route picked during the fetch was
+  replaced by the example (external review, 19/09). `importOn: 'commit'`, so the example is
+  kept among the recents only if it actually opened; after that the button never shows again
+  and the last route reopens at launch. A failed read is reported by the coordinator, and
+  only if nothing replaced it.
+- `cw:forecast` is not the signal: a route can open and never publish (no coverage, a start
+  date out of range), and hiding on the forecast left the button over that route.
+
+Tests: `tests/example-route.spec.mjs` (loads and forecasts; the GPX is in the bundle; the
+button ships hidden) and four in `smoke.spec.mjs` (not offered while a stored route is being
+restored; steps aside for a route without a forecast and returns after a broken file; hides
+while any route is being read; an example still being read loses to a file picked meanwhile).
+Each was checked by mutation.
 
 ## Consumers of the snapshot
 
