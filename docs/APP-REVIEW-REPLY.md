@@ -1,6 +1,6 @@
 # Respuesta para App Review
 
-No enviar hasta adjuntar la grabación del build 7 y sustituir `[MODEL]` y `[VERSION]`.
+No enviar hasta adjuntar la grabación del build 8 y sustituir `[MODEL]` y `[VERSION]`.
 El vídeo debe mostrar el arranque desde el icono, la ruta de
 Mont-roig, la previsión, un cambio de salida, el permiso de notificaciones y el estado
 «Watching … until …». Añadir importación, exportación y reapertura offline al recorrido
@@ -14,7 +14,7 @@ TestFlight y App Privacy siguen siendo necesarias. No se ha enviado a Apple.
 Thank you for the review. Answers to each point follow.
 
 1. Screen recording
-Attached, recorded using build 7 on an iPhone [MODEL] running iOS [VERSION], starting from the Home Screen. MeteoRide has no account creation, login, account deletion, public user posts, purchases or paid features, so none of those flows exist to show.
+Attached, recorded using build 8 on an iPhone [MODEL] running iOS [VERSION], starting from the Home Screen. MeteoRide has no account creation, login, account deletion, public user posts, purchases or paid features, so none of those flows exist to show.
 
 2. Purpose and audience
 MeteoRide is a free weather planner for cycling. The user loads a GPX or KML route, sets a departure time and an average speed, and the app shows the forecast at each point of the route for the time the rider is expected to reach it, as a table and on the map. It is for cyclists, mountain bikers and walkers planning a route.
@@ -44,3 +44,26 @@ Not a regulated industry; no licence or documentation of that kind is needed. It
 Native iOS functionality
 Background forecast checks with local notifications that respect Focus and notification summaries (ride alerts can be turned off in ⚙️), opening GPX/KML from other apps, exporting through the share sheet, location while in use, and a route saved with its forecast for use without coverage.
 ```
+
+## App Privacy (App Store Connect → App Privacy)
+
+Rellenar según `public/privacy-ios.html` y `docs/IOS.md` («App Store review»). No declarar
+«Data Not Collected»: cada previsión envía las coordenadas de la ruta a Open-Meteo, que
+dice conservarlas en sus registros hasta 90 días, y eso ya no es un tratamiento efímero.
+
+- **Privacy Policy URL:** `https://app.meteoride.cc/privacy-ios.html`.
+- **Do you or your third-party partners collect data from this app?** Yes.
+- **Location → Precise Location.** Purpose: **App Functionality**, solo esa.
+  Linked to the user's identity: **No** (la ruta viaja sin cuenta ni identificador; la clave
+  de OpenWeather, solo si el usuario pone la suya, se trata abajo).
+  Used for tracking: **No**.
+- **Other Data → Other Data Types** (la clave de OpenWeather del usuario). Es el caso
+  discutible: la clave es del propio usuario y OpenWeather no es socio del desarrollador,
+  pero la identifica ante OpenWeather. Declararla es la lectura prudente: Purpose **App
+  Functionality**, Linked **Yes**, Tracking **No**. Omitirla es defendible; si se omite,
+  no hay que tocar nada más.
+- Nada más: sin contacto, sin identificadores, sin uso, sin diagnósticos, sin compras, sin
+  contenido de usuario (el GPX no sale del dispositivo, solo coordenadas muestreadas).
+- El `PrivacyInfo.xcprivacy` del paquete solo declara las API de acceso requerido; no
+  contradice nada de lo anterior.
+

@@ -1870,3 +1870,17 @@ como mucho una vez al día (la lectura ya las rechaza). Codex señaló que `max-
 la recepción sin descontar `Age`: esa cabecera no es legible por CORS, y OSM envía
 `stale-if-error=604800`, que autoriza servir una tesela caducada 7 días más cuando falla la
 red, que es cuando esta caché se lee; queda explicado en el código.
+
+### Build 8 (19/09)
+
+Archivado desde `a493d58` con `npm run sync` y `CURRENT_PROJECT_VERSION = 8`: 1.0.0 (8), solo
+iPhone, `UIBackgroundModes` = `fetch`, sin Time Sensitive, firma Apple Distribution con
+`get-task-allow=false`, sin extensiones. Su `public/` es idéntico a `mobile/www` (salvo los
+ficheros de Cordova) e incluye la caducidad de teselas, el host `tile.openstreetmap.org` en
+la URL y en la CSP, y el User-Agent (también en la configuración de Android). Archive en
+`/tmp/MeteoRide-1.0.0-8.xcarchive`; IPA en `mobile/ios/releases/1.0.0-8/` (ignorado por Git).
+Subido a App Store Connect el 19/09 a las 17:29 (`Upload succeeded`; log en
+`/tmp/meteoride-build8-upload.log`); no enviado a revisión. La respuesta a Apple (`docs/APP-REVIEW-REPLY.md`) nombra ahora el build
+8 e incluye las respuestas de App Privacy: Precise Location para App Functionality, no
+vinculada ni para tracking; la clave de OpenWeather como Other Data, vinculada, es la lectura
+prudente.
