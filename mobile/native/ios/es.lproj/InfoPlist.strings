@@ -1,0 +1,8 @@
+/* Spanish purpose strings. CFBundleLocalizations declares es, so on a Spanish iPhone iOS
+   draws the permission alert in Spanish; without these the reason inside it stayed in
+   English. English needs no file: Info.plist itself is the fallback. Copy to
+   ios/App/App/es.lproj/ and register it in Xcode as a localised InfoPlist.strings (see
+   docs/IOS.md). Keys must match the NS*UsageDescription keys in Info.plist.additions.xml. */
+"NSLocationWhenInUseUsageDescription" = "MeteoRide usa tu ubicación para centrar el mapa donde estás.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "MeteoRide centra el mapa donde estás, y solo mientras tienes la app abierta. Nunca usa tu ubicación en segundo plano.";
+"NSLocationAlwaysUsageDescription" = "MeteoRide centra el mapa donde estás, y solo mientras tienes la app abierta. Nunca usa tu ubicación en segundo plano.";

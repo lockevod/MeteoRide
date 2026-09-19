@@ -1758,3 +1758,28 @@ Sobre `1eca34c` y el texto para la respuesta de la 2.1: dos pasadas adversariale
   está declarado, pero nadie lo ha visto funcionar: el texto para Apple no lo promete.
 - **La copia de iOS se queda atrás si no se sincroniza.** `ios/App/App/public` no tenía
   ninguna de las licencias nuevas: antes de archivar, `npm run sync`.
+
+### Segunda ronda sobre la respuesta a App Review (19/09)
+
+Claude (código), Codex y el revisor de Apple simulado, sobre `55f0f9d` y `5635757`.
+
+**Arreglados.** QuickJS 2025-04-26 va compilado en el `.aar` Android de background-runner y
+no tenía aviso; tampoco lo tenían las librerías ion de Android ni el classpath de Gradle
+(AndroidX, Kotlin, Gson, play-services). El test de avisos era circular (leía la lista de la
+que se genera el fichero); ahora lee los `build.gradle`, `Package.swift` y `.aar` de cada
+plugin. La licencia de los iconos de marcador se sirve también en la web. La ayuda ocultaba
+Android pero seguía describiendo en la app lo que solo hace la web (`?gpx_url=`, atajos que
+suben a Cloudflare, la rueda del ratón). Las «48 h de AROME en la comparación» eran falsas:
+la comparación corta en 36 h como todo lo demás. Una preferencia de depuración guardada dejaba
+la captura de logs encendida, oculta y sin forma de apagarla. Declarar `es` sin
+`es.lproj/InfoPlist.strings` dejaba el aviso de ubicación medio traducido; ya existe, y un
+build de simulador lo lleva dentro.
+
+**Sin explicar.** «loading a route does not fold the controls» falló en webkit una vez en la
+suite (la tira abierta medía 290 px de 374) y 2 de 5 aislado justo después. Luego, 40 de 40 con
+el mismo código y 10 de 10 en `1eca34c`, `55f0f9d` y `5635757`. Había dos daemons de Gradle
+vivos por la resolución de dependencias; no está demostrado que fueran la causa.
+
+**Abierto.** `android-maven.txt` se escribe a mano desde `./gradlew :app:dependencies`: nada
+comprueba las dependencias transitivas. El build de iOS sigue en `CURRENT_PROJECT_VERSION` 6
+y su copia de `public/` está atrasada: `npm run sync` y subir el número antes de archivar.

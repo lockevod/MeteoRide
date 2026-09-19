@@ -230,3 +230,27 @@ test('the plist Xcode builds agrees with the tracked one', async (t) => {
 test('the app declares both languages it speaks', () => {
   assert.deepEqual([...plist.CFBundleLocalizations].sort(), ['en', 'es']);
 });
+
+/* CFBundleLocalizations declares es, so a Spanish iPhone draws the permission alerts in
+ * Spanish. Without a Spanish InfoPlist.strings the reason inside them stayed English: a
+ * half-translated prompt, which is what a second review flagged. Every purpose string the
+ * plist declares needs its Spanish line. */
+const esStrings = await readFile(join(HERE, '../native/ios/es.lproj/InfoPlist.strings'), 'utf8');
+
+test('every permission reason has its Spanish translation', () => {
+  const keys = Object.keys(plist).filter((k) => /UsageDescription$/.test(k));
+  assert.ok(keys.length >= 3, 'the plist declares fewer purpose strings than expected; the scan is broken');
+  const missing = keys.filter((k) => !new RegExp(`^"${k}"\\s*=\\s*"[^"]+";`, 'm').test(esStrings));
+  assert.deepEqual(missing, [], 'purpose strings with no Spanish line');
+});
+
+test('the Xcode project ships the Spanish strings it is given', async (t) => {
+  let pbx;
+  try { pbx = await readFile(join(HERE, '../ios/App/App.xcodeproj/project.pbxproj'), 'utf8'); }
+  catch { return t.skip('mobile/ios/ has not been generated here'); }
+  const copy = await readFile(join(HERE, '../ios/App/App/es.lproj/InfoPlist.strings'), 'utf8').catch(() => null);
+  assert.equal(copy, esStrings, 'ios/App/App/es.lproj/InfoPlist.strings has drifted from the tracked one');
+  assert.match(pbx, /path = es\.lproj\/InfoPlist\.strings;/, 'the strings file is not in the Xcode project');
+  assert.match(pbx, /\/\* InfoPlist\.strings in Resources \*\/,/, 'the strings file is not in the Resources build phase');
+  assert.match(pbx, /knownRegions = \([^)]*\bes,/, 'es is not a known region of the project');
+});

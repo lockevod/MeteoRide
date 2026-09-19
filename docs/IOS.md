@@ -107,6 +107,15 @@ the key App Store Connect asks on every single upload), and lock
 **the iPhone** to portrait — rotating breaks the layout badly, and this is
 deliberate, not an oversight.
 
+**Spanish permission prompts.** The plist declares `CFBundleLocalizations` [en, es], so
+on a Spanish iPhone iOS draws the permission alerts in Spanish; the reason inside them
+comes from `es.lproj/InfoPlist.strings`. Copy `mobile/native/ios/es.lproj/` into
+`ios/App/App/`, then in Xcode add `es.lproj/InfoPlist.strings` to the App target (it
+appears as a localised `InfoPlist.strings`, in Copy Bundle Resources) and make sure `es` is
+under Project → Info → Localizations. English needs no file: `Info.plist` is the fallback.
+`document-open.test.mjs` checks the copy, the project entry and the region. Whether the web
+view then starts in Spanish on a Spanish iPhone has not been checked on a device.
+
 **The first App Store release is iPhone only.** The template `cap add ios` targets
 iPhone and iPad alike (`TARGETED_DEVICE_FAMILY = "1,2"`); set it to iPhone alone in
 *App target → Build Settings → Targeted Device Families → iPhone* (`"1"` in
