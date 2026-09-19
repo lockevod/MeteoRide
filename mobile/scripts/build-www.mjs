@@ -207,9 +207,14 @@ async function copyVendorLicences() {
  * ships, web and native. That is every runtime dependency in package.json, plus
  * @capacitor/ios and @capacitor/android, which are devDependencies only because the CLI
  * installs them, but whose code is compiled into the app. Every other file in
- * mobile/licenses is a component that has no package here (the marker icons, Cordova's
- * Apache code inside Capacitor, the ion-ios libraries SPM fetches) and is added as is.
+ * mobile/licenses is a component that has no package here (Cordova's Apache code inside
+ * Capacitor, the ion libraries, QuickJS, the Gradle classpath) and is added as is. The
+ * marker icons' licence lives next to them in public/icons, because the website serves it
+ * too; it is read from there rather than through a symlink, which a checkout without
+ * symlinks (Windows) turns into a one-line file holding the path.
  */
+const MARKERS_LICENCE = join(SRC, 'icons', 'LICENSE-markers.txt');
+
 async function writeNotices() {
   const pkgJson = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
   const pkgs = [...Object.keys(pkgJson.dependencies), '@capacitor/ios', '@capacitor/android'].sort();
@@ -225,6 +230,7 @@ async function writeNotices() {
   for (const n of (await readdir(LICENCES)).sort()) {
     if (!used.has(n)) sections.push(`== ${basename(n, '.txt')} ==\n\n${await readFile(join(LICENCES, n), 'utf8')}`);
   }
+  sections.push(`== leaflet-color-markers ==\n\n${await readFile(MARKERS_LICENCE, 'utf8')}`);
   const head = 'MeteoRide includes the third-party components below, each under its own licence.';
   await writeFile(join(OUT, 'THIRD-PARTY-NOTICES.txt'), [head, ...sections].join('\n\n\n'));
 }

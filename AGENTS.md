@@ -54,8 +54,10 @@ docs/ANDROID.md    Android build
   Capacitor or plugin upgrade, regenerate `android-maven.txt` from
   `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`: transitive
   artifacts are listed there by hand and no test can see them.
-  `mobile/licenses/leaflet-color-markers.txt` is a symlink to `public/icons/LICENSE-markers.txt`,
-  so the website, which serves `public/` as it is, carries the icons' licence too.
+  The marker icons' licence is `public/icons/LICENSE-markers.txt`, so the website, which
+  serves `public/` as it is, carries it too; `writeNotices` reads it from there. It used to
+  be a symlink in `mobile/licenses/`, which a Windows checkout turns into a file holding the
+  path, and the notices would then carry the path instead of the licence.
 - The same `www/` ships to iOS and Android, so platform-specific text in the help and
   policy pages is hidden at runtime, not stripped: `help.js` sets `cw-native` and
   `cw-ios`/`cw-android` on `<html>`, and the pages hide `.web-only`, `.ios-only` and

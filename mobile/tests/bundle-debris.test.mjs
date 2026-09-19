@@ -78,44 +78,66 @@ test('the notices file names every shipped package and carries every kept licenc
   const shipped = [...Object.keys(pkg.dependencies), '@capacitor/ios', '@capacitor/android'];
   const unnamed = shipped.filter((name) => !notices.includes(`\n== ${name} `));
   assert.deepEqual(unnamed, [], 'shipped without a section in THIRD-PARTY-NOTICES.txt');
-  const kept = await readdir(join(MOBILE, 'licenses'));
+  const kept = (await readdir(join(MOBILE, 'licenses'))).map((n) => join(MOBILE, 'licenses', n));
+  kept.push(join(MOBILE, '../public/icons/LICENSE-markers.txt'));
   const dropped = [];
-  for (const n of kept) {
-    if (!notices.includes((await readFile(join(MOBILE, 'licenses', n), 'utf8')).trim())) dropped.push(n);
+  for (const file of kept) {
+    const text = (await readFile(file, 'utf8')).trim();
+    // A symlink checked out as a plain file holds only its target path: that is no licence.
+    if (text.length < 200 || !notices.includes(text)) dropped.push(relative(MOBILE, file));
   }
-  assert.deepEqual(dropped, [], 'a licence kept in mobile/licenses is not in THIRD-PARTY-NOTICES.txt');
+  assert.deepEqual(dropped, [], 'a kept licence is missing from THIRD-PARTY-NOTICES.txt, or is not a licence');
 });
 
 test('every native dependency a plugin declares is named in the notices', async () => {
   // The test above reads the list the build wrote the notices from, so it cannot see what
   // package.json does not list: the Maven artifacts and SPM packages each plugin pulls in,
   // and the prebuilt .aar the background runner ships with QuickJS compiled into it. A third
-  // review found all of those missing. This reads the plugins' own build files instead.
+  // review found all of those missing. This reads the plugins' own build files instead:
+  // every dependency with native code, not only @capacitor/ ones, in Groovy or Kotlin DSL.
+  // What it cannot see is the TRANSITIVE classpath: android-maven.txt is written by hand
+  // from `./gradlew :app:dependencies` and must be regenerated after an upgrade.
   const notices = await readFile(join(WWW, 'THIRD-PARTY-NOTICES.txt'), 'utf8');
   const pkg = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
   // Capacitor's own artifacts are the @capacitor/android and @capacitor/ios sections.
   const covered = { 'com.capacitorjs:core': '@capacitor/android', 'capacitor-swift-pm': '@capacitor/ios' };
-  const roots = Object.keys(pkg.dependencies).filter((n) => n.startsWith('@capacitor/'))
-    .map((n) => join(MOBILE, 'node_modules', n));
-  const gradles = [join(MOBILE, 'android/app/build.gradle'), join(MOBILE, 'node_modules/@capacitor/android/capacitor/build.gradle')];
+  const read = (f) => readFile(f, 'utf8').catch(() => null);
+  const gradleOf = async (dir) => (await read(join(dir, 'build.gradle'))) ?? (await read(join(dir, 'build.gradle.kts')));
+  const gradles = [await gradleOf(join(MOBILE, 'android/app')), await gradleOf(join(MOBILE, 'node_modules/@capacitor/android/capacitor'))];
   const swifts = [];
   const aars = [];
-  for (const root of roots) {
-    gradles.push(join(root, 'android/build.gradle'));
-    swifts.push(join(root, 'Package.swift'));
-    const libs = join(root, 'android/src/main/libs');
-    aars.push(...(await readdir(libs).catch(() => [])).filter((n) => n.endsWith('.aar')));
+  const unreadable = [];
+  for (const name of Object.keys(pkg.dependencies)) {
+    const root = join(MOBILE, 'node_modules', name);
+    const hasAndroid = await stat(join(root, 'android')).then(() => true, () => false);
+    if (hasAndroid) {
+      const g = await gradleOf(join(root, 'android'));
+      if (g === null) unreadable.push(`${name}/android`);
+      gradles.push(g ?? '');
+      aars.push(...(await readdir(join(root, 'android/src/main/libs')).catch(() => [])).filter((n) => n.endsWith('.aar')));
+    }
+    const swift = await read(join(root, 'Package.swift'));
+    if (swift !== null) swifts.push(swift);
   }
+  assert.deepEqual(unreadable, [], 'a plugin has native Android code but no build file this scan can read');
   const declared = new Set(aars);
-  for (const file of gradles) {
-    const text = await readFile(file, 'utf8').catch(() => '');
-    for (const [, coord] of text.matchAll(/^\s*(?:implementation|api)\s*\(?\s*["']([\w.-]+:[\w.-]+)/gm)) declared.add(coord);
+  const unparsed = [];
+  for (const text of gradles) {
+    for (const [line, coord] of text.matchAll(/^\s*(?:implementation|api|runtimeOnly)\b\s*\(?\s*(?:["']([\w.-]+:[\w.-]+))?.*$/gm)) {
+      const localAar = line.match(/name:\s*["']([\w.-]+)["'],\s*ext:\s*["']aar["']/)?.[1];
+      if (coord) declared.add(coord);
+      else if (localAar) declared.add(`${localAar}.aar`);
+      else if (!/project\s*\(|fileTree\s*\(|files\s*\(|kotlin\s*\(/.test(line)) unparsed.push(line.trim());
+    }
   }
-  for (const file of swifts) {
-    const text = await readFile(file, 'utf8').catch(() => '');
+  assert.deepEqual(unparsed, [], 'dependency lines this scan cannot read (version catalog? platform()?)');
+  for (const text of swifts) {
     for (const [, name] of text.matchAll(/\.package\(url:\s*"[^"]*\/([\w.-]+?)(?:\.git)?"/g)) declared.add(name);
   }
   assert.ok(declared.size > 10, `found only ${declared.size} native dependencies; the scan is broken`);
-  const missing = [...declared].filter((d) => !notices.includes(covered[d] || d));
+  // Whole names only: androidx.core:core must not pass on the strength of androidx.core:core-ktx.
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const named = (d) => new RegExp(`(^|[\\s/(])${esc(d)}(?![\\w.:-])`, 'm').test(notices);
+  const missing = [...declared].filter((d) => !named(covered[d] || d));
   assert.deepEqual(missing, [], 'a plugin ships a native dependency the notices do not name');
 });

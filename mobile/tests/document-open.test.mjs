@@ -235,13 +235,63 @@ test('the app declares both languages it speaks', () => {
  * Spanish. Without a Spanish InfoPlist.strings the reason inside them stayed English: a
  * half-translated prompt, which is what a second review flagged. Every purpose string the
  * plist declares needs its Spanish line. */
-const esStrings = await readFile(join(HERE, '../native/ios/es.lproj/InfoPlist.strings'), 'utf8');
+const esPath = join(HERE, '../native/ios/es.lproj/InfoPlist.strings');
+const esStrings = await readFile(esPath, 'utf8');
 
-test('every permission reason has its Spanish translation', () => {
+/** Parses an old-style .strings file the way iOS must, or throws. Matching each key line by
+ *  itself passed files iOS reads as nothing at all: one line without its semicolon anywhere
+ *  makes the whole file unreadable, and a comment left open swallows every key after it. */
+function parseStrings(src) {
+  const out = {};
+  let i = 0;
+  const skip = () => {
+    for (;;) {
+      while (/\s/.test(src[i] ?? '')) i++;
+      if (src.startsWith('/*', i)) {
+        const end = src.indexOf('*/', i + 2);
+        if (end < 0) throw new Error(`comment opened at ${i} never closes`);
+        i = end + 2;
+      } else if (src.startsWith('//', i)) {
+        i = src.indexOf('\n', i); if (i < 0) i = src.length;
+      } else return;
+    }
+  };
+  const quoted = () => {
+    if (src[i] !== '"') throw new Error(`expected a quoted string at ${i}: ${JSON.stringify(src.slice(i, i + 20))}`);
+    let s = ''; i++;
+    while (src[i] !== '"') {
+      if (i >= src.length) throw new Error('string never closes');
+      if (src[i] === '\\') { const c = src[++i]; s += c === 'n' ? '\n' : c === 't' ? '\t' : c; i++; }
+      else s += src[i++];
+    }
+    i++; return s;
+  };
+  const expect = (c) => { skip(); if (src[i] !== c) throw new Error(`expected ${c} at ${i}`); i++; };
+  for (skip(); i < src.length; skip()) {
+    const k = quoted(); expect('='); skip(); out[k] = quoted(); expect(';');
+  }
+  return out;
+}
+
+test('the Spanish strings parse, and every permission reason has its translation', async (t) => {
+  const es = parseStrings(esStrings);
   const keys = Object.keys(plist).filter((k) => /UsageDescription$/.test(k));
   assert.ok(keys.length >= 3, 'the plist declares fewer purpose strings than expected; the scan is broken');
-  const missing = keys.filter((k) => !new RegExp(`^"${k}"\\s*=\\s*"[^"]+";`, 'm').test(esStrings));
+  const missing = keys.filter((k) => !(es[k] || '').trim());
   assert.deepEqual(missing, [], 'purpose strings with no Spanish line');
+  if (process.platform !== 'darwin') return;
+  // Apple's own reader, where there is one, must agree key for key.
+  const { execFileSync } = await import('node:child_process');
+  const apple = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', esPath], { encoding: 'utf8' }));
+  assert.deepEqual(apple, es, 'plutil reads the file differently');
+});
+
+test('the strings parser refuses what iOS would not read', () => {
+  const good = '/* c */\n"A" = "x";\n"B" = "y \\" z";\n';
+  assert.deepEqual(parseStrings(good), { A: 'x', B: 'y " z' });
+  assert.throws(() => parseStrings(good + '"C" = "x"\n'), /expected ;/);
+  assert.throws(() => parseStrings('/* open\n"A" = "x";\n"B" = "y";\n'), /never closes/);
+  assert.throws(() => parseStrings(good + 'stray'), /expected a quoted string/);
 });
 
 test('the Xcode project ships the Spanish strings it is given', async (t) => {
@@ -250,7 +300,15 @@ test('the Xcode project ships the Spanish strings it is given', async (t) => {
   catch { return t.skip('mobile/ios/ has not been generated here'); }
   const copy = await readFile(join(HERE, '../ios/App/App/es.lproj/InfoPlist.strings'), 'utf8').catch(() => null);
   assert.equal(copy, esStrings, 'ios/App/App/es.lproj/InfoPlist.strings has drifted from the tracked one');
-  assert.match(pbx, /path = es\.lproj\/InfoPlist\.strings;/, 'the strings file is not in the Xcode project');
-  assert.match(pbx, /\/\* InfoPlist\.strings in Resources \*\/,/, 'the strings file is not in the Resources build phase');
+  // Follow the IDs, not the comments: file reference -> variant group -> build file -> Resources.
+  const fileRef = pbx.match(/(\w{24}) \/\* es \*\/ = \{isa = PBXFileReference;[^}]*path = es\.lproj\/InfoPlist\.strings;/)?.[1];
+  assert.ok(fileRef, 'the strings file is not in the Xcode project');
+  const group = [...pbx.matchAll(/(\w{24}) \/\* InfoPlist\.strings \*\/ = \{\s*isa = PBXVariantGroup;([\s\S]*?)\};/g)]
+    .find((m) => m[2].includes(fileRef))?.[1];
+  assert.ok(group, 'the Spanish file is not a variant of a localised InfoPlist.strings');
+  const buildFile = pbx.match(new RegExp(`(\\w{24}) /\\* [^*]+ \\*/ = \\{isa = PBXBuildFile; fileRef = ${group}\\b`))?.[1];
+  assert.ok(buildFile, 'the localised InfoPlist.strings is never built');
+  const resources = pbx.match(/isa = PBXResourcesBuildPhase;[\s\S]*?files = \(([\s\S]*?)\);/)?.[1] ?? '';
+  assert.ok(resources.includes(buildFile), 'the strings file is not in the Resources build phase');
   assert.match(pbx, /knownRegions = \([^)]*\bes,/, 'es is not a known region of the project');
 });

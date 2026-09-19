@@ -452,14 +452,14 @@
     const d = document.getElementById("debugConsole");
     const dbgSection = document.getElementById("debugSection");
     const sdb = document.getElementById("showDebugButton");
-    // Consider debug visible if the debugSection exists and is not hidden (explicit "none")
-    // OR if the settings checkbox to show the debug button is checked (user prefers debug output)
-    const debugVisible = !!(
-      (sdb && sdb.checked) || (dbgSection && dbgSection.style && dbgSection.style.display !== 'none')
-    );
+    // The panel starts closed through the hidden attribute, which leaves style.display empty,
+    // so only the computed style says whether anyone can see it.
+    const panelOpen = !!dbgSection && getComputedStyle(dbgSection).display !== 'none';
+    // Debug is visible if the panel is open OR the settings checkbox asks for debug output
+    const debugVisible = !!(sdb && sdb.checked) || panelOpen;
 
     // Append to in-page debug console only when debug is visible (panel open)
-    if (dbgSection && dbgSection.style && dbgSection.style.display !== 'none' && d) {
+    if (panelOpen && d) {
       const p = document.createElement("p");
       p.textContent = line;
       p.className = isError ? "error" : "info";

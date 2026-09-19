@@ -3072,6 +3072,23 @@ test('the app shows no debug switch and no debug button, whatever was stored', a
   await expect(page.locator('#showDebugButton')).not.toBeChecked();
 });
 
+// logDebug used to test the panel's inline style.display, which the hidden attribute never
+// sets: with debug off and the panel closed, every step of every forecast still went into
+// #debugConsole, hidden and never trimmed. Nothing may be captured while nobody can see it.
+test('with debug off, computing a forecast writes nothing into the hidden debug console', async ({ page }) => {
+  await page.route((url) => url.hostname === 'api.open-meteo.com', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecastAt(21)) }));
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(async () => (await shownTemperatures(page)).length).toBeGreaterThan(0);
+  // The same call must still write once the panel is open, or this proves only that nothing logs.
+  expect(await page.evaluate(() => document.getElementById('debugConsole').childElementCount)).toBe(0);
+  await page.evaluate(() => { document.getElementById('debugSection').style.display = 'block'; window.logDebug('probe'); });
+  await expect(page.locator('#debugConsole')).toContainText('probe');
+});
+
 test('detailed notices switch the notice of the forecast on screen on and off', async ({ page }) => {
   let calls = 0;
   await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {
