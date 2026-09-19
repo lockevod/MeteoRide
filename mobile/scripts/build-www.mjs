@@ -12,7 +12,7 @@
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -90,6 +90,15 @@ const VENDOR = [
  *  exist for search engines and are only reachable through the alternate link tags
  *  that patchIndexHtml strips, so nothing in the app can navigate to them. */
 const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', 'en', 'es'];
+
+/* `cp` copies public/ wholesale, so anything a local tool leaves in there ends up inside
+ * the shipped app. That is not hypothetical: two code-analysis databases
+ * (`scripts/.neuralmind/synapses.db`, `scripts/graphify-out/**`) were riding into the IPA
+ * and to every user, ~160 KB of them, until an App Store review pass noticed. They are
+ * untracked, so `git status` never showed them either. Filter by shape rather than by
+ * name: a dot-directory in public/ is never part of the website, and a build output
+ * directory belongs to whatever produced it. */
+const isBuildDebris = (name) => name.startsWith('.') || name === 'graphify-out' || name === 'node_modules';
 
 /** The background runner: the shared rules first, then the wiring. See the header of
  *  mobile/runners/watch.js for why it is one file and not a module. */
@@ -379,7 +388,7 @@ async function main() {
   await writeIosMarketingVersion();
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
-  await cp(SRC, OUT, { recursive: true });
+  await cp(SRC, OUT, { recursive: true, filter: (src) => !isBuildDebris(basename(src)) });
   for (const f of WEB_ONLY) await rm(join(OUT, f), { force: true, recursive: true });
   log('copied public/ -> www/');
 
