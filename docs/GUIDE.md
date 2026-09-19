@@ -105,7 +105,7 @@ instructions are in [USERSCRIPTS.md](USERSCRIPTS.md).
 |---|---|---|---|
 | Open-Meteo | No | 14 days | Global |
 | OpenWeather | Yes (free tier) | 4 days | Global |
-| AROME-HD | No | 48 hours | Part of Europe |
+| AROME-HD | No | 36 hours | Part of Europe |
 
 - **Open-Meteo**: free, no key, global coverage, up to 14 days. Open-Meteo picks
   its best model for the area of your track. Recommended for any situation, and
@@ -116,7 +116,7 @@ instructions are in [USERSCRIPTS.md](USERSCRIPTS.md).
   areas.
 - **AROME-HD**: high-resolution model (~1-2 km) from MeteoFrance, reached
   through Open-Meteo and without a key. Only available for Europe
-  (approx. 39-52°N, 10.5°W-16.5°E) and within 48 hours. Outside that area or
+  (approx. 39-52°N, 10.5°W-16.5°E) and within 36 hours. Outside that area or
   that window it switches straight to the best model Open-Meteo has for that
   location, with nothing odd to report: there is still data. Superior for wind
   and short-term precipitation in France and nearby countries.
@@ -421,7 +421,7 @@ APIs. It expires on its own: there is nothing to clear by hand.
 
 ### Limitations
 
-- **Time horizon:** Open-Meteo 14 days, OpenWeather 4 days, AROME-HD 48 hours.
+- **Time horizon:** Open-Meteo 14 days, OpenWeather 4 days, AROME-HD 36 hours.
 - **Accuracy:** forecasts are markedly less reliable from day 3-4 onwards.
 - **Free APIs:** Open-Meteo requires no key and has no practical limit;
   OpenWeather offers a free tier, but keys can have monthly usage limits.

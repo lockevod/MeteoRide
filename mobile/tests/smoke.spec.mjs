@@ -3068,6 +3068,8 @@ test('the app shows no debug switch and no debug button, whatever was stored', a
   await expect(page.locator('#toggleDebug')).toBeHidden();
   await expect(page.locator('#showDebugButton')).toBeHidden();
   await expect(page.locator('#debugSection')).toBeHidden();
+  // Hidden is not enough: a switch left on keeps capturing every log line with no way off.
+  await expect(page.locator('#showDebugButton')).not.toBeChecked();
 });
 
 test('detailed notices switch the notice of the forecast on screen on and off', async ({ page }) => {
@@ -7910,6 +7912,11 @@ test('the pages an iPhone reader can open never mention Android', async ({ page 
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
     const seen = await page.locator('body').innerText();
     expect(seen, `${name} shows Android to an iPhone reader`).not.toMatch(/android/i);
+    // Nor what only the website does: App Review reads documented features the app does
+    // not have as inaccurate metadata (2.3.1), and the Cloudflare upload sat awkwardly next
+    // to "no server of ours in between".
+    expect(seen, `${name} describes the website to an app reader`)
+      .not.toMatch(/gpx_url|mouse wheel|rueda del ratón|Cloudflare|Shortcuts|atajos de iOS|pantalla de inicio|Home Screen/i);
     if (name.startsWith('help')) expect(seen).toMatch(/Background App Refresh|Actualización en segundo plano/);
   }
 });

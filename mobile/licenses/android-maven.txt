@@ -1,0 +1,86 @@
+Libraries the Android app pulls in through Gradle (release runtime classpath, as resolved by
+`./gradlew :app:dependencies --configuration releaseRuntimeClasspath`). Regenerate this list
+when a plugin or Capacitor is upgraded.
+
+Under the Apache License, Version 2.0 (full text in the apache-cordova section of this file):
+AndroidX (The Android Open Source Project), Kotlin and kotlinx.coroutines (JetBrains), Gson,
+Guava's listenablefuture and Error Prone annotations (Google), JetBrains annotations, JSpecify
+and Apache Cordova's Android framework.
+
+  androidx.activity:activity
+  androidx.activity:activity-ktx
+  androidx.annotation:annotation
+  androidx.annotation:annotation-experimental
+  androidx.annotation:annotation-jvm
+  androidx.appcompat:appcompat
+  androidx.appcompat:appcompat-resources
+  androidx.arch.core:core-common
+  androidx.arch.core:core-runtime
+  androidx.collection:collection
+  androidx.collection:collection-jvm
+  androidx.concurrent:concurrent-futures
+  androidx.concurrent:concurrent-futures-ktx
+  androidx.coordinatorlayout:coordinatorlayout
+  androidx.core:core
+  androidx.core:core-ktx
+  androidx.core:core-splashscreen
+  androidx.core:core-viewtree
+  androidx.cursoradapter:cursoradapter
+  androidx.customview:customview
+  androidx.drawerlayout:drawerlayout
+  androidx.emoji2:emoji2
+  androidx.emoji2:emoji2-views-helper
+  androidx.fragment:fragment
+  androidx.interpolator:interpolator
+  androidx.lifecycle:lifecycle-common
+  androidx.lifecycle:lifecycle-livedata
+  androidx.lifecycle:lifecycle-livedata-core
+  androidx.lifecycle:lifecycle-process
+  androidx.lifecycle:lifecycle-runtime
+  androidx.lifecycle:lifecycle-runtime-ktx
+  androidx.lifecycle:lifecycle-service
+  androidx.lifecycle:lifecycle-viewmodel
+  androidx.lifecycle:lifecycle-viewmodel-ktx
+  androidx.lifecycle:lifecycle-viewmodel-savedstate
+  androidx.loader:loader
+  androidx.profileinstaller:profileinstaller
+  androidx.resourceinspection:resourceinspection-annotation
+  androidx.room:room-common
+  androidx.room:room-common-jvm
+  androidx.room:room-runtime
+  androidx.room:room-runtime-android
+  androidx.savedstate:savedstate
+  androidx.savedstate:savedstate-ktx
+  androidx.sqlite:sqlite
+  androidx.sqlite:sqlite-android
+  androidx.sqlite:sqlite-framework
+  androidx.sqlite:sqlite-framework-android
+  androidx.startup:startup-runtime
+  androidx.tracing:tracing
+  androidx.tracing:tracing-ktx
+  androidx.vectordrawable:vectordrawable
+  androidx.vectordrawable:vectordrawable-animated
+  androidx.versionedparcelable:versionedparcelable
+  androidx.viewpager:viewpager
+  androidx.webkit:webkit
+  androidx.work:work-runtime
+  androidx.work:work-runtime-ktx
+  com.google.code.gson:gson
+  com.google.errorprone:error_prone_annotations
+  com.google.guava:listenablefuture
+  org.apache.cordova:framework
+  org.jetbrains:annotations
+  org.jetbrains.kotlin:kotlin-stdlib
+  org.jetbrains.kotlinx:kotlinx-coroutines-android
+  org.jetbrains.kotlinx:kotlinx-coroutines-core
+  org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm
+  org.jetbrains.kotlinx:kotlinx-coroutines-play-services
+  org.jspecify:jspecify
+
+Google Play services, used for location on Android. Proprietary; provided by Google under the
+Android Software Development Kit License Agreement (https://developer.android.com/studio/terms):
+
+  com.google.android.gms:play-services-base
+  com.google.android.gms:play-services-basement
+  com.google.android.gms:play-services-location
+  com.google.android.gms:play-services-tasks

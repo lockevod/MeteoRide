@@ -46,8 +46,16 @@ docs/ANDROID.md    Android build
   zlib notice). A new library with neither stops the build. `www/THIRD-PARTY-NOTICES.txt`
   gathers everything the app ships: every runtime dependency, `@capacitor/ios` and
   `@capacitor/android` (devDependencies, but compiled in), and every other file in
-  `mobile/licenses/` (marker icons, Cordova's Apache code, the ion-ios SPM libraries).
-  A new native dependency with its own licence needs a file there.
+  `mobile/licenses/` (marker icons, Cordova's Apache code, the ion-ios SPM libraries,
+  the ion-android Maven libraries, QuickJS inside background-runner's Android `.aar`, and
+  `android-maven.txt`, the Gradle release classpath). A new native dependency with its own
+  licence needs a file there; `bundle-debris.test.mjs` reads every plugin's `build.gradle`,
+  `Package.swift` and bundled `.aar` and fails on one the notices do not name. After a
+  Capacitor or plugin upgrade, regenerate `android-maven.txt` from
+  `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`: transitive
+  artifacts are listed there by hand and no test can see them.
+  `mobile/licenses/leaflet-color-markers.txt` is a symlink to `public/icons/LICENSE-markers.txt`,
+  so the website, which serves `public/` as it is, carries the icons' licence too.
 - The same `www/` ships to iOS and Android, so platform-specific text in the help and
   policy pages is hidden at runtime, not stripped: `help.js` sets `cw-native` and
   `cw-ios`/`cw-android` on `<html>`, and the pages hide `.web-only`, `.ios-only` and

@@ -589,7 +589,10 @@
     const sdb = document.getElementById("showDebugButton");
     const debugButton = document.getElementById("toggleDebug");
     if (sdb && debugButton) {
-      sdb.checked = (s.showDebugButton === true); // Default to false; a stored value (true or false) wins
+      // Default to false; a stored value (true or false) wins — except in the store apps,
+      // which have no debug switch to turn it back off (style.css hides it), so a value
+      // stored before that would leave the log capture running for good.
+      sdb.checked = !window.CW_NATIVE && s.showDebugButton === true;
       if (sdb.checked) {
         debugButton.classList.remove('debug-hidden');
         debugButton.style.display = ''; // Reset any inline styles

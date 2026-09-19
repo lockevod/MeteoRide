@@ -109,7 +109,7 @@ instrucciones de instalación están en
 |---|---|---|---|
 | Open-Meteo | No | 14 días | Global |
 | OpenWeather | Sí (gratuita) | 4 días | Global |
-| AROME-HD | No | 48 horas | Parte de Europa |
+| AROME-HD | No | 36 horas | Parte de Europa |
 
 - **Open-Meteo**: gratuito, sin clave, cobertura global, hasta 14 días.
   Open-Meteo elige su mejor modelo según la zona de tu track. Recomendado para
@@ -121,7 +121,7 @@ instrucciones de instalación están en
   áreas urbanas.
 - **AROME-HD**: modelo de alta resolución (~1-2 km) de MeteoFrance, accesible a
   través de Open-Meteo y sin clave. Solo disponible para Europa
-  (aprox. 39-52°N, 10.5°O-16.5°E) y dentro de 48 horas. Fuera de esa zona o de
+  (aprox. 39-52°N, 10.5°O-16.5°E) y dentro de 36 horas. Fuera de esa zona o de
   ese plazo conmuta directamente al mejor modelo que Open-Meteo tenga para esa
   localización, sin avisar de nada raro: sigue habiendo datos. Superior para
   viento y precipitación a corto plazo en Francia y países cercanos.
@@ -431,7 +431,7 @@ mano.
 ### Limitaciones
 
 - **Horizonte temporal:** Open-Meteo 14 días, OpenWeather 4 días, AROME-HD
-  48 horas.
+  36 horas.
 - **Precisión:** las previsiones son notablemente menos fiables a partir del
   día 3-4.
 - **APIs gratuitas:** Open-Meteo no requiere clave ni tiene límite práctico;

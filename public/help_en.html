@@ -162,6 +162,9 @@
         /* A tip for one platform is noise on the other, and App Review reads a mention of
            another platform as metadata that does not belong in the app (2.3.10). */
         html.cw-ios .android-only, html.cw-android .ios-only { display: none; }
+        /* .app-only is a block; this is the same idea inside a sentence. */
+        .app-only-inline { display: none; }
+        html.cw-native .app-only-inline { display: inline; }
         /* Every section is a <details> written open. The website leaves it open and
            takes no clicks on the summary, so the page reads exactly as it always did.
            Inside the app help.js closes them and the reader gets an index to tap
@@ -203,7 +206,7 @@
 
         <div class="step">
             <h3>1. Load a GPX/KML route</h3>
-            <p>Press <strong>📁</strong> and pick your file. You can also open MeteoRide with <code>?gpx_url=</code>, or share the GPX from another app.</p>
+            <p>Press <strong>📁</strong> and pick your file. <span class="web-only">You can also open MeteoRide with <code>?gpx_url=</code>, or share the GPX from another app.</span><span class="app-only-inline">You can also share the GPX to MeteoRide from another app.</span></p>
         </div>
 
         <div class="step">
@@ -282,7 +285,7 @@
             <li>With no route, the map opens where you are: the system asks for location permission in MeteoRide's name.</li>
             <li>The app starts in the phone's language until you pick one by hand.</li>
             <li>Settings, key, recent routes and tiles are still there when you open the app again.</li>
-            <li>The phone stays in portrait, because turning it breaks the layout.</li>
+            <li>The phone stays in portrait.</li>
         </ul>
     </details>
 
@@ -319,7 +322,7 @@
         <summary><h2>📱 Advanced Features</h2></summary>
 
         <h3>🔄 The table scrolls</h3>
-        <p>Drag the table or use the mouse wheel to see more columns; the ⇆ icon says there are some. Pressing a column highlights the row and the map, which recentres on that point.</p>
+        <p>Drag the table<span class="web-only"> or use the mouse wheel</span> to see more columns; the ⇆ icon says there are some. Pressing a column highlights the row and the map, which recentres on that point.</p>
 
         <h3>🌅 Sun and light</h3>
         <p>Sunrise, sunset and civil twilight, marked with "c", plus the luminosity calculated for each interval.</p>
@@ -334,12 +337,14 @@
             <li>Provider responses are cached for about 30 minutes and expire on their own.</li>
         </ul>
 
-        <h3>🔗 URLs with parameters</h3>
-        <ul>
-            <li><code>?gpx_url=https://example.com/route.gpx</code></li>
-            <li><code>?datetime=2024-03-15T10:00</code></li>
-            <li><code>?speed=25</code></li>
-        </ul>
+        <div class="web-only">
+            <h3>🔗 URLs with parameters</h3>
+            <ul>
+                <li><code>?gpx_url=https://example.com/route.gpx</code></li>
+                <li><code>?datetime=2024-03-15T10:00</code></li>
+                <li><code>?speed=25</code></li>
+            </ul>
+        </div>
     </details>
 
     <details class="section" open>
@@ -348,7 +353,7 @@
         <div class="warning">
             <h3>🚨 Limits</h3>
             <ul>
-                <li>Horizon: Open-Meteo 14 days, OpenWeather 4 days, AROME-HD 36 hours (48 in the provider comparison).</li>
+                <li>Horizon: Open-Meteo 14 days, OpenWeather 4 days, AROME-HD 36 hours.</li>
                 <li>From day 3-4 onwards the forecast is markedly less reliable.</li>
                 <li>OpenWeather keys have usage limits set by OpenWeather; Open-Meteo needs no key at all.</li>
             </ul>
@@ -393,7 +398,7 @@
 
         <div class="privacy">
             <h3>🛡️ Your data stays with you</h3>
-            <p>MeteoRide runs on your device: settings, routes and cache are stored only there, with no account and no sign-up. The exception is the website with the iOS Shortcuts, which upload the GPX to Cloudflare because Shortcuts only accept POST; that file is deleted within two minutes at most.</p>
+            <p>MeteoRide runs on your device: settings, routes and cache are stored only there, with no account and no sign-up.<span class="web-only"> The exception is the website with the iOS Shortcuts, which upload the GPX to Cloudflare because Shortcuts only accept POST; that file is deleted within two minutes at most.</span></p>
         </div>
 
         <h3>🌐 What is sent to the providers</h3>
@@ -410,7 +415,7 @@
         <p>MeteoRide is developed by <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer"><strong>Lockevod</strong></a> under the <strong>MIT license</strong>: you may use it, modify it and distribute it, for personal or commercial use, naming the author and the license.</p>
 
         <h3>🙏 Technologies</h3>
-        <p>Maps from OpenStreetMap, data from Open-Meteo and OpenWeather, icons from Weather Icons (Erik Flowers), Leaflet.js, SunCalc and GPX parser, native app with Capacitor and the website on Cloudflare Pages.</p>
+        <p>Maps from OpenStreetMap, data from Open-Meteo and OpenWeather, icons from Weather Icons (Erik Flowers), Leaflet.js, SunCalc and GPX parser, native app with Capacitor<span class="web-only"> and the website on Cloudflare Pages</span>.</p>
 
         <h3>⚖️ Disclaimer</h3>
         <p>Bikemap, Komoot, OpenWeatherMaps, Openmeteo and Hammerhead are registered marks with their own licenses, which you must comply with. The code and the webapp are provided as-is, without warranty or liability, and you accept that by using them. MeteoRide is a planning tool: weather data are estimates, so verify conditions before heading out and use your judgement.</p>

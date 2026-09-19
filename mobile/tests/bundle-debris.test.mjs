@@ -85,3 +85,37 @@ test('the notices file names every shipped package and carries every kept licenc
   }
   assert.deepEqual(dropped, [], 'a licence kept in mobile/licenses is not in THIRD-PARTY-NOTICES.txt');
 });
+
+test('every native dependency a plugin declares is named in the notices', async () => {
+  // The test above reads the list the build wrote the notices from, so it cannot see what
+  // package.json does not list: the Maven artifacts and SPM packages each plugin pulls in,
+  // and the prebuilt .aar the background runner ships with QuickJS compiled into it. A third
+  // review found all of those missing. This reads the plugins' own build files instead.
+  const notices = await readFile(join(WWW, 'THIRD-PARTY-NOTICES.txt'), 'utf8');
+  const pkg = JSON.parse(await readFile(join(MOBILE, 'package.json'), 'utf8'));
+  // Capacitor's own artifacts are the @capacitor/android and @capacitor/ios sections.
+  const covered = { 'com.capacitorjs:core': '@capacitor/android', 'capacitor-swift-pm': '@capacitor/ios' };
+  const roots = Object.keys(pkg.dependencies).filter((n) => n.startsWith('@capacitor/'))
+    .map((n) => join(MOBILE, 'node_modules', n));
+  const gradles = [join(MOBILE, 'android/app/build.gradle'), join(MOBILE, 'node_modules/@capacitor/android/capacitor/build.gradle')];
+  const swifts = [];
+  const aars = [];
+  for (const root of roots) {
+    gradles.push(join(root, 'android/build.gradle'));
+    swifts.push(join(root, 'Package.swift'));
+    const libs = join(root, 'android/src/main/libs');
+    aars.push(...(await readdir(libs).catch(() => [])).filter((n) => n.endsWith('.aar')));
+  }
+  const declared = new Set(aars);
+  for (const file of gradles) {
+    const text = await readFile(file, 'utf8').catch(() => '');
+    for (const [, coord] of text.matchAll(/^\s*(?:implementation|api)\s*\(?\s*["']([\w.-]+:[\w.-]+)/gm)) declared.add(coord);
+  }
+  for (const file of swifts) {
+    const text = await readFile(file, 'utf8').catch(() => '');
+    for (const [, name] of text.matchAll(/\.package\(url:\s*"[^"]*\/([\w.-]+?)(?:\.git)?"/g)) declared.add(name);
+  }
+  assert.ok(declared.size > 10, `found only ${declared.size} native dependencies; the scan is broken`);
+  const missing = [...declared].filter((d) => !notices.includes(covered[d] || d));
+  assert.deepEqual(missing, [], 'a plugin ships a native dependency the notices do not name');
+});
