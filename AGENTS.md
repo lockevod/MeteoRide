@@ -1529,9 +1529,14 @@ than a page" and "Preparing and replaying").
 A first-time user has no GPX, and neither does an App Store reviewer: before 19/09/2026 the
 whole app sat behind a file picker opening on an empty folder. `#exampleRoute` ("Try an
 example route" / "Probar una ruta de ejemplo") is a pill in the middle of `#map` that loads
-`public/assets/example-route.gpx` (generated, not copied from anyone: 42.5 km out and back along the
-coast south-west of Barcelona towards Castelldefels, 181 points; the track is illustrative and
-cuts through the port and the airport area, not a surveyed path), bundled so it works with no network. It sits on
+`public/assets/example-route.gpx` (17 km out and back from Castelldefels to Garraf on the C-31
+coast road, 591 points, routed once with BRouter's `fastbike` profile on OpenStreetMap roads;
+the GPX description carries the OSM/ODbL attribution), bundled so it works with no network.
+Its name comes from `example_route_name`, so it is Spanish in Spanish. The first version was
+drawn by hand with straight legs and crossed the sea, the port and the airport; a test now
+rejects a track whose median leg is too long to be a road. To change the route, route it
+again (e.g. `brouter.de/brouter?lonlats=…&profile=fastbike&format=gpx`), append the reversed
+track and keep the bounding box in `example-route.spec.mjs` in step. It sits on
 the map rather than in the controls because in the controls it pushed the upload icon onto
 a row of its own (the layout test catches that).
 
@@ -1555,8 +1560,9 @@ The rule is that it never stands in for a route the user has or is about to have
 - `cw:forecast` is not the signal: a route can open and never publish (no coverage, a start
   date out of range), and hiding on the forecast left the button over that route.
 
-Tests: `tests/example-route.spec.mjs` (loads and forecasts; the GPX is in the bundle; the
-button ships hidden) and four in `smoke.spec.mjs` (not offered while a stored route is being
+Tests: `tests/example-route.spec.mjs` (loads and forecasts; the GPX is in the bundle; it
+follows roads and stays between Castelldefels and Garraf; it is named in the chosen language;
+the button ships hidden) and four in `smoke.spec.mjs` (not offered while a stored route is being
 restored; steps aside for a route without a forecast and returns after a broken file; hides
 while any route is being read; an example still being read loses to a file picked meanwhile).
 Each was checked by mutation.

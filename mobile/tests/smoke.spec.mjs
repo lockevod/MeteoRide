@@ -3254,7 +3254,7 @@ test('an example still being read loses to a route picked meanwhile', async ({ p
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(() => currentRouteName(page)).not.toBeNull();
   const picked = await currentRouteName(page);
-  expect(picked).not.toMatch(/Example ride/);
+  expect(picked).not.toMatch(/Example ride|Ruta de ejemplo/);
 
   release();
   // Both ended: the picked file and the example, whichever order they come in.
@@ -3262,7 +3262,7 @@ test('an example still being read loses to a route picked meanwhile', async ({ p
   // Anything either of them queued for the recent routes has been written.
   await page.evaluate(async () => { await window.cw.enqueueRecents(async () => {}); await window.cw.enqueueRecents(async () => {}); });
   expect(await currentRouteName(page), 'the example replaced the route picked after it').toBe(picked);
-  expect((await storedRoutes(page)).map((r) => r.name).join('|')).not.toMatch(/Example ride/);
+  expect((await storedRoutes(page)).map((r) => r.name).join('|')).not.toMatch(/Example ride|Ruta de ejemplo/);
 });
 
 // Spec §6: the recent route is read after the shared one has already published, and the

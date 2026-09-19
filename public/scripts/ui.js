@@ -1887,7 +1887,7 @@
         // nothing has replaced it.
         window.cwReceiveRoute({
           source: 'example',
-          name: 'Example ride - Barcelona coast',
+          name: window.t('example_route_name'),
           fetchText: async () => {
             const res = await fetch('assets/example-route.gpx');
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
