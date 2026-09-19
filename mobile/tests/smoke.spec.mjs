@@ -7934,6 +7934,14 @@ test('the pages an iPhone reader can open never mention Android', async ({ page 
     // to "no server of ours in between".
     expect(seen, `${name} describes the website to an app reader`)
       .not.toMatch(/gpx_url|mouse wheel|rueda del ratón|Cloudflare|Shortcuts|atajos de iOS|pantalla de inicio|Home Screen/i);
+    // Nor that a website sits behind it (4.2), nor brands only the website deals with, nor
+    // controls that no longer exist (the Comp. checkbox, a 🔄 Compare button).
+    expect(seen, `${name} tells an app reader there is a website behind it`)
+      .not.toMatch(/browser|navegador|webapp|aplicación web|Bikemap|Hammerhead|OpenWeatherMaps|\bComp\.|🔄 Compar/i);
+    // The guide covers the Android app and installing the website: no visible link to it.
+    const guideLinks = await page.locator('a[href*="GUIDE.md"], a[href*="GUIA.md"]').evaluateAll(
+      (as) => as.filter((a) => a.checkVisibility()).map((a) => a.textContent));
+    expect(guideLinks, `${name} links an app reader to the guide`).toEqual([]);
     if (name.startsWith('help')) expect(seen).toMatch(/Background App Refresh|Actualización en segundo plano/);
   }
 });

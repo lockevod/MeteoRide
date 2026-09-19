@@ -127,7 +127,7 @@
     <summary><h2>Qué se guarda en tu dispositivo</h2></summary>
     <p>Todo lo siguiente vive en tu teléfono y nadie más lo lee mientras siga ahí:</p>
     <ul>
-      <li>Tus ajustes: idioma, unidades, proveedor, intervalos. Se copian a UserDefaults, el almacén del sistema, porque el navegador interno puede vaciarse solo cuando falta espacio.</li>
+      <li>Tus ajustes: idioma, unidades, proveedor, intervalos. Se copian a UserDefaults, el almacén del sistema, porque iOS puede vaciar el almacenamiento local de la app cuando falta espacio.</li>
       <li>Las rutas recientes, la ruta preparada para usar sin cobertura y la caché de previsiones y de mapas.</li>
       <li>Tu clave de OpenWeather, si pones una. <strong>Se guarda sin cifrar</strong>: usa una clave que no uses para nada más, o quédate con Open-Meteo, que no necesita ninguna.</li>
       <li>Las rutas que te llegan desde otra app por «Compartir» y «Abrir en MeteoRide» esperan en un directorio privado de la app (un contenedor App Group) hasta que se cargan. Al abrir una ruta, iOS deja además su propia copia en la carpeta de entrada de la app; se borra en cuanto la ruta queda guardada. Lo que lleve más de 24 horas sin recogerse se borra la próxima vez que la app mira.</li>
@@ -189,7 +189,7 @@
     <h3>What is stored on your device</h3>
     <p>All of the following lives on your phone, and nobody else reads it while it stays there:</p>
     <ul>
-      <li>Your settings: language, units, provider, intervals. They are copied to UserDefaults, the system store, because the embedded browser can clear itself when the device runs short of space.</li>
+      <li>Your settings: language, units, provider, intervals. They are copied to UserDefaults, the system store, because iOS can empty the app's local storage when the device runs short of space.</li>
       <li>Recent routes, the route prepared for use without coverage, and the forecast and map caches.</li>
       <li>Your OpenWeather key, if you enter one. <strong>It is stored unencrypted</strong>: use a key you use for nothing else, or stay with Open-Meteo, which needs none.</li>
       <li>Routes that reach you from another app through "Share" and "Open in MeteoRide" wait in a private directory of the app (an App Group container) until they are loaded. When a route is opened, iOS also leaves its own copy in the app's inbox folder; that one is deleted as soon as the route is stored. Anything uncollected for more than 24 hours is deleted the next time the app looks.</li>
