@@ -1783,3 +1783,27 @@ vivos por la resolución de dependencias; no está demostrado que fueran la caus
 **Abierto.** `android-maven.txt` se escribe a mano desde `./gradlew :app:dependencies`: nada
 comprueba las dependencias transitivas. El build de iOS sigue en `CURRENT_PROJECT_VERSION` 6
 y su copia de `public/` está atrasada: `npm run sync` y subir el número antes de archivar.
+
+### Tercera ronda sobre la respuesta a App Review (19/09)
+
+Claude (código), el revisor de Apple simulado y Codex (`/codex:adversarial-review`), sobre
+`5635757..5f8d88d` y el texto v4.
+
+**Arreglados.** `logDebug` metía cada línea en `#debugConsole` con el panel cerrado: miraba
+`style.display`, que el atributo `hidden` no toca (web y app, desde siempre; `dfa24f9` decía
+haberlo arreglado y no era así). El test de `InfoPlist.strings` aceptaba ficheros que iOS lee
+vacíos; ahora los parsea y, en macOS, los contrasta con `plutil`. El de avisos de licencia miraba
+solo plugins `@capacitor/`, no leía `runtimeOnly` ni `.kts` y aceptaba nombres por subcadena. La
+licencia de los iconos deja de ser un enlace simbólico. La ayuda de la app ya no dice que hay una
+web detrás («lo que un navegador no puede hacer», «la aplicación web»; las políticas decían
+«navegador interno»), no enlaza a la guía (que habla de Android y de instalar la web) y explica
+la comparación con los controles que existen. La ruta de ejemplo cruzaba el mar, el puerto y el
+aeropuerto; ahora es Castelldefels–Garraf por la C-31, calculada sobre OSM. Texto v5: 3920 bytes.
+
+**Abierto.** Las dependencias transitivas de Gradle siguen fuera de cualquier test
+(`android-maven.txt` a mano). QuickJS y Play services aparecen en los avisos también en iOS
+porque `www/` es común; nadie los ve (el fichero no está enlazado). `processing` en
+`UIBackgroundModes` se queda sin uso, documentado. Antes de archivar: `npx cap sync ios`,
+comprobar que `ios/App/App/public/THIRD-PARTY-NOTICES.txt` existe y que `utils.js` es el nuevo,
+subir el build a 7 o más, y que la grabación enseñe el permiso de notificaciones y «Watching…»,
+porque el texto lo afirma.
