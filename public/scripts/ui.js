@@ -1876,27 +1876,24 @@
       document.addEventListener('cw:route-settled', offerExample);
       // It sits inside the map container: without this a tap on it is also a tap on the map.
       if (window.L) L.DomEvent.disableClickPropagation(exampleEl);
-      exampleEl.addEventListener('click', async () => {
+      exampleEl.addEventListener('click', () => {
         // A route arrived between the button being drawn and this tap: it stays.
         if (window.lastGPXFile || window.cw.hasRouteRequestPending()) { hideExample(); return; }
-        exampleEl.disabled = true;
-        try {
-          const res = await fetch('assets/example-route.gpx');
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const text = await res.text();
-          window.cwReceiveRoute({
-            source: 'example',
-            name: 'Example ride - Barcelona seafront',
-            text,
-            // Kept among the recent routes only once it has opened, like a link.
-            importOn: 'commit',
-          });
-        } catch (e) {
-          console.warn('[MeteoRide] example route failed', e);
-          if (window.setNotice) window.setNotice(window.t ? window.t('example_route_failed') : 'The example route could not be opened.', 'warn');
-        } finally {
-          exampleEl.disabled = false;
-        }
+        // Asked for on the tap, with the file read inside the request rather than before it:
+        // a route picked or shared while the file is still being read is then the newer
+        // request and wins, and a read that fails is the coordinator's to report, only if
+        // nothing has replaced it.
+        window.cwReceiveRoute({
+          source: 'example',
+          name: 'Example ride - Barcelona seafront',
+          fetchText: async () => {
+            const res = await fetch('assets/example-route.gpx');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.text();
+          },
+          // Kept among the recent routes only once it has opened, like a link.
+          importOn: 'commit',
+        });
       });
     }
 

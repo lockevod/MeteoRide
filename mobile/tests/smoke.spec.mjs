@@ -3178,6 +3178,47 @@ test('the example route steps aside for a route that opens without a forecast, a
   await expect(button).toBeHidden();
 });
 
+test('the example route hides while any route is being read, and returns if it fails', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const button = page.locator('#exampleRoute');
+  await expect(button).toBeVisible();
+
+  // A route on its way (a link, a share): a tap now would supersede it.
+  await page.evaluate(() => {
+    window.cwReceiveRoute({ source: 'url', name: 'held.gpx', importOn: 'commit',
+      fetchText: () => new Promise((resolve) => { window.__release = resolve; }) });
+  });
+  await expect(button).toBeHidden();
+
+  await page.evaluate(() => window.__release('this is not a route'));
+  await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+  await expect(button).toBeVisible();
+});
+
+test('an example still being read loses to a route picked meanwhile', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  await page.route('**/assets/example-route.gpx', async (route) => { await gate; await route.continue(); });
+  await page.goto('/index.html');
+  await mapReady(page);
+
+  await page.locator('#exampleRoute').click();
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect.poll(() => currentRouteName(page)).not.toBeNull();
+  const picked = await currentRouteName(page);
+
+  release();
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequestPending())).toBe(false);
+  await page.waitForTimeout(500);
+  expect(await currentRouteName(page), 'the example replaced the route picked after it').toBe(picked);
+  expect((await storedRoutes(page)).map((r) => r.name).join('|')).not.toMatch(/Example ride/);
+});
+
 // Spec §6: the recent route is read after the shared one has already published, and the
 // shared one still wins.
 test('a route shared while the last recent route is still being read at start-up wins', async ({ page }) => {
