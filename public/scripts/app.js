@@ -118,7 +118,10 @@ const OPENWEATHER_MAX_DAYS = 4;
 const OPENWEATHER_MAX_HOURS = 1; 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_HOUR = 60 * 60 * 1000;          // NEW
-const AROMEHD_MAX_HOURS = 48;                 // NEW
+// Outer guard only. What the user gets is decided first by the provider chains in utils.js
+// (providerChains), which hand AROME-HD over to Open-Meteo at 36 h; this 48 h is never the
+// cut-off a reader sees. In a comparison it marks where the AROME column goes blank.
+const AROMEHD_MAX_HOURS = 48;
 
 // NEW: AROME‑HD coverage check (coarse bbox: FR + nearby; excludes S. Spain)
 function isAromeHdCovered(lat, lon) {
@@ -837,7 +840,8 @@ async function fetchWeatherForSteps(steps, timeSteps, settings, ids, signal) {
         missingKeyFallback = true;
       }
 
-      // NEW: AROME‑HD policy — within 48h AND within coverage; otherwise fallback to Open‑Meteo
+      // AROME-HD outside its coverage, or past the outer guard, falls back to Open-Meteo
+      // (the chain has already moved anything past 36 h over; see AROMEHD_MAX_HOURS).
       if (prov === "aromehd") {
         if (hoursAhead > AROMEHD_MAX_HOURS || !isAromeHdCovered(p.lat, p.lon)) {
           prov = "openmeteo";

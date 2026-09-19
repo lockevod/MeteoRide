@@ -3089,6 +3089,38 @@ test('with debug off, computing a forecast writes nothing into the hidden debug 
   await expect(page.locator('#debugConsole')).toContainText('probe');
 });
 
+// The console bridge had the same leak through another door: every console.error (a failed
+// forecast step logs one per step) went into the panel, and on the website the first one
+// opened it for someone who never turned debug on.
+test('with debug off, an error neither fills nor opens the debug panel', async ({ page }) => {
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { console.error('probe error'); window.logDebug('probe step', true); });
+  expect(await page.evaluate(() => document.getElementById('debugConsole').childElementCount)).toBe(0);
+  await expect(page.locator('#debugSection')).toBeHidden();
+  // Whoever did turn debug on still gets the history, panel closed or not.
+  await page.evaluate(() => { document.getElementById('showDebugButton').checked = true; console.error('wanted'); });
+  await expect(page.locator('#debugConsole')).toContainText('wanted');
+});
+
+// A reviewer on a Spanish iPhone read "Unidades/i18n", "Check", "API Key" and "Compare" in
+// the Spanish settings: developer shorthand and English left in a translated screen.
+test('the Spanish controls and settings show no English or developer shorthand', async ({ page }) => {
+  await page.route((url) => url.hostname.endsWith('tile.openstreetmap.org'), (r) => r.abort());
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ language: 'es' })));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#toggleConfig').click();
+  const seen = await page.evaluate(() => [
+    document.getElementById('configMenu').innerText,
+    document.getElementById('controlsPanel').innerText,
+    ...[...document.querySelectorAll('#apiSource option')].map((o) => o.textContent),
+  ].join('\n'));
+  expect(seen).toContain('Unidades e idioma');
+  expect(seen).not.toMatch(/i18n|\bCheck\b|\bCompare\b|API Key|Fallback/);
+});
+
 test('detailed notices switch the notice of the forecast on screen on and off', async ({ page }) => {
   let calls = 0;
   await page.route((url) => url.hostname === 'api.open-meteo.com', (route) => {

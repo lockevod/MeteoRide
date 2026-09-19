@@ -103,7 +103,12 @@ test('every native dependency a plugin declares is named in the notices', async 
   const covered = { 'com.capacitorjs:core': '@capacitor/android', 'capacitor-swift-pm': '@capacitor/ios' };
   const read = (f) => readFile(f, 'utf8').catch(() => null);
   const gradleOf = async (dir) => (await read(join(dir, 'build.gradle'))) ?? (await read(join(dir, 'build.gradle.kts')));
-  const gradles = [await gradleOf(join(MOBILE, 'android/app')), await gradleOf(join(MOBILE, 'node_modules/@capacitor/android/capacitor'))];
+  // [module dir, build file text]: the app, Capacitor itself, the Cordova plugins module.
+  const gradles = [];
+  for (const dir of ['android/app', 'node_modules/@capacitor/android/capacitor', 'android/capacitor-cordova-android-plugins']) {
+    const g = await gradleOf(join(MOBILE, dir));
+    if (g !== null) gradles.push([join(MOBILE, dir), g]);
+  }
   const swifts = [];
   const aars = [];
   const unreadable = [];
@@ -113,7 +118,7 @@ test('every native dependency a plugin declares is named in the notices', async 
     if (hasAndroid) {
       const g = await gradleOf(join(root, 'android'));
       if (g === null) unreadable.push(`${name}/android`);
-      gradles.push(g ?? '');
+      gradles.push([join(root, 'android'), g ?? '']);
       aars.push(...(await readdir(join(root, 'android/src/main/libs')).catch(() => [])).filter((n) => n.endsWith('.aar')));
     }
     const swift = await read(join(root, 'Package.swift'));
@@ -122,17 +127,28 @@ test('every native dependency a plugin declares is named in the notices', async 
   assert.deepEqual(unreadable, [], 'a plugin has native Android code but no build file this scan can read');
   const declared = new Set(aars);
   const unparsed = [];
-  for (const text of gradles) {
-    for (const [line, coord] of text.matchAll(/^\s*(?:implementation|api|runtimeOnly)\b\s*\(?\s*(?:["']([\w.-]+:[\w.-]+))?.*$/gm)) {
+  // Every configuration that ships in a release build; test*, androidTest* and debug* do not.
+  const shipping = /^\s*(?:(?:release)?(?:[Ii]mplementation|[Aa]pi|[Rr]untimeOnly)|coreLibraryDesugaring)\b\s*\(?\s*(?:["']([\w.-]+:[\w.-]+))?.*$/gm;
+  for (const [dir, text] of gradles) {
+    for (const [line, coord] of text.matchAll(shipping)) {
       const localAar = line.match(/name:\s*["']([\w.-]+)["'],\s*ext:\s*["']aar["']/)?.[1];
+      const tree = line.match(/fileTree\s*\(/) && line.match(/dir:\s*["']([^"']+)["']/)?.[1];
       if (coord) declared.add(coord);
       else if (localAar) declared.add(`${localAar}.aar`);
-      else if (!/project\s*\(|fileTree\s*\(|files\s*\(|kotlin\s*\(/.test(line)) unparsed.push(line.trim());
+      else if (tree) {
+        // A fileTree ships whatever sits in that folder: read it, don't assume it is empty.
+        const exts = [...line.matchAll(/\*\.(\w+)/g)].map((m) => `.${m[1]}`);
+        for (const f of await readdir(join(dir, tree)).catch(() => [])) if (exts.some((e) => f.endsWith(e))) declared.add(f);
+      } else if (!/project\s*\(|kotlin\s*\(/.test(line)) unparsed.push(line.trim());
     }
   }
-  assert.deepEqual(unparsed, [], 'dependency lines this scan cannot read (version catalog? platform()?)');
+  assert.deepEqual(unparsed, [], 'dependency lines this scan cannot read (version catalog? platform()? files()?)');
   for (const text of swifts) {
-    for (const [, name] of text.matchAll(/\.package\(url:\s*"[^"]*\/([\w.-]+?)(?:\.git)?"/g)) declared.add(name);
+    const pkgs = [...text.matchAll(/\.package\(url:\s*"[^"]*\/([\w.-]+?)(?:\.git)?"/g)];
+    for (const [, name] of pkgs) declared.add(name);
+    // Any other kind of package reference (by path, a binary target) would ship unseen.
+    const all = (text.match(/\.package\(|\.binaryTarget\(/g) || []).length;
+    assert.equal(all, pkgs.length, `a Package.swift declares something this scan cannot read:\n${text}`);
   }
   assert.ok(declared.size > 10, `found only ${declared.size} native dependencies; the scan is broken`);
   // Whole names only: androidx.core:core must not pass on the strength of androidx.core:core-ktx.

@@ -7,6 +7,13 @@
   }
   function ensureEl(){ return document.getElementById('debugConsole'); }
   window.logdebug = function(...args){
+      // Nothing is captured, and the panel never opens itself, unless the user turned debug on
+      // or the panel is already on screen. Errors used to bypass this: every failed step went
+      // into a hidden, never-trimmed panel, and on the website the first one popped it open.
+      try {
+        const sec = document.getElementById('debugSection');
+        if (!isDebugEnabled() && !(sec && getComputedStyle(sec).display !== 'none')) return;
+      } catch(_) { return; }
       // ensure toolbar
       try {
         const sec = document.getElementById('debugSection');
