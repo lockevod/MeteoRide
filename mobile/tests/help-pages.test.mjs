@@ -230,3 +230,15 @@ test('neither page promises the map background without a connection', async () =
     assert.doesNotMatch(html, /teselas[^<]*sin conexión|tiles[^<]*offline|y teselas siguen|and tiles are still|mapa[^<.]*(funciona|sirve)[^<.]*sin conexión|map[^<.]*works[^<.]*offline/i, `${name} promises offline map tiles`);
   }
 });
+
+/* Open-Meteo's data are CC BY 4.0: credit, a link to the licence and a note of what was
+ * changed. The map carries the "Open-Meteo" link; the rest lives here, in both languages,
+ * so the main screen does not give up height to a credit line. */
+test('each help page credits the weather data with its licence', async () => {
+  for (const name of ['help.html', 'help_en.html']) {
+    const html = await read(name);
+    for (const href of ['https://open-meteo.com/', 'https://creativecommons.org/licenses/by/4.0/', 'https://openweathermap.org/']) {
+      assert.ok(html.includes(`href="${href}"`), `${name} does not link ${href}`);
+    }
+  }
+});

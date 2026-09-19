@@ -1246,16 +1246,6 @@ input[type="file"] {
 }
 
 /* Bloque clima/tablas ------------------------------------------------------- */
-#weatherAttribution {
-  padding: 2px 6px;
-  font-size: 11px;
-  color: #334155;
-}
-#weatherAttribution a {
-  display: inline-block;
-  min-height: 24px;
-  line-height: 24px;
-}
 #weatherContainer {
   background: white;
   box-shadow: 0 5px 15px rgb(30 56 175 / 0.12);

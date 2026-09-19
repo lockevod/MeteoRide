@@ -305,7 +305,6 @@
       example_route: "Probar una ruta de ejemplo",
       example_route_title: "Carga una ruta de muestra para probar la previsión",
       example_route_name: "Ruta de ejemplo - Mont-roig a Castillo",
-      weather_data_credit: "Datos meteorológicos",
       field_date_a: "fecha A",
       field_date_b: "fecha B",
       // Route validation messages
@@ -434,7 +433,6 @@
       example_route: "Try an example route",
       example_route_title: "Load a sample route to try the forecast",
       example_route_name: "Example ride - Mont-roig to Castillo",
-      weather_data_credit: "Weather data",
       field_date_a: "first date",
       field_date_b: "second date",
       // Route validation messages

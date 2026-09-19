@@ -6434,7 +6434,7 @@ test('in the app, compare-by-dates collapses the sticky first column once scroll
   await runCompareDates(page);
   await expect.poll(() => datesShown(page)).toBe(true);
 
-  await expect(page.locator('#weatherAttribution a[href="https://open-meteo.com/"]')).toBeVisible();
+  await expect(page.locator('#map a[href="https://open-meteo.com/"]')).toBeVisible();
 
   const container = page.locator('#weatherTableContainer');
   await expect.poll(() => container.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);

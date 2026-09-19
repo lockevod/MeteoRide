@@ -1830,7 +1830,7 @@ Time Sensitive del proyecto iOS local. `UIBackgroundModes` queda en `fetch`, tan
 plantilla como en el proyecto local; esto sustituye la decisión histórica de conservar
 `processing` descrita arriba. La configuración añade un User-Agent identificable de
 MeteoRide para los mosaicos de OpenStreetMap. Open-Meteo aparece enlazado junto al mapa y
-la tabla, con CC BY 4.0 en la tabla y explicación del procesamiento en ambas ayudas.
+la tabla (luego se quitó de la tabla, ver abajo), con CC BY 4.0 y explicación del procesamiento en ambas ayudas.
 
 `docs/APP-REVIEW-REPLY.md` contiene el borrador revisado; requiere vídeo real del build 7,
 modelo/iOS y contraste con el mensaje original de Apple antes de enviarlo.
@@ -1884,3 +1884,16 @@ Subido a App Store Connect el 19/09 a las 17:29 (`Upload succeeded`; log en
 8 e incluye las respuestas de App Privacy: Precise Location para App Functionality, no
 vinculada ni para tracking; la clave de OpenWeather como Other Data, vinculada, es la lectura
 prudente.
+
+### Atribución de Open-Meteo fuera de la pantalla principal (19/09, después del build 8)
+
+La línea «Datos meteorológicos: Open-Meteo (CC BY 4.0) · OpenWeather» bajo la tabla restaba
+altura al mapa en el iPhone. Se quita: Open-Meteo sigue enlazado en la esquina del mapa, junto a
+OpenStreetMap, y las dos ayudas enlazan Open-Meteo, la licencia CC BY 4.0 y OpenWeather y
+explican qué calcula MeteoRide (`help-pages.test.mjs` lo exige). CC BY 4.0 admite atribuir de
+forma razonable según el medio; en una app, su pantalla de créditos. **El build 8 subido aún
+lleva la línea**: el cambio va en el siguiente build.
+
+Fallo intermitente visto una vez (19/09): «opening without coverage four hours later drops the
+prepared route…» en webkit recibió «No connection, and no saved forecast for this route.» en vez
+de «prepared route no longer fits»; 10 de 10 aislado y la suite siguiente, verde. Sin explicar.

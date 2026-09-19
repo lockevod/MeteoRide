@@ -2044,7 +2044,9 @@ Ride-change notifications use `active`, not `timeSensitive`: the watch checks ri
 The iOS runner schedules `BGAppRefreshTaskRequest` only, so `UIBackgroundModes` needs
 `fetch`, not `processing`. The local target no longer carries the Time Sensitive entitlement.
 `appendUserAgent` (top level, so iOS and Android alike) identifies MeteoRide to the tile service. Open-Meteo credit is
-linked beside the table (outside the replaceable table markup) and on the map; both
-help languages explain the CC BY 4.0 data licence and MeteoRide's transformations.
+a link on the map, beside OpenStreetMap's; both help languages link Open-Meteo, CC BY 4.0
+and OpenWeather and explain MeteoRide's transformations. A credit line under the table was
+tried and removed: it took height from the map on a phone, and CC BY allows attribution in
+any reasonable manner for the medium (for an app, its credits/help screen).
 The submission text is in `docs/APP-REVIEW-REPLY.md`; its recording and device fields
 must be completed from the actual build sent to Apple, never from browser tests.
