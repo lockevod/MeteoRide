@@ -3717,3 +3717,10 @@ html.cw-native .params-folded > .wrap-break {
   cursor: pointer;
 }
 .example-route-button[hidden] { display: none; }
+
+/* No developer console in the store apps: App Review reads a debug switch and a log pane
+   as a test feature (2.1/2.2). The website keeps both for bug reports. !important
+   because ui.js shows and hides the button with an inline style. */
+html.cw-native #toggleDebug,
+html.cw-native .debug-setting,
+html.cw-native #debugSection { display: none !important; }

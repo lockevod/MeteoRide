@@ -237,7 +237,7 @@
         <ul>
             <li><strong>Open-Meteo:</strong> no key, global, 14 days. The default, and the right one for almost everything.</li>
             <li><strong>OpenWeather:</strong> needs a key, 4 days. Real-time data, and the only one that publishes official alerts.</li>
-            <li><strong>AROME-HD:</strong> no key, high resolution, France and nearby countries, and 48 hours. Outside that it uses Open-Meteo without you having to do anything.</li>
+            <li><strong>AROME-HD:</strong> no key, high resolution, France and nearby countries, and 36 hours. Outside that it uses Open-Meteo without you having to do anything.</li>
             <li><strong>OpenWeather → AROME-HD → Open-Meteo:</strong> a chain that uses each one over the stretch where it is best. Requires an OpenWeather key.</li>
         </ul>
         <div class="tip">
@@ -282,7 +282,7 @@
             <li>With no route, the map opens where you are: the system asks for location permission in MeteoRide's name.</li>
             <li>The app starts in the phone's language until you pick one by hand.</li>
             <li>Settings, key, recent routes and tiles are still there when you open the app again.</li>
-            <li>The phone stays in portrait, because turning it breaks the layout. The iPad does rotate.</li>
+            <li>The phone stays in portrait, because turning it breaks the layout.</li>
         </ul>
     </details>
 
@@ -290,7 +290,7 @@
         <summary><h2>🛠️ Settings</h2></summary>
 
         <h3>🔑 API key</h3>
-        <p>Only OpenWeather needs a key, and it is free: <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>. The <strong>🔍 Check</strong> button next to the field tells you whether it is valid.</p>
+        <p>Only OpenWeather needs a key, and it has to be one for its One Call API 3.0: <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>. What it costs and how many calls it allows are OpenWeather's terms, not ours. The <strong>🔍 Check</strong> button next to the field tells you whether it is valid.</p>
 
         <h3>📏 Units, language and notices</h3>
         <ul>
@@ -348,9 +348,9 @@
         <div class="warning">
             <h3>🚨 Limits</h3>
             <ul>
-                <li>Horizon: Open-Meteo 14 days, OpenWeather 4 days, AROME-HD 48 hours.</li>
+                <li>Horizon: Open-Meteo 14 days, OpenWeather 4 days, AROME-HD 36 hours (48 in the provider comparison).</li>
                 <li>From day 3-4 onwards the forecast is markedly less reliable.</li>
-                <li>Free keys can have monthly limits; Open-Meteo needs none at all.</li>
+                <li>OpenWeather keys have usage limits set by OpenWeather; Open-Meteo needs no key at all.</li>
             </ul>
         </div>
 
@@ -399,7 +399,7 @@
         <h3>🌐 What is sent to the providers</h3>
         <ul>
             <li>The coordinates of your route and the times you are asking a forecast for.</li>
-            <li>Your OpenWeather key, if you use one. It is stored unencrypted, so a free key with minimal permissions is wise — or none at all, with Open-Meteo and AROME-HD.</li>
+            <li>Your OpenWeather key, if you use one. It is stored unencrypted, so a key used for nothing else is wise — or none at all, with Open-Meteo and AROME-HD.</li>
         </ul>
         <p>The providers have their own privacy policies. Exactly what is stored on your device is in the <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">guide</a>.</p>
         <p>The full detail — what each provider receives, how long it keeps it, and how to delete everything left on the device — is in the <a href="privacy-web.html" id="privacyLink"><strong>privacy policy</strong></a>.</p>
@@ -422,7 +422,7 @@
         <h3>🐛 Report Issues</h3>
         <ul>
             <li>Open an issue in the <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">GitHub repository</a></li>
-            <li>Turn the debug button (🐞) on under <strong>Settings → Show debug button</strong>: it starts off</li>
+            <li class="web-only">Turn the debug button (🐞) on under <strong>Settings → Show debug button</strong>: it starts off</li>
             <li>Include your device and the version, shown at the foot of this page</li>
         </ul>
 

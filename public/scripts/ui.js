@@ -277,8 +277,10 @@
   if (btn) { btn.disabled = true; btn.classList.add("testing"); }
   setKeyStatus(window.t("key_testing"), "testing", 'apiKeyStatusOW');
 
-      const center = (typeof window.map !== "undefined" && window.map?.getCenter) ? window.map.getCenter() : { lat: 41.3874, lng: 2.1686 };
-      const p = { lat: center.lat, lon: center.lng };
+      // A fixed point, not the map's centre: right after start-up the map is centred on
+      // the phone, and the privacy policies promise that position is never sent anywhere.
+      // Any point answers the only question asked here, whether the key works.
+      const p = { lat: 41.3874, lon: 2.1686 };
       const timeAt = new Date();
 
       const url = window.buildProviderUrl("openweather", p, timeAt, apiKey, window.getVal("windUnits"), window.getVal("tempUnits"));

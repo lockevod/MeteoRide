@@ -3048,12 +3048,26 @@ test('a fresh install starts with the debug button off', async ({ page }) => {
   await expect(page.locator('#toggleDebug')).toBeHidden();
 });
 
+// The website only: the store apps have no debug button at all (see style.css).
 test('a stored preference for the debug button survives, on or off', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ showDebugButton: true })));
   await page.goto('/index.html');
   await mapReady(page);
   await expect(page.locator('#showDebugButton')).toBeChecked();
   await expect(page.locator('#toggleDebug')).toBeVisible();
+});
+
+// App Review treats a debug switch and a log pane as an unfinished, test-only feature.
+// Even a preference stored before this change must not bring either back in the app.
+test('the app shows no debug switch and no debug button, whatever was stored', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ showDebugButton: true })));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect(page.locator('#toggleDebug')).toBeHidden();
+  await expect(page.locator('#showDebugButton')).toBeHidden();
+  await expect(page.locator('#debugSection')).toBeHidden();
 });
 
 test('detailed notices switch the notice of the forecast on screen on and off', async ({ page }) => {
@@ -4167,7 +4181,7 @@ test('a route posted before the map exists is drawn once the map is ready, and o
 test('the app toolbar stays on one line', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
-  // The debug button is off by default now; turn it on so both app-only buttons are on screen.
+  // A stored debug preference must not bring the debug button back: the app has none.
   await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ showDebugButton: true })));
   await page.goto('/index.html');
   await mapReady(page);
@@ -4184,7 +4198,7 @@ test('the app toolbar stays on one line', async ({ page }) => {
     };
   });
 
-  expect(count, 'expected the app toolbar to carry both extra buttons').toBeGreaterThan(4);
+  expect(count, 'expected the app toolbar to carry its extra buttons').toBeGreaterThanOrEqual(4);
   expect(navHeight, `toolbar is ${navHeight}px tall for a ${tallestButton}px button, so it wrapped`)
     .toBeLessThan(tallestButton * 1.5);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -5117,6 +5131,34 @@ test.describe('the app path uses the native plugin, not the browser api', () => 
     const c = await mapCentre(page);
     expect(Math.abs(c.lat - 40.4168)).toBeLessThan(0.05);
     expect(await page.evaluate(() => window.__geoCalls)).toEqual({ browser: 0, plugin: 1 });
+  });
+});
+
+// The privacy policies say the phone's position is never sent anywhere. The key check
+// used to ask OpenWeather about the map's centre, which right after start-up IS the
+// phone's position, so the promise was false the first time anyone checked a key.
+test.describe('checking an OpenWeather key does not send where the phone is', () => {
+  test('asks about a fixed point, not the centre the phone put the map on', async ({ page }) => {
+    await installNativeBridge(page, { geolocation: { latitude: 40.4168, longitude: -3.7038 } }); // Madrid
+    await goOffline(page);
+    const asked = [];
+    await page.route('**/data/3.0/onecall**', (route) => {
+      asked.push(new URL(route.request().url()));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/index.html');
+    await mapReady(page);
+    await expect.poll(async () => (await mapCentre(page)).lng).toBeLessThan(-3);
+
+    await page.evaluate(() => {
+      document.getElementById('apiKeyOW').value = 'a-valid-looking-key';
+      document.getElementById('checkApiKeyOW').click();
+    });
+    await expect.poll(() => asked.length).toBeGreaterThan(0);
+    for (const url of asked) {
+      expect(Math.abs(Number(url.searchParams.get('lat')) - 40.4168), 'the key check sent the phone position')
+        .toBeGreaterThan(0.5);
+    }
   });
 });
 
@@ -7702,10 +7744,9 @@ test.describe('the header toolbar', () => {
     await goOffline(page);
     await page.goto('/index.html');
     await mapReady(page);
-    await page.locator('#toggleDebug').evaluate((el) => el.classList.remove('debug-hidden'));
 
     const shown = await page.locator('header nav button:visible').count();
-    expect(shown, 'the app is not showing the five buttons this is here to measure').toBeGreaterThanOrEqual(5);
+    expect(shown, 'the app is not showing the four buttons this is here to measure').toBeGreaterThanOrEqual(4);
 
     // One row means the name starts to the RIGHT of the logo. The vertical version of
     // this check is worthless: the logo is tall enough that the two boxes still overlap

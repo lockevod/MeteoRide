@@ -52,6 +52,12 @@ docs/ANDROID.md    Android build
   policy pages is hidden at runtime, not stripped: `help.js` sets `cw-native` and
   `cw-ios`/`cw-android` on `<html>`, and the pages hide `.web-only`, `.ios-only` and
   `.android-only`. App Review rejects an iOS app whose pages mention Android (2.3.10).
+- The store apps have no debug switch or button: `style.css` hides `#toggleDebug`,
+  `.debug-setting` and `#debugSection` under `html.cw-native` with `!important`, because
+  `ui.js` sets the button's inline style. The website keeps them for bug reports.
+- The OpenWeather key check asks about a fixed point, never the map's centre: right
+  after start-up that centre is the phone's position, which the policies promise is never
+  sent.
 - User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
 - **The help pages are the short version; `docs/GUIA.md` and `docs/GUIDE.md` are the
   long one.** `public/help.html` and `public/help_en.html` answer "what do I do" in

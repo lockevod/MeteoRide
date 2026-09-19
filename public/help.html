@@ -235,7 +235,7 @@
         <ul>
             <li><strong>Open-Meteo:</strong> sin clave, global, 14 días. La opción por defecto y la buena para casi todo.</li>
             <li><strong>OpenWeather:</strong> con clave, 4 días. Datos en tiempo real, y el único que publica alertas oficiales.</li>
-            <li><strong>AROME-HD:</strong> sin clave, alta resolución, Francia y países cercanos, y 48 horas. Fuera de ahí usa Open-Meteo sin que tengas que hacer nada.</li>
+            <li><strong>AROME-HD:</strong> sin clave, alta resolución, Francia y países cercanos, y 36 horas. Fuera de ahí usa Open-Meteo sin que tengas que hacer nada.</li>
             <li><strong>OpenWeather → AROME-HD → Open-Meteo:</strong> una cadena que usa cada uno en el tramo donde es mejor. Requiere clave de OpenWeather.</li>
         </ul>
         <div class="tip">
@@ -280,7 +280,7 @@
             <li>Sin ruta, el mapa se abre donde estás: el sistema pide el permiso de ubicación en nombre de MeteoRide.</li>
             <li>La app arranca en el idioma del teléfono mientras no elijas uno a mano.</li>
             <li>Ajustes, clave, rutas recientes y teselas siguen ahí al volver a abrir la app.</li>
-            <li>El teléfono se queda en vertical, porque al girarlo se rompe la pantalla. El iPad sí gira.</li>
+            <li>El teléfono se queda en vertical, porque al girarlo se rompe la pantalla.</li>
         </ul>
     </details>
 
@@ -288,7 +288,7 @@
         <summary><h2>🛠️ Configuración</h2></summary>
 
         <h3>🔑 Clave API</h3>
-        <p>Solo OpenWeather necesita clave, y es gratuita: <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>. El botón <strong>🔍 Check</strong> que hay al lado del campo te dice si es válida.</p>
+        <p>Solo OpenWeather necesita clave, y tiene que ser de su One Call API 3.0: <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>. Lo que cuesta y cuántas llamadas permite son condiciones de OpenWeather, no nuestras. El botón <strong>🔍 Check</strong> que hay al lado del campo te dice si es válida.</p>
 
         <h3>📏 Unidades, idioma y avisos</h3>
         <ul>
@@ -346,9 +346,9 @@
         <div class="warning">
             <h3>🚨 Límites</h3>
             <ul>
-                <li>Horizonte: Open-Meteo 14 días, OpenWeather 4 días, AROME-HD 48 horas.</li>
+                <li>Horizonte: Open-Meteo 14 días, OpenWeather 4 días, AROME-HD 36 horas (48 en la comparación de proveedores).</li>
                 <li>A partir del día 3-4 la previsión es bastante menos fiable.</li>
-                <li>Las claves gratuitas pueden tener límite mensual; Open-Meteo no necesita ninguna.</li>
+                <li>Las claves de OpenWeather tienen los límites de uso que fija OpenWeather; Open-Meteo no necesita ninguna.</li>
             </ul>
         </div>
 
@@ -397,7 +397,7 @@
         <h3>🌐 Qué se envía a los proveedores</h3>
         <ul>
             <li>Las coordenadas de tu ruta y las horas para las que pides previsión.</li>
-            <li>Tu clave de OpenWeather, si la usas. Se guarda sin cifrar, así que conviene una gratuita con permisos mínimos — o ninguna, con Open-Meteo y AROME-HD.</li>
+            <li>Tu clave de OpenWeather, si la usas. Se guarda sin cifrar, así que conviene una que no uses para nada más — o ninguna, con Open-Meteo y AROME-HD.</li>
         </ul>
         <p>Los proveedores tienen sus propias políticas de privacidad. Qué se guarda exactamente en tu dispositivo está en la <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIA.md" target="_blank" rel="noopener noreferrer">guía</a>.</p>
         <p>El detalle completo — qué recibe cada proveedor, cuánto lo conserva y cómo borrar todo lo que queda en el dispositivo — está en la <a href="privacy-web.html" id="privacyLink"><strong>política de privacidad</strong></a>.</p>
@@ -420,7 +420,7 @@
         <h3>🐛 Reportar Problemas</h3>
         <ul>
             <li>Abre una incidencia en el <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">repositorio en GitHub</a></li>
-            <li>Activa el botón de debug (🐞) en <strong>Configuración → Mostrar botón de debug</strong>: viene apagado</li>
+            <li class="web-only">Activa el botón de debug (🐞) en <strong>Configuración → Mostrar botón de debug</strong>: viene apagado</li>
             <li>Incluye tu dispositivo y la versión, que aparece al final de esta página</li>
         </ul>
 

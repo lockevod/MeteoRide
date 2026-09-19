@@ -1722,3 +1722,39 @@ probablemente no era el fallo, y yo lo conté como tal. Rectificado en el plist,
   referencias al `ShareViewController.swift` borrado. No vuelven a incrustar nada —la fase
   de *embed* está vacía— pero el esquema es inválido. `mobile/ios/` no está en git, así que
   esto es limpieza a mano en Xcode, junto con borrar el target.
+
+### Revisión de la respuesta a App Review (19/09): cuatro pasadas
+
+Sobre `1eca34c` y el texto para la respuesta de la 2.1: dos pasadas adversariales de Claude
+(código y texto), una de Codex y una haciendo de revisor de Apple. Todas de solo lectura.
+
+**Arreglados.**
+
+- Licencias: `www/THIRD-PARTY-NOTICES.txt` reúne todo lo que la app lleva, nativo incluido.
+  Faltaban el aviso zlib de pako (su cabecera declara «MIT AND Zlib»), los iconos de
+  marcador (BSD-2, de pointhi/leaflet-color-markers), Capacitor y sus plugins, el código
+  Apache de Cordova dentro de Capacitor y las librerías ion-ios que baja SPM.
+- La ayuda y la política de iOS mencionaban Android dentro de la app: un rechazo 2.3.10
+  rutinario. Se oculta por plataforma (`cw-ios`/`cw-android`), no se borra, porque el
+  mismo `www/` va a las dos apps.
+- El interruptor y el botón de depuración ya no aparecen en la app (2.1/2.2); la web los
+  conserva.
+- El botón «🔍 Check» de la clave de OpenWeather preguntaba por el centro del mapa, que al
+  arrancar es la posición del teléfono, y las políticas prometen que esa posición no se
+  envía nunca. Ahora pregunta por un punto fijo.
+- La ayuda decía 48 h para AROME-HD (la cadena normal corta en 36 h; 48 es la comparación),
+  que las alertas se «encienden» (vienen encendidas), que el iPad gira (la app es solo de
+  iPhone) y que la clave de OpenWeather es gratuita (tiene que ser de One Call 3.0, con las
+  condiciones que ponga OpenWeather; no se ha podido comprobar si piden tarjeta).
+- `CFBundleLocalizations` [en, es] en el plist.
+
+**Abiertos, decididos.**
+
+- **`processing` en `UIBackgroundModes` se queda.** El plugin solo usa
+  `BGAppRefreshTaskRequest`, pero su README exige «Background fetch» y «Background
+  processing» como mínimo, y quitarlo solo se puede comprobar en un dispositivo.
+- **Idioma al primer arranque en iOS, sin verificar.** Sin `CFBundleLocalizations`,
+  WKWebView podía dar a `navigator.languages` solo el inglés en un iPhone en español. Ya
+  está declarado, pero nadie lo ha visto funcionar: el texto para Apple no lo promete.
+- **La copia de iOS se queda atrás si no se sincroniza.** `ios/App/App/public` no tenía
+  ninguna de las licencias nuevas: antes de archivar, `npm run sync`.

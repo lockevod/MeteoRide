@@ -16,6 +16,17 @@
 <key>CFBundleName</key>
 <string>MeteoRide</string>
 
+<!-- The two languages the app speaks. Without this the bundle declares English alone, and
+     WKWebView tends to hand the page the app's localisations rather than the phone's, so
+     navigator.languages — which picks the language at first launch — could say English
+     on a Spanish iPhone. NOT yet verified on a device; until it is, the App Review notes
+     must not promise the app follows the phone's language. -->
+<key>CFBundleLocalizations</key>
+<array>
+	<string>en</string>
+	<string>es</string>
+</array>
+
 <!-- Android uses this scheme; on iOS nothing opens it any more, now that the share
      extension is gone. Kept so both platforms declare the same thing, and because
      SceneDelegate ignores non-file URLs by design. -->

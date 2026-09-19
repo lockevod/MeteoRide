@@ -221,8 +221,12 @@ test('the plist Xcode builds agrees with the tracked one', async (t) => {
     'CFBundleDocumentTypes', 'LSSupportsOpeningDocumentsInPlace', 'CFBundleURLTypes',
     // The names too: they live only in the generated plist unless the fragment carries
     // them, and `cap add ios` would put Capacitor's "App" back without a word.
-    'CFBundleDisplayName', 'CFBundleName',
+    'CFBundleDisplayName', 'CFBundleName', 'CFBundleLocalizations',
   ]) {
     assert.deepEqual(shipped[key], plist[key], `${key} has drifted between the tracked and the built plist`);
   }
+});
+
+test('the app declares both languages it speaks', () => {
+  assert.deepEqual([...plist.CFBundleLocalizations].sort(), ['en', 'es']);
 });
