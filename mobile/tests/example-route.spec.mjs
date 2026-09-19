@@ -57,11 +57,11 @@ test('the bundled route file is in the shipped app and is a real track', async (
   expect(gpx).toContain('<trkseg>');
 });
 
-test('the example follows real roads between Castelldefels and Garraf', async ({ request }) => {
+test('the example is a real ride around Mont-roig', async ({ request }) => {
   // The first example was drawn with straight legs every ~240 m and crossed the sea, the
-  // port and the airport: the first thing a reviewer sees. This one is routed on
-  // OpenStreetMap roads, which leaves a vertex every few tens of metres; a hand-drawn line
-  // does not, so the median leg tells the two apart.
+  // port and the airport: the first thing a reviewer sees. This one is a loop the developer
+  // rode, which leaves a vertex every few tens of metres; a hand-drawn line does not, so the
+  // median leg tells the two apart.
   const gpx = await (await request.get('/assets/example-route.gpx')).text();
   const pts = [...gpx.matchAll(/lat="([\d.-]+)" lon="([\d.-]+)"/g)].map((m) => [Number(m[1]), Number(m[2])]);
   const legs = pts.slice(1).map(([la, lo], i) => {
@@ -71,10 +71,11 @@ test('the example follows real roads between Castelldefels and Garraf', async ({
   }).sort((a, b) => a - b);
   expect(legs[legs.length >> 1], 'legs this long are a line drawn by hand, not a road').toBeLessThan(80);
   for (const [la, lo] of pts) {
-    expect(la >= 41.24 && la <= 41.29 && lo >= 1.89 && lo <= 1.99, `${la},${lo} is outside Castelldefels–Garraf`).toBe(true);
+    expect(la >= 41.02 && la <= 41.16 && lo >= 0.91 && lo <= 0.99, `${la},${lo} is outside the Mont-roig loop`).toBe(true);
   }
-  // Out and back: it ends where it starts.
-  expect(pts[0]).toEqual(pts[pts.length - 1]);
+  // A loop: it ends where it starts, give or take the last few metres.
+  const [[a0, o0], [a1, o1]] = [pts[0], pts[pts.length - 1]];
+  expect(Math.hypot(a1 - a0, (o1 - o0) * Math.cos(a0 * Math.PI / 180)) * 111195).toBeLessThan(100);
 });
 
 test('the example is named in the language chosen', async ({ page }) => {
@@ -83,7 +84,7 @@ test('the example is named in the language chosen', async ({ page }) => {
   await page.goto('/');
   await page.locator('#exampleRoute').click();
   await expect.poll(() => page.evaluate(() => window.cw.currentSnapshot()?.route.name ?? null))
-    .toBe('Ruta de ejemplo - Castelldefels a Garraf');
+    .toBe('Ruta de ejemplo - Mont-roig a Castillo');
 });
 
 test('the button ships hidden, so it is never drawn over a route still being restored', async ({ request }) => {
