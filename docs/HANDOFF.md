@@ -1891,8 +1891,10 @@ La línea «Datos meteorológicos: Open-Meteo (CC BY 4.0) · OpenWeather» bajo 
 altura al mapa en el iPhone. Se quita: Open-Meteo sigue enlazado en la esquina del mapa, junto a
 OpenStreetMap, y las dos ayudas enlazan Open-Meteo, la licencia CC BY 4.0 y OpenWeather y
 explican qué calcula MeteoRide (`help-pages.test.mjs` lo exige). CC BY 4.0 admite atribuir de
-forma razonable según el medio; en una app, su pantalla de créditos. **El build 8 subido aún
-lleva la línea**: el cambio va en el siguiente build.
+forma razonable según el medio; en una app, su pantalla de créditos. El build 8 aún llevaba la
+línea; el **build 9** ya no. Build 9: archivado desde `04e54fc`, 1.0.0 (9), solo iPhone, `fetch`,
+sin Time Sensitive, firma Apple Distribution, `public/` idéntico a `mobile/www`; subido el 19/09 a
+las 17:42 (`Upload succeeded`). Es el build de la respuesta a Apple (`docs/APP-REVIEW-REPLY.md`).
 
 Fallo intermitente visto una vez (19/09): «opening without coverage four hours later drops the
 prepared route…» en webkit recibió «No connection, and no saved forecast for this route.» en vez
