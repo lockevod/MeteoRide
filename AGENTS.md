@@ -639,7 +639,8 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   policies are ~90% the same document and drift the way the two help pages do, so they
   are shape-compared against each other; and an app policy that starts describing the
   website undoes the whole point, so the website-only terms are asserted absent from
-  both. The help pages carry one link, `#privacyLink`, written as the website's policy —
+  both. Nor do the app policies link to each other or to the website's: a reviewer read
+  "the website does things this app does not" as noise, so each one stands alone. The help pages carry one link, `#privacyLink`, written as the website's policy —
   that is what a reader without JavaScript and every crawler gets — and `help.js` points
   it at `privacy-<platform>.html?return=true` inside the app. The `?return=true` is not
   decoration: without it that page's own back button stays hidden and a native reader is

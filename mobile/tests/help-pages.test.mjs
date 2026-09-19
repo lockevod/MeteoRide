@@ -175,7 +175,8 @@ test('the app policies claim nothing the website does, and the website policy ow
     for (const websiteOnly of [/jsdelivr/i, /cdnjs/i, /unpkg/i, /buy me a coffee/i, /gpx_url/i]) {
       assert.doesNotMatch(html, websiteOnly, `${policy} describes website behaviour; a reviewer will credit it to the app`);
     }
-    assert.match(html, /privacy-web\.html/, `${policy} should point at the website's own policy`);
+    // Nor send the reader to the other policies: this one is the whole story for the app.
+    assert.doesNotMatch(html, /<a href="privacy-(web|ios|android)\.html/, `${policy} points at another platform's policy`);
   }
 });
 
