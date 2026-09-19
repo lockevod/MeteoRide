@@ -3201,20 +3201,33 @@ test('the example route hides while any route is being read, and returns if it f
 test('an example still being read loses to a route picked meanwhile', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
+  // Every request that ends is counted, so the test waits for the example's own end rather
+  // than for "nothing pending", which only describes the latest request (the picked file).
+  await page.addInitScript(() => {
+    window.__settled = 0;
+    document.addEventListener('cw:route-settled', () => { window.__settled++; });
+  });
   let release;
+  let fetched = false;
   const gate = new Promise((resolve) => { release = resolve; });
-  await page.route('**/assets/example-route.gpx', async (route) => { await gate; await route.continue(); });
+  await page.route('**/assets/example-route.gpx', async (route) => { fetched = true; await gate; await route.continue(); });
   await page.goto('/index.html');
   await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequestPending())).toBe(false);
+  const before = await page.evaluate(() => window.__settled);
 
   await page.locator('#exampleRoute').click();
+  await expect.poll(() => fetched, 'the example never started reading its file').toBe(true);
   await page.locator('#gpxFile').setInputFiles(FIXTURE);
   await expect.poll(() => currentRouteName(page)).not.toBeNull();
   const picked = await currentRouteName(page);
+  expect(picked).not.toMatch(/Example ride/);
 
   release();
-  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequestPending())).toBe(false);
-  await page.waitForTimeout(500);
+  // Both ended: the picked file and the example, whichever order they come in.
+  await expect.poll(() => page.evaluate(() => window.__settled)).toBeGreaterThanOrEqual(before + 2);
+  // Anything either of them queued for the recent routes has been written.
+  await page.evaluate(async () => { await window.cw.enqueueRecents(async () => {}); await window.cw.enqueueRecents(async () => {}); });
   expect(await currentRouteName(page), 'the example replaced the route picked after it').toBe(picked);
   expect((await storedRoutes(page)).map((r) => r.name).join('|')).not.toMatch(/Example ride/);
 });

@@ -40,6 +40,9 @@ docs/ANDROID.md    Android build
 - Libraries come from CDNs on the website and from `mobile/www/vendor/` in the app.
   Do not add a CDN reference without also adding it to `VENDOR` in
   `mobile/scripts/build-www.mjs`; the build fails otherwise, on purpose.
+  Each vendored package also ships its licence as `www/vendor/<dir>/LICENSE.txt`: the
+  package's own file, or `mobile/licenses/<package>.txt` when it has none (Weather Icons:
+  OFL for the font, MIT for the CSS). A new library with neither stops the build.
 - User-facing strings go through the i18n helpers in `ui.js`. English and Spanish.
 - **The help pages are the short version; `docs/GUIA.md` and `docs/GUIDE.md` are the
   long one.** `public/help.html` and `public/help_en.html` answer "what do I do" in

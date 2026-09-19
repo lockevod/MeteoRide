@@ -53,3 +53,17 @@ test('nothing in the bundle is implausibly large for a static app', async () => 
   }
   assert.deepEqual(big, [], 'an unexpectedly large file is in the shipped bundle');
 });
+
+test('every vendored library ships with its licence', async () => {
+  // MIT, BSD and the icon font's OFL all ask for the notice to travel with the copies. The
+  // vendored files alone did not carry it: an external review of the App Store reply found
+  // "bundled components retain their licences" unsupported by what was in the bundle.
+  const missing = [];
+  for (const dir of await readdir(join(WWW, 'vendor'), { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    const file = join(WWW, 'vendor', dir.name, 'LICENSE.txt');
+    const size = await stat(file).then((s) => s.size, () => 0);
+    if (size < 200) missing.push(dir.name);
+  }
+  assert.deepEqual(missing, [], 'vendored without its licence; see copyVendorLicences in build-www.mjs');
+});

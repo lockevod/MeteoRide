@@ -171,7 +171,24 @@ async function copyVendor() {
       await cp(src, dest, { recursive: true });
     }
   }
+  await copyVendorLicences();
   log(`vendored ${VENDOR.length} libraries into www/vendor`);
+}
+
+// Every vendored library travels with its licence: MIT, BSD and the OFL of the icon font
+// all ask for the notice to accompany the copies, and a vendored file alone does not carry
+// it. The package's own licence file when it has one; otherwise a copy kept in
+// mobile/licenses/<package>.txt (Weather Icons ships none). A library with neither stops
+// the build rather than shipping without its terms.
+async function copyVendorLicences() {
+  const dirs = new Map();
+  for (const entry of VENDOR) dirs.set(entry.from.split('/')[0], entry.to.split('/')[1]);
+  for (const [pkg, dir] of dirs) {
+    const own = (await readdir(join(MODULES, pkg))).find((n) => /^(licen[cs]e|copying)(\.|$)/i.test(n));
+    const src = own ? join(MODULES, pkg, own) : join(MOBILE, 'licenses', `${pkg}.txt`);
+    if (!existsSync(src)) throw new Error(`no licence for vendored ${pkg}: add mobile/licenses/${pkg}.txt`);
+    await cp(src, join(OUT, 'vendor', dir, 'LICENSE.txt'));
+  }
 }
 
 /**
