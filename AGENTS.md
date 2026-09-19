@@ -387,8 +387,12 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   column itself, since the table is `table-layout: fixed` and toggling `display` on a
   `<th>` would reflow every step column under it.
 - **The phone is locked to portrait, deliberately: rotating breaks the layout badly.
-  The iPad is not** — the author chose to let it rotate, and nobody has looked at that
-  layout in landscape, so it is untested rather than endorsed. Native configuration
+  The first App Store release is iPhone only** (`TARGETED_DEVICE_FAMILY = "1"`, 19/09/2026,
+  author's decision): the app runs on an iPad, but a declared iPad is reviewed on one, in
+  landscape too, and nobody has looked at that layout. It is a build setting in the
+  gitignored `project.pbxproj`, so a regenerated `mobile/ios/` silently returns to
+  `"1,2"`; `docs/IOS.md` step 4 says where to set it. iPad comes later as its own
+  release; the `~ipad` orientation key below is kept, inert until then. Native configuration
   only, on both platforms — nothing in `public/` changed, so the website still rotates
   freely. iOS: `UISupportedInterfaceOrientations` holds Portrait alone, and
   `UISupportedInterfaceOrientations~ipad` lists all four explicitly, because an absent

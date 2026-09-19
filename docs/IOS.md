@@ -105,16 +105,25 @@ implements and ships no cryptography of its own, using only what the system prov
 which is the exemption; the plist file itself spells out what that covers, and without
 the key App Store Connect asks on every single upload), and lock
 **the iPhone** to portrait — rotating breaks the layout badly, and this is
-deliberate, not an oversight. The iPad is left free to rotate, by the author's
-decision: the template `cap add ios` targets iPhone and iPad alike
-(`TARGETED_DEVICE_FAMILY = "1,2"`), and an absent `~ipad` key does **not** mean
-"free" — iOS falls back to the iPhone key, which would lock the iPad too. So
-`UISupportedInterfaceOrientations~ipad` is set explicitly to all four orientations,
-while `UISupportedInterfaceOrientations` keeps Portrait alone. Merging the file is
-equivalent to ticking only Portrait under *General → Deployment Info → Device
-Orientation* for **iPhone**, and leaving every box ticked for **iPad**, the same
-relationship step 6 below has with *Background Modes*. Nobody has looked at the iPad
-layout in landscape; it is untested, not endorsed.
+deliberate, not an oversight.
+
+**The first App Store release is iPhone only.** The template `cap add ios` targets
+iPhone and iPad alike (`TARGETED_DEVICE_FAMILY = "1,2"`); set it to iPhone alone in
+*App target → Build Settings → Targeted Device Families → iPhone* (`"1"` in
+`project.pbxproj`, which appears twice, Debug and Release). This is a build setting, not
+an Info.plist key, so the additions file cannot carry it and a regenerated `mobile/ios/`
+comes back as `"1,2"` without a word — check it before every archive. The reason is
+review, not capability: the app runs on an iPad, but a declared iPad is reviewed on an
+iPad, in both orientations, and nobody has looked at that layout in landscape. iPad
+comes later, as its own release, once that layout has been checked.
+
+The iPad orientation key stays in the additions file for that day: an absent `~ipad`
+key does **not** mean "free" — iOS falls back to the iPhone key, which would lock the
+iPad too — so `UISupportedInterfaceOrientations~ipad` lists all four orientations while
+`UISupportedInterfaceOrientations` keeps Portrait alone. With an iPhone-only target it
+is inert. Merging the file is equivalent to ticking only Portrait under *General →
+Deployment Info → Device Orientation* for **iPhone**, the same relationship step 6
+below has with *Background Modes*.
 
 Then replace `ios/App/App/SceneDelegate.swift` with
 `mobile/native/ios/SceneDelegate.swift`, which is the file Capacitor 8.5.2 generates

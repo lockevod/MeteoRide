@@ -458,10 +458,14 @@
           opened = prepared;
           return { text: prepared.gpx.text, name: prepared.gpx.name };
         }
-        const routes = await waitFor(() => {
-          const list = window.getRecentRoutes ? window.getRecentRoutes() : [];
-          return list && list.length ? list : null;
-        }, 5000);
+        // Wait until the recent routes have been READ, not until some appear: on a first
+        // install none ever will, and polling for them burned the whole five seconds with
+        // the loading overlay up and eating taps in the middle of the map. `initUI` sets
+        // the flag once the store answers, so this ends immediately on a clean install and
+        // still covers a slow IndexedDB read on a full one.
+        await waitFor(() => window.cwRecentRoutesRead || null, 5000);
+        const read = window.getRecentRoutes ? window.getRecentRoutes() : [];
+        const routes = read && read.length ? read : null;
         if (!routes) {
           nothingStored = true;
           return null;
@@ -1073,8 +1077,8 @@
 
   // With no route loaded the map opens on Barcelona, the hard-coded default of the
   // website. On a phone the obvious place to start is where the phone is. Runs
-  // alongside the route restore rather than after it, because on a first run the
-  // restore waits several seconds for routes that do not exist; whichever finishes
+  // alongside the route restore rather than after it, because the restore waits on
+  // reading the recent routes, which a slow store can stretch; whichever finishes
   // last must not undo the other, so a position is only applied while the map is
   // still unclaimed, and a route always fits itself afterwards anyway.
   // The web geolocation API runs inside the WKWebView, so iOS attributes the permission

@@ -482,145 +482,12 @@
   }
 
   // Upload lastGPXFile to a share-server instance (defaults to same-origin path `/share` so Caddy can proxy to the internal server)
-  async function uploadGPXToShareServer(options = {}) {
-    // If caller provides an absolute server base URL, use it; otherwise default to the same-origin path
-    // so Caddy can proxy /share -> backend. options.server may be absolute (http(s)://host:port) or falsy.
-    let endpoint;
-    let serverBase = options.server || '';
-    if (serverBase && /^https?:\/\//i.test(String(serverBase))) {
-      // absolute base provided
-      endpoint = new URL('/share', serverBase).toString();
-      console.log('[MODHH] uploadGPXToShareServer using absolute endpoint=', endpoint, 'serverBase=', serverBase);
-      // Quick health check to confirm the share-server is reachable from the page context
-      try {
-        const hurl = new URL('/health', serverBase).toString();
-        const hr = await fetch(hurl, { method: 'GET' });
-        const htxt = await hr.text().catch(() => '');
-        console.log('[MODHH] share-server health GET', hurl, 'status=', hr.status, 'text=', htxt, 'headers=', Array.from(hr.headers.entries()));
-        if (!hr.ok) {
-          console.warn('[MODHH] share-server health check failed; request may be intercepted by proxy or not reachable');
-          window.setNotice && window.setNotice('[MODHH] share-server no reachable desde la página (health ' + hr.status + ')', 'warn');
-        }
-      } catch (e) {
-        console.error('[MODHH] share-server health fetch error', e);
-        window.setNotice && window.setNotice('[MODHH] Error comprobando share-server: ' + e.message, 'warn');
-      }
-    } else {
-      // Default: use same-origin path so Caddy (on port 8080) can proxy to internal node server
-      endpoint = '/share';
-      console.log('[MODHH] uploadGPXToShareServer using same-origin endpoint=', endpoint);
-    }
-    // Ensure we have a GPX file in window.lastGPXFile; generate one if not present
-    if (!window.lastGPXFile) {
-      // Try to generate from current route without reloading UI/map
-      exportRouteToGpx(undefined, true);
-    }
-    if (!window.lastGPXFile) {
-      window.setNotice && window.setNotice(window.t ? window.t('no_route_for_export') || 'No route to export' : 'No route to export', 'warn');
-      return null;
-    }
-
-    // Build payload
-    let rawText = null;
-    let filename = (window.lastGPXFile && window.lastGPXFile.name) ? window.lastGPXFile.name : 'route.gpx';
-    try {
-      const f = window.lastGPXFile;
-      if (typeof File !== 'undefined' && f instanceof File && typeof f.text === 'function') {
-        rawText = await f.text();
-      } else if (f && f._text) {
-        rawText = String(f._text);
-      } else if (typeof f === 'string') {
-        rawText = f;
-      }
-      if (!rawText) {
-        window.setNotice && window.setNotice('GPX payload not available', 'error');
-        return null;
-      }
-    } catch (e) {
-      window.setNotice && window.setNotice('Error preparing GPX upload: ' + e.message, 'error');
-      return null;
-    }
-
-    try {
-      window.cw.claimLoading('share-upload');
-      window.setKeyStatus && window.setKeyStatus('Subiendo GPX...', 'testing');
-      // Preferred: send raw GPX body with application/gpx+xml
-      let res = null;
-      try {
-        res = await fetch(endpoint, {
-        method: 'POST',
-        body: rawText,
-        headers: { 'Content-Type': 'application/gpx+xml', 'X-File-Name': filename, 'X-Bypass-Service-Worker': '1' }
-        });
-      } catch (netErr) {
-        console.error('[MODHH] network error when POSTing to share-server', netErr);
-        window.setNotice && window.setNotice('[MODHH] Error de red al subir GPX: ' + netErr.message, 'error');
-        return null;
-      }
-
-      // If server rejected raw body (e.g., 400) try multipart fallback for compatibility
-      if (!res.ok && res.status >= 400 && res.status < 500) {
-        try {
-          const form = new FormData();
-          const blob = new Blob([rawText], { type: 'application/gpx+xml' });
-          form.append('file', blob, filename);
-          res = await fetch(endpoint, { method: 'POST', body: form, headers: { 'X-File-Name': filename, 'X-Bypass-Service-Worker': '1' } });
-        } catch (e) {
-          // keep original res if fallback fails
-        }
-      }
-      const text = await res.text();
-      let payload = null;
-      try { payload = JSON.parse(text); } catch (e) { payload = null; }
-      // Detect cases where the server returned the app index (likely Caddy proxying /share to 8080)
-      if (text && typeof text === 'string' && /<!doctype html/i.test(text)) {
-        console.warn('[MODHH] Received HTML (index) when uploading GPX — request probably hit the webserver (Caddy) not the share-server:', endpoint);
-        console.log('[MODHH] response head:', text.slice(0, 300));
-        window.setNotice && window.setNotice('[MODHH] Error: la petición fue servida por el servidor web (index) en vez del share-server. Revisa la URL del share-server o la configuración de Caddy/proxy.', 'error');
-        return null;
-      }
-      if (!res.ok) {
-        const msg = payload && payload.message ? payload.message : (text || res.statusText || 'Upload failed');
-        window.setNotice && window.setNotice('Upload failed: ' + msg, 'error');
-        return null;
-      }
-
-      // Success: servers in this repo return JSON with url or sharedUrl
-      console.log('[MeteoRide] share response status=', res.status, 'text=', text, 'parsed=', payload);
-      const sharedUrl = (payload && (payload.url || payload.sharedUrl)) || (res.headers.get('Location')) || null;
-      window.setKeyStatus && window.setKeyStatus('GPX guardado', 'ok');
-      if (sharedUrl) {
-        const abs = (typeof sharedUrl === 'string' && sharedUrl.startsWith('http')) ? sharedUrl : (new URL(sharedUrl, serverBase)).toString();
-        // Try HEAD to check availability
-        let available = false;
-        try {
-          const h = await fetch(abs, { method: 'HEAD' });
-          available = h.ok;
-        } catch (e) { available = false; }
-
-        // Extract saved filename/message if present
-        let savedName = null;
-        if (payload && payload.message) {
-          const m = String(payload.message).match(/Stored as\s+(.+)$/i);
-          if (m) savedName = m[1]; else savedName = payload.message;
-        }
-
-        const noticeMsg = (savedName ? `${savedName} -> ` : '') + abs + (available ? ' (available)' : ' (may be pending)');
-        window.setNotice && window.setNotice(noticeMsg, 'ok');
-        console.log('[MeteoRide] shared URL:', abs, 'available=', available, 'payload=', payload);
-        try { await navigator.clipboard?.writeText(abs); } catch (e) { /* ignore clipboard errors */ }
-        return { url: abs, available, payload };
-      }
-      window.setNotice && window.setNotice('GPX guardado', 'ok');
-      return payload;
-    } catch (err) {
-      window.setNotice && window.setNotice('Error subiendo GPX: ' + err.message, 'error');
-      console.error('uploadGPXToShareServer error', err);
-      return null;
-    } finally {
-      window.cw.releaseLoading('share-upload');
-    }
-  }
+  /* `uploadGPXToShareServer` lived here: ~135 lines POSTing a GPX to a share server for
+   * the iOS Shortcuts hand-off, exported on window.cw and called from nowhere. It carried
+   * user-facing notices in Spanish tagged [MODHH] inside an otherwise translated app, and
+   * its /share endpoint is not served under capacitor://localhost at all. Removed before
+   * an App Store submission; the history has it, and docs/DEPLOY.md still describes the
+   * hand-off that the service worker actually implements. */
 
   // Export geojsonToGpx helper so other scripts/userscripts can reuse it
   // Attach to window.cw namespace (created later in the file); create temporary holder now
@@ -693,14 +560,6 @@
     
     const toggleDebugEl = document.getElementById("toggleDebug");
     if (toggleDebugEl) toggleDebugEl.addEventListener("click", toggleDebug);
-
-    // Test alerts button (temporary)
-    const testAlertsEl = document.getElementById("testAlerts");
-    if (testAlertsEl) testAlertsEl.addEventListener("click", () => {
-      if (window.testWeatherAlerts) {
-        window.testWeatherAlerts();
-      }
-    });
 
     // Help button
     const toggleHelpEl = document.getElementById("toggleHelp");
@@ -1108,7 +967,6 @@
     testOpenWeatherKey,
     bindUIEvents,
     replaceGPXMarkers,
-  uploadGPXToShareServer,
   };
 
   // Attach export helper and geojsonToGpx to public cw API
@@ -1979,11 +1837,58 @@
           recentRoutesCache = stored ? JSON.parse(stored) : [];
         } catch (_) { recentRoutesCache = []; }
       }
+      // The list has been read, whatever it turned out to hold. `restoreLastRoute` used to
+      // poll `getRecentRoutes()` for a NON-EMPTY list and give up only at a five-second
+      // deadline — so a fresh install spent five seconds behind a "Loading…" overlay that
+      // also swallowed taps, waiting for routes that were never going to appear. Waiting
+      // on "read" rather than on "non-empty" ends that wait the moment the truth is known.
+      window.cwRecentRoutesRead = true;
+      // Someone with routes of their own has no use for the example; this is the first
+      // moment that is known, the check in the button's setup runs before the read ends.
+      const exampleBtn = document.getElementById("exampleRoute");
+      if (exampleBtn && recentRoutesCache.length) exampleBtn.hidden = true;
       updateRecentRoutesUI();
     });
 
 
 
+
+    /* A route to try, for anyone who arrives without a GPX of their own — which is every
+     * first-time user, and every App Store reviewer, whose test device has never held one.
+     * Without it the whole app sits behind a file picker showing an empty folder, and
+     * nothing below the map can be reached at all.
+     *
+     * It hides itself once the app has a route or any recent one, so it is a way in rather
+     * than a permanent button. The file ships in the bundle; no network, so it works on a
+     * plane. */
+    const exampleEl = document.getElementById("exampleRoute");
+    if (exampleEl) {
+      const hideExample = () => { exampleEl.hidden = true; };
+      // `cw:forecast` is the only event the app publishes, and it fires once a forecast is
+      // on screen — which is exactly when a way in is no longer needed.
+      document.addEventListener('cw:forecast', hideExample, { once: true });
+      // It sits inside the map container: without this a tap on it is also a tap on the map.
+      if (window.L) L.DomEvent.disableClickPropagation(exampleEl);
+      exampleEl.addEventListener('click', async () => {
+        exampleEl.disabled = true;
+        try {
+          const res = await fetch('assets/example-route.gpx');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const text = await res.text();
+          hideExample();
+          window.cwReceiveRoute({
+            source: 'example',
+            name: 'Example ride - Barcelona seafront',
+            text,
+            importOn: 'arrival',
+          });
+        } catch (e) {
+          console.warn('[MeteoRide] example route failed', e);
+          exampleEl.disabled = false;
+          if (window.setNotice) window.setNotice(window.t ? window.t('example_route_failed') : 'The example route could not be opened.', 'warn');
+        }
+      });
+    }
 
     const gpxFileEl = document.getElementById("gpxFile");
     console.log('[MeteoRide] initUI: gpxFileEl found?', !!gpxFileEl);

@@ -471,9 +471,6 @@ la casilla **Mostrar alertas meteorológicas oficiales**.
 - **Compatibilidad temporal:** solo se consideran las alertas cuyo periodo
   (start/end) coincide con la ventana temporal del tramo correspondiente de la
   ruta, con una tolerancia de ±1 hora alrededor del paso.
-- **Pruebas:** si eres desarrollador o quieres validar la integración, puedes
-  forzar alertas de prueba desde la consola del navegador con
-  `window.testWeatherAlerts()`.
 
 > **Aviso importante.** Estas alertas se proporcionan solo como información
 > adicional. No confíes exclusivamente en ellas para decisiones de seguridad.

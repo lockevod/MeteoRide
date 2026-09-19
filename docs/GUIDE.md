@@ -458,9 +458,6 @@ official weather alerts**.
 - **Time window:** only alerts whose period (start/end) overlaps the time window
   of the corresponding route stretch are considered, with a ±1 hour tolerance
   around the step.
-- **Testing:** if you are a developer or want to validate the integration, you
-  can trigger test alerts from the browser console with
-  `window.testWeatherAlerts()`.
 
 > **Important notice.** These alerts are provided for information only. Do not
 > rely solely on them for safety decisions. Always consult your country's

@@ -98,10 +98,6 @@
   <span class="debug-ico" aria-hidden="true">🐞</span>
   <span class="debug-text" data-i18n="toggle_debug_label">Debug</span>
 </button>
-<!-- TEMP: Test button for weather alerts (hidden) -->
-<button id="testAlerts" title="Test Weather Alerts" style="display: none; background: #ff6b35; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin-left: 5px;">
-  ⚠️ Test Alerts
-</button>
 </nav>
 </header>
 
@@ -205,7 +201,10 @@
 </section>
 
 <main>
-  <div id="map" style="height:60vh;"></div>
+  <div id="map" style="height:60vh;">
+    <!-- Over the empty map, not in the controls: a row there pushed the upload icon onto a line of its own. -->
+    <button type="button" id="exampleRoute" class="example-route-button" data-i18n="example_route" data-i18n-title="example_route_title" title="Load a sample route to try the forecast">Probar una ruta de ejemplo</button>
+  </div>
   <div id="controlsPanel">
     <div class="params">
       <div class="param-row date-row">

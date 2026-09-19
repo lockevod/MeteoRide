@@ -4484,6 +4484,18 @@ test('a first-run restore that a newer request replaced says nothing about cover
   await page.addInitScript(() =>
     Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true })
   );
+  // A clean install answers "no routes" at once, and the restore ends before anything can
+  // replace it. Hold the recent-routes read open, as a slow IndexedDB would, so the restore
+  // is still waiting when the picked file arrives.
+  await page.addInitScript(() => {
+    let read = false;
+    window.__holdRecents = true;
+    Object.defineProperty(window, 'cwRecentRoutesRead', {
+      configurable: true,
+      get: () => read && !window.__holdRecents,
+      set: (v) => { read = v; },
+    });
+  });
   await page.goto('/index.html');
   await mapReady(page);
   // Nothing else asks for a route at this start-up: the restore has asked, and is waiting.
@@ -4491,9 +4503,20 @@ test('a first-run restore that a newer request replaced says nothing about cover
 
   await pickText(page, 'broken.gpx', 'this is not a route');
   await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
-  await page.waitForTimeout(6000);   // past the restore's five-second wait
+  await page.evaluate(() => { window.__holdRecents = false; });   // the read answers: nothing stored
+  await page.waitForTimeout(1500);
   expect((await page.evaluate(() => window.__notices)).filter((n) => /needs coverage|necesita cobertura/.test(n))).toEqual([]);
   await expect(page.locator('#horizonNotice')).toHaveText(loadFailedNotice);
+});
+
+test('a clean install does not wait for recent routes it does not have', async ({ page }) => {
+  // The restore used to poll for a NON-EMPTY recent list, so a first install sat out the
+  // whole five-second deadline behind a "Loading…" overlay that also swallowed taps. It is
+  // what an App Store reviewer sees first. The list is empty once read; that ends the wait.
+  await installNativeBridge(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  await expect.poll(() => page.evaluate(() => window.cw.hasRouteRequestPending()), { timeout: 2000 }).toBe(false);
 });
 
 test('a first run with coverage stays quiet', async ({ page }) => {
