@@ -1807,3 +1807,17 @@ porque `www/` es común; nadie los ve (el fichero no está enlazado). `processin
 comprobar que `ios/App/App/public/THIRD-PARTY-NOTICES.txt` existe y que `utils.js` es el nuevo,
 subir el build a 7 o más, y que la grabación enseñe el permiso de notificaciones y «Watching…»,
 porque el texto lo afirma.
+
+### Cuarta ronda (19/09)
+
+Claude (código), el revisor de Apple simulado y Codex, sobre `5f8d88d..9ee79db` y el texto v5.
+Ninguna regresión en el código. **Arreglado:** el puente de `console.*` metía cada error en la
+consola de depuración oculta y en la web la abría sola; los ajustes en español decían
+«Unidades/i18n», «Check», «API Key», «Compare» y «Fallback»; el escáner de dependencias nativas
+no leía `fileTree`, `releaseImplementation`, el módulo de plugins de Cordova ni los
+`binaryTarget` de Swift. La ruta de ejemplo pasa a ser una vuelta real del autor por Mont-roig
+(la de Garraf salía de OSM y pedía atribución ODbL). Texto v6, 3882 bytes: no nombra el fichero
+de licencias (empieza por `@capacitor/android`) y cita los rótulos como salen en pantalla.
+**No se cambia:** `AROMEHD_MAX_HOURS` sigue en 48; la cadena corta a 36 h y bajarlo dejaría
+vacía la columna de AROME entre 36 y 48 h en la comparación. Codex lo leyó como que la app usa
+48 h; el comentario ahora lo explica.
