@@ -3704,6 +3704,25 @@ html.cw-native .params-folded > .wrap-break {
   display: none !important;
 }
 
+/* Folded, every pixel of the line is the summary's. The two icons of the kept row had
+   20px between them (a margin on each plus the row's gap; ui.js pulls the menu button
+   2px back inline, so they end 2px apart) and the row sat 8px off the strip, so at 390px
+   the provider name ended in "…". Open, the row has a line to itself and the spacing is
+   left as it was. The ID is there to outrank `#controlsPanel .params`, which sets the
+   gap of the whole panel; without it the 4px below lost silently. */
+html.cw-native #controlsPanel .params.params-folded,
+html.cw-native .params-folded > .params-keep {
+  gap: 4px;
+}
+html.cw-native .params-folded > .params-keep > .small-file-btn,
+html.cw-native .params-folded > .params-keep > .recent-routes-container {
+  margin-left: 0;
+  margin-right: 0;
+}
+html.cw-native .params-folded .params-strip {
+  padding-right: 2px;
+}
+
 /* "Example route": the way in for someone without a GPX, centred on the empty map. */
 .example-route-button {
   position: absolute;

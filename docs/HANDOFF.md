@@ -1899,3 +1899,17 @@ las 17:42 (`Upload succeeded`). Es el build de la respuesta a Apple (`docs/APP-R
 Fallo intermitente visto una vez (19/09): «opening without coverage four hours later drops the
 prepared route…» en webkit recibió «No connection, and no saved forecast for this route.» en vez
 de «prepared route no longer fits»; 10 de 10 aislado y la suite siguiente, verde. Sin explicar.
+
+### Resumen plegado cortado en un iPhone de 390 px (21/09)
+
+Con el panel plegado el resumen («fecha · velocidad · intervalo · proveedor») terminaba en
+«OpenMe…» a 390 px: pedía 283 px y tenía 264, mientras los dos iconos de al lado gastaban 20 px
+en márgenes y huecos. Plegado, ahora van a 4 px (2 px reales: `ui.js` retrasa el botón del
+menú 2 px en línea) y el resumen queda a 4 px de ellos; abierto no cambia nada. El `gap` del
+panel necesita `#controlsPanel` en el selector: sin él pierde contra `#controlsPanel .params` y
+no se aplica, que es lo que cazó la revisión adversarial. Test: `folded on an iPhone-width
+screen, the strip says all of it` (en inglés, porque el reloj de 12 h es el resumen largo, y
+esperando al botón de rutas recientes, que llega tras IndexedDB).
+
+- **Límite aceptado:** a 375 px (iPhone SE y mini), en inglés, aún se cortan unos 8 px. En
+  español, con reloj de 24 h, cabe. Si molesta, lo barato es la hora en 24 h en el resumen.

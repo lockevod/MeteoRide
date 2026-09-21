@@ -7824,6 +7824,35 @@ test('loading a route does not fold the controls; the first touch on the map doe
   // doing exactly its job.
 });
 
+/* The fold exists to say what the controls are set to, so a strip ending in "Open…" has
+ * half failed. At 390px — an iPhone 14, 15 or 16 — it did: the text wanted 283px and got
+ * 264, while the two icons beside it spent 20px on margins and gaps between them. */
+test.describe('on an English phone', () => {
+  // English, because its 12-hour clock ("10:45 PM") is the longer summary: in Spanish
+  // it fits without the fix, and the test would prove nothing.
+  test.use({ locale: 'en-US' });
+
+  test('folded on an iPhone-width screen, the strip says all of it', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await withForecast(page);
+    await page.locator('#gpxFile').setInputFiles(FIXTURE);
+    await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+    // The menu button arrives after an IndexedDB round trip. Folded without it, the kept
+    // row is 40px narrower and the strip fits whatever the CSS says.
+    await expect(page.locator('#recentRoutesButton')).toBeVisible();
+    await lookAt(page, '#map');
+    await expect.poll(() => folded(page)).toBe(true);
+
+    const clip = await page.evaluate(() => {
+      const t = document.querySelector('.params-strip-text');
+      return { cut: t.scrollWidth - t.clientWidth, text: t.textContent };
+    });
+    // An empty strip cuts nothing either.
+    expect(clip.text).toMatch(/[AP]M · .* · OpenMeteo$/);
+    expect(clip.cut, `the folded strip cuts ${clip.cut}px off "${clip.text}"`).toBeLessThanOrEqual(0);
+  });
+});
+
 test('typing in the controls is not undone by the strip refreshing itself', async ({ page }) => {
   // The strip refreshes on every `input`, which put it one function call away from the
   // worst kind of bug: its first version asked `window.loadSettings()` for the language,
