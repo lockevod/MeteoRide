@@ -1953,3 +1953,8 @@ desde `0ffe754` con `npm run sync` y `CURRENT_PROJECT_VERSION = 11`, 1.0.0 (11),
 firma Apple Distribution con `get-task-allow=false`, `support.html` fuera, contenido web idéntico
 a `mobile/www`. IPA y capturas en `mobile/ios/releases/1.0.0-11/`. El texto del permiso es el
 mismo que en el 10. **Subirlo y seleccionarlo es de Sergi.**
+
+Fallo intermitente visto una vez (22/09): «the blank map says why, and only when it is blank» en
+webkit, `badgeBox.top` 548 frente a > 750 (el aviso salió en el centro del mapa, no abajo), en un
+`npm test` sobre un commit sólo de documentos. Aislado 15 de 15 y la suite siguiente, verde. Sin
+explicar; si vuelve, mirar si el mapa aún no tenía su altura final cuando se midió.
