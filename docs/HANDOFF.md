@@ -1922,11 +1922,12 @@ permiso de ubicación no daba un ejemplo; y 1.5, la Support URL era GitHub Issue
 (`support.html`, sólo web; correo de soporte en la ayuda; las políticas mandan ahí en vez de a
 GitHub). Plan y ledger: `docs/superpowers/plans/2026-09-21-app-review-location-support.md`.
 
-Build 10: archivado desde `db519a8` con `npm run sync` y `CURRENT_PROJECT_VERSION = 10`: 1.0.0
+Build 10: archivado desde `18b1887` (rehecho tras alinear las políticas y el español) con `npm run sync` y `CURRENT_PROJECT_VERSION = 10`: 1.0.0
 (10), solo iPhone, `fetch`, firma Apple Distribution con `get-task-allow=false`, sin
 extensiones, `support.html` fuera del bundle. Leídos con `plutil` dentro del IPA los tres textos
 en inglés y en `es.lproj`. Archive en `/tmp/MeteoRide-1.0.0-10.xcarchive`; IPA en
-`mobile/ios/releases/1.0.0-10/` (ignorado por Git). **No subido.**
+`mobile/ios/releases/1.0.0-10/` (ignorado por Git). **No subido.** Junto al IPA, las capturas del diálogo en inglés y
+en español (simulador iPad Air 11" M3, build 10).
 
 Probado en el simulador iPad Air 11" (M3), el modelo del revisor: el diálogo sale completo en
 inglés y en español con el permiso sin decidir; concedido (posición simulada en Madrid), el mapa
