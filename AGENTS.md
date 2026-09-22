@@ -499,6 +499,15 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   `stripDonation` in the build removes the section from every bundled page and
   `ensureNoDonationLink` fails the build if the host is still mentioned, so moving
   the section in `help.html` cannot quietly put it back. The website keeps it.
+- **The App Store Support URL is `https://app.meteoride.cc/support.html`.** App Review
+  (21/09/2026, 1.5) rejected GitHub Issues: it needs an account and is not a support page.
+  The page is static and bilingual, with `support@meteoride.cc` visible in both languages,
+  and no script, no payment link and no mention of Android (it is what the iOS reviewer
+  opens; see 2.3.10 above). It is website-only (`WEB_ONLY` in `build-www.mjs`): the help
+  and the policies link its absolute address, which opens in the system browser. The help
+  pages give the address as a `mailto:`; the app policies link the page instead, because
+  `help-pages.test.mjs` counts exactly two `mailto:` (the privacy contact) per policy.
+  GitHub stays as a second way in the help, never the only one.
 - **`t()` substitutes placeholders itself and blanks out any it is not given.** So
   `t('offline_stale_forecast')` followed by a `.replace('{age}', …)` silently produces
   "Forecast is  old." Pass the values to `t`, never patch its result.

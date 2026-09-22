@@ -157,3 +157,13 @@ test('every native dependency a plugin declares is named in the notices', async 
   const missing = [...declared].filter((d) => !named(covered[d] || d));
   assert.deepEqual(missing, [], 'a plugin ships a native dependency the notices do not name');
 });
+
+/* support.html is the Support URL App Review opens (21/09, guideline 1.5), and it speaks to
+ * every platform's user. Nothing in the app navigates to it: the help and the policies link
+ * the absolute URL, which opens in the system browser. Inside the IPA it would be one more
+ * bundled page for a reviewer to read. */
+test('the website-only support page stays out of the bundle', async () => {
+  const paths = await walk(WWW);
+  assert.ok(paths.includes('index.html'), 'www/ is not built; the check below would pass on nothing');
+  assert.ok(!paths.includes('support.html'), 'support.html is in the shipped bundle; list it in WEB_ONLY');
+});

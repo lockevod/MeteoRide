@@ -243,3 +243,25 @@ test('each help page credits the weather data with its licence', async () => {
     }
   }
 });
+
+/* App Review (21/09, guideline 1.5) rejected GitHub Issues as the Support URL: it needs
+ * an account and is not a support page. support.html is the Support URL; the help and
+ * the app policies reach it too, so no path leaves GitHub as the only way to ask. */
+test('support has a direct contact, and the app never offers GitHub as the only way to ask', async () => {
+  const support = await read('support.html');
+  assert.equal(support.split('mailto:support@meteoride.cc').length - 1, 2, 'support.html lost its contact in one language');
+  assert.match(support, /id="en"/);
+  assert.match(support, /id="es"/);
+  // It is the Support URL: no payment link (AGENTS.md) and nothing the CSP would block.
+  assert.doesNotMatch(support, /<script|buymeacoffee|donat/i, 'support.html carries a script or a payment link');
+  // It is the page the iOS reviewer opens: another platform named there is a 2.3.10 flag.
+  assert.doesNotMatch(support, /android/i, 'the Support URL mentions another platform');
+  for (const name of ['help.html', 'help_en.html']) {
+    assert.match(await read(name), /mailto:support@meteoride\.cc/, `${name} lost the support contact`);
+  }
+  for (const name of ['privacy-ios.html', 'privacy-android.html']) {
+    const html = await read(name);
+    assert.doesNotMatch(html, /github\.com\/lockevod\/MeteoRide\/issues/i, `${name} still sends bugs to GitHub`);
+    assert.equal(html.split('https://app.meteoride.cc/support.html').length - 1, 2, `${name} lost the support link in one language`);
+  }
+});

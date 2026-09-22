@@ -46,6 +46,11 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://app.meteoride.cc/support.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://app.meteoride.cc/privacy-android.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
