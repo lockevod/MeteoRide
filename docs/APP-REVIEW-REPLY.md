@@ -2,6 +2,36 @@
 
 ## Build 11 — respuesta al rechazo del 21/09/2026
 
+**Cambio de flujo (22/09):** Sergi retiró el envío anterior para subir el build 11, y el hilo
+del rechazo ya no admite respuesta. La respuesta va dentro de las **Notes** de la versión, junto
+con las notas de prueba, en este texto único (2144 caracteres); las dos capturas van en
+**App Review Information → Attachment**. Luego, enviar a revisión con el build 11 seleccionado.
+La lista y los textos de más abajo se quedan como referencia de cómo se llegó a esto.
+
+```text
+RESPONSE TO THE SEPTEMBER 21 REVIEW (version 1.0, build 9)
+
+Guideline 5.1.1(ii)
+Build 1.0 (11) includes updated location purpose strings in English and Spanish. They explain that the location is used only to centre the map where the user is when the app is opened with no route loaded, and give a specific example: if the user opens the app while travelling, the map starts on the town they are in instead of a default city. They also say that the position is not saved or sent to the weather services, since forecasts use the points of the user's route, and that the permission can be declined. In addition, the location is never requested or used in the background.
+
+On a fresh installation, with Location Services enabled and permission not yet determined, opening the app without a route triggers the location prompt. Screenshots of the prompt in English and Spanish are attached.
+
+Guideline 1.5
+The Support URL is now https://app.meteoride.cc/support.html, a public page in English and Spanish with support information and a direct contact, support@meteoride.cc, which requires no account. The same address is in the Support section of the in-app help (the ? button).
+
+NOTES FOR TESTING
+
+MeteoRide is a cycling weather planning app. No login is required.
+
+To test the app without a file, tap "Try an example route" on the map: a sample route bundled with the app loads and the forecast is calculated with Open-Meteo, which needs no account or API key. You can also import your own GPX or KML route with the 📁 button or through the iOS share sheet, and change the departure time or the cycling speed to recalculate.
+
+OpenWeather is optional and requires the user's own API key. It is not required to test the main functionality.
+
+Previously prepared forecasts and cached map tiles can be viewed offline. Fetching new forecasts requires an internet connection.
+
+Location permission is optional. It is requested when the app opens with no route loaded, only to centre the map on the user's area. The position is not saved or sent to the weather services, and it is never used in the background. Weather forecasts use the route's coordinates.
+```
+
 Apple rechazó 1.0 (9) el 21/09 (submission `f7c9f37f-da39-47e8-9301-be089aad8f54`, iPad Air
 11" M3) por 5.1.1(ii), el texto del permiso de ubicación, y 1.5, la Support URL. Esta respuesta
 va en el mismo hilo. **Enviarla sólo cuando todo lo siguiente sea cierto:**
