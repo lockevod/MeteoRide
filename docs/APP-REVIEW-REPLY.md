@@ -24,8 +24,26 @@ va en el mismo hilo. **Enviarla sólo cuando todo lo siguiente sea cierto:**
 5. Capturas del diálogo de ubicación en inglés y en español, del build 10 (hay capturas del
    simulador iPad Air 11" M3 en `mobile/ios/releases/1.0.0-10/`; mejor las de TestFlight en un
    iPhone).
-6. En las Notes, el punto 1 pasa a la versión de abajo («Build 10 changes only texts and one layout
-   detail.»). Comprobar también que el campo Privacy Policy URL sigue en
+6. **Notes de la versión** (App Review Information → Notes). Las que hay en App Store Connect son
+   un texto corto propio, no el bloque largo de la sección del build 9 (ese se envió como
+   respuesta en el hilo). Sustituirlas por esto, que añade la ruta de ejemplo (el revisor usa
+   un iPad y no tendrá un GPX) y alinea la ubicación con el permiso nuevo:
+
+   ```text
+   MeteoRide is a cycling weather planning app. No login is required.
+
+   To test the app without a file, tap "Try an example route" on the map: a sample route bundled with the app loads and the forecast is calculated with Open-Meteo, which needs no account or API key. You can also import your own GPX or KML route with the 📁 button or through the iOS share sheet, and change the departure time or the cycling speed to recalculate.
+
+   OpenWeather is optional and requires the user's own API key. It is not required to test the main functionality.
+
+   Previously prepared forecasts and cached map tiles can be viewed offline. Fetching new forecasts requires an internet connection.
+
+   Location permission is optional. It is requested when the app opens with no route loaded, only to centre the map on the user's area. The position is not saved or sent to the weather services, and it is never used in the background. Weather forecasts use the route's coordinates.
+
+   Support: https://app.meteoride.cc/support.html (support@meteoride.cc).
+   ```
+
+   Comprobar también que el campo Privacy Policy URL sigue en
    `https://app.meteoride.cc/privacy-ios.html`.
 7. Responder en el hilo con el texto de abajo y las dos capturas, y **después pulsar «Resubmit
    to App Review»** con el build 10 seleccionado: responder no reenvía. El estado tiene que
