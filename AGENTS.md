@@ -509,6 +509,10 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   pages give the address as a `mailto:`; the app policies link the page instead, because
   `help-pages.test.mjs` counts exactly two `mailto:` (the privacy contact) per policy.
   GitHub stays as a second way in the help, never the only one.
+- **The help never talks about what a provider costs.** The API-key paragraph says which key
+  (OpenWeather One Call 3.0), where to get it and how to check it, nothing about price or plans:
+  an adversarial review before build 10 read "what it costs … are OpenWeather's terms" next to
+  the link as a nudge to pay outside the app (3.1.1). `help-pages.test.mjs` pins it.
 - **`t()` substitutes placeholders itself and blanks out any it is not given.** So
   `t('offline_stale_forecast')` followed by a `.replace('{age}', …)` silently produces
   "Forecast is  old." Pass the values to `t`, never patch its result.

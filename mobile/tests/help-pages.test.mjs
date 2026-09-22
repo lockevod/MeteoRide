@@ -278,3 +278,15 @@ test('the app policies say where the position does not go, not that it goes nowh
     assert.match(html, /ni se envía a los servicios meteorológicos/, `${name} lost the Spanish claim`);
   }
 });
+
+/* An adversarial review before resubmitting build 10 read the API-key paragraph — a link to
+ * openweathermap.org/api next to "what it costs … are OpenWeather's terms" — as a nudge to
+ * pay outside the app (3.1.1). The key is the user's own account with a third party, but the
+ * help has no reason to talk about money: it says which key, where to get it and how to check. */
+test('the help never talks about what a provider costs', async () => {
+  const [es, en] = await pages();
+  for (const [name, html] of [['help.html', es], ['help_en.html', en]]) {
+    assert.doesNotMatch(html, /what it costs|lo que cuesta|pricing|precio|subscri|suscrip/i, `${name} mentions paying a provider`);
+    assert.match(html, /openweathermap\.org\/api/, `${name} lost where to get the key`);
+  }
+});
