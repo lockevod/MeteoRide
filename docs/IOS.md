@@ -572,10 +572,13 @@ already `MeteoRide` there) and not in the project's file name.
     `https://app.meteoride.cc/privacy-ios.html`.
 13. **The listing.** Screenshots for 6.7" and 6.5" (iPhone) at minimum; description;
     keywords; support URL; category. Screenshots must be of this app, at those exact
-    pixel sizes, with no device frame added.
+    pixel sizes, with no device frame added. The support URL is
+    `https://app.meteoride.cc/support.html`, in every localisation: App Review rejected
+    GitHub Issues (21/09/2026, 1.5) because it needs an account and is not a support page.
 14. **Reviewer notes.** Worth writing here, because two of them have bitten this app
-    already: say that the device's own position is read only to centre the map and is
-    never transmitted, and that the OpenWeather key is the user's own. A reviewer who has
+    already: say that the device's own position is read only to centre the map, is not
+    saved and is not sent to the weather services (centring the map does request the
+    OpenStreetMap tiles of that area), and that the OpenWeather key is the user's own. A reviewer who has
     to guess guesses badly.
 15. **Submit for review.**
 
@@ -618,8 +621,15 @@ but the forecast call, and does route computation locally. Worth keeping in mind
   default Open-Meteo path, but once the user supplies their own OpenWeather key the same
   coordinates reach OpenWeather tied to that account, and the answer has to cover it. The
   manifest deliberately does not answer it — the form does. The device's own position is read
-  only to centre the map, is never transmitted and is not the basis of the forecast
-  call — say so in the notes rather than leaving the reviewer to guess.
+  only to centre the map, is not saved, is not sent to the weather services and is not the
+  basis of the forecast call; the OpenStreetMap tiles of that area are requested like any
+  other. Say so in the notes rather than leaving the reviewer to guess.
+- **The location purpose string counts as sent only once it has been read inside the
+  archive.** Its text lives in two places (the tracked fragment and the gitignored Xcode
+  copy, plus `es.lproj`), and only the Xcode copy reaches Apple. Before uploading, run
+  `plutil -p` on `Info.plist` and `es.lproj/InfoPlist.strings` inside the `.app` of the
+  `.xcarchive` (or of the exported IPA). App Review rejected build 9 (21/09/2026,
+  5.1.1(ii)) for a reason with no example.
 - `public/privacy-ios.html` is the policy the questionnaire has to agree with, and it
   is the URL to give App Store Connect: `https://app.meteoride.cc/privacy-ios.html`.
   There is one policy per platform on purpose — Android has its own, the website has a

@@ -1913,3 +1913,31 @@ esperando al botón de rutas recientes, que llega tras IndexedDB).
 
 - **Límite aceptado:** a 375 px (iPhone SE y mini), en inglés, aún se cortan unos 8 px. En
   español, con reloj de 24 h, cabe. Si molesta, lo barato es la hora en 24 h en el resumen.
+
+### Rechazo del build 9 y build 10 (21-22/09)
+
+App Review rechazó 1.0 (9) el 21/09 (iPad Air 11" M3) por dos motivos: 5.1.1(ii), el texto del
+permiso de ubicación no daba un ejemplo; y 1.5, la Support URL era GitHub Issues. Corregido en
+`8510638` (texto con uso, cuándo, ejemplo «de viaje» y opcional, EN/ES, con tests) y `db519a8`
+(`support.html`, sólo web; correo de soporte en la ayuda; las políticas mandan ahí en vez de a
+GitHub). Plan y ledger: `docs/superpowers/plans/2026-09-21-app-review-location-support.md`.
+
+Build 10: archivado desde `db519a8` con `npm run sync` y `CURRENT_PROJECT_VERSION = 10`: 1.0.0
+(10), solo iPhone, `fetch`, firma Apple Distribution con `get-task-allow=false`, sin
+extensiones, `support.html` fuera del bundle. Leídos con `plutil` dentro del IPA los tres textos
+en inglés y en `es.lproj`. Archive en `/tmp/MeteoRide-1.0.0-10.xcarchive`; IPA en
+`mobile/ios/releases/1.0.0-10/` (ignorado por Git). **No subido.**
+
+Probado en el simulador iPad Air 11" (M3), el modelo del revisor: el diálogo sale completo en
+inglés y en español con el permiso sin decidir; concedido (posición simulada en Madrid), el mapa
+abre en Madrid sin ningún diálogo; denegado, abre en Barcelona con «Try an example route». En
+ningún caso aparece el diálogo de WebKit («localhost»). El botón ⌖ bajo el zoom es «Recentrar
+ruta» (`ensureTrackVisible`), no pide la ubicación.
+
+- **Sin comprobar (necesita tocar la pantalla o un dispositivo):** ruta de ejemplo con el
+  permiso denegado; qué pide la brújula al tocarla; que el selector de ficheros no ofrezca «Hacer
+  foto»; que el `mailto:` de la ayuda abra Mail y los enlaces a `support.html` y GitHub abran
+  Safari y se vuelva a la app. Todo en iPhone físico. iPad sólo en simulador.
+- **Pendiente de Sergi:** push a `main` (publica `support.html` en la web), probar el correo
+  de `support@meteoride.cc`, subir el build 10, Support URL en App Store Connect, responder y
+  reenviar.
