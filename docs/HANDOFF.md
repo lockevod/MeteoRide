@@ -1922,7 +1922,8 @@ permiso de ubicación no daba un ejemplo; y 1.5, la Support URL era GitHub Issue
 (`support.html`, sólo web; correo de soporte en la ayuda; las políticas mandan ahí en vez de a
 GitHub). Plan y ledger: `docs/superpowers/plans/2026-09-21-app-review-location-support.md`.
 
-Build 10: archivado desde `18b1887` (rehecho tras alinear las políticas y el español) con `npm run sync` y `CURRENT_PROJECT_VERSION = 10`: 1.0.0
+Build 10: archivado desde `c876e60` (rehecho tras alinear las políticas y el español, y otra vez
+tras quitar de la ayuda la frase sobre lo que cuesta OpenWeather, que una revisión leyó como 3.1.1) con `npm run sync` y `CURRENT_PROJECT_VERSION = 10`: 1.0.0
 (10), solo iPhone, `fetch`, firma Apple Distribution con `get-task-allow=false`, sin
 extensiones, `support.html` fuera del bundle. Leídos con `plutil` dentro del IPA los tres textos
 en inglés y en `es.lproj`. Archive en `/tmp/MeteoRide-1.0.0-10.xcarchive`; IPA en
