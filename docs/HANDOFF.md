@@ -1943,3 +1943,13 @@ ruta» (`ensureTrackVisible`), no pide la ubicación.
 - **Pendiente de Sergi:** push a `main` (publica `support.html` en la web), probar el correo
   de `support@meteoride.cc`, subir el build 10, Support URL en App Store Connect, responder y
   reenviar.
+
+### Build 11 (22/09)
+
+El build 10 se subió a App Store Connect para probarlo en TestFlight y, después, las políticas
+de las apps cambiaron de formato (`0ffe754`: cada idioma, un solo bloque con los mismos
+apartados). Como el 10 ya no se puede volver a subir, el que se envía es el **11**: archivado
+desde `0ffe754` con `npm run sync` y `CURRENT_PROJECT_VERSION = 11`, 1.0.0 (11), solo iPhone,
+firma Apple Distribution con `get-task-allow=false`, `support.html` fuera, contenido web idéntico
+a `mobile/www`. IPA y capturas en `mobile/ios/releases/1.0.0-11/`. El texto del permiso es el
+mismo que en el 10. **Subirlo y seleccionarlo es de Sergi.**

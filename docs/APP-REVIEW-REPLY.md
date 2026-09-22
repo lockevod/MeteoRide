@@ -1,6 +1,6 @@
 # Respuesta para App Review
 
-## Build 10 — respuesta al rechazo del 21/09/2026
+## Build 11 — respuesta al rechazo del 21/09/2026
 
 Apple rechazó 1.0 (9) el 21/09 (submission `f7c9f37f-da39-47e8-9301-be089aad8f54`, iPad Air
 11" M3) por 5.1.1(ii), el texto del permiso de ubicación, y 1.5, la Support URL. Esta respuesta
@@ -20,9 +20,10 @@ va en el mismo hilo. **Enviarla sólo cuando todo lo siguiente sea cierto:**
    Connect. Revisar a la vez la descripción, las palabras clave y la Marketing URL: nada de
    Android, web, PWA ni donaciones (la web lleva las tres cosas; mejor dejar la Marketing URL
    vacía que apuntarla a app.meteoride.cc).
-4. Build 10 subido, procesado y seleccionado en la versión (que no quede el 9).
-5. Capturas del diálogo de ubicación en inglés y en español, del build 10 (hay capturas del
-   simulador iPad Air 11" M3 en `mobile/ios/releases/1.0.0-10/`; mejor las de TestFlight en un
+4. Build 11 subido, procesado y seleccionado en la versión (que no quede ni el 9 ni el 10). El 10
+   se subió para probar en TestFlight y no lleva el formato nuevo de las políticas.
+5. Capturas del diálogo de ubicación en inglés y en español, del build 11 (hay capturas del
+   simulador iPad Air 11" M3 en `mobile/ios/releases/1.0.0-11/`; el texto del permiso es el mismo desde el build 10; mejor las de TestFlight en un
    iPhone).
 6. **Notes de la versión** (App Review Information → Notes). Las que hay en App Store Connect son
    un texto corto propio, no el bloque largo de la sección del build 9 (ese se envió como
@@ -46,7 +47,7 @@ va en el mismo hilo. **Enviarla sólo cuando todo lo siguiente sea cierto:**
    Comprobar también que el campo Privacy Policy URL sigue en
    `https://app.meteoride.cc/privacy-ios.html`.
 7. Responder en el hilo con el texto de abajo y las dos capturas, y **después pulsar «Resubmit
-   to App Review»** con el build 10 seleccionado: responder no reenvía. El estado tiene que
+   to App Review»** con el build 11 seleccionado: responder no reenvía. El estado tiene que
    pasar a «Waiting for Review».
 
 ```text
@@ -55,7 +56,7 @@ Hello,
 Thank you for your feedback. We have addressed both issues from the September 21 review.
 
 Guideline 5.1.1(ii)
-Build 1.0 (10) includes updated location purpose strings in English and Spanish. They explain that the location is used only to centre the map where the user is when the app is opened with no route loaded, and give a specific example: if the user opens the app while travelling, the map starts on the town they are in instead of a default city. They also say that the position is not saved or sent to the weather services, since forecasts use the points of the user's route, and that the permission can be declined. In addition, the location is never requested or used in the background.
+Build 1.0 (11) includes updated location purpose strings in English and Spanish. They explain that the location is used only to centre the map where the user is when the app is opened with no route loaded, and give a specific example: if the user opens the app while travelling, the map starts on the town they are in instead of a default city. They also say that the position is not saved or sent to the weather services, since forecasts use the points of the user's route, and that the permission can be declined. In addition, the location is never requested or used in the background.
 
 On a fresh installation, with Location Services enabled and permission not yet determined, opening the app without a route triggers the location prompt. Screenshots in English and Spanish are attached.
 
