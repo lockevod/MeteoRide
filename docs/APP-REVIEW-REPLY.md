@@ -4,8 +4,9 @@
 
 **Cambio de flujo (22/09):** Sergi retiró el envío anterior para subir el build 11, y el hilo
 del rechazo ya no admite respuesta. La respuesta va dentro de las **Notes** de la versión, junto
-con las notas de prueba, en este texto único (2144 caracteres); las dos capturas van en
-**App Review Information → Attachment**. Luego, enviar a revisión con el build 11 seleccionado.
+con las notas de prueba, en este texto único (2144 caracteres). Attachment admite un solo
+fichero, así que las dos capturas del iPhone (inglés y español, build nuevo) van juntas en una
+imagen, `location-prompt-en-es.png`, en **App Review Information → Attachment**. Luego, enviar a revisión con el build 11 seleccionado.
 La lista y los textos de más abajo se quedan como referencia de cómo se llegó a esto.
 
 ```text
