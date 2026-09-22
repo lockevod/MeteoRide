@@ -6,16 +6,30 @@ Apple rechazó 1.0 (9) el 21/09 (submission `f7c9f37f-da39-47e8-9301-be089aad8f5
 11" M3) por 5.1.1(ii), el texto del permiso de ubicación, y 1.5, la Support URL. Esta respuesta
 va en el mismo hilo. **Enviarla sólo cuando todo lo siguiente sea cierto:**
 
-1. `support.html` publicado (push a `main`) y `https://app.meteoride.cc/support.html` abre en
-   una ventana privada con el correo visible en los dos idiomas.
-2. Un correo de prueba a `support@meteoride.cc` llega y se puede responder.
-3. Support URL cambiada a esa dirección en todas las localizaciones de App Store Connect.
+1. **Push a `main`** (despliega la web). Comprobar el CONTENIDO, no el código de estado: la web
+   devuelve 200 con la portada de la app para cualquier URL que no existe, y el 21-22/09 eso es
+   lo que servía `support.html`.
+   - `curl -sL https://app.meteoride.cc/support.html | grep -o support@meteoride.cc | wc -l` → 4
+     (enlace y texto en cada idioma; hoy da 0); en una ventana privada se ve el título
+     «MeteoRide — Support / Soporte». Si redirige a `/support`, vale.
+   - `curl -sL https://app.meteoride.cc/privacy-ios.html | grep -c "22 September 2026"` → 1: la
+     política publicada es la nueva (la del 19/09 aún mandaba los fallos a GitHub).
+2. Correo de prueba a `support@meteoride.cc` **y** a `privacy@meteoride.cc`: llegan y se pueden
+   responder.
+3. Support URL = `https://app.meteoride.cc/support.html` en todas las localizaciones de App Store
+   Connect. Revisar a la vez la descripción, las palabras clave y la Marketing URL: nada de
+   Android, web, PWA ni donaciones (la web lleva las tres cosas; mejor dejar la Marketing URL
+   vacía que apuntarla a app.meteoride.cc).
 4. Build 10 subido, procesado y seleccionado en la versión (que no quede el 9).
 5. Capturas del diálogo de ubicación en inglés y en español, del build 10 (hay capturas del
-   simulador iPad Air 11" M3; mejor las de TestFlight en un iPhone).
-
-Las Notes de abajo siguen valiendo; la grabación que citan es la del build 9, y el cambio del
-build 10 no afecta a nada de lo que muestra.
+   simulador iPad Air 11" M3 en `mobile/ios/releases/1.0.0-10/`; mejor las de TestFlight en un
+   iPhone).
+6. En las Notes, el punto 1 pasa a la versión de abajo («Build 10 changes only texts and one layout
+   detail.»). Comprobar también que el campo Privacy Policy URL sigue en
+   `https://app.meteoride.cc/privacy-ios.html`.
+7. Responder en el hilo con el texto de abajo y las dos capturas, y **después pulsar «Resubmit
+   to App Review»** con el build 10 seleccionado: responder no reenvía. El estado tiene que
+   pasar a «Waiting for Review».
 
 ```text
 Hello,
@@ -23,12 +37,12 @@ Hello,
 Thank you for your feedback. We have addressed both issues from the September 21 review.
 
 Guideline 5.1.1(ii)
-The new build includes updated location purpose strings in English and Spanish. They explain that the location is used only to centre the map where the user is when the app is opened with no route loaded, with a specific example: when the user opens the app while travelling, the map starts on the town they are in instead of a default city. The position is not saved, is not used in the background and is not sent to the weather services; forecasts use the points of the user's route. Users can decline the permission and still use the whole app.
+Build 1.0 (10) includes updated location purpose strings in English and Spanish. They explain that the location is used only to centre the map where the user is when the app is opened with no route loaded, and give a specific example: if the user opens the app while travelling, the map starts on the town they are in instead of a default city. They also say that the position is not saved or sent to the weather services, since forecasts use the points of the user's route, and that the permission can be declined. In addition, the location is never requested or used in the background.
+
+On a fresh installation, with Location Services enabled and permission not yet determined, opening the app without a route triggers the location prompt. Screenshots in English and Spanish are attached.
 
 Guideline 1.5
-The Support URL is now https://app.meteoride.cc/support.html, a public page in English and Spanish with support information and a direct contact, support@meteoride.cc, which requires no account. The same address is also in the in-app help.
-
-Screenshots of the updated location permission prompts are attached.
+The Support URL is now https://app.meteoride.cc/support.html, a public page in English and Spanish with support information and a direct contact, support@meteoride.cc, which requires no account. The same address is in the Support section of the in-app help (the ? button).
 
 Thank you for reviewing the updated submission.
 ```
@@ -49,7 +63,7 @@ TestFlight y App Privacy siguen siendo necesarias. No se ha enviado a Apple.
 Thank you for the review. Answers to each point follow.
 
 1. Screen recording
-Attached, recorded using build 9 on an iPhone 17 Pro running iOS 27.0, starting from the Home Screen. MeteoRide has no account creation, login, account deletion, public user posts, purchases or paid features, so none of those flows exist to show.
+Attached, recorded using build 9 on an iPhone 17 Pro running iOS 27.0, starting from the Home Screen. Build 10 changes only texts and one layout detail. MeteoRide has no account creation, login, account deletion, public user posts, purchases or paid features, so none of those flows exist to show.
 
 2. Purpose and audience
 MeteoRide is a free weather planner for cycling. The user loads a GPX or KML route, sets a departure time and an average speed, and the app shows the forecast at each point of the route for the time the rider is expected to reach it, as a table and on the map. It is for cyclists, mountain bikers and walkers planning a route.
