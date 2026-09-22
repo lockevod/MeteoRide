@@ -316,8 +316,8 @@ test('no location reason promises more than the privacy policy', () => {
   const keys = Object.keys(plist).filter((k) => /^NSLocation.*UsageDescription$/.test(k));
   assert.equal(keys.length, 3, 'the plist no longer declares the three location reasons');
   for (const key of keys) {
-    assert.doesNotMatch(plist[key], /anywhere|anyone/i, `${key} claims the position never leaves the phone`);
-    assert.doesNotMatch(es[key], /ningún (sitio|lado)|nadie/i, `${key} (es) claims the position never leaves the phone`);
+    assert.doesNotMatch(plist[key], /anywhere|anyone|nowhere|never leaves/i, `${key} claims the position never leaves the phone`);
+    assert.doesNotMatch(es[key], /ningún (sitio|lado)|nadie|ninguna parte|no sale/i, `${key} (es) claims the position never leaves the phone`);
   }
 });
 

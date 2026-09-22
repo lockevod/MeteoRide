@@ -265,3 +265,16 @@ test('support has a direct contact, and the app never offers GitHub as the only 
     assert.equal(html.split('https://app.meteoride.cc/support.html').length - 1, 2, `${name} lost the support link in one language`);
   }
 });
+
+/* The purpose strings say the position is not saved and not sent to the weather services,
+ * never that it goes nowhere: centring the map asks OpenStreetMap for the tiles of that
+ * area. The app policies used to open with "not sent anywhere" and correct themselves a
+ * sentence later; a reviewer reading one against the other should find the same claim. */
+test('the app policies say where the position does not go, not that it goes nowhere', async () => {
+  for (const name of ['privacy-ios.html', 'privacy-android.html']) {
+    const html = await read(name);
+    assert.doesNotMatch(html, /sent anywhere|se envía a ningún sitio/i, `${name} says the position goes nowhere`);
+    assert.match(html, /not sent to the weather services/, `${name} lost the English claim`);
+    assert.match(html, /ni se envía a los servicios meteorológicos/, `${name} lost the Spanish claim`);
+  }
+});

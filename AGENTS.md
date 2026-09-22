@@ -298,7 +298,8 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   English in the plist and in Spanish in `es.lproj/InfoPlist.strings`. They may say the
   position is not saved and not sent to the weather services, but never that it goes
   nowhere: centring the map asks OpenStreetMap for the tiles of that area, which
-  `privacy-ios.html` declares. `document-open.test.mjs` pins both rules (an example in
+  `privacy-ios.html` declares; both app policies make the same claim in the same words
+  (`help-pages.test.mjs`). `document-open.test.mjs` pins both rules (an example in
   each language, no "anywhere"/"ningún sitio"), and the drift test now compares the three
   keys against the gitignored Xcode copy, because that copy is the one Apple reads.
 - **The root `.gitignore` ignores every nested `.gitignore`** (line 6). So the one
