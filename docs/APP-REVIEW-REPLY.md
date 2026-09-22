@@ -1,5 +1,40 @@
 # Respuesta para App Review
 
+## Build 10 — respuesta al rechazo del 21/09/2026
+
+Apple rechazó 1.0 (9) el 21/09 (submission `f7c9f37f-da39-47e8-9301-be089aad8f54`, iPad Air
+11" M3) por 5.1.1(ii), el texto del permiso de ubicación, y 1.5, la Support URL. Esta respuesta
+va en el mismo hilo. **Enviarla sólo cuando todo lo siguiente sea cierto:**
+
+1. `support.html` publicado (push a `main`) y `https://app.meteoride.cc/support.html` abre en
+   una ventana privada con el correo visible en los dos idiomas.
+2. Un correo de prueba a `support@meteoride.cc` llega y se puede responder.
+3. Support URL cambiada a esa dirección en todas las localizaciones de App Store Connect.
+4. Build 10 subido, procesado y seleccionado en la versión (que no quede el 9).
+5. Capturas del diálogo de ubicación en inglés y en español, del build 10 (hay capturas del
+   simulador iPad Air 11" M3; mejor las de TestFlight en un iPhone).
+
+Las Notes de abajo siguen valiendo; la grabación que citan es la del build 9, y el cambio del
+build 10 no afecta a nada de lo que muestra.
+
+```text
+Hello,
+
+Thank you for your feedback. We have addressed both issues from the September 21 review.
+
+Guideline 5.1.1(ii)
+The new build includes updated location purpose strings in English and Spanish. They explain that the location is used only to centre the map where the user is when the app is opened with no route loaded, with a specific example: when the user opens the app while travelling, the map starts on the town they are in instead of a default city. The position is not saved, is not used in the background and is not sent to the weather services; forecasts use the points of the user's route. Users can decline the permission and still use the whole app.
+
+Guideline 1.5
+The Support URL is now https://app.meteoride.cc/support.html, a public page in English and Spanish with support information and a direct contact, support@meteoride.cc, which requires no account. The same address is also in the in-app help.
+
+Screenshots of the updated location permission prompts are attached.
+
+Thank you for reviewing the updated submission.
+```
+
+## Build 9 (enviado el 19/09, rechazado el 21/09)
+
 No enviar hasta adjuntar la grabación del build 9 (iPhone 17 Pro, iOS 27.0).
 El vídeo debe mostrar el arranque desde el icono, la ruta de
 Mont-roig, la previsión, un cambio de salida, el permiso de notificaciones y el estado

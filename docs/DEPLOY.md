@@ -1,5 +1,9 @@
 # Deploying MeteoRide, and sharing routes into it
 
+**app.meteoride.cc is Cloudflare Pages, connected to this repository: every push to `main`
+publishes `public/`.** So a push is a deploy, and it publishes every commit not yet pushed at
+once. Run `cd mobile && npm test` on that HEAD first.
+
 MeteoRide is a static site. Any web server will do — until you want the POST
 handoff that iOS Shortcuts need, which is the only part with a server-side
 requirement.
