@@ -290,3 +290,17 @@ test('the help never talks about what a provider costs', async () => {
     assert.match(html, /openweathermap\.org\/api/, `${name} lost where to get the key`);
   }
 });
+
+/* Each app policy is the same document twice, and a reader opening it should see it twice the
+ * same way: one section per language, the same subsections under each. The Spanish half used to
+ * be six collapsible sections and the English half one, which read as two different pages. */
+test('each app policy shows both languages the same way', async () => {
+  for (const name of ['privacy-ios.html', 'privacy-android.html']) {
+    const html = await read(name);
+    const sections = [...html.matchAll(/<details class="section"[^>]*\bid="(\w+)"[^>]*>/g)].map((m) => m[1]);
+    assert.deepEqual(sections, ['es', 'en'], `${name}: expected one section per language`);
+    assert.equal(sectionClasses(html).length, 2, `${name}: a language is split into several sections`);
+    const [es, en] = html.split('id="en"');
+    assert.equal(count(es, /<h3\b/g), count(en, /<h3\b/g), `${name}: the two languages have different subsections`);
+  }
+});
