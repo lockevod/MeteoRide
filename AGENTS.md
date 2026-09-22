@@ -292,6 +292,15 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   runs alongside the route restore, not after it, because the restore waits on reading
   the recent routes, which a slow store can stretch; a position is only applied while the
   map is still unclaimed, and a route fits itself afterwards regardless.
+- **The location reasons say what, when, a concrete example, and that it is optional.**
+  App Review (21/09/2026, 5.1.1(ii)) rejected "MeteoRide uses your location to centre the
+  map on where you are." for having no example. The three keys carry the same text, in
+  English in the plist and in Spanish in `es.lproj/InfoPlist.strings`. They may say the
+  position is not saved and not sent to the weather services, but never that it goes
+  nowhere: centring the map asks OpenStreetMap for the tiles of that area, which
+  `privacy-ios.html` declares. `document-open.test.mjs` pins both rules (an example in
+  each language, no "anywhere"/"ningún sitio"), and the drift test now compares the three
+  keys against the gitignored Xcode copy, because that copy is the one Apple reads.
 - **The root `.gitignore` ignores every nested `.gitignore`** (line 6). So the one
   `cap add android` generates never reaches a clone, and on a fresh checkout the
   files `cap sync android` writes — `app/src/main/assets/`, `res/xml/config.xml`,

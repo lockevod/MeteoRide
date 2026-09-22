@@ -222,6 +222,9 @@ test('the plist Xcode builds agrees with the tracked one', async (t) => {
     // The names too: they live only in the generated plist unless the fragment carries
     // them, and `cap add ios` would put Capacitor's "App" back without a word.
     'CFBundleDisplayName', 'CFBundleName', 'CFBundleLocalizations',
+    // The permission reasons: App Review reads the built one, not this fragment.
+    'NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription',
+    'NSLocationAlwaysUsageDescription',
   ]) {
     assert.deepEqual(shipped[key], plist[key], `${key} has drifted between the tracked and the built plist`);
   }
@@ -292,6 +295,30 @@ test('the strings parser refuses what iOS would not read', () => {
   assert.throws(() => parseStrings(good + '"C" = "x"\n'), /expected ;/);
   assert.throws(() => parseStrings('/* open\n"A" = "x";\n"B" = "y";\n'), /never closes/);
   assert.throws(() => parseStrings(good + 'stray'), /expected a quoted string/);
+});
+
+/* App Review (21/09, 5.1.1(ii)) rejected a reason that said what, but gave no example.
+ * The drift tests only compare copies, so putting the old text back in every copy would
+ * pass them; this is what would not. */
+test('every location reason gives an example, in both languages', () => {
+  const es = parseStrings(esStrings);
+  for (const key of Object.keys(plist).filter((k) => /^NSLocation.*UsageDescription$/.test(k))) {
+    assert.match(plist[key], /For example,/, `${key} gives no example`);
+    assert.match(es[key], /Por ejemplo,/, `${key} (es) gives no example`);
+  }
+});
+
+/* Centring the map asks OpenStreetMap for the tiles of that area, and privacy-ios.html
+ * says so. A reason promising the position goes nowhere would contradict the policy the
+ * listing links to; "not sent to the weather services" is the exact claim. */
+test('no location reason promises more than the privacy policy', () => {
+  const es = parseStrings(esStrings);
+  const keys = Object.keys(plist).filter((k) => /^NSLocation.*UsageDescription$/.test(k));
+  assert.equal(keys.length, 3, 'the plist no longer declares the three location reasons');
+  for (const key of keys) {
+    assert.doesNotMatch(plist[key], /anywhere|anyone/i, `${key} claims the position never leaves the phone`);
+    assert.doesNotMatch(es[key], /ningún (sitio|lado)|nadie/i, `${key} (es) claims the position never leaves the phone`);
+  }
 });
 
 test('the Xcode project ships the Spanish strings it is given', async (t) => {

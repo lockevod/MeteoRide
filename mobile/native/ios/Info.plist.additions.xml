@@ -137,7 +137,7 @@
 <false/>
 
 <key>NSLocationWhenInUseUsageDescription</key>
-<string>MeteoRide uses your location to centre the map on where you are.</string>
+<string>MeteoRide uses your location only to centre the map on where you are when you open the app with no route loaded. For example, if you open it while travelling, the map starts on the town you are in instead of a default city. Your position is not saved or sent to the weather services: forecasts use the points of your route. You can decline and still use the whole app.</string>
 
 <!-- Rotating breaks the layout badly, so the app is locked to portrait. Capacitor's
      template ships all four orientations for both idioms; set both keys rather than
@@ -184,9 +184,9 @@
      told on the app's behalf. Keep all three in step with what public/privacy-ios.html
      says about location. -->
 <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-<string>MeteoRide centres the map on where you are, and only while you have the app open. It never uses your location in the background.</string>
+<string>MeteoRide uses your location only to centre the map on where you are when you open the app with no route loaded. For example, if you open it while travelling, the map starts on the town you are in instead of a default city. Your position is not saved or sent to the weather services: forecasts use the points of your route. You can decline and still use the whole app.</string>
 <key>NSLocationAlwaysUsageDescription</key>
-<string>MeteoRide centres the map on where you are, and only while you have the app open. It never uses your location in the background.</string>
+<string>MeteoRide uses your location only to centre the map on where you are when you open the app with no route loaded. For example, if you open it while travelling, the map starts on the town you are in instead of a default city. Your position is not saved or sent to the weather services: forecasts use the points of your route. You can decline and still use the whole app.</string>
 
 <!-- Export compliance. MeteoRide implements no cryptography of its own and ships none:
      no algorithms, no key material, no encrypted storage. What it uses is what the
