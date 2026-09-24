@@ -1227,6 +1227,8 @@
       params.classList.toggle('params-folded', on);
       strip.setAttribute('aria-expanded', String(!on));
       summarise();
+      // The map's room changes with the fold; the route takes it as it does on loading.
+      window.cw?.refitRoute?.();
     }
 
     strip.addEventListener('click', () => {

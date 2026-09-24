@@ -7824,6 +7824,122 @@ test('loading a route does not fold the controls; the first touch on the map doe
   // doing exactly its job.
 });
 
+/* The room the fold gives the map is only worth having if the route uses it. The map's
+ * ResizeObserver already ran, but `ensureTrackVisible` only refits a route that no longer
+ * fits — and in a map that just grew it always does, so the route sat at the zoom of the
+ * smaller map. A tall viewport, because on a short one the table takes the room and the map
+ * stays on its floor (see above), and then there is nothing to refit. And a route running
+ * north to south: the fixture runs east to west, so the phone's width is what limits its
+ * zoom, a taller map changes nothing about the fit, and this passed against the bug. */
+const NORTH_SOUTH = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="MeteoRide smoke test" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>North - South</name><trkseg>${
+  [[41.53, 2.27], [41.51, 2.272], [41.49, 2.274], [41.47, 2.276]]
+    .map(([lat, lon]) => `<trkpt lat="${lat}" lon="${lon}"><ele>10</ele></trkpt>`).join('')
+}</trkseg></trk></gpx>`;
+
+async function withNorthSouth(page) {
+  await withForecast(page);
+  await page.locator('#gpxFile').setInputFiles({ name: 'ns.gpx', mimeType: 'application/gpx+xml', buffer: Buffer.from(NORTH_SOUTH) });
+  await expect.poll(() => forecastsSeen(page)).toBeGreaterThan(0);
+  // Past the load's last refit, at 700 ms. Only ever a false pass if it runs late: that
+  // refit landing after the fold would do the fold's job for it.
+  await page.waitForTimeout(900);
+}
+
+/** How far the route is from filling the map, in zoom levels: 0 is fitted. Leaflet caches
+ *  the map's size until something calls `invalidateSize`, and until then this measures
+ *  against the old size and reads 0 whatever happened — which is how the first version of
+ *  this test passed against the bug. So no answer until Leaflet has caught up. */
+const slack = (page) => page.evaluate(() => {
+  const el = document.getElementById('map');
+  const size = window.map.getSize();
+  if (size.x !== el.clientWidth || size.y !== el.clientHeight) return Infinity;
+  const b = window.trackLayer.getBounds();
+  return Math.abs(window.map.getBoundsZoom(b, false, L.point(18, 18)) - window.map.getZoom());
+});
+const mapTall = (page) => page.evaluate(() => document.getElementById('map').clientHeight);
+const mapCenter = (page) => page.evaluate(() => {
+  const c = window.map.latLngToContainerPoint(window.map.getCenter());
+  const o = window.map.latLngToContainerPoint(window.trackLayer.getBounds().getCenter());
+  return { dx: Math.round(o.x - c.x), dy: Math.round(o.y - c.y) };   // the route's centre, off the map's
+});
+
+test.describe('on a tall phone', () => {
+  test.use({ viewport: { width: 390, height: 1100 } });
+
+  test('folding or opening the controls refits the route to the map, as loading it does', async ({ page }) => {
+    await withNorthSouth(page);
+    expect(await slack(page), 'the route was not fitted after loading').toBeLessThan(0.05);
+    const before = await mapTall(page);
+    await lookAt(page, '#map');
+    await expect.poll(() => folded(page)).toBe(true);
+    expect(await mapTall(page), 'the map did not grow, so this proves nothing').toBeGreaterThan(before + 40);
+    await expect.poll(() => slack(page), { message: 'the route kept the zoom of the smaller map' }).toBeLessThan(0.05);
+
+    // And back. This half held before the fix too — a map that shrank leaves the route
+    // outside it, which `ensureTrackVisible` does refit — so it is coverage, not a guard.
+    await stripOf(page).click();
+    await expect.poll(() => mapTall(page)).toBeLessThan(before + 5);
+    await expect.poll(() => slack(page), { message: 'the route kept the zoom of the bigger map' }).toBeLessThan(0.05);
+  });
+
+  // The fold springs on the touch that may be starting a drag. The ResizeObserver's own
+  // refit, 180 ms later, used to see the route dragged half out of the map and pull it back
+  // under the finger.
+  test('a drag that begins with the fold is not pulled back to the route', async ({ page }) => {
+    await withNorthSouth(page);
+    await lookAt(page, '#map');
+    await expect.poll(() => slack(page)).toBeLessThan(0.05);
+    await page.evaluate(() => window.map.panBy([0, 400], { animate: false }));
+    const dragged = await mapCenter(page);
+    expect(Math.abs(dragged.dy), 'the pan did not move the map').toBeGreaterThan(300);
+    await page.waitForTimeout(500);
+    expect(await mapCenter(page), 'the map went back to the route under the drag').toEqual(dragged);
+  });
+
+  // The load's own refits animate. A zoom animation that is running swallows any other
+  // zoom, `animate: false` or not, so a fold inside one was dropped and the animation
+  // landed on the smaller map's fit.
+  test('folding in the middle of a zoom animation still refits once it ends', async ({ page }) => {
+    await withNorthSouth(page);
+    // Leaflet starts the animation on the next frame, not in setZoom itself.
+    const animating = await page.evaluate(() => new Promise((done) => {
+      window.map.setZoom(window.map.getZoom() - 1);
+      requestAnimationFrame(() => done(window.map._animatingZoom));
+    }));
+    expect(animating, 'no zoom animation was running, so this proves nothing').toBe(true);
+    await lookAt(page, '#map');
+    expect(await folded(page)).toBe(true);
+    await expect.poll(() => slack(page), { message: 'the fold during the animation was dropped' }).toBeLessThan(0.05);
+  });
+  // A rotation still refits a route the new shape leaves out. The resize refit skips a
+  // size it has already placed the route for, and that must be its own record, not
+  // Leaflet's cached size: Leaflet invalidates that itself on a window resize before the
+  // debounce runs, so comparing against it skipped every rotation.
+  test('turning the phone refits a route the new shape leaves out', async ({ page }) => {
+    await withNorthSouth(page);
+    await page.setViewportSize({ width: 1100, height: 390 });
+    await expect.poll(() => slack(page), { message: 'the route was left out of the turned map' }).toBeLessThan(0.3);
+  });
+});
+
+/* And when the fold gives the map nothing, it leaves the map alone: with the table taking
+ * the room there is no new size to fit, only a view the user may have moved. */
+test.describe('on a short phone', () => {
+  test.use({ viewport: { width: 390, height: 600 } });
+
+  test('folding the controls keeps a panned map where it was when the map did not grow', async ({ page }) => {
+    await withNorthSouth(page);
+    await page.evaluate(() => window.map.panBy([0, 120], { animate: false }));
+    const panned = await mapCenter(page);
+    const before = await mapTall(page);
+    await lookAt(page, '#map');
+    await expect.poll(() => folded(page)).toBe(true);
+    await page.waitForTimeout(400);                  // past the ResizeObserver's 180 ms
+    expect(await mapTall(page), 'the map grew, so this proves nothing').toBe(before);
+    expect(await mapCenter(page), 'the fold threw away the pan').toEqual(panned);
+  });
+});
+
 /* The fold exists to say what the controls are set to, so a strip ending in "Open…" has
  * half failed. At 390px — an iPhone 14, 15 or 16 — it did: the text wanted 283px and got
  * 264, while the two icons beside it spent 20px on margins and gaps between them. */

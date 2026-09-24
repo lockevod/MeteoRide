@@ -668,6 +668,40 @@ Cuatro cosas que el CSS y los tests aprendieron por las malas:
   cazaba ninguna aserción hasta que se añadió el caso concreto: reabrir a mano, cambiar el
   intervalo, mirar el mapa — y se había vuelto a plegar solo.
 
+#### Reencuadrar la ruta al plegar (24/09)
+
+Plegar agrandaba el mapa pero la ruta se quedaba con el zoom del mapa pequeño. El
+`ResizeObserver` del mapa sí se disparaba, pero `ensureTrackVisible` solo reencuadra una ruta
+que **ya no cabe**, y en un mapa que crece siempre cabe. Ahora `fold()` (`native.js`) llama a
+`window.cw.refitRoute()` (`app.js`): `invalidateSize` y, **solo si el tamaño cambió**,
+`fitBounds` con el padding `[9,9]` del último reencuadre tras la previsión. Si el mapa sigue
+en su suelo (la tabla se queda el sitio) no toca nada, para no tirar el encuadre del usuario.
+
+Lo que sacaron las dos revisiones (Claude y Codex), todo con test y mutación:
+
+- **Sin animación, y por qué es seguro.** El pliegue salta en un `pointerdown`, que el
+  navegador despacha **antes** del `touchstart`/`mousedown` donde el `Draggable` de Leaflet
+  toma el origen del arrastre (en `_onDown`, no en el primer movimiento, como decía la
+  primera versión del comentario). Un arrastre que pliega empieza desde la vista ya
+  reencuadrada. Mover la llamada a `touchstart` o a un hook de Leaflet lo rompería.
+- **Un zoom animado en curso se traga cualquier otro zoom**, `animate: false` incluido
+  (`_tryAnimatedZoom` sale antes). Los reencuadres de la carga animan, así que un primer toque
+  en el segundo siguiente a la previsión perdía el reencuadre; ahora espera al `zoomend`.
+  Queda un hueco de un frame: Leaflet arranca la animación en el `requestAnimationFrame`
+  siguiente a `setZoom`, y en ese frame no hay bandera que mirar.
+- **El reencuadre del `ResizeObserver`, 180 ms después, deshacía el arrastre** que había
+  empezado con el pliegue: veía la ruta medio fuera y la devolvía bajo el dedo. Ahora recuerda
+  el tamaño para el que se colocó la ruta (`routePlacedFor`) y no repite. **No sirve el
+  tamaño cacheado de Leaflet**: Leaflet lo invalida él solo al redimensionar la ventana
+  (`trackResize`) antes de que corra el debounce, y compararlo se saltaba todos los giros del
+  móvil. Hay un test de giro que caza esa versión.
+
+Dos trampas del primer test, que pasó dos veces contra el fallo: la ruta del fixture va de
+este a oeste, así que a 390px la limita el ancho y un mapa más alto no cambia su zoom (los
+tests usan una ruta norte-sur); y Leaflet cachea el tamaño del mapa hasta el
+`invalidateSize`, así que medir antes de eso da «encuadrado» pase lo que pase. La mitad de
+«desplegar» ya se cumplía antes del arreglo: es cobertura, no guarda.
+
 #### El fallo que este trabajo introdujo y casi se publica
 
 La primera versión de la tira pedía el idioma con `window.loadSettings()`. **`loadSettings`

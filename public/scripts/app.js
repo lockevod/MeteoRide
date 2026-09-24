@@ -3117,14 +3117,48 @@ function initMap() {
   
 }
 let resizeDebTimer = null; // for debounced resize
+// The map size the route was last placed for, by this or by refitRoute. Not Leaflet's own
+// cached size: Leaflet invalidates that itself on a window resize (trackResize) before
+// this debounce runs, and comparing against it would skip every rotation.
+let routePlacedFor = null;
 
 function scheduleMapResizeRecenter() {
   if (resizeDebTimer) clearTimeout(resizeDebTimer);
   resizeDebTimer = setTimeout(() => {
     if (!map) return;
     map.invalidateSize();
+    // Folding the controls (native.js) resizes and refits at once, so by now the route
+    // is placed for this size, and refitting again would pull it back under a drag that
+    // the fold's own touch started.
+    const size = map.getSize();
+    if (routePlacedFor && size.equals(routePlacedFor)) return;
+    routePlacedFor = size;
     ensureTrackVisible();
   }, 180);
+}
+
+// Refits the route to a map that has just changed size, as loading does; nothing when the
+// size did not change, so a pan the user made is kept. `ensureTrackVisible` is not this:
+// it refits only a route that no longer fits, and in a map that grew it always does.
+// Synchronous and unanimated on purpose: the fold (native.js) calls it on a `pointerdown`,
+// which the browser dispatches before the `touchstart`/`mousedown` where Leaflet's
+// Draggable takes the drag's origin from the pane, so a drag that folds starts from the
+// refitted view. Called from `touchstart` or a Leaflet hook, the origin would be the old
+// pane and the first move would jump the map.
+function refitRoute() {
+  if (!map || !trackLayer) return;
+  const was = map.getSize();
+  const size = map.invalidateSize({ pan: false }).getSize();
+  if (size.equals(was)) return;
+  routePlacedFor = size;
+  const bounds = trackLayer.getBounds();
+  if (!bounds.isValid()) return;
+  const fit = () => map.fitBounds(bounds, { padding: [9, 9], animate: false });
+  // A zoom animation already running swallows any other zoom, `animate: false` or not
+  // (Leaflet's _tryAnimatedZoom returns early), and lands on the smaller map's fit. The
+  // load's own refits animate, so a first tap within a second of the forecast hits one.
+  if (map._animatingZoom) map.once('zoomend', fit);
+  else fit();
 }
 
 function ensureTrackVisible() {
@@ -3331,6 +3365,7 @@ window.cwLoadGPXFromString = (gpxText, nameHint = "route.gpx", source = "message
 // NEW: expose minimal hooks for compare.js (no behavior changes)
 try {
   window.cw = window.cw || {};
+  window.cw.refitRoute = refitRoute;
   // Steps baseline (lat, lon, time, distanceM) – derived from current weatherData
   window.cw.getSteps = () => (Array.isArray(weatherData)
     ? weatherData.map(s => ({ lat: s.lat, lon: s.lon, time: new Date(s.time), distanceM: s.distanceM }))
