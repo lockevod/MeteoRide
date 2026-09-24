@@ -1,6 +1,6 @@
 {
   "name": "meteoride-mobile",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Native iOS/Android shell for the MeteoRide web app (Capacitor)",
   "license": "MIT",
