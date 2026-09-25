@@ -9,6 +9,8 @@ the route — at the hour you will actually be there.
 runs as a native iPhone and Android app, as an installable PWA, or from your own
 copy of this repository.
 
+<a href="https://apps.apple.com/es/app/meteoride/id6813109920"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" height="40"></a>
+
 ## Documentation
 
 | Document | What is in it |
