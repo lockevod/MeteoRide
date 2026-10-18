@@ -105,7 +105,7 @@ SEN COBERTURA
 Garda a previsión da ruta na casa antes de saír. Ao abrir a app volve a última ruta coa súa táboa, e unha previsión antiga segue amosándose, marcada coas horas que ten. O fondo do mapa precisa conexión.
 
 PRIVACIDADE
-Sen conta, sen rexistro, sen publicidade e sen analítica. Os axustes e as rutas gárdanse só no teu dispositivo. Para calcular a previsión, as coordenadas da túa ruta envíanse ao provedor meteorolóxico que escollas.
+Sen conta, sen rexistro, sen publicidade e sen analítica. Os axustes e as rutas gárdanse só no teu dispositivo. Para calcular a previsión, as coordenadas da túa ruta e as horas envíanse aos provedores meteorolóxicos, e a túa clave se usas OpenWeather.
 
 Os avisos oficiais son información adicional, non unha fonte de seguridade: consulta sempre o servizo meteorolóxico oficial antes de saír.
 
@@ -164,7 +164,7 @@ ESTALDURARIK GABE
 Prestatu ibilbidea etxean irten aurretik: iragarpena gordeta geratzen da, eta estaldurarik gabe ere taula ikusten jarraituko duzu. Maparen hondoak konexioa behar du.
 
 ZURE DATUAK ZUREAK DIRA
-Ez dago konturik ez erregistrorik. Ezarpenak eta ibilbideak zure gailuan bakarrik gordetzen dira. Eguraldi-hornitzaileek zure ibilbidearen koordenatuak eta orduak bakarrik jasotzen dituzte, iragarpena kalkulatzeko.
+Ez dago konturik ez erregistrorik. Ezarpenak eta ibilbideak zure gailuan bakarrik gordetzen dira. Iragarpena kalkulatzeko, ibilbidearen koordenatuak eta orduak eguraldi-hornitzaileei bidaltzen zaizkie, eta zure gakoa OpenWeather erabiltzen baduzu.
 
 MeteoRide planifikaziorako tresna bat da: eguraldi-datuak estimazioak dira. Egiaztatu baldintzak irten aurretik eta kontsultatu zure herrialdeko zerbitzu meteorologiko ofiziala.
 
@@ -222,7 +222,7 @@ SANS RÉSEAU
 Enregistrez les prévisions de votre parcours avant de partir. Sans couverture, l’app retrouve le dernier parcours avec son tableau et affiche les prévisions enregistrées, avec leur ancienneté. Le fond de carte, lui, a besoin d’une connexion.
 
 VOTRE VIE PRIVÉE
-Pas de compte, pas d’inscription, pas de publicité, pas de suivi. Vos réglages et vos parcours restent sur votre appareil. Seules les coordonnées du parcours et les heures demandées sont envoyées au fournisseur météo choisi.
+Pas de compte, pas d’inscription, pas de publicité, pas de suivi. Vos réglages et vos parcours restent sur votre appareil. Pour calculer les prévisions, les coordonnées du parcours et les heures demandées sont envoyées aux fournisseurs météo, avec votre clé si vous utilisez OpenWeather.
 
 Disponible en français, espagnol, anglais, catalan, galicien, basque, allemand, italien et portugais.
 
@@ -243,9 +243,9 @@ vélo,VTT,météo,GPX,KML,pluie,vent,randonnée,cyclisme,gravel,prévisions,parc
 
 # MeteoRide – App Store listing (Deutsch)
 
-## App name (28 chars)
+## App name (24 chars)
 
-MeteoRide – Wetter auf Route
+MeteoRide – Routenwetter
 
 ## Subtitle (28 chars)
 
@@ -262,7 +262,7 @@ MeteoRide zeigt dir das Wetter entlang deiner Route – zu der Zeit, zu der du a
 Lade eine GPX- oder KML-Datei, wähle Startzeit und Tempo, und MeteoRide berechnet für jeden Abschnitt Temperatur, Wind mit Böen, Regen und Regenwahrscheinlichkeit, Luftfeuchtigkeit, Bewölkung, Licht und UV. Kein Routeneditor: Das Wetter liegt direkt auf deinem vorhandenen Track.
 
 SO FUNKTIONIERT'S
-• Lade deine GPX/KML-Datei oder teile sie aus einer anderen App wie Komoot oder Strava an MeteoRide
+• Lade deine GPX/KML-Datei oder teile sie aus einer anderen App (z. B. Dateien) an MeteoRide
 • Stell Datum, Startzeit und dein Durchschnittstempo ein
 • Wähle, wie oft du einen Wert sehen willst: alle 15 oder 30 Minuten
 • Sieh dir Tabelle und Karte an und entscheide, ob und wann du losfährst
@@ -287,7 +287,7 @@ OHNE NETZ
 Speichere die Vorhersage für deine Route zu Hause, bevor du losfährst. Ohne Netz zeigt die App die letzte Route mit ihrer Tabelle und eine ältere Vorhersage mit dem Hinweis, wie alt sie ist. Der Kartenhintergrund braucht eine Verbindung.
 
 DATENSCHUTZ
-Kein Konto, keine Registrierung, keine Werbung, kein Tracking. Einstellungen und Routen bleiben auf deinem Gerät. An die Wetteranbieter gehen nur die Koordinaten deiner Route und die Zeiten, für die du eine Vorhersage abfragst.
+Kein Konto, keine Registrierung, keine Werbung, kein Tracking. Einstellungen und Routen bleiben auf deinem Gerät. Für die Vorhersage gehen die Koordinaten deiner Route und die abgefragten Zeiten an die Wetteranbieter, bei OpenWeather auch dein Schlüssel.
 
 Die Wetterdaten sind Schätzungen: Prüfe vor einer wichtigen Tour die amtlichen Warnungen deines Landes und verlass dich auf dein eigenes Urteil.
 
@@ -343,10 +343,10 @@ SENZA SEGNALE
 Prepara il percorso a casa prima di partire: le previsioni restano salvate per uscire senza copertura, e l'ultimo percorso si riapre con la sua tabella. Lo sfondo della mappa ha bisogno di connessione.
 
 CONDIVIDI I PERCORSI
-Ricevi un GPX da Komoot, Strava o File con "Condividi", oppure invia il percorso caricato al tuo ciclocomputer o a un'altra app. Il file non lascia mai il dispositivo.
+Ricevi un GPX da un'altra app (per esempio File) con "Condividi", oppure invia il percorso caricato al tuo ciclocomputer o a un'altra app. Il file non lascia mai il dispositivo.
 
 LA TUA PRIVACY
-Niente account, niente registrazione, niente pubblicità, niente tracciamento. Impostazioni e percorsi restano sul tuo dispositivo. Ai fornitori meteo arrivano solo le coordinate del percorso e gli orari per cui chiedi la previsione.
+Niente account, niente registrazione, niente pubblicità, niente tracciamento. Impostazioni e percorsi restano sul tuo dispositivo. Per la previsione, le coordinate del percorso e gli orari richiesti vengono inviati ai fornitori meteo, insieme alla tua chiave se usi OpenWeather.
 
 Le previsioni sono stime: controlla sempre i servizi meteorologici ufficiali prima di un'uscita impegnativa e usa il buon senso.
 
@@ -388,7 +388,7 @@ Antes de sair, sabe que tempo te espera em cada troço do percurso.
 O MeteoRide carrega o teu percurso GPX ou KML e mostra a chuva, o vento e a temperatura que vais apanhar ao longo dele, à hora a que vais passar em cada ponto. Não edita percursos: põe o tempo sobre o trajeto que já tens. Pensado para BTT, ciclismo de estrada e caminhada.
 
 COMO FUNCIONA
-• Carrega o teu GPX/KML, ou partilha-o com o MeteoRide a partir de outra app (Komoot, Strava, Ficheiros).
+• Carrega o teu GPX/KML, ou partilha-o com o MeteoRide a partir de outra app (por exemplo, Ficheiros).
 • Escolhe a data e a hora de partida, a tua velocidade média e de quanto em quanto tempo queres uma leitura.
 • Vê a tabela e o mapa: temperatura, vento com rajadas, chuva e probabilidade, humidade, nuvens, luz e UV em cada ponto.
 • Decide se e quando sair.
@@ -412,7 +412,7 @@ SEM REDE
 Guarda a previsão do percurso antes de saíres e consulta-a mesmo sem rede. A app volta a abrir o último percurso com a sua tabela. O fundo do mapa precisa de ligação.
 
 PRIVACIDADE
-Sem conta, sem registo, sem publicidade, sem análises. As definições, os percursos e a cache ficam no teu dispositivo. Para calcular a previsão, só as coordenadas do percurso e as horas são enviadas ao fornecedor meteorológico que escolheres. A tua localização serve apenas para centrar o mapa e não é guardada.
+Sem conta, sem registo, sem publicidade, sem análises. As definições, os percursos e a cache ficam no teu dispositivo. Para calcular a previsão, as coordenadas do percurso e as horas pedidas são enviadas aos fornecedores meteorológicos, e a tua chave se usares o OpenWeather. A tua localização serve apenas para centrar o mapa e não é guardada.
 
 O MeteoRide é uma ferramenta de planeamento: os dados meteorológicos são estimativas. Confirma as condições antes de saíres e usa o teu bom senso.
 
@@ -424,7 +424,7 @@ Antes de sair, saiba que tempo espera por você em cada trecho da rota.
 O MeteoRide carrega sua rota GPX ou KML e mostra a chuva, o vento e a temperatura que você vai pegar ao longo dela, na hora em que passar por cada ponto. Ele não edita rotas: coloca o clima sobre o trajeto que você já tem. Feito para MTB, ciclismo de estrada e caminhada.
 
 COMO FUNCIONA
-• Carregue seu GPX/KML, ou compartilhe com o MeteoRide a partir de outro app (Komoot, Strava, Arquivos).
+• Carregue seu GPX/KML, ou compartilhe com o MeteoRide a partir de outro app (por exemplo, Arquivos).
 • Escolha a data e a hora de saída, sua velocidade média e de quanto em quanto tempo você quer uma leitura.
 • Veja a tabela e o mapa: temperatura, vento com rajadas, chuva e probabilidade, umidade, nuvens, luz e UV em cada ponto.
 • Decida se e quando sair.
@@ -448,7 +448,7 @@ SEM SINAL
 Salve a previsão da rota antes de sair e consulte mesmo sem sinal. O app volta a abrir a última rota com a sua tabela. O fundo do mapa precisa de conexão.
 
 PRIVACIDADE
-Sem conta, sem cadastro, sem anúncios, sem análises. Os ajustes, as rotas e o cache ficam no seu dispositivo. Para calcular a previsão, só as coordenadas da rota e os horários são enviados ao provedor meteorológico que você escolher. Sua localização serve apenas para centrar o mapa e não é salva.
+Sem conta, sem cadastro, sem anúncios, sem análises. Os ajustes, as rotas e o cache ficam no seu dispositivo. Para calcular a previsão, as coordenadas da rota e os horários pedidos são enviados aos provedores meteorológicos, e a sua chave se você usar o OpenWeather. Sua localização serve apenas para centrar o mapa e não é salva.
 
 O MeteoRide é uma ferramenta de planejamento: os dados meteorológicos são estimativas. Confirme as condições antes de sair e use o bom senso.
 

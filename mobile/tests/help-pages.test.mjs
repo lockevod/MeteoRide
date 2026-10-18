@@ -284,9 +284,11 @@ test('the app policies say where the position does not go, not that it goes nowh
  * pay outside the app (3.1.1). The key is the user's own account with a third party, but the
  * help has no reason to talk about money: it says which key, where to get it and how to check. */
 test('the help never talks about what a provider costs', async () => {
-  const [es, en] = await pages();
-  for (const [name, html] of [['help.html', es], ['help_en.html', en]]) {
-    assert.doesNotMatch(html, /what it costs|lo que cuesta|pricing|precio|subscri|suscrip/i, `${name} mentions paying a provider`);
+  const names = ['help.html', 'help_en.html', ...['ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt'].map((c) => `help_${c}.html`)];
+  for (const [name, html] of await Promise.all(names.map(async (n) => [n, await read(n)]))) {
+    assert.doesNotMatch(html,
+      /what it costs|lo que cuesta|pricing|precio|subscri|suscrip|\bpreus?\b|\bprezos?\b|prezio|kostu|harpidetz|\bprix\b|tarif|abonnement|\bpreis|kosten|\babo\b|prezzo|abbonament|\bpreço|assinatura/i,
+      `${name} mentions paying a provider`);
     assert.match(html, /openweathermap\.org\/api/, `${name} lost where to get the key`);
   }
 });

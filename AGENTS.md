@@ -359,6 +359,14 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   changes the website too — a Spanish-speaking visitor now lands in Spanish. iOS
   cannot offer its own per-app language row for this app: that appears only when the
   bundle declares several localizations, and the translations live in JavaScript.
+- **The Android release is minified (R8 full mode), and that can break plugins silently.**
+  Capacitor reads each plugin's permissions from annotations at run time, and the background
+  runner's native JS engine calls Kotlin classes by name over JNI with an empty
+  `proguard.txt`. Without the rules in `mobile/android/app/proguard-rules.pro`, the release
+  said notifications were off with the permission granted, while the debug build said
+  granted. Any new plugin or native library: check it on a minified release build, not only
+  on debug. Building needs JDK 21; `~/.gradle/gradle.properties` pins JDK 17 for other
+  projects, so pass `-Dorg.gradle.java.home=<jdk21>` on the command line.
 - **Nine languages, and only es/en live in `utils.js`.** Catalan, Galician, Basque, French,
   German, Italian and Portuguese (pt-PT) are one file each, `scripts/lang-<code>.js`, loaded
   before `utils.js` and merged into its dictionary. Each language also has `help_<code>.html`,

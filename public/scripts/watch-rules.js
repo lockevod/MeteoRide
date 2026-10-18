@@ -274,7 +274,7 @@ var cwWatchRules = (function () {
       at: 'alle {time} (km {km})',
       alert: 'Allerta ufficiale: {event}',
       alertTitle: '⚠️ Allerta ufficiale',
-      calm: 'non era prevista',
+      calm: 'non era previsto',
     },
     pt: {
       title: 'O tempo no teu percurso mudou',

@@ -32,7 +32,7 @@ window.cwLang.eu = {
   ride_alerts_label: "Abisatu ibilbideko eguraldia aldatzen bada",
   ride_alerts_watching: "{name} zaintzen {until} arte",
   ride_alerts_denied: "MeteoRideren jakinarazpenak desaktibatuta daude. Aktibatu itzazu Ezarpenetan abisuak jasotzeko.",
-  ride_alerts_bg_ios: "Atzeko planoko eguneratzea desaktibatuta dago MeteoRiderako, beraz ez da egiaztapenik egingo. Aktibatu ezazu Ezarpenak → Orokorra → Atzeko planoko eguneratzea atalean.",
+  ride_alerts_bg_ios: "Atzeko planoko eguneratzea desaktibatuta dago MeteoRiderako, beraz ez da egiaztapenik egingo. Aktibatu ezazu Ezarpenak → Orokorra → Atzeko planoko eguneratzea atalean (iPhonean, gaztelaniaz: Ajustes → General → Actualización en segundo plano).",
   ride_alerts_bg_android: "Bateria-optimizazioak egiaztapena eragotz dezake: baztertu MeteoRide bateriaren ezarpenetan.",
   no_route_for_export: "Ez dago ibilbiderik kargatuta",
   recenter_route: "Zentratu berriro ibilbidea",

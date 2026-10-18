@@ -91,6 +91,9 @@ for (const code of LANGS) {
     assert.match(html, /<script src="\/scripts\/help\.js"><\/script>/);
     assert.match(html, /data-page="help"/);
     assert.doesNotMatch(html, /meteoblue/i);
+    // help.js hides these by platform; one lost in translation shows Android to an iPhone.
+    const markers = (h) => [...h.matchAll(/class="([^"]*-only[^"]*)"/g)].map((m) => m[1]).sort();
+    assert.deepEqual(markers(html), markers(en), 'the web-only / app-only / platform-only markers differ');
     // Translations run longer than English, German most of all; a lost section is far bigger.
     const drift = (visibleWords(html) - visibleWords(en)) / visibleWords(en);
     assert.ok(drift > -0.15 && drift < 0.3, `${visibleWords(html)} words against English ${visibleWords(en)}`);
@@ -110,6 +113,8 @@ for (const code of LANGS) {
       assert.equal(html.split('mailto:privacy@meteoride.cc').length - 1, 1, 'the privacy contact');
       for (const p of [/open-meteo/i, /openweather/i, /openstreetmap/i, /\b90\b/]) assert.match(html, p);
       assert.match(html, /<script src="\/scripts\/help\.js"><\/script>/);
+      const markers = (h) => [...h.matchAll(/class="([^"]*-only[^"]*)"/g)].map((m) => m[1]).sort();
+      assert.deepEqual(markers(html), markers(enHalf), 'the platform-only markers differ from the English half');
       if (platform === 'web') {
         for (const third of [/jsdelivr/i, /cdnjs/i, /unpkg/i, /buy me a coffee/i, /gpx_url/i, /cloudflare/i]) assert.match(html, third);
       } else {
@@ -148,8 +153,17 @@ test('merge: every language is offered, loaded, notified and supported', async (
     assert.ok(index.indexOf(`lang-${code}.js`) < index.indexOf('/scripts/utils.js'), `lang-${code}.js loads after utils.js`);
     assert.ok(support.includes(`<section id="${code}" lang="${code}">`), `support.html has no ${code} section`);
     await access(join(PUBLIC, `help_${code}.html`));
-    const out = rules.compose([], [{ event: 'X', sender: 'Y' }], { lang: code, name: 'R', points: [] });
-    assert.ok(!/Official warning/.test(out.title), `the ${code} notification is in English`);
+    // Every kind and level of change plus a warning, so a missing or misshapen entry shows up
+    // as "undefined", a thrown error (the runner would send nothing) or English.
+    const changes = [1, 2].flatMap((to) => ['rain', 'wind'].map((kind) => ({ kind, i: 0, from: 0, to, value: 30 })));
+    for (const c of changes) {
+      const out = rules.compose([c], [{ event: 'X', sender: 'Y' }], { lang: code, name: 'R', points: [{ label: '10:00', km: 5 }] });
+      assert.ok(out.title.startsWith('⚠️ '), `${code}: the warning title is ${out.title}`);
+      assert.doesNotMatch(out.title + out.body, /undefined|Official warning|Strong wind|Heavy rain/, `${code}: ${out.body}`);
+      assert.match(out.body, /10:00/, `${code}: the time is lost`);
+    }
+    const plain = rules.compose([changes[0]], [], { lang: code, name: 'R', points: [{ label: '10:00', km: 5 }] });
+    assert.doesNotMatch(plain.title, /undefined|changed/, `${code}: ${plain.title}`);
   }
   assert.equal(support.split('mailto:support@meteoride.cc').length - 1, 2 + ALL.length, 'one contact per language');
   const plist = await readFile(join(ROOT, 'mobile/native/ios/Info.plist.additions.xml'), 'utf8');

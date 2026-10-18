@@ -300,6 +300,19 @@ test('the strings parser refuses what iOS would not read', () => {
   assert.throws(() => parseStrings(good + 'stray'), /expected a quoted string/);
 });
 
+// "For example" in each language the purpose strings are written in.
+const EXAMPLE = { es: /Por ejemplo,/, ca: /Per exemple,/, gl: /Por exemplo,/, eu: /Adibidez,/,
+  fr: /Par exemple,/, de: /Zum Beispiel,|Beispiel/, it: /Per esempio,|Ad esempio,/, pt: /Por exemplo,/ };
+
+test('every translated location reason gives an example', async () => {
+  for (const [code, re] of Object.entries(EXAMPLE)) {
+    const parsed = parseStrings(await readFile(join(HERE, `../native/ios/${code}.lproj/InfoPlist.strings`), 'utf8'));
+    for (const key of Object.keys(plist).filter((k) => /^NSLocation.*UsageDescription$/.test(k))) {
+      assert.match(parsed[key] || '', re, `${key} (${code}) gives no example`);
+    }
+  }
+});
+
 /* App Review (21/09, 5.1.1(ii)) rejected a reason that said what, but gave no example.
  * The drift tests only compare copies, so putting the old text back in every copy would
  * pass them; this is what would not. */

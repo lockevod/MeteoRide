@@ -223,7 +223,7 @@
       recenter_route: "Recentrar ruta",
       toggle_debug_label: "Debug",
       provider_unreachable: "No se ha podido obtener la previsión: el proveedor no responde.",
-      no_forecast_data: "El proveedor no ha devuelto datos para esta ruta ni para esta hora.",
+      no_forecast_data: "El proveedor no ha devuelto datos para esta ruta a esta hora.",
       provider_not_responding: "{prov} no responde.",
       provider_rejected: "El proveedor ha rechazado la petición. Revisa tu clave API en ajustes.",
       prepare_offline: "Preparar ruta para ir sin cobertura",
@@ -231,7 +231,7 @@
       prepare_offline_empty: "Carga una ruta y espera a que salga la previsión antes de prepararla.",
       prepare_offline_partial: "Ruta preparada solo en parte: hay previsión para {n} de {total} puntos con cualquier salida hasta 3 h antes o después. Vuelve a calcularla con cobertura.",
       prepare_offline_failed: "No se ha podido guardar la ruta preparada.",
-      prepare_offline_uncovered: "No se ha guardado nada: ningún punto tiene previsión con cualquier salida hasta 3 h antes o después. Vuelve a calcularla con cobertura.",
+      prepare_offline_uncovered: "No se ha guardado nada: ningún punto tiene previsión para todas las salidas hasta 3 h antes o después. Vuelve a calcularla con cobertura.",
       prepare_offline_replaced: "Sustituye a la ruta preparada antes.",
       compare_needs_coverage: "Comparar proveedores necesita cobertura.",
       prepared_expired_needs_coverage: "La ruta preparada ya no sirve para esta hora de salida y se ha borrado: la previsión necesita cobertura.",
@@ -482,7 +482,7 @@
 
   // The other seven languages live in scripts/lang-<code>.js, one file each, loaded
   // before this one; each adds its dictionary to window.cwLang. They carry exactly the
-  // English keys (translations.test.mjs), so t() never falls back for them.
+  // English keys (languages.test.mjs), so t() never falls back for them.
   Object.assign(i18n, window.cwLang || {});
   const LANGS = ['es', 'en', 'ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt'];
 

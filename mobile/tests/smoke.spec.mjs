@@ -8281,10 +8281,19 @@ test('the English help page says the same', async ({ page }) => {
 // the help and the iOS policy both did: "an iPhone and Android app", the Android battery
 // tip, a link to the Android policy. The same www/ ships to Android, so the text stays and
 // help.js hides it by platform; innerText is what a reader on an iPhone actually sees.
+// The website-only words each language would use for the same three things: a browser,
+// the home screen, iOS Shortcuts. They sit in web-only spans; seen in the app, they leak.
+const WEBSITE_WORDS = {
+  ca: /navegador|pantalla d'inici|Dreceres/i, gl: /navegador|pantalla de inicio|Atallos/i,
+  eu: /nabigatzaile|hasierako pantaila|Lasterbide/i, fr: /navigateur|écran d'accueil|Raccourcis/i,
+  de: /Browser|Home-Bildschirm|Kurzbefehle/i, it: /browser|schermata Home|Comandi rapidi/i,
+  pt: /navegador|ecrã principal|Atalhos/i,
+};
 test('the pages an iPhone reader can open never mention Android', async ({ page }) => {
   await installNativeBridge(page);
   await goOffline(page);
-  for (const name of ['help.html', 'help_en.html', 'privacy-ios.html']) {
+  const translated = Object.keys(WEBSITE_WORDS).flatMap((c) => [`help_${c}.html`, `privacy-ios-${c}.html`]);
+  for (const name of ['help.html', 'help_en.html', 'privacy-ios.html', ...translated]) {
     await page.goto(`/${name}`);
     await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
     const seen = await page.locator('body').innerText();
@@ -8302,7 +8311,21 @@ test('the pages an iPhone reader can open never mention Android', async ({ page 
     const guideLinks = await page.locator('a[href*="GUIDE.md"], a[href*="GUIA.md"]').evaluateAll(
       (as) => as.filter((a) => a.checkVisibility()).map((a) => a.textContent));
     expect(guideLinks, `${name} links an app reader to the guide`).toEqual([]);
-    if (name.startsWith('help')) expect(seen).toMatch(/Background App Refresh|Actualización en segundo plano/);
+    if (name === 'help.html' || name === 'help_en.html') expect(seen).toMatch(/Background App Refresh|Actualización en segundo plano/);
+    const code = name.match(/-(\w\w)\.html$|_(\w\w)\.html$/)?.slice(1).find(Boolean);
+    if (WEBSITE_WORDS[code]) expect(seen, `${name} describes the website to an app reader`).not.toMatch(WEBSITE_WORDS[code]);
+  }
+});
+
+// help.js points the help's privacy link at the policy of the reader's platform and, for the
+// seven languages with a policy of their own, of the reader's language.
+test('inside the app, each help page links the iOS policy in its own language', async ({ page }) => {
+  await installNativeBridge(page);
+  await goOffline(page);
+  for (const [name, policy] of [['help.html', 'privacy-ios.html'], ['help_en.html', 'privacy-ios.html'],
+    ...Object.keys(WEBSITE_WORDS).map((c) => [`help_${c}.html`, `privacy-ios-${c}.html`])]) {
+    await page.goto(`/${name}`);
+    await expect(page.locator('#privacyLink'), name).toHaveAttribute('href', `${policy}?return=true`);
   }
 });
 
