@@ -144,14 +144,21 @@ test('the icon canvas is exactly what it was before the splash needed a rectangu
   //
   // The committed launcher icons are one: `mipmap-*/ic_launcher.png` is in git, written by
   // the renderer as it was before any of this, and `installAndroid` writes exactly
-  // `encodePng(px, px, render(source, px))`. So re-encoding here and comparing bytes
-  // compares against the old drawing. (`npm run icons` leaves those files untouched in
-  // `git status`, which is the same proof by another route.)
+  // `encodePng(px, px, render(source, px))`. So rendering here and comparing pixels
+  // compares against the old drawing. Pixels, not file bytes: the bytes are zlib's output
+  // and zlib versions compress the same pixels differently — Node 22's 1.3.1 on CI wrote
+  // other bytes than Node 23's 1.2.12 that made these files, and the test failed on CI for
+  // weeks with an identical drawing.
   const RES = join(dirname(fileURLToPath(import.meta.url)), '../android/app/src/main/res');
   for (const [density, scale] of [['mdpi', 1], ['hdpi', 1.5], ['xhdpi', 2], ['xxhdpi', 3], ['xxxhdpi', 4]]) {
     const px = Math.round(48 * scale);
     const committed = await readFile(join(RES, `mipmap-${density}`, 'ic_launcher.png'));
-    assert.deepEqual(encodePng(px, px, render(source, px)), committed,
+    const back = decodePng(committed);
+    assert.deepEqual([back.width, back.height, header(committed).colour], [px, px, 2], `mipmap-${density}/ic_launcher.png`);
+    const rendered = render(source, px);
+    const pixels = Buffer.alloc(px * px * 3);
+    for (let i = 0, j = 0; i < back.rgba.length; i += 4) { pixels[j++] = back.rgba[i]; pixels[j++] = back.rgba[i + 1]; pixels[j++] = back.rgba[i + 2]; }
+    assert.ok(Buffer.from(rendered).equals(pixels),
       `mipmap-${density}/ic_launcher.png is not what the renderer produces any more`);
   }
 });
