@@ -320,7 +320,7 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   gets, and only `help.js` closes them, only under `cw-native`, so the phone gets an
   index to tap instead of 600 lines to scroll. The website takes no clicks on a
   `<summary>` (`pointer-events: none`), so it reads exactly as it did before.
-  `mobile/tests/help-pages.test.mjs` compares the two languages section by section —
+  `mobile/tests/help-pages.test.mjs` compares the Spanish and English pages section by section —
   same sections in the same order, same count of headings and bullets — because the
   failure mode here has always been an edit landing in one language only.
 - **The help pages' back button pays for the notch itself.** `.header` adds
@@ -354,11 +354,23 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   work as written. Declaring `cc.meteoride.gpx` in `Info.plist` covers "Open in
   MeteoRide" from other apps; it does not help the web view's own picker.
 - **The starting language follows the device, not a hardcoded `'en'`.** Only when
-  nothing is stored: the in-app selector wins the moment it is touched. Catalan and
-  Galician map to Spanish, which is far closer than English for those readers. This
+  nothing is stored: the in-app selector wins the moment it is touched. Any of the nine
+  languages (`LANGS` in `utils.js`) is taken as is; anything else gets English. This
   changes the website too — a Spanish-speaking visitor now lands in Spanish. iOS
   cannot offer its own per-app language row for this app: that appears only when the
   bundle declares several localizations, and the translations live in JavaScript.
+- **Nine languages, and only es/en live in `utils.js`.** Catalan, Galician, Basque, French,
+  German, Italian and Portuguese (pt-PT) are one file each, `scripts/lang-<code>.js`, loaded
+  before `utils.js` and merged into its dictionary. Each language also has `help_<code>.html`,
+  `privacy-{ios,android,web}-<code>.html` (single-language; the es/en policies keep both
+  languages, so App Store Connect gets a privacy URL per localisation), a landing page, a
+  `support.html` section, a `TEXT` entry in `watch-rules.js` for the notification and an
+  `InfoPlist.strings` (`mobile/native/ios/<code>.lproj`, copied into the Xcode project and
+  registered there by hand like `es`). `mobile/tests/languages.test.mjs` holds every one of
+  them to the shape of its English source; `CW_LANG=fr` limits it to one. The store listing
+  texts are in `docs/STORE-LISTING.md`. The seven were machine-translated and want a native
+  read; the help's guide links still point at the English guide. The in-app donation strip
+  (`stripDonation` in the build) finds the heading by its 💰, not by its words.
 - **`t()` returns the key when it is missing**, so a forgotten entry reaches the
   user as `no_route_for_export` rather than a sentence, and the `|| 'fallback'`
   written around several calls never fires because the key is truthy. Two keys had

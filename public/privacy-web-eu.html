@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="eu">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Pribatutasuna — MeteoRide webgunea</title>
+  <meta name="description" content="MeteoRide webgunearen pribatutasun-politika: zer bidaltzen zaien eguraldi-hornitzaileei, zer gordetzen den zure nabigatzailean eta nola ezabatu.">
+  <link rel="canonical" href="https://app.meteoride.cc/privacy-web-eu.html">
+
+  <!-- Shared with the help pages: the back button when the app opens this page, the
+       version footer and, inside the app, the sections arriving closed. The title
+       swap there is help-only and keeps its hands off this page. -->
+  <script src="/scripts/help.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f0f4f8;
+      color: #243746;
+    }
+    .header {
+      background: #1e40af;
+      color: white;
+      padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: center;
+      position: relative;
+    }
+    .back-button {
+      position: absolute;
+      left: calc(1rem + env(safe-area-inset-left));
+      top: calc(50% + env(safe-area-inset-top) / 2);
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+    h3 { color: #2563eb; margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; border: 0; }
+    a { color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0ebff; vertical-align: top; }
+    .lede { background: #f8fafc; border-left: 4px solid #2563eb; padding: 1rem; border-radius: 0 8px 8px 0; }
+    .other { font-size: 0.9rem; color: #475569; }
+    .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; }
+    /* The title runs under the absolutely positioned back button on a phone; the
+       button only appears in the app. `display` is left alone: help.js sets it inline,
+       and that inline style is what keeps it hidden on the website. */
+    @media (max-width: 480px) {
+      .back-button { position: static; transform: none; margin-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <a href="index.html" class="back-button" id="backBtn" style="display:none;">← Itzuli</a>
+    <h1>🔒 Pribatutasuna</h1>
+    <p>MeteoRide webgunea</p>
+  </div>
+
+  <details class="section" open id="eu" lang="eu">
+    <summary><h2>Euskara</h2></summary>
+
+    <div class="lede">
+      <p><strong>MeteoRidek ez ditu zure datuak biltzen ezta ustiatzen ere.</strong> Ez dago konturik, ez erregistrorik, ez iragarkirik, ez analitikarik, ez telemetriarik, ez akats-txostenik, ez jarraipen-identifikatzailerik.</p>
+      <p><strong>Politika honek webgunea bakarrik hartzen du</strong>, nabigatzaile batean irekitako <a href="https://app.meteoride.cc" target="_blank" rel="noopener noreferrer">app.meteoride.cc</a>. Instala daitezkeen aplikazioek beren politika dute, eta hau baino itxiagoak dira: <a href="privacy-ios-eu.html">iOS</a> eta <a href="privacy-android-eu.html">Android</a>. Hemen webgunearena bakarrik bezala deskribatzen den ezer ez da haietan gertatzen.</p>
+    </div>
+    <p>Azken eguneratzea: 2026ko irailaren 19a.</p>
+
+    <h3>Iragarpena emateko</h3>
+    <table>
+      <tr><th>Helmuga</th><th>Zer jasotzen duen</th><th>Noiz</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (AROME-HD barne)</td>
+        <td>Zure ibilbideko puntuen koordenatuak eta iragarpenaren datak eta orduak, gehi zure IPa eta web-eskaera baten ohiko xehetasunak.</td>
+        <td>Iragarpen bat kalkulatzen edo berriro kalkulatzen den bakoitzean.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>Puntuen koordenatuak —ez zuk aukeratutako data eta ordua— eta zure API gakoa, haien bezero gisa identifikatzen zaituena.</td>
+        <td>OpenWeather aukeratzen baduzu, baita abisu ofizialak gako bat gordeta aktibatzen badituzu ere, hautatutako hornitzailea edozein dela ere.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>Zure IPa eta maparen zein zati ari zaren ikusten.</td>
+        <td>Mapa erakusten denean. Lehenik sareari galdetzen zaio; cacheak eskaera batek huts egiten duenean edo konexiorik ez dagoenean zerbitzatzen du.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteok dioenez</strong>, bere erregistroek koordenatuak izan ditzakete eta 90 egunen buruan ezabatzen ditu.</p>
+
+    <h3>Eta webguneak bakarrik egiten duena</h3>
+    <p>Hau da webgunea aplikazioetatik bereizten duena. Aplikazioek ez dute hurrengoetako ezer egiten, eta ez da ahazturagatik: instala daitekeen paketea sortzen duen konpilazioak eragozten du, eta huts egiten du norbaitek berriro sartzen badu.</p>
+    <ul>
+      <li>Webguneak bere liburutegiak hiru eduki-banaketako saretatik kargatzen ditu: <a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener noreferrer">jsDelivr</a>, <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">cdnjs (Cloudflare)</a> eta <a href="https://www.npmjs.com/policies/privacy" target="_blank" rel="noopener noreferrer">unpkg</a>. Bakoitzak zure IPa eta zu zein orritatik zatozen jasotzen ditu. Aplikazioek liburutegi horiek barruan daramatzate.</li>
+      <li>Laguntza-orriek Buy Me a Coffee botoi bat erakusten dute, zure IPa ere jasotzen duena. Aplikazioek ez daramate.</li>
+      <li>Ibilbide bat <code>?gpx_url=</code> bidez irekitzean, zuk adierazitako zerbitzaritik eskuratzen da. Aplikazioek ez dute halako sarbiderik.</li>
+      <li>Ibilbide bat MeteoRidera bidaltzen duen iOSeko Lasterbideak POST bidez bakarrik bidal dezake; beraz, GPX hori <strong>egileak kudeatzen duen Cloudflare biltegi batera igotzen da</strong>, asmaezina den ausazko identifikatzaile bat ematen zaio eta bi minuturen buruan bere kabuz ezabatzen da (lehenetsitako balioa, eta erabiltzen ari dena). Egilearen eskuetara inoiz iristen den gauza bakarra da, eta denbora horretan bakarrik irauten du. Aplikazioek ez dute bide hori erabiltzen.</li>
+    </ul>
+    <p>Ostatua Cloudflare Pages da, eta zerbitzatzen duen edozein gunetako eskaerak erregistratzen ditu, edozein ostatatzailek bezala.</p>
+
+    <h3>Zer gordetzen den zure nabigatzailean</h3>
+    <p>Zure ezarpenak, azken ibilbideak, estaldurarik gabe erabiltzeko prestatutako ibilbidea, iragarpenaren eta maparen cacheak, eta zure OpenWeather gakoa sartzen baduzu —<strong>zifratu gabe</strong>; beraz, erabili beste ezertarako erabiltzen ez duzun gako bat, edo Open-Meteo, ez baitu gakorik behar—. Dena localStorage-n eta IndexedDB-n, zure nabigatzailean bakarrik.</p>
+    <p>Ezabatzeko: garbitu app.meteoride.cc gunearen datuak zure nabigatzailean. Gakoa bakarrik ezarpenetako bere eremutik garbitzen da.</p>
+
+    <h3>Harremana eta aldaketak</h3>
+    <p>Pribatutasunari buruzko galderak, edo sarbide-, zuzenketa- eta ezabatze-eskubideak erabiltzeko: <a href="mailto:privacy@meteoride.cc">privacy@meteoride.cc</a>. Akatsak eta iradokizunak hobe <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">github.com/lockevod/MeteoRide/issues</a> helbidean.</p>
+    <p>Politika hau aldatzen bada, goiko data ere aldatzen da, eta historia biltegian geratzen da.</p>
+  </details>
+
+  <p class="version-footer" id="cwVersion"></p>
+
+  <script src="/scripts/version.js"></script>
+</body>
+</html>

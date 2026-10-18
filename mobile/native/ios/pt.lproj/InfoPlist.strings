@@ -1,0 +1,8 @@
+/* Portuguese purpose strings. CFBundleLocalizations declares pt, so on a Portuguese iPhone
+   iOS draws the permission alert in Portuguese; without these the reason inside it stayed
+   in English. English needs no file: Info.plist itself is the fallback. Copy to
+   ios/App/App/pt.lproj/ and register it in Xcode as a localised InfoPlist.strings (see
+   docs/IOS.md). Keys must match the NS*UsageDescription keys in Info.plist.additions.xml. */
+"NSLocationWhenInUseUsageDescription" = "O MeteoRide usa a tua localização só para centrar o mapa onde estás quando abres a app sem nenhum percurso carregado. Por exemplo, se a abrires em viagem, o mapa começa na localidade onde estás em vez de numa cidade predefinida. A tua posição não é guardada nem enviada aos serviços meteorológicos: a previsão usa os pontos do teu percurso. Podes recusar a permissão e continuar a usar toda a app.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "O MeteoRide usa a tua localização só para centrar o mapa onde estás quando abres a app sem nenhum percurso carregado. Por exemplo, se a abrires em viagem, o mapa começa na localidade onde estás em vez de numa cidade predefinida. A tua posição não é guardada nem enviada aos serviços meteorológicos: a previsão usa os pontos do teu percurso. Podes recusar a permissão e continuar a usar toda a app.";
+"NSLocationAlwaysUsageDescription" = "O MeteoRide usa a tua localização só para centrar o mapa onde estás quando abres a app sem nenhum percurso carregado. Por exemplo, se a abrires em viagem, o mapa começa na localidade onde estás em vez de numa cidade predefinida. A tua posição não é guardada nem enviada aos serviços meteorológicos: a previsão usa os pontos do teu percurso. Podes recusar a permissão e continuar a usar toda a app.";

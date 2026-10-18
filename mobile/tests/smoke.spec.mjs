@@ -7353,18 +7353,31 @@ test.describe('on a phone set to Spanish', () => {
 test.describe('on a phone set to Catalan', () => {
   test.use({ locale: 'ca-ES' });
 
-  test('falls back to Spanish rather than English', async ({ page }) => {
+  test('starts in Catalan, and the table speaks it', async ({ page }) => {
     await goOffline(page);
     await page.goto('/index.html');
     await mapReady(page);
-    expect(await chosenLanguage(page)).toBe('es');
+    expect(await chosenLanguage(page)).toBe('ca');
+    expect(await page.evaluate(() => window.t('row_humidity'))).toBe(
+      await page.evaluate(() => window.cwLang.ca.row_humidity));
   });
 });
 
 test.describe('on a phone set to German', () => {
   test.use({ locale: 'de-DE' });
 
-  test('falls back to English, the only other language there is', async ({ page }) => {
+  test('starts in German', async ({ page }) => {
+    await goOffline(page);
+    await page.goto('/index.html');
+    await mapReady(page);
+    expect(await chosenLanguage(page)).toBe('de');
+  });
+});
+
+test.describe('on a phone set to Japanese', () => {
+  test.use({ locale: 'ja-JP' });
+
+  test('falls back to English, as there is no Japanese', async ({ page }) => {
     await goOffline(page);
     await page.goto('/index.html');
     await mapReady(page);

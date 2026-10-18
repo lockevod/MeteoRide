@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Confidentialité — MeteoRide pour iOS</title>
+  <meta name="description" content="Politique de confidentialité de l’app MeteoRide pour iOS : ce qui est envoyé aux fournisseurs météo, ce qui est stocké sur votre appareil et comment le supprimer.">
+  <link rel="canonical" href="https://app.meteoride.cc/privacy-ios-fr.html">
+
+  <!-- Shared with the help pages: the back button when the app opens this page, the
+       version footer and, inside the app, the sections arriving closed. The title
+       swap there is help-only and keeps its hands off this page. -->
+  <script src="/scripts/help.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f0f4f8;
+      color: #243746;
+    }
+    .header {
+      background: #1e40af;
+      color: white;
+      padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: center;
+      position: relative;
+    }
+    .back-button {
+      position: absolute;
+      left: calc(1rem + env(safe-area-inset-left));
+      top: calc(50% + env(safe-area-inset-top) / 2);
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+    h3 { color: #2563eb; margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; border: 0; }
+    a { color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0ebff; vertical-align: top; }
+    .lede { background: #f8fafc; border-left: 4px solid #2563eb; padding: 1rem; border-radius: 0 8px 8px 0; }
+    .other { font-size: 0.9rem; color: #475569; }
+    .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; }
+    /* The title runs under the absolutely positioned back button on a phone; the
+       button only appears in the app. `display` is left alone: help.js sets it inline,
+       and that inline style is what keeps it hidden on the website. */
+    @media (max-width: 480px) {
+      .back-button { position: static; transform: none; margin-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <a href="index.html" class="back-button" id="backBtn" style="display:none;">← Retour</a>
+    <h1>🔒 Confidentialité</h1>
+    <p>MeteoRide pour iOS</p>
+  </div>
+
+  <details class="section" open id="fr" lang="fr">
+    <summary><h2>Français</h2></summary>
+
+    <div class="lede">
+      <p><strong>MeteoRide ne collecte pas vos données et ne les exploite pas.</strong> Pas de compte, pas d’inscription, pas de publicité, pas d’analyse d’audience, pas de télémétrie, pas de rapports de plantage, pas d’identifiants de suivi. L’auteur de MeteoRide ne reçoit jamais vos parcours, votre position ni aucune statistique d’utilisation.</p>
+      <p><strong>Mais MeteoRide n’invente pas la météo.</strong> Pour vous donner des prévisions, il doit les demander à un fournisseur météo, ce qui implique de lui envoyer les coordonnées de votre parcours et les heures qui vous intéressent. Ce fournisseur est une société distincte, avec sa propre politique : il peut enregistrer la requête et la conserver un certain temps. Il en va de même pour les cartes.</p>
+      <p><strong>Cette politique couvre uniquement l’app iOS.</strong></p>
+    </div>
+    <p>Dernière mise à jour : 22 septembre 2026.</p>
+
+    <h3>Ce qui quitte votre appareil, et où cela va</h3>
+    <table>
+      <tr><th>Destination</th><th>Ce qu’elle reçoit</th><th>Quand</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (modèle AROME-HD compris)</td>
+        <td>Les coordonnées des points de votre parcours et les dates et heures des prévisions, ainsi que votre adresse IP et les informations ordinaires d’une requête web.</td>
+        <td>Chaque fois que des prévisions sont calculées ou recalculées, y compris quand la surveillance de sortie en arrière-plan en calcule.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>Les coordonnées des points de votre parcours — pas la date et l’heure choisies : leur API renvoie sa propre fenêtre — et votre clé API, qui vous identifie auprès d’eux comme leur client et leur permet de rattacher la requête à votre compte.</td>
+        <td>Si vous choisissez OpenWeather comme fournisseur, <strong>et aussi si vous activez les vigilances officielles avec une clé enregistrée, quel que soit le fournisseur sélectionné</strong>. Sans clé, il n’est jamais appelé.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>Votre adresse IP et la zone de la carte consultée, ce qu’exige la fourniture des tuiles.</td>
+        <td>À l’affichage de la carte. Le réseau est interrogé en premier : le cache de l’appareil sert quand il n’y a pas de connexion ou quand une requête échoue, pas pour en éviter une.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteo déclare</strong> que ses journaux peuvent contenir des coordonnées et qu’il les supprime au bout de 90 jours. Ce n’est pas un traitement éphémère, et c’est pourquoi cette politique ne se contente pas d’affirmer « aucune donnée collectée » : MeteoRide n’en collecte aucune, mais les fournisseurs reçoivent et enregistrent les requêtes que MeteoRide leur adresse en votre nom.</p>
+    <p><strong>Ces trois services sont les seuls auxquels l’app se connecte.</strong> Elle ne télécharge de code depuis nulle part — chaque bibliothèque et chaque ressource de l’interface voyage dans le paquet que vous installez, et les seules choses récupérées sur le réseau sont les données de prévision et les tuiles de carte du tableau ci-dessus —, et la politique de sécurité du contenu de l’app reprend cette même liste fermée.</p>
+
+    <h3>Votre position et vos notifications</h3>
+    <p><strong>Position :</strong> avec votre autorisation, elle est lue une fois à l’ouverture de l’app, uniquement pour centrer la carte sur l’endroit où vous êtes tant qu’aucun parcours n’est chargé. Cette position n’est pas enregistrée et n’est pas envoyée aux services météo : les prévisions sont demandées pour les points du parcours. Centrer la carte demande toutefois à OpenStreetMap les tuiles de cette zone, si bien que la zone où vous vous trouvez arrive sur leurs serveurs comme n’importe quelle autre que vous consultez. Refusez l’autorisation et l’app fonctionne de la même façon.</p>
+    <p><strong>Notifications :</strong> les alertes de pluie et de vent sont produites sur votre appareil et ne passent jamais par un serveur de notifications push ni par l’auteur de l’app. Elles ne viennent pas de nulle part pour autant : avec la surveillance de sortie activée, le système réveille l’app de temps en temps — c’est le système qui décide quand, pas l’app — et, <strong>une fois le départ entré dans son horizon d’un jour</strong>, chaque réveil <strong>télécharge des prévisions fraîches</strong> d’Open-Meteo pour votre parcours, plus les vigilances officielles d’OpenWeather si vous les avez activées. Avec un départ plus lointain, elle ne demande rien. Il y a donc des requêtes vers les fournisseurs pendant que l’app est en arrière-plan.</p>
+
+    <h3>Ce qui est stocké sur votre appareil</h3>
+    <p>Tout ce qui suit vit sur votre téléphone, et personne d’autre ne le lit tant que cela y reste :</p>
+    <ul>
+      <li>Vos réglages : langue, unités, fournisseur, intervalles. Ils sont copiés dans UserDefaults, le stockage du système, car iOS peut vider le stockage local de l’app quand l’appareil manque d’espace.</li>
+      <li>Les parcours récents, le parcours préparé pour une utilisation sans réseau, et les caches de prévisions et de cartes.</li>
+      <li>Votre clé OpenWeather, si vous en saisissez une. <strong>Elle est stockée sans chiffrement</strong> : utilisez une clé qui ne vous sert à rien d’autre, ou restez sur Open-Meteo, qui n’en demande aucune.</li>
+      <li>Les parcours qui vous arrivent d’une autre app via « Partager » et « Ouvrir dans MeteoRide » attendent dans un répertoire privé de l’app (un conteneur App Group) jusqu’à leur chargement. Quand un parcours est ouvert, iOS laisse aussi sa propre copie dans le dossier de réception de l’app ; celle-ci est supprimée dès que le parcours est enregistré. Tout ce qui n’a pas été récupéré depuis plus de 24 heures est supprimé la prochaine fois que l’app vérifie.</li>
+    </ul>
+    <p><strong>Avec une exception à connaître : les sauvegardes du système.</strong> Les réglages vivent dans UserDefaults, qu’iOS inclut dans la sauvegarde de l’appareil, si bien qu’ils peuvent se retrouver dans iCloud ou sur l’ordinateur avec lequel vous synchronisez. Cela échappe au contrôle de l’app et n’est pas géré par son auteur. Si cela vous inquiète — surtout pour la clé, stockée sans chiffrement —, désactivez la sauvegarde de l’appareil, ou n’enregistrez pas de clé. Effacer les données de l’app ou la désinstaller ne supprime <em>pas</em> une sauvegarde déjà faite ; cela se fait depuis les réglages d’iCloud, ou depuis l’ordinateur qui contient la sauvegarde.</p>
+
+    <h3>Comment le supprimer</h3>
+    <ul>
+      <li><strong>Tout supprimer :</strong> désinstallez MeteoRide. Les réglages conservés dans le stockage du système, les parcours, les caches et la boîte de réception partagée disparaissent. Rien ne reste sur l’appareil.</li>
+      <li><strong>La clé seule :</strong> videz le champ dans les réglages et enregistrez.</li>
+    </ul>
+    <p>Il n’y a rien à demander à l’auteur de supprimer, car l’app ne conserve rien de son côté. Ce qui a déjà atteint les journaux d’un fournisseur relève de la politique de ce fournisseur, dont le lien figure ci-dessus.</p>
+
+    <h3>Contact et modifications</h3>
+    <p>Questions sur la confidentialité, ou pour exercer vos droits d’accès, de rectification et d’effacement : <a href="mailto:privacy@meteoride.cc">privacy@meteoride.cc</a>. Bugs, questions et suggestions : <a href="https://app.meteoride.cc/support.html#fr" target="_blank" rel="noopener noreferrer">app.meteoride.cc/support.html</a>.</p>
+    <p>Si cette politique change, la date ci-dessus change avec elle et l’historique reste dans le dépôt.</p>
+  </details>
+
+  <p class="version-footer" id="cwVersion"></p>
+
+  <script src="/scripts/version.js"></script>
+</body>
+</html>

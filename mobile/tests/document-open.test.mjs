@@ -230,8 +230,8 @@ test('the plist Xcode builds agrees with the tracked one', async (t) => {
   }
 });
 
-test('the app declares both languages it speaks', () => {
-  assert.deepEqual([...plist.CFBundleLocalizations].sort(), ['en', 'es']);
+test('the app declares the nine languages it speaks', () => {
+  assert.deepEqual([...plist.CFBundleLocalizations].sort(), ['ca', 'de', 'en', 'es', 'eu', 'fr', 'gl', 'it', 'pt']);
 });
 
 /* CFBundleLocalizations declares es, so a Spanish iPhone draws the permission alerts in
@@ -276,18 +276,21 @@ function parseStrings(src) {
   return out;
 }
 
-test('the Spanish strings parse, and every permission reason has its translation', async (t) => {
-  const es = parseStrings(esStrings);
-  const keys = Object.keys(plist).filter((k) => /UsageDescription$/.test(k));
-  assert.ok(keys.length >= 3, 'the plist declares fewer purpose strings than expected; the scan is broken');
-  const missing = keys.filter((k) => !(es[k] || '').trim());
-  assert.deepEqual(missing, [], 'purpose strings with no Spanish line');
-  if (process.platform !== 'darwin') return;
-  // Apple's own reader, where there is one, must agree key for key.
-  const { execFileSync } = await import('node:child_process');
-  const apple = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', esPath], { encoding: 'utf8' }));
-  assert.deepEqual(apple, es, 'plutil reads the file differently');
-});
+for (const code of [...plist.CFBundleLocalizations].filter((c) => c !== 'en')) {
+  test(`the ${code} strings parse, and every permission reason has its translation`, async () => {
+    const path = join(HERE, `../native/ios/${code}.lproj/InfoPlist.strings`);
+    const parsed = parseStrings(await readFile(path, 'utf8'));
+    const keys = Object.keys(plist).filter((k) => /UsageDescription$/.test(k));
+    assert.ok(keys.length >= 3, 'the plist declares fewer purpose strings than expected; the scan is broken');
+    const missing = keys.filter((k) => !(parsed[k] || '').trim());
+    assert.deepEqual(missing, [], `purpose strings with no ${code} line`);
+    if (process.platform !== 'darwin') return;
+    // Apple's own reader, where there is one, must agree key for key.
+    const { execFileSync } = await import('node:child_process');
+    const apple = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', path], { encoding: 'utf8' }));
+    assert.deepEqual(apple, parsed, 'plutil reads the file differently');
+  });
+}
 
 test('the strings parser refuses what iOS would not read', () => {
   const good = '/* c */\n"A" = "x";\n"B" = "y \\" z";\n';
@@ -321,14 +324,16 @@ test('no location reason promises more than the privacy policy', () => {
   }
 });
 
-test('the Xcode project ships the Spanish strings it is given', async (t) => {
+for (const code of [...plist.CFBundleLocalizations].filter((c) => c !== 'en')) {
+test(`the Xcode project ships the ${code} strings it is given`, async (t) => {
+  const tracked = await readFile(join(HERE, `../native/ios/${code}.lproj/InfoPlist.strings`), 'utf8');
   let pbx;
   try { pbx = await readFile(join(HERE, '../ios/App/App.xcodeproj/project.pbxproj'), 'utf8'); }
   catch { return t.skip('mobile/ios/ has not been generated here'); }
-  const copy = await readFile(join(HERE, '../ios/App/App/es.lproj/InfoPlist.strings'), 'utf8').catch(() => null);
-  assert.equal(copy, esStrings, 'ios/App/App/es.lproj/InfoPlist.strings has drifted from the tracked one');
+  const copy = await readFile(join(HERE, `../ios/App/App/${code}.lproj/InfoPlist.strings`), 'utf8').catch(() => null);
+  assert.equal(copy, tracked, `ios/App/App/${code}.lproj/InfoPlist.strings has drifted from the tracked one`);
   // Follow the IDs, not the comments: file reference -> variant group -> build file -> Resources.
-  const fileRef = pbx.match(/(\w{24}) \/\* es \*\/ = \{isa = PBXFileReference;[^}]*path = es\.lproj\/InfoPlist\.strings;/)?.[1];
+  const fileRef = pbx.match(new RegExp(`(\\w{24}) /\\* ${code} \\*/ = \\{isa = PBXFileReference;[^}]*path = ${code}\\.lproj/InfoPlist\\.strings;`))?.[1];
   assert.ok(fileRef, 'the strings file is not in the Xcode project');
   const group = [...pbx.matchAll(/(\w{24}) \/\* InfoPlist\.strings \*\/ = \{\s*isa = PBXVariantGroup;([\s\S]*?)\};/g)]
     .find((m) => m[2].includes(fileRef))?.[1];
@@ -337,5 +342,6 @@ test('the Xcode project ships the Spanish strings it is given', async (t) => {
   assert.ok(buildFile, 'the localised InfoPlist.strings is never built');
   const resources = pbx.match(/isa = PBXResourcesBuildPhase;[\s\S]*?files = \(([\s\S]*?)\);/)?.[1] ?? '';
   assert.ok(resources.includes(buildFile), 'the strings file is not in the Resources build phase');
-  assert.match(pbx, /knownRegions = \([^)]*\bes,/, 'es is not a known region of the project');
+  assert.match(pbx, new RegExp(`knownRegions = \\([^)]*\\b${code},`), `${code} is not a known region of the project`);
 });
+}

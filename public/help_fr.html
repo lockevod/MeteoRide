@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Aide - MeteoRide</title>
+  <meta name="description" content="Comment utiliser MeteoRide : importez un GPX/KML et voyez la pluie, le vent et la température tout au long de votre parcours. FAQ et conseils.">
+  <link rel="canonical" href="https://app.meteoride.cc/help_fr.html">
+
+  <link rel="alternate" hreflang="en" href="https://app.meteoride.cc/help_en.html">
+  <link rel="alternate" hreflang="es" href="https://app.meteoride.cc/help.html">
+  <link rel="alternate" hreflang="ca" href="https://app.meteoride.cc/help_ca.html">
+  <link rel="alternate" hreflang="gl" href="https://app.meteoride.cc/help_gl.html">
+  <link rel="alternate" hreflang="eu" href="https://app.meteoride.cc/help_eu.html">
+  <link rel="alternate" hreflang="fr" href="https://app.meteoride.cc/help_fr.html">
+  <link rel="alternate" hreflang="de" href="https://app.meteoride.cc/help_de.html">
+  <link rel="alternate" hreflang="it" href="https://app.meteoride.cc/help_it.html">
+  <link rel="alternate" hreflang="pt" href="https://app.meteoride.cc/help_pt.html">
+
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="MeteoRide">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Aide - MeteoRide">
+  <meta property="og:description" content="Guide rapide pour utiliser MeteoRide avec vos parcours GPX/KML.">
+  <meta property="og:image" content="https://app.meteoride.cc/assets/preview.png">
+  <meta property="og:url" content="https://app.meteoride.cc/help_fr.html">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Aide - MeteoRide">
+  <meta name="twitter:description" content="Comment utiliser MeteoRide : importez un GPX/KML et voyez la pluie, le vent et la température tout au long de votre parcours. FAQ et conseils.">
+  <meta name="twitter:image" content="https://app.meteoride.cc/assets/preview.png">
+
+  <!-- Structured data (FAQPage) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Que fait MeteoRide ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Il affiche la pluie, le vent et la température tout au long de votre parcours GPX/KML. Il ne modifie pas les parcours."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Quels formats sont pris en charge ?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "GPX et KML. Vous pouvez coller une URL partagée ou importer le fichier."
+        }
+      },
+            {
+                "@type": "Question",
+                "name": "Quels fournisseurs météo sont utilisés ?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Open-Meteo, OpenWeather et AromeHD."
+                }
+            }
+    ]
+  }
+  </script>
+    <!-- Loaded here, ahead of the stylesheet, so the cw-native class — everything
+         below keys off it, including .web-only and the open sections — is already
+         set before the page paints. See scripts/help.js for why the rest of what it
+         does waits for the body to exist. -->
+    <script src="/scripts/help.js"></script>
+  <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f4f8;
+            color: #243746;
+        }
+        .header {
+            background: #1e40af;
+            color: white;
+            /* The app draws under the Dynamic Island (`contentInset: "never"`), so the
+               notch is paid for here, on top of the padding the page always had. On the
+               website and on a screen without one the inset is zero and nothing moves. */
+            padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            text-align: center;
+            position: relative;
+        }
+        .back-button {
+            position: absolute;
+            left: calc(1rem + env(safe-area-inset-left));
+            /* An absolute offset measures from the border box, which the inset just
+               grew, so half of it goes back into the offset: the button stays centred
+               on the header's own text instead of drifting into the notch. */
+            top: calc(50% + env(safe-area-inset-top) / 2);
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 200ms ease;
+        }
+        .back-button:hover {
+            background: rgba(255,255,255,0.3);
+            text-decoration: none;
+            color: white;
+        }
+        .section {
+            background: white;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+        }
+        h1 { margin: 0; }
+        h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+        h3 { color: #2563eb; margin-top: 1.5rem; }
+        .step { 
+            background: #f8fafc; 
+            padding: 1rem; 
+            margin: 1rem 0; 
+            border-left: 4px solid #2563eb; 
+            border-radius: 0 8px 8px 0;
+        }
+        .tip {
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .warning {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .privacy {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        code {
+            background: #e5e7eb;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        /* Only inside the native shell: scripts/help.js adds the class. The website
+           has none of these buttons, so describing them there would be noise. */
+        .app-only { display: none; }
+        html.cw-native .app-only { display: block; }
+        /* And the other way round: how to install the web app from a browser is a
+           recipe the app's reader has already followed. */
+        html.cw-native .web-only { display: none; }
+        /* A tip for one platform is noise on the other, and App Review reads a mention of
+           another platform as metadata that does not belong in the app (2.3.10). */
+        html.cw-ios .android-only, html.cw-android .ios-only { display: none; }
+        /* .app-only is a block; this is the same idea inside a sentence. */
+        .app-only-inline { display: none; }
+        html.cw-native .app-only-inline { display: inline; }
+        /* Every section is a <details> written open. The website leaves it open and
+           takes no clicks on the summary, so the page reads exactly as it always did.
+           Inside the app help.js closes them and the reader gets an index to tap
+           instead of a scroll with no end. */
+        summary { list-style: none; }
+        summary::-webkit-details-marker { display: none; }
+        summary h2 { margin-top: 0; }
+        html:not(.cw-native) summary { pointer-events: none; }
+        html.cw-native summary { cursor: pointer; }
+        html.cw-native summary h2::after { content: ' ▾'; font-size: 0.8em; }
+        html.cw-native details:not([open]) summary h2::after { content: ' ▸'; }
+        .icon { font-size: 1.2em; margin-right: 0.5em; }
+        ul { padding-left: 1.5rem; }
+        li { margin: 0.5rem 0; }
+        .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; margin: 1.5rem 0 0.5rem; }
+        @media screen and (max-width: 600px) {
+            body { padding: 10px; }
+            .back-button { position: static; transform: none; margin-bottom: 1rem; display: inline-block; }
+            .header { text-align: left; }
+        }
+    </style>
+</head>
+
+<body data-page="help">
+    <div class="header">
+        <a href="#" id="backBtn" class="back-button" style="display: none;">← Retour à l’app</a>
+        <h1>🚴‍♂️ MeteoRide</h1>
+        <p>Préparez vos sorties avec une météo détaillée</p>
+    </div>
+
+    <details class="section" open>
+        <summary><h2>🚀 Introduction</h2></summary>
+        <p>MeteoRide charge votre parcours GPX/KML et vous indique la météo que vous rencontrerez sur chaque tronçon : température, vent, pluie, humidité, nuages, luminosité et UV. <span class="web-only">Il fonctionne sur le web et en app pour iPhone et Android.</span></p>
+        <p>Cette aide répond à la question « que dois-je faire ?».<span class="web-only"> Le détail —les limites de chaque fournisseur, ce qui est stocké et où, le comportement sans réseau— se trouve dans le <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">guide d’utilisation</a> (en anglais).</span></p>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🚀 Premiers pas</h2></summary>
+
+        <div class="step">
+            <h3>1. Charger un parcours GPX/KML</h3>
+            <p>Appuyez sur <strong>📁</strong> et choisissez votre fichier. <span class="web-only">Vous pouvez aussi ouvrir MeteoRide avec <code>?gpx_url=</code>, ou partager le GPX depuis une autre app.</span><span class="app-only-inline">Vous pouvez aussi partager le GPX vers MeteoRide depuis une autre app.</span></p>
+        </div>
+
+        <div class="step">
+            <h3>2. Date et heure</h3>
+            <p>Quand vous comptez partir. L’heure s’ajuste d’elle-même par tranches de 15 minutes.</p>
+        </div>
+
+        <div class="step">
+            <h3>3. Vitesse</h3>
+            <p>Votre moyenne estimée, ou une valeur prédéfinie : 5, 10, 12, 15 ou 20 km/h.</p>
+        </div>
+
+        <div class="step">
+            <h3>4. Intervalle</h3>
+            <p>La fréquence des relevés : toutes les 15 ou 30 minutes.</p>
+        </div>
+
+        <div class="step">
+            <h3>5. Fournisseur</h3>
+            <p>La source à utiliser, parmi celles ci-dessous. Choisissez <strong>Comparer</strong> dans cette liste pour voir les fournisseurs côte à côte sur le même parcours.</p>
+        </div>
+
+        <div class="step">
+            <h3>6. Comparer des dates</h3>
+            <p>Appuyez sur <strong>⇄</strong> à côté de la date, réglez la date B et appuyez sur <strong>⟲</strong>. Il n’y a pas de recalcul automatique : si vous changez quoi que ce soit, appuyez de nouveau sur <strong>⟲</strong>.</p>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🌤️ Fournisseurs météo</h2></summary>
+        <ul>
+            <li><strong>Open-Meteo :</strong> sans clé, mondial, 14 jours. Le choix par défaut, et le bon pour presque tout.</li>
+            <li><strong>OpenWeather :</strong> demande une clé, 4 jours. Données en temps réel, et le seul qui publie les vigilances officielles.</li>
+            <li><strong>AROME-HD :</strong> sans clé, haute résolution, France et pays voisins, et 36 heures. Au-delà, il utilise Open-Meteo sans que vous ayez rien à faire.</li>
+            <li><strong>OpenWeather → AROME-HD → Open-Meteo :</strong> une chaîne qui utilise chacun sur le tronçon où il est le meilleur. Demande une clé OpenWeather.</li>
+        </ul>
+        <div class="tip">
+            <strong>💡 Conseil :</strong> si vous ne savez pas lequel choisir, prenez Open-Meteo.<span class="web-only"> La couverture et l’horizon exacts de chacun sont dans le <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">guide</a>.</span>
+        </div>
+    </details>
+
+    <details class="section web-only" open>
+        <summary><h2>🏁 Installer comme une app</h2></summary>
+        <p>Le site peut s’installer comme une app (PWA) et obtient sa propre icône, comme n’importe quelle autre app :</p>
+        <ul>
+            <li><strong>Android (Chrome) et iPhone/iPad (Safari) :</strong> menu ou bouton Partager → « Sur l’écran d’accueil ».</li>
+            <li><strong>Chrome et Edge sur ordinateur :</strong> icône d’installation dans la barre d’adresse → « Installer ».</li>
+            <li><strong>Safari sur Mac :</strong> Fichier → « Ajouter au Dock ».</li>
+        </ul>
+        <p>Les instructions pas à pas pour chaque plateforme sont dans le <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">guide</a>.</p>
+    </details>
+
+    <details class="section app-only" open>
+        <summary><h2>📱 Dans l’app</h2></summary>
+        <p>Ce que seule l’app sait faire.</p>
+
+        <h3>📤 Partager des parcours</h3>
+        <p>Avec un parcours chargé, le bouton <strong>📤</strong> l’envoie vers une autre app : votre compteur GPS, Fichiers, la messagerie. Dans l’autre sens aussi : partagez un GPX depuis Komoot, Strava ou Fichiers et choisissez MeteoRide. Le fichier ne quitte jamais l’appareil.</p>
+
+        <h3>🔔 Alertes quand la météo change</h3>
+        <p>Une fois votre parcours calculé, l’app continue de le surveiller et vous prévient s’il se dégrade pendant les heures où vous serez dehors : de la pluie apparaît, du vent ou de fortes rafales apparaissent, ou une vigilance officielle est émise qui chevauche votre sortie. C’est activé dès le départ ; désactivez-le dans <strong>Réglages → Alertes → « Me prévenir si la météo change sur le parcours »</strong>.</p>
+        <div class="warning">
+            <strong>Bon à savoir :</strong> la vérification est lancée par le système d’exploitation, pas par l’app. <span class="ios-only">Sur iPhone, elle a besoin de l’<em>actualisation en arrière-plan</em>.</span><span class="android-only">Sur Android, il faut que le gestionnaire de batterie ne la coupe pas.</span> Quand le système ne va pas la lancer, l’app l’indique sous l’interrupteur.
+        </div>
+
+        <h3>🚴 Sans réseau</h3>
+        <ul>
+            <li>À l’ouverture, l’app retrouve le dernier parcours avec son tableau.</li>
+            <li>Des prévisions anciennes restent affichées, avec leur ancienneté en heures, jusqu’à douze.</li>
+            <li>Le fond de carte a besoin d’une connexion et peut rester vide ; le parcours et le tableau s’affichent quand même.</li>
+        </ul>
+        <p>Le bouton <strong>📴</strong> enregistre les prévisions du parcours chargé et les protège du nettoyage automatique. Appuyez dessus chez vous avant de partir.</p>
+
+        <h3>📍 Carte et réglages</h3>
+        <ul>
+            <li>Sans parcours, la carte s’ouvre là où vous êtes : le système demande l’autorisation de localisation au nom de MeteoRide.</li>
+            <li>L’app démarre dans la langue du téléphone jusqu’à ce que vous en choisissiez une à la main.</li>
+            <li>Les réglages, la clé et les parcours récents sont toujours là quand vous rouvrez l’app.</li>
+            <li>Sur téléphone, l’affichage reste en portrait.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🛠️ Réglages</h2></summary>
+
+        <h3>🔑 Clé API</h3>
+        <p>Seul OpenWeather demande une clé, et ce doit être une clé pour son API One Call 3.0 : <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>. Le bouton <strong>🔍 Vérifier</strong> à côté du champ vous dit si elle est valide.</p>
+
+        <h3>📏 Unités, langue et avis</h3>
+        <ul>
+            <li>Vent en km/h, m/s ou mph ; température en °C ou °F ; distance en km ou mi ; pluie en mm ou in.</li>
+            <li>Interface et messages en espagnol, anglais, catalan, galicien, basque, français, allemand, italien et portugais.</li>
+            <li><strong>Afficher les avis non critiques :</strong> bandeaux d’information quand une source de secours prend le relais. Désactivé, vous ne voyez que les erreurs critiques.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📊 Lire les données</h2></summary>
+
+        <h3>🌤️ Le tableau</h3>
+        <p>Chaque colonne est un point du parcours : heure et distance cumulée, icône météo, température, vent avec les rafales entre parenthèses, pluie en mm/h avec la probabilité à côté, humidité et nuages/UV. La barre verticale à côté de l’icône indique la lumière disponible sur cet intervalle.</p>
+        <p>La pluie affichée est celle de l’heure où vous roulerez, pas le relevé le plus proche de la minute exacte de l’étape. Quand la source des données change, la colonne est marquée <strong>OPM</strong> (Open-Meteo), <strong>ARM</strong> (AROME-HD) ou <strong>OPW</strong> (OpenWeather).</p>
+
+        <h3>🗺️ La carte</h3>
+        <ul>
+            <li>Flèches de vent : bleu faible, rouge fort (30-50 km/h), violet très fort (&gt;50 km/h).</li>
+            <li>Gouttes 💧 : précipitations prévues.</li>
+            <li>Marqueurs vert et rouge : départ et arrivée du parcours.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📱 Fonctions avancées</h2></summary>
+
+        <h3>🔄 Le tableau défile</h3>
+        <p>Faites glisser le tableau<span class="web-only"> ou utilisez la molette de la souris</span> pour voir plus de colonnes ; l’icône ⇆ indique qu’il y en a d’autres. Appuyer sur une colonne met en évidence la ligne et la carte, qui se recentre sur ce point.</p>
+
+        <h3>🌅 Soleil et lumière</h3>
+        <p>Lever et coucher du soleil et crépuscule civil, marqué d’un « c », plus la luminosité calculée pour chaque intervalle.</p>
+
+        <h3>🎯 Sources de secours</h3>
+        <p>Si votre fournisseur dépasse son horizon, échoue ou n’a pas de données, ces étapes —et seulement celles-là— sont demandées à Open-Meteo. Chaque requête laisse 15 secondes au serveur pour commencer à répondre, puis 15 autres sans recevoir de données pendant le téléchargement ; un téléchargement lent mais régulier n’est jamais coupé. Un fournisseur qui ne répond plus n’est pas de nouveau sollicité pour ce calcul.</p>
+
+        <h3>🗺️ Parcours récents et cache</h3>
+        <ul>
+            <li>À côté de 📁, une liste déroulante propose les <strong>5</strong> derniers parcours. Recharger un parcours déjà présent le remonte en tête de liste.</li>
+            <li>Ils sont stockés sur votre appareil et jamais partagés. Jusqu’à environ 750 Ko par GPX.</li>
+            <li>Les réponses des fournisseurs sont mises en cache pendant environ 30 minutes et expirent d’elles-mêmes.</li>
+        </ul>
+
+        <div class="web-only">
+            <h3>🔗 URL avec paramètres</h3>
+            <ul>
+                <li><code>?gpx_url=https://example.com/route.gpx</code></li>
+                <li><code>?datetime=2024-03-15T10:00</code></li>
+                <li><code>?speed=25</code></li>
+            </ul>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>⚠️ Limites et conseils</h2></summary>
+
+        <div class="warning">
+            <h3>🚨 Limites</h3>
+            <ul>
+                <li>Horizon : Open-Meteo 14 jours, OpenWeather 4 jours, AROME-HD 36 heures.</li>
+                <li>À partir du 3e ou 4e jour, les prévisions sont nettement moins fiables.</li>
+                <li>Les clés OpenWeather ont des limites d’utilisation fixées par OpenWeather ; Open-Meteo ne demande aucune clé.</li>
+            </ul>
+        </div>
+
+        <div class="tip">
+            <h3>✅ Conseils</h3>
+            <ul>
+                <li>Des parcours de 100 à 200 km au maximum, et préparez-les 1 à 2 jours à l’avance.</li>
+                <li>Croisez plusieurs sources quand la décision compte.</li>
+                <li>Ayez un plan B et emportez de quoi vous protéger de la pluie, même si la probabilité est faible.</li>
+            </ul>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🚨 Vigilances météo officielles</h2></summary>
+        <p>MeteoRide peut afficher les vigilances officielles émises par les services météorologiques nationaux. Seul OpenWeather les publie : saisissez votre clé dans Réglages et cochez <strong>Afficher les vigilances météo officielles</strong>. Sans clé, la case est désactivée et en indique la raison.</p>
+        <ul>
+            <li>Elles sont vérifiées même quand OpenWeather n’est pas votre fournisseur principal.</li>
+            <li>Une vigilance apparaît sous forme de carte, qui se masque d’elle-même, et laisse un <strong>⚠️</strong> pour les rouvrir.</li>
+            <li>Seules celles qui chevauchent l’heure à laquelle vous serez sur ce tronçon sont prises en compte.</li>
+        </ul>
+        <div class="warning">
+            <h3>⚠️ Avertissement important</h3>
+            <p>C’est une information en plus, pas une garantie de sécurité. Consultez toujours le service météorologique officiel de votre pays avant une sortie qui pourrait être concernée : OpenWeather peut contenir des erreurs, des retards, ou omettre des vigilances locales. MeteoRide ne remplace pas les communications officielles.</p>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🐛 Dépannage</h2></summary>
+        <ul>
+            <li><strong>Le GPX/KML ne se charge pas :</strong> vérifiez que le fichier contient des traces valides.</li>
+            <li><strong>Pas de données météo :</strong> vérifiez la clé avec 🔍 Vérifier, ou passez à Open-Meteo, qui n’en demande pas.</li>
+            <li><strong>Date hors limites :</strong> rapprochez la date ; chaque fournisseur a son propre horizon.</li>
+            <li><strong>Tableau vide :</strong> le parcours est trop court pour une seule étape.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🔒 Confidentialité et données</h2></summary>
+
+        <div class="privacy">
+            <h3>🛡️ Vos données restent chez vous</h3>
+            <p>MeteoRide fonctionne sur votre appareil : réglages, parcours et cache sont stockés uniquement là, sans compte ni inscription.<span class="web-only"> L’exception est le site avec les Raccourcis iOS, qui envoient le GPX à Cloudflare parce que Raccourcis n’accepte que le POST ; ce fichier est supprimé en deux minutes au plus.</span></p>
+        </div>
+
+        <h3>🌐 Ce qui est envoyé aux fournisseurs</h3>
+        <ul>
+            <li>Les coordonnées de votre parcours et les heures pour lesquelles vous demandez des prévisions.</li>
+            <li>Votre clé OpenWeather, si vous en utilisez une. Elle est stockée sans chiffrement, donc mieux vaut une clé qui ne sert à rien d’autre — ou aucune, avec Open-Meteo et AROME-HD.</li>
+        </ul>
+        <p>Les fournisseurs ont leurs propres politiques de confidentialité.<span class="web-only"> Ce qui est stocké exactement sur votre appareil est dans le <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">guide</a>.</span></p>
+        <p>Tout le détail — ce que reçoit chaque fournisseur, combien de temps il le conserve, et comment supprimer tout ce qui reste sur l’appareil — est dans la <a href="privacy-web-fr.html" id="privacyLink"><strong>politique de confidentialité</strong></a>.</p>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📄 Licence et crédits</h2></summary>
+        <p>MeteoRide est développé par <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer"><strong>Lockevod</strong></a> sous <strong>licence MIT</strong> : vous pouvez l’utiliser, le modifier et le distribuer, pour un usage personnel ou commercial, en citant l’auteur et la licence.</p>
+
+        <h3>🙏 Technologies</h3>
+        <p>Cartes d’OpenStreetMap, données d’<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> et d’<a href="https://openweathermap.org/" target="_blank" rel="noopener noreferrer">OpenWeather</a>, icônes de Weather Icons (Erik Flowers), Leaflet.js, SunCalc et GPX parser, app native avec Capacitor<span class="web-only"> et site sur Cloudflare Pages</span>.</p>
+
+        <h3>⚖️ Avertissement</h3>
+        <p>Les données météo d’<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> sont sous licence <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. MeteoRide échantillonne les prévisions le long du parcours, convertit les unités et calcule des résumés et des comparaisons. Ce sont des calculs de MeteoRide, pas une caution du fournisseur de données.</p>
+        <p>Open-Meteo, OpenWeather et OpenStreetMap<span class="web-only">, ainsi que les sites de parcours que ce site peut ouvrir (Komoot, Bikemap, Hammerhead),</span> sont des marques de leurs propriétaires, avec leurs propres conditions, que vous devez respecter. MeteoRide est fourni tel quel, sans garantie ni responsabilité, et vous l’acceptez en l’utilisant. MeteoRide est un outil de préparation : les données météo sont des estimations, alors vérifiez les conditions avant de partir et faites preuve de bon sens.</p>
+        <p class="web-only">Les conditions complètes et les informations à jour sont sur <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a> et dans le <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">guide</a>.</p>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📞 Assistance et contributions</h2></summary>
+        <h3>🐛 Signaler un problème</h3>
+        <ul>
+            <li>Écrivez à <a href="mailto:support@meteoride.cc">support@meteoride.cc</a>, ou ouvrez une issue dans le <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">dépôt GitHub</a></li>
+            <li class="web-only">Activez le bouton de débogage (🐞) dans <strong>Réglages → Afficher le bouton de débogage</strong> : il est désactivé au départ</li>
+            <li>Indiquez votre appareil et la version, affichée en bas de cette page</li>
+        </ul>
+
+        <h3>🤝 Contribuer au projet</h3>
+        <p>Forkez le dépôt, signalez des bugs, proposez des améliorations, traduisez dans de nouvelles langues ou améliorez la documentation.</p>
+
+        <div class="tip">
+            <strong>💡 Dernier conseil :</strong> La météo peut changer vite ! Servez-vous de MeteoRide comme d’un guide, mais restez flexible et prudent pendant vos sorties.
+        </div>
+
+        <h3>💰 Soutenir le projet</h3>
+        <p>Si MeteoRide vous est utile, pensez à soutenir le projet par un don :</p>
+        <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
+    </details>
+
+    <p class="version-footer" id="cwVersion"></p>
+
+    <script src="/scripts/version.js"></script>
+</body>
+</html>

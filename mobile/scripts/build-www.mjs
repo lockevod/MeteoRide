@@ -91,7 +91,7 @@ const VENDOR = [
  *  that patchIndexHtml strips, so nothing in the app can navigate to them. support.html
  *  is the App Store Support URL: the app links its absolute address, which opens in the
  *  system browser, so a bundled copy would never be read. */
-const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', 'en', 'es', 'support.html'];
+const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', 'en', 'es', 'ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt', 'support.html'];
 
 /* `cp` copies public/ wholesale, so anything a local tool leaves in there ends up inside
  * the shipped app. That is not hypothetical: two code-analysis databases
@@ -320,8 +320,9 @@ function patchBundledHtml(html) {
  * approved non-profits, 3.2.1) and Google Play tolerates but does not promise to.
  * The whole section goes: heading and the paragraphs that follow it, up to the next
  * tag that is not a paragraph. `ensureNoDonationLink` then proves nothing survived.
+ * The heading is found by its 💰, the one thing it shares across the nine languages.
  */
-const DONATION_SECTION = /\s*<h3>[^<]*(?:Apoya el Proyecto|Support the Project)[^<]*<\/h3>(?:\s*<p>[\s\S]*?<\/p>)*/g;
+const DONATION_SECTION = /\s*<h3>💰[^<]*<\/h3>(?:\s*<p>[\s\S]*?<\/p>)*/g;
 const DONATION_HOST = /buymeacoffee\.com/i;
 
 function stripDonation(html) {

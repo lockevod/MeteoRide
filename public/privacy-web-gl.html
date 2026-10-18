@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="gl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Privacidade — a web de MeteoRide</title>
+  <meta name="description" content="Política de privacidade da web de MeteoRide: que se envía aos provedores meteorolóxicos, que se garda no teu dispositivo e como borralo.">
+  <link rel="canonical" href="https://app.meteoride.cc/privacy-web-gl.html">
+
+  <!-- Shared with the help pages: the back button when the app opens this page, the
+       version footer and, inside the app, the sections arriving closed. The title
+       swap there is help-only and keeps its hands off this page. -->
+  <script src="/scripts/help.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f0f4f8;
+      color: #243746;
+    }
+    .header {
+      background: #1e40af;
+      color: white;
+      padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: center;
+      position: relative;
+    }
+    .back-button {
+      position: absolute;
+      left: calc(1rem + env(safe-area-inset-left));
+      top: calc(50% + env(safe-area-inset-top) / 2);
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+    h3 { color: #2563eb; margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; border: 0; }
+    a { color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0ebff; vertical-align: top; }
+    .lede { background: #f8fafc; border-left: 4px solid #2563eb; padding: 1rem; border-radius: 0 8px 8px 0; }
+    .other { font-size: 0.9rem; color: #475569; }
+    .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; }
+    /* The title runs under the absolutely positioned back button on a phone; the
+       button only appears in the app. `display` is left alone: help.js sets it inline,
+       and that inline style is what keeps it hidden on the website. */
+    @media (max-width: 480px) {
+      .back-button { position: static; transform: none; margin-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <a href="index.html" class="back-button" id="backBtn" style="display:none;">← Volver</a>
+    <h1>🔒 Privacidade</h1>
+    <p>a web de MeteoRide</p>
+  </div>
+
+  <details class="section" open id="gl" lang="gl">
+    <summary><h2>Galego</h2></summary>
+
+    <div class="lede">
+      <p><strong>MeteoRide non recompila os teus datos nin os explota.</strong> Sen conta, sen rexistro, sen publicidade, sen analítica, sen telemetría, sen informes de fallos, sen identificadores de seguimento.</p>
+      <p><strong>Esta política cobre unicamente a web</strong>, <a href="https://app.meteoride.cc" target="_blank" rel="noopener noreferrer">app.meteoride.cc</a> aberta nun navegador. As apps instalables teñen a súa propia e son máis pechadas ca esta: <a href="privacy-ios-gl.html">iOS</a> e <a href="privacy-android-gl.html">Android</a>. Nada do que aquí se describe como exclusivo da web ocorre nelas.</p>
+    </div>
+    <p>Última actualización: 19 de setembro de 2026.</p>
+
+    <h3>Para darche a previsión</h3>
+    <table>
+      <tr><th>Destino</th><th>Que recibe</th><th>Cando</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (incluído AROME-HD)</td>
+        <td>As coordenadas dos puntos da túa ruta e as datas e horas da previsión, ademais da túa IP e os datos normais dunha petición web.</td>
+        <td>Cada vez que se calcula ou se recalcula unha previsión.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>As coordenadas dos puntos —non a data e hora escollidas— e a túa clave de API, que te identifica ante eles como cliente seu.</td>
+        <td>Se escolles OpenWeather, e tamén se activas os avisos oficiais cunha clave gardada, sexa cal sexa o provedor escollido.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>A túa IP e que zona do mapa estás a mirar.</td>
+        <td>Ao amosar o mapa. Pídese primeiro á rede; a caché serve cando unha petición falla ou non hai conexión.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteo declara</strong> que os seus rexistros poden conter coordenadas e que os borra aos 90 días.</p>
+
+    <h3>E o que só fai a web</h3>
+    <p>Isto é o que separa a web das apps. As apps non fan nada do seguinte, e non é un descoido: a compilación que xera o paquete instalable impídeo e falla se alguén o volve meter.</p>
+    <ul>
+      <li>A web carga as súas bibliotecas desde tres redes de distribución de contido: <a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener noreferrer">jsDelivr</a>, <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">cdnjs (Cloudflare)</a> e <a href="https://www.npmjs.com/policies/privacy" target="_blank" rel="noopener noreferrer">unpkg</a>. Cada unha recibe a túa IP e a páxina de onde vés. As apps levan esas bibliotecas dentro.</li>
+      <li>As páxinas de axuda amosan un botón de Buy Me a Coffee, que tamén recibe a túa IP. As apps non o levan.</li>
+      <li>Abrir unha ruta con <code>?gpx_url=</code> descárgaa do servidor que indiques. As apps non teñen esa porta de entrada.</li>
+      <li>O Atallo de iOS que envía unha ruta a MeteoRide só pode facer POST, así que ese GPX <strong>súbese a un almacén de Cloudflare que xestiona o autor</strong>, recibe un identificador aleatorio imposible de adiviñar e bórrase só aos dous minutos (o valor predeterminado, e o que está en uso). É o único que chega nunca ás mans do autor, e dura iso. As apps non usan esa vía.</li>
+    </ul>
+    <p>O aloxamento é Cloudflare Pages, que rexistra as peticións a calquera sitio que serve, como fai calquera aloxamento.</p>
+
+    <h3>Que se garda no teu navegador</h3>
+    <p>Os teus axustes, as rutas recentes, a ruta preparada para usar sen cobertura, a caché de previsións e de mapas, e a túa clave de OpenWeather se pos unha —<strong>sen cifrar</strong>, así que usa unha clave que non uses para nada máis, ou Open-Meteo, que non precisa ningunha—. Todo en localStorage e IndexedDB, só no teu navegador.</p>
+    <p>Para borralo: borra os datos do sitio app.meteoride.cc no teu navegador. A clave soa bórrase desde o seu campo nos axustes.</p>
+
+    <h3>Contacto e cambios</h3>
+    <p>Dúbidas sobre privacidade, ou para exercer os teus dereitos de acceso, rectificación e supresión: <a href="mailto:privacy@meteoride.cc">privacy@meteoride.cc</a>. Para fallos e suxestións, mellor en <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">github.com/lockevod/MeteoRide/issues</a>.</p>
+    <p>Se esta política cambia, cambia con ela a data de arriba e o historial queda no repositorio.</p>
+  </details>
+
+  <p class="version-footer" id="cwVersion"></p>
+
+  <script src="/scripts/version.js"></script>
+</body>
+</html>

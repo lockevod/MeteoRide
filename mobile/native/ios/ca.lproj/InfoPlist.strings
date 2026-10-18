@@ -1,0 +1,8 @@
+/* Catalan purpose strings. CFBundleLocalizations declares ca, so on a Catalan iPhone iOS
+   draws the permission alert in Catalan; without these the reason inside it stayed in
+   English. English needs no file: Info.plist itself is the fallback. Copy to
+   ios/App/App/ca.lproj/ and register it in Xcode as a localised InfoPlist.strings (see
+   docs/IOS.md). Keys must match the NS*UsageDescription keys in Info.plist.additions.xml. */
+"NSLocationWhenInUseUsageDescription" = "MeteoRide fa servir la teva ubicació només per centrar el mapa on ets quan obres l'app sense cap ruta carregada. Per exemple, si l'obres quan ets de viatge, el mapa comença a la població on ets en lloc d'una ciutat per defecte. La teva posició no es desa ni s'envia als serveis meteorològics: la previsió fa servir els punts de la teva ruta. Pots denegar el permís i continuar fent servir tota l'app.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "MeteoRide fa servir la teva ubicació només per centrar el mapa on ets quan obres l'app sense cap ruta carregada. Per exemple, si l'obres quan ets de viatge, el mapa comença a la població on ets en lloc d'una ciutat per defecte. La teva posició no es desa ni s'envia als serveis meteorològics: la previsió fa servir els punts de la teva ruta. Pots denegar el permís i continuar fent servir tota l'app.";
+"NSLocationAlwaysUsageDescription" = "MeteoRide fa servir la teva ubicació només per centrar el mapa on ets quan obres l'app sense cap ruta carregada. Per exemple, si l'obres quan ets de viatge, el mapa comença a la població on ets en lloc d'una ciutat per defecte. La teva posició no es desa ni s'envia als serveis meteorològics: la previsió fa servir els punts de la teva ruta. Pots denegar el permís i continuar fent servir tota l'app.";

@@ -572,7 +572,8 @@
         
         // Get current language and select appropriate help file
         const lang = window.getVal("language") || "es";
-        const helpFile = lang.startsWith("en") ? "help_en.html" : "help.html";
+        // help.html is the Spanish page; every other language has help_<code>.html.
+        const helpFile = lang === "es" ? "help.html" : `help_${lang}.html`;
         
         if (isMobile || isPWA) {
           window.location.href = `${helpFile}?return=true`;

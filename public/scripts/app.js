@@ -720,7 +720,7 @@ function readForecastSettings() {
     noticeAll: !!document.getElementById("noticeAll")?.checked,
     alerts,
     interval: Number(getVal("intervalSelect")) || 15,
-    lang: getVal("language") === "es" ? "es" : "en",
+    lang: getVal("language") || "en",
     // What the ride watch needs to look up official warnings in the background, and only
     // when the user shows them. Kept in memory with the snapshot, never stored.
     alertsKey: alerts ? keys.openweather : "",
@@ -1848,8 +1848,6 @@ function computeRouteSummary() {
 
 function buildRouteSummaryHTML(sum, tempUnitLabel, windUnitLabel, precipUnitLabel) {
   if (!sum) return "";
-  const lang = (getVal("language") || "es").toLowerCase();
-  const L = (es, en) => (lang.startsWith("es") ? es : en);
 
   // Unidades en minúsculas (solo viento/precip)
   const windUnitLc = (windUnitLabel || "").toString().toLowerCase();
@@ -1902,9 +1900,9 @@ function buildRouteSummaryHTML(sum, tempUnitLabel, windUnitLabel, precipUnitLabe
     <div class="route-summary">
       <i class="wi ${sum.iconClass} rs-icon"></i>
       <div class="rs-lines">
-        <div class="rs-line"><span class="rs-label">${L("Temp", "Temp")}:</span> ${tempTxt}</div>
-        <div class="rs-line"><span class="rs-label">${L("Viento", "Wind")}:</span> ${windTxt}${gustTxt}</div>
-                      <div class="rs-line"><span class="rs-label">${L("Lluvia", "Rain")}:</span> ${precipTxt}${probTxt}</div>
+        <div class="rs-line"><span class="rs-label">${t("summary_temp")}:</span> ${tempTxt}</div>
+        <div class="rs-line"><span class="rs-label">${t("summary_wind")}:</span> ${windTxt}${gustTxt}</div>
+        <div class="rs-line"><span class="rs-label">${t("summary_rain")}:</span> ${precipTxt}${probTxt}</div>
       </div>
     </div>
   `;
@@ -2248,23 +2246,7 @@ function renderWeatherTable() {
   thead.appendChild(row);
 
   // Labels base (sin unidades) - reduced rows: combine Cloud + UV, move luminance into icon row
-  const lang = getVal("language") || "es";
-  const labels = {
-    es: [
-      "Temperatura",
-      "Viento/Racha",
-      "Lluvia/Probabilidad",
-      "Humedad relativa",
-      "Nubes / UV",
-    ],
-    en: [
-      "Temperature",
-      "Wind/Gust",
-      "Rain/Probability",
-      "Relative humidity",
-      "Cloud / UV",
-    ],
-  };
+  const labels = ["row_temp", "row_wind_gust", "row_rain_prob", "row_humidity", "row_cloud_uv"].map((k) => t(k));
   const keys = [
     "temp",
     "windCombined",
@@ -2292,15 +2274,15 @@ function renderWeatherTable() {
 
   // Provide tooltip titles for icons (only used in compact mode via CSS/JS)
   const titleMap = {
-    temp: (lang === 'es') ? 'Temperatura' : 'Temperature',
-    windCombined: (lang === 'es') ? 'Viento y racha' : 'Wind and gusts',
-    rainCombined: (lang === 'es') ? 'Lluvia y probabilidad' : 'Rain and probability',
-    humidity: (lang === 'es') ? 'Humedad relativa' : 'Relative humidity',
-    cloud_uv: (lang === 'es') ? 'Nubes y UV' : 'Clouds and UV'
+    temp: t('tip_temp'),
+    windCombined: t('tip_wind_gust'),
+    rainCombined: t('tip_rain_prob'),
+    humidity: t('tip_humidity'),
+    cloud_uv: t('tip_cloud_uv')
   };
 
   // Construye etiquetas con unidades para los keys interesados + icono + envoltorio de texto
-  const labelsHTML = labels[lang].map((txt, i) => {
+  const labelsHTML = labels.map((txt, i) => {
     const key = keys[i];
     let base = txt;
     if (key === "temp") {
@@ -2318,7 +2300,7 @@ function renderWeatherTable() {
     const key = keys[idx];
     if (key === 'cloud_uv') {
       // Place the UV icon to the left of the 'UV' token inside the label text
-      const raw = labels[lang][idx];
+      const raw = labels[idx];
       // If label contains 'UV' place icon before it, otherwise append at end
       if (raw.indexOf('UV') !== -1) {
         const parts = raw.split('UV');
@@ -2357,9 +2339,9 @@ function renderWeatherTable() {
   const uvPart = (uv != null)
       ? `<span class="uv-part"><span class="uv-text">${uv}</span></span>`
       : `<span class="uv-part"><span class="uv-text">-</span></span>`;
-        const tooltipText = (lang === 'es')
-          ? (uv != null ? `Nubosidad: ${Math.round(cc)}% — UV: ${uv}` : `Nubosidad: ${Math.round(cc)}%`)
-          : (uv != null ? `Cloud cover: ${Math.round(cc)}% — UV: ${uv}` : `Cloud cover: ${Math.round(cc)}%`);
+        const tooltipText = uv != null
+          ? t('tip_cloud_cover_uv', { cc: Math.round(cc), uv })
+          : t('tip_cloud_cover', { cc: Math.round(cc) });
         td.innerHTML = `<div class="cloud-uv-cell">${cloudPart}<span class="sep"> / </span>${uvPart}</div>`;
         td.setAttribute('data-tooltip', tooltipText);
       } else {
@@ -3738,7 +3720,7 @@ function createAlertElement(alert) {
   const close = document.createElement('button');
   close.type = 'button';
   close.textContent = '×';
-  close.setAttribute('aria-label', 'Close');
+  close.setAttribute('aria-label', t('close'));
   close.style.cssText = `
     position: absolute;
     top: 8px;
@@ -3794,7 +3776,7 @@ function showAlertIndicator() {
     indicator = document.createElement('div');
     indicator.id = 'weather-alert-indicator';
     indicator.innerHTML = '⚠️';
-    indicator.title = 'Weather alerts available - click to toggle';
+    indicator.title = t('alert_indicator_title');
     
     // Simple inline positioning: insert directly next to route name for all screen sizes
     const updatePosition = () => {
@@ -3808,7 +3790,7 @@ function showAlertIndicator() {
       if (rutaName) {
         // If rutaName exists but is empty, add placeholder content
         if (!rutaName.textContent.trim()) {
-          rutaName.textContent = 'Cargando ruta...';
+          rutaName.textContent = t('route_loading');
           rutaName.style.color = '#666';
           rutaName.style.fontStyle = 'italic';
           console.log('Added placeholder content to empty rutaName');

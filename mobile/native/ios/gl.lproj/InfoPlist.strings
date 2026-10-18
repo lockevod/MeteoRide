@@ -1,0 +1,8 @@
+/* Galician purpose strings. CFBundleLocalizations declares gl, so on a Galician iPhone iOS
+   draws the permission alert in Galician; without these the reason inside it stayed in
+   English. English needs no file: Info.plist itself is the fallback. Copy to
+   ios/App/App/gl.lproj/ and register it in Xcode as a localised InfoPlist.strings (see
+   docs/IOS.md). Keys must match the NS*UsageDescription keys in Info.plist.additions.xml. */
+"NSLocationWhenInUseUsageDescription" = "MeteoRide usa a túa localización só para centrar o mapa onde estás cando abres a app sen ningunha ruta cargada. Por exemplo, se a abres estando de viaxe, o mapa comeza na localidade na que estás en vez de nunha cidade predeterminada. A túa posición non se garda nin se envía aos servizos meteorolóxicos: a previsión usa os puntos da túa ruta. Podes denegar o permiso e seguir usando toda a app.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "MeteoRide usa a túa localización só para centrar o mapa onde estás cando abres a app sen ningunha ruta cargada. Por exemplo, se a abres estando de viaxe, o mapa comeza na localidade na que estás en vez de nunha cidade predeterminada. A túa posición non se garda nin se envía aos servizos meteorolóxicos: a previsión usa os puntos da túa ruta. Podes denegar o permiso e seguir usando toda a app.";
+"NSLocationAlwaysUsageDescription" = "MeteoRide usa a túa localización só para centrar o mapa onde estás cando abres a app sen ningunha ruta cargada. Por exemplo, se a abres estando de viaxe, o mapa comeza na localidade na que estás en vez de nunha cidade predeterminada. A túa posición non se garda nin se envía aos servizos meteorolóxicos: a previsión usa os puntos da túa ruta. Podes denegar o permiso e seguir usando toda a app.";

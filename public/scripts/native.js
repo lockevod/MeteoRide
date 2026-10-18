@@ -855,7 +855,7 @@
     return {
       name: route.name || 'GPX',
       fingerprint: route.fingerprint || '',   // ignored by the runner; tells rides apart here
-      lang: settings.lang === 'es' ? 'es' : 'en',
+      lang: settings.lang || 'en',   // watch-rules falls back to English for an unknown one
       createdAt: Date.now(),
       start,
       end,

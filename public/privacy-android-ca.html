@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ca">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Privadesa — MeteoRide per a Android</title>
+  <meta name="description" content="Política de privadesa de l'app MeteoRide per a Android: què s'envia als proveïdors meteorològics, què es desa al teu dispositiu i com esborrar-ho.">
+  <link rel="canonical" href="https://app.meteoride.cc/privacy-android-ca.html">
+
+  <!-- Shared with the help pages: the back button when the app opens this page, the
+       version footer and, inside the app, the sections arriving closed. The title
+       swap there is help-only and keeps its hands off this page. -->
+  <script src="/scripts/help.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f0f4f8;
+      color: #243746;
+    }
+    .header {
+      background: #1e40af;
+      color: white;
+      padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: center;
+      position: relative;
+    }
+    .back-button {
+      position: absolute;
+      left: calc(1rem + env(safe-area-inset-left));
+      top: calc(50% + env(safe-area-inset-top) / 2);
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+    h3 { color: #2563eb; margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; border: 0; }
+    a { color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0ebff; vertical-align: top; }
+    .lede { background: #f8fafc; border-left: 4px solid #2563eb; padding: 1rem; border-radius: 0 8px 8px 0; }
+    .other { font-size: 0.9rem; color: #475569; }
+    .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; }
+    /* The title runs under the absolutely positioned back button on a phone; the
+       button only appears in the app. `display` is left alone: help.js sets it inline,
+       and that inline style is what keeps it hidden on the website. */
+    @media (max-width: 480px) {
+      .back-button { position: static; transform: none; margin-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <a href="index.html" class="back-button" id="backBtn" style="display:none;">← Tornar</a>
+    <h1>🔒 Privadesa</h1>
+    <p>MeteoRide per a Android</p>
+  </div>
+
+  <details class="section" open id="ca" lang="ca">
+    <summary><h2>Català</h2></summary>
+
+    <div class="lede">
+      <p><strong>MeteoRide no recull les teves dades ni les explota.</strong> No hi ha compte, ni registre, ni publicitat, ni analítica, ni telemetria, ni informes d'errors, ni identificadors de seguiment. L'autor de MeteoRide no rep les teves rutes, la teva ubicació ni cap estadística d'ús.</p>
+      <p><strong>Però MeteoRide no s'inventa el temps.</strong> Per donar-te la previsió l'ha de demanar a un proveïdor meteorològic, i per fer-ho li envia les coordenades de la teva ruta i les hores per les quals preguntes. Aquest proveïdor és una empresa aliena, amb la seva pròpia política: pot registrar aquesta petició i conservar-la un temps. El mateix val per als mapes.</p>
+      <p><strong>Aquesta política cobreix únicament l'app per a Android.</strong></p>
+    </div>
+    <p>Última actualització: 22 de setembre de 2026.</p>
+
+    <h3>Què surt del teu dispositiu, i cap a on</h3>
+    <table>
+      <tr><th>Destinació</th><th>Què rep</th><th>Quan</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (inclòs el model AROME-HD)</td>
+        <td>Les coordenades dels punts de la teva ruta i les dates i hores de la previsió, a més de la teva adreça IP i les dades normals d'una petició web.</td>
+        <td>Cada vegada que es calcula o es recalcula una previsió, també quan la calcula el vigilant en segon pla.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>Les coordenades dels punts de la teva ruta —no la data i l'hora triades: la seva API retorna la seva pròpia finestra— i la teva clau d'API, que t'identifica davant seu com a client i permet associar la petició al teu compte.</td>
+        <td>Si tries OpenWeather com a proveïdor, <strong>i també si actives els avisos oficials amb una clau desada, sigui quin sigui el proveïdor triat</strong>. Sense clau no s'hi connecta mai.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>La teva adreça IP i quina zona del mapa s'està mirant, que és el que cal per servir les tessel·les.</td>
+        <td>En mostrar el mapa. Primer es demana a la xarxa: la memòria cau del dispositiu serveix quan no hi ha connexió o quan la petició falla, no per evitar-la.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteo declara</strong> que els seus registres poden contenir coordenades i que els esborra al cap de 90 dies. No és un tractament efímer, i per això aquesta política no diu simplement que «no es recullen dades»: MeteoRide no en recull, però els proveïdors reben i registren les peticions que MeteoRide els fa en nom teu.</p>
+    <p><strong>Aquests tres són els únics serveis als quals es connecta l'app.</strong> No descarrega codi d'enlloc —totes les biblioteques i recursos de la interfície viatgen dins del paquet que instal·les; l'únic que es baixa de la xarxa són les dades de previsió i les tessel·les del mapa de la taula de dalt—, i la política de seguretat de contingut de l'app porta aquesta mateixa llista tancada.</p>
+
+    <h3>La teva ubicació i les teves notificacions</h3>
+    <p><strong>Ubicació:</strong> si dones permís, es llegeix una sola vegada en obrir l'app i només per centrar el mapa on ets, quan encara no hi ha cap ruta carregada. Aquesta posició no es desa ni s'envia als serveis meteorològics: la previsió es demana pels punts de la ruta. Això sí, centrar el mapa fa que es demanin a OpenStreetMap les tessel·les d'aquella zona, així que la zona on ets arriba als seus servidors igual que qualsevol altra que miris. Pots denegar el permís i l'app funciona igual.</p>
+    <p><strong>Notificacions:</strong> els avisos de pluja o vent es generen al teu dispositiu i no passen per cap servidor de notificacions push ni per l'autor de l'app. Però no surten del no-res: amb el vigilant activat, el sistema desperta l'app de tant en tant —quan, ho decideix el sistema, no l'app— i, <strong>quan la sortida ja és dins del seu horitzó d'un dia</strong>, a cada despertar <strong>es descarrega una previsió nova</strong> d'Open-Meteo per a la teva ruta, i els avisos oficials d'OpenWeather si els tens activats. Amb la sortida més lluny no demana res. És a dir, hi ha peticions als proveïdors mentre l'app és en segon pla.</p>
+
+    <h3>Què es desa al teu dispositiu</h3>
+    <p>Tot el que segueix viu al teu telèfon, i ningú més ho llegeix mentre hi sigui:</p>
+    <ul>
+      <li>La teva configuració: idioma, unitats, proveïdor, intervals. Es copia a SharedPreferences, el magatzem del sistema, perquè Android pot buidar l'emmagatzematge local de l'app quan falta espai.</li>
+      <li>Les rutes recents, la ruta preparada per fer servir sense cobertura i la memòria cau de previsions i de mapes.</li>
+      <li>La teva clau d'OpenWeather, si n'hi poses una. <strong>Es desa sense xifrar</strong>: fes servir una clau que no facis servir per a res més, o queda't amb Open-Meteo, que no en necessita cap.</li>
+      <li>Les rutes que t'arriben des d'una altra app per «Compartir» i «Obre amb» esperen en un directori privat de l'app fins que es carreguen. El que porti més de 24 hores allà sense recollir s'esborra la pròxima vegada que l'app mira aquella carpeta.</li>
+    </ul>
+    <p><strong>Amb una excepció que convé saber: les còpies de seguretat del sistema.</strong> L'app declara <code>allowBackup="true"</code>, així que Android pot pujar la seva configuració i els seus fitxers a la còpia automàtica del teu compte de Google. Això queda fora del control de l'app i no ho gestiona l'autor. Si et preocupa —sobretot per la clau, que es desa sense xifrar—, desactiva la còpia de seguretat del dispositiu o no hi desis cap clau. Esborrar les dades de l'app o desinstal·lar-la <em>no</em> esborra una còpia ja feta; això es fa des de la gestió de còpies de seguretat del teu compte de Google.</p>
+
+    <h3>Com esborrar-ho</h3>
+    <ul>
+      <li><strong>Esborrar-ho tot:</strong> Configuració → Aplicacions → MeteoRide → Emmagatzematge → Esborra les dades, o desinstal·la l'app. Se'n van la configuració, les rutes, les memòries cau i la safata d'entrada.</li>
+      <li><strong>Només la clau:</strong> esborra-la del camp a la configuració i desa.</li>
+    </ul>
+    <p>No cal demanar res a l'autor perquè ho esborri, perquè l'app no guarda res en poder seu. El que ja hagi quedat als registres d'un proveïdor es regeix per la política d'aquest proveïdor, enllaçada més amunt.</p>
+
+    <h3>Contacte i canvis</h3>
+    <p>Dubtes sobre privadesa, o per exercir els teus drets d'accés, rectificació i supressió: <a href="mailto:privacy@meteoride.cc">privacy@meteoride.cc</a>. Errors, dubtes i suggeriments: <a href="https://app.meteoride.cc/support.html#ca" target="_blank" rel="noopener noreferrer">app.meteoride.cc/support.html</a>.</p>
+    <p>Si aquesta política canvia, canvia la data de dalt i l'historial queda al repositori.</p>
+  </details>
+
+  <p class="version-footer" id="cwVersion"></p>
+
+  <script src="/scripts/version.js"></script>
+</body>
+</html>

@@ -313,6 +313,24 @@
       weather_alert_detected: "Alerta meteorológica detectada",
       weather_alert_from: "de",
       alerts_section_title: "Alertas",
+      // Forecast table and route summary
+      summary_temp: "Temp",
+      summary_wind: "Viento",
+      summary_rain: "Lluvia",
+      row_temp: "Temperatura",
+      row_wind_gust: "Viento/Racha",
+      row_rain_prob: "Lluvia/Probabilidad",
+      row_humidity: "Humedad relativa",
+      row_cloud_uv: "Nubes / UV",
+      tip_temp: "Temperatura",
+      tip_wind_gust: "Viento y racha",
+      tip_rain_prob: "Lluvia y probabilidad",
+      tip_humidity: "Humedad relativa",
+      tip_cloud_uv: "Nubes y UV",
+      tip_cloud_cover: "Nubosidad: {cc}%",
+      tip_cloud_cover_uv: "Nubosidad: {cc}% — UV: {uv}",
+      alert_indicator_title: "Avisos meteorológicos: toca para mostrarlos u ocultarlos",
+      route_loading: "Cargando ruta...",
     },
     en: {
       config_saved: "Settings saved",
@@ -441,8 +459,32 @@
       weather_alert_detected: "Weather alert detected",
       weather_alert_from: "from",
       alerts_section_title: "Alerts",
+      // Forecast table and route summary
+      summary_temp: "Temp",
+      summary_wind: "Wind",
+      summary_rain: "Rain",
+      row_temp: "Temperature",
+      row_wind_gust: "Wind/Gust",
+      row_rain_prob: "Rain/Probability",
+      row_humidity: "Relative humidity",
+      row_cloud_uv: "Cloud / UV",
+      tip_temp: "Temperature",
+      tip_wind_gust: "Wind and gusts",
+      tip_rain_prob: "Rain and probability",
+      tip_humidity: "Relative humidity",
+      tip_cloud_uv: "Clouds and UV",
+      tip_cloud_cover: "Cloud cover: {cc}%",
+      tip_cloud_cover_uv: "Cloud cover: {cc}% — UV: {uv}",
+      alert_indicator_title: "Weather alerts: tap to show or hide them",
+      route_loading: "Loading route...",
     },
   };
+
+  // The other seven languages live in scripts/lang-<code>.js, one file each, loaded
+  // before this one; each adds its dictionary to window.cwLang. They carry exactly the
+  // English keys (translations.test.mjs), so t() never falls back for them.
+  Object.assign(i18n, window.cwLang || {});
+  const LANGS = ['es', 'en', 'ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt'];
 
   // NEW: restored helpers (translation, logs, settings, cache, dates, math, conversions)
   function t(key, vars = {}) {
@@ -508,8 +550,7 @@
    * device instead of defaulting to English: inside the app `navigator.languages`
    * is the system's list, and on the website it is the browser's.
    *
-   * Catalan and Galician map to Spanish. There is no Catalan translation, and for
-   * someone whose phone is in Catalan, Spanish is a great deal closer than English.
+   * Any language the app speaks is taken as is; anything else gets English.
    */
   function deviceLanguage() {
     const tags = (typeof navigator === 'undefined')
@@ -517,8 +558,7 @@
       : (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]);
     for (const tag of tags) {
       const base = String(tag || '').toLowerCase().split('-')[0];
-      if (base === 'es' || base === 'ca' || base === 'gl') return 'es';
-      if (base === 'en') return 'en';
+      if (LANGS.includes(base)) return base;
     }
     return 'en';
   }

@@ -140,7 +140,7 @@ test('the help links to a policy that exists, and the app swaps it per platform'
   /* help.js rewrites that href inside the app. Without `?return=true` the page's own
    * back button stays hidden and a native reader is stranded on it. */
   const helpJs = await readFile(join(PUBLIC, 'scripts/help.js'), 'utf8');
-  assert.match(helpJs, /privacy-\$\{platform\}\.html\?return=true/, 'the in-app policy link lost its platform or its return');
+  assert.match(helpJs, /privacy-\$\{platform\}\$\{suffix\}\.html\?return=true/, 'the in-app policy link lost its platform or its return');
 });
 
 test('each policy states what MeteoRide does not collect and what the providers receive', async () => {
@@ -249,7 +249,7 @@ test('each help page credits the weather data with its licence', async () => {
  * the app policies reach it too, so no path leaves GitHub as the only way to ask. */
 test('support has a direct contact, and the app never offers GitHub as the only way to ask', async () => {
   const support = await read('support.html');
-  assert.equal(support.split('mailto:support@meteoride.cc').length - 1, 2, 'support.html lost its contact in one language');
+  assert.equal(support.split('mailto:support@meteoride.cc').length - 1, 9, 'support.html lost its contact in one language');
   assert.match(support, /id="en"/);
   assert.match(support, /id="es"/);
   // It is the Support URL: no payment link (AGENTS.md) and nothing the CSP would block.

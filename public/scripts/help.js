@@ -41,9 +41,13 @@
 
     // Written as the website's policy so a reader without JavaScript, and every
     // search engine, gets a working link; inside the app it becomes the platform's.
+    // The Spanish and English pages carry both languages; every other language has its own
+    // file per platform, privacy-<platform>-<code>.html.
     const privacyLink = document.getElementById('privacyLink');
     if (privacyLink && (platform === 'ios' || platform === 'android')) {
-      privacyLink.setAttribute('href', `privacy-${platform}.html?return=true`);
+      const code = (document.documentElement.lang || '').toLowerCase().split('-')[0];
+      const suffix = (code === 'es' || code === 'en' || !code) ? '' : `-${code}`;
+      privacyLink.setAttribute('href', `privacy-${platform}${suffix}.html?return=true`);
     }
 
     // A policy links to the other two. Without carrying the parameter over, the next
@@ -91,9 +95,8 @@
     // to keep in sync by hand here.
     const versionEl = document.getElementById('cwVersion');
     if (versionEl) {
-      const label = pageLang.startsWith('es') ? 'Versión' : 'Version';
-      const fallback = pageLang.startsWith('es') ? 'desconocida' : 'unknown';
-      versionEl.textContent = `${label} ${window.CW_VERSION || fallback}`;
+      const label = { es: 'Versión', ca: 'Versió', gl: 'Versión', eu: 'Bertsioa', it: 'Versione', pt: 'Versão' }[pageLang.split('-')[0]] || 'Version';
+      versionEl.textContent = `${label} ${window.CW_VERSION || '?'}`;
     }
   }
 

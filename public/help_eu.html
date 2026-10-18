@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="eu">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Laguntza - MeteoRide</title>
+  <meta name="description" content="Nola erabili MeteoRide: kargatu GPX/KML bat eta ikusi euria, haizea eta tenperatura zure ibilbidean zehar. Ohiko galderak eta aholkuak.">
+  <link rel="canonical" href="https://app.meteoride.cc/help_eu.html">
+
+  <link rel="alternate" hreflang="en" href="https://app.meteoride.cc/help_en.html">
+  <link rel="alternate" hreflang="es" href="https://app.meteoride.cc/help.html">
+  <link rel="alternate" hreflang="ca" href="https://app.meteoride.cc/help_ca.html">
+  <link rel="alternate" hreflang="gl" href="https://app.meteoride.cc/help_gl.html">
+  <link rel="alternate" hreflang="eu" href="https://app.meteoride.cc/help_eu.html">
+  <link rel="alternate" hreflang="fr" href="https://app.meteoride.cc/help_fr.html">
+  <link rel="alternate" hreflang="de" href="https://app.meteoride.cc/help_de.html">
+  <link rel="alternate" hreflang="it" href="https://app.meteoride.cc/help_it.html">
+  <link rel="alternate" hreflang="pt" href="https://app.meteoride.cc/help_pt.html">
+
+  <!-- Open Graph -->
+  <meta property="og:site_name" content="MeteoRide">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Laguntza - MeteoRide">
+  <meta property="og:description" content="MeteoRide zure GPX/KML ibilbideekin erabiltzeko gida azkarra.">
+  <meta property="og:image" content="https://app.meteoride.cc/assets/preview.png">
+  <meta property="og:url" content="https://app.meteoride.cc/help_eu.html">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Laguntza - MeteoRide">
+  <meta name="twitter:description" content="Nola erabili MeteoRide: kargatu GPX/KML bat eta ikusi euria, haizea eta tenperatura zure ibilbidean zehar. Ohiko galderak eta aholkuak.">
+  <meta name="twitter:image" content="https://app.meteoride.cc/assets/preview.png">
+
+  <!-- Structured data (FAQPage) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Zer egiten du MeteoRidek?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Euria, haizea eta tenperatura erakusten ditu zure GPX/KML ibilbidean zehar. Ez ditu ibilbideak editatzen."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Zein formatu onartzen dira?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "GPX eta KML. Partekatutako URL bat itsatsi dezakezu edo fitxategia kargatu."
+        }
+      },
+            {
+                "@type": "Question",
+                "name": "Zein eguraldi-hornitzaile erabiltzen dira?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Open-Meteo, OpenWeather eta AromeHD."
+                }
+            }
+    ]
+  }
+  </script>
+    <!-- Loaded here, ahead of the stylesheet, so the cw-native class — everything
+         below keys off it, including .web-only and the open sections — is already
+         set before the page paints. See scripts/help.js for why the rest of what it
+         does waits for the body to exist. -->
+    <script src="/scripts/help.js"></script>
+  <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f0f4f8;
+            color: #243746;
+        }
+        .header {
+            background: #1e40af;
+            color: white;
+            /* The app draws under the Dynamic Island (`contentInset: "never"`), so the
+               notch is paid for here, on top of the padding the page always had. On the
+               website and on a screen without one the inset is zero and nothing moves. */
+            padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            text-align: center;
+            position: relative;
+        }
+        .back-button {
+            position: absolute;
+            left: calc(1rem + env(safe-area-inset-left));
+            /* An absolute offset measures from the border box, which the inset just
+               grew, so half of it goes back into the offset: the button stays centred
+               on the header's own text instead of drifting into the notch. */
+            top: calc(50% + env(safe-area-inset-top) / 2);
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 200ms ease;
+        }
+        .back-button:hover {
+            background: rgba(255,255,255,0.3);
+            text-decoration: none;
+            color: white;
+        }
+        .section {
+            background: white;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+        }
+        h1 { margin: 0; }
+        h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+        h3 { color: #2563eb; margin-top: 1.5rem; }
+        .step { 
+            background: #f8fafc; 
+            padding: 1rem; 
+            margin: 1rem 0; 
+            border-left: 4px solid #2563eb; 
+            border-radius: 0 8px 8px 0;
+        }
+        .tip {
+            background: #fff7ed;
+            border: 1px solid #fdba74;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .warning {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .privacy {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        code {
+            background: #e5e7eb;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        /* Only inside the native shell: scripts/help.js adds the class. The website
+           has none of these buttons, so describing them there would be noise. */
+        .app-only { display: none; }
+        html.cw-native .app-only { display: block; }
+        /* And the other way round: how to install the web app from a browser is a
+           recipe the app's reader has already followed. */
+        html.cw-native .web-only { display: none; }
+        /* A tip for one platform is noise on the other, and App Review reads a mention of
+           another platform as metadata that does not belong in the app (2.3.10). */
+        html.cw-ios .android-only, html.cw-android .ios-only { display: none; }
+        /* .app-only is a block; this is the same idea inside a sentence. */
+        .app-only-inline { display: none; }
+        html.cw-native .app-only-inline { display: inline; }
+        /* Every section is a <details> written open. The website leaves it open and
+           takes no clicks on the summary, so the page reads exactly as it always did.
+           Inside the app help.js closes them and the reader gets an index to tap
+           instead of a scroll with no end. */
+        summary { list-style: none; }
+        summary::-webkit-details-marker { display: none; }
+        summary h2 { margin-top: 0; }
+        html:not(.cw-native) summary { pointer-events: none; }
+        html.cw-native summary { cursor: pointer; }
+        html.cw-native summary h2::after { content: ' ▾'; font-size: 0.8em; }
+        html.cw-native details:not([open]) summary h2::after { content: ' ▸'; }
+        .icon { font-size: 1.2em; margin-right: 0.5em; }
+        ul { padding-left: 1.5rem; }
+        li { margin: 0.5rem 0; }
+        .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; margin: 1.5rem 0 0.5rem; }
+        @media screen and (max-width: 600px) {
+            body { padding: 10px; }
+            .back-button { position: static; transform: none; margin-bottom: 1rem; display: inline-block; }
+            .header { text-align: left; }
+        }
+    </style>
+</head>
+
+<body data-page="help">
+    <div class="header">
+        <a href="#" id="backBtn" class="back-button" style="display: none;">← Itzuli aplikaziora</a>
+        <h1>🚴‍♂️ MeteoRide</h1>
+        <p>Planifikatu zure ibilbideak eguraldiaren informazio zehatzarekin</p>
+    </div>
+
+    <details class="section" open>
+        <summary><h2>🚀 Sarrera</h2></summary>
+        <p>MeteoRidek zure GPX/KML ibilbidea kargatzen du eta zati bakoitzean izango duzun eguraldia esaten dizu: tenperatura, haizea, euria, hezetasuna, hodeiak, argia eta UV. <span class="web-only">Webean dabil, eta iPhone eta Androiderako aplikazio gisa ere bai.</span></p>
+        <p>Laguntza honek "zer egin behar dut" galderari erantzuten dio.<span class="web-only"> Xehetasunak —hornitzaile bakoitzaren mugak, zer gordetzen den eta non, nola jokatzen duen estaldurarik gabe— <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">erabiltzailearen gidan</a> daude.</span></p>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🚀 Lehen urratsak</h2></summary>
+
+        <div class="step">
+            <h3>1. Kargatu GPX/KML ibilbide bat</h3>
+            <p>Sakatu <strong>📁</strong> eta aukeratu zure fitxategia. <span class="web-only">MeteoRide <code>?gpx_url=</code> bidez ere ireki dezakezu, edo GPXa beste aplikazio batetik partekatu.</span><span class="app-only-inline">GPXa beste aplikazio batetik MeteoRidera partekatu dezakezu ere.</span></p>
+        </div>
+
+        <div class="step">
+            <h3>2. Data eta ordua</h3>
+            <p>Noiz irten nahi duzun. Bere kabuz egokitzen da 15 minutuko tarteetara.</p>
+        </div>
+
+        <div class="step">
+            <h3>3. Abiadura</h3>
+            <p>Zure batez besteko abiadura estimatua, edo aurrez ezarritako balio bat: 5, 10, 12, 15 edo 20 km/h.</p>
+        </div>
+
+        <div class="step">
+            <h3>4. Tartea</h3>
+            <p>Zenbatean behin nahi duzun neurketa bat: 15 edo 30 minuturo.</p>
+        </div>
+
+        <div class="step">
+            <h3>5. Hornitzailea</h3>
+            <p>Zein iturri erabili, behean daudenen artean. Aukeratu <strong>Alderatu</strong> zerrenda horretan, hornitzaileak elkarren ondoan ikusteko ibilbide berean.</p>
+        </div>
+
+        <div class="step">
+            <h3>6. Alderatu datak</h3>
+            <p>Sakatu dataren ondoko <strong>⇄</strong>, ezarri B data eta sakatu <strong>⟲</strong>. Ez da automatikoki berriro kalkulatzen: zerbait aldatzen baduzu, sakatu berriro <strong>⟲</strong>.</p>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🌤️ Eguraldi-hornitzaileak</h2></summary>
+        <ul>
+            <li><strong>Open-Meteo:</strong> ez du gakorik behar, mundu osoa hartzen du, 14 egun. Lehenetsitakoa da, eta ia guztirako egokiena.</li>
+            <li><strong>OpenWeather:</strong> gakoa behar du, 4 egun. Denbora errealeko datuak ditu, eta abisu ofizialak argitaratzen dituen bakarra da.</li>
+            <li><strong>AROME-HD:</strong> ez du gakorik behar, bereizmen handikoa da, Frantzia eta inguruko herrialdeak, eta 36 ordu. Hortik kanpo Open-Meteo erabiltzen du, zuk ezer egin beharrik gabe.</li>
+            <li><strong>OpenWeather → AROME-HD → Open-Meteo:</strong> bakoitza onena den zatian erabiltzen duen katea da. OpenWeather-en gakoa behar du.</li>
+        </ul>
+        <div class="tip">
+            <strong>💡 Aholkua:</strong> zein aukeratu ez badakizu, Open-Meteo.<span class="web-only"> Bakoitzaren estaldura eta horizonte zehatzak <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">gidan</a> daude.</span>
+        </div>
+    </details>
+
+    <details class="section web-only" open>
+        <summary><h2>🏁 Instalatu aplikazio gisa</h2></summary>
+        <p>Webgunea aplikazio gisa (PWA) instala daiteke, eta ikono propioa izango du, beste edozein aplikaziok bezala:</p>
+        <ul>
+            <li><strong>Android (Chrome) eta iPhone/iPad (Safari):</strong> menua edo Partekatu botoia → "Gehitu hasierako pantailan".</li>
+            <li><strong>Chrome eta Edge ordenagailuan:</strong> helbide-barrako instalatzeko ikonoa → "Instalatu".</li>
+            <li><strong>Safari Mac-en:</strong> Fitxategia → "Gehitu Dock-era".</li>
+        </ul>
+        <p>Plataforma bakoitzerako urratsez urratseko argibideak <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">gidan</a> daude.</p>
+    </details>
+
+    <details class="section app-only" open>
+        <summary><h2>📱 Aplikazioan</h2></summary>
+        <p>Hauek aplikazioak bakarrik egiten dituen gauzak dira.</p>
+
+        <h3>📤 Ibilbideak partekatu</h3>
+        <p>Ibilbide bat kargatuta dagoenean, <strong>📤</strong> botoiak beste aplikazio batera bidaltzen du: zure GPS gailura, Fitxategiak aplikaziora, posta elektronikora. Alderantziz ere bai: partekatu GPX bat Komoot, Strava edo Fitxategiak aplikaziotik eta aukeratu MeteoRide. Fitxategia ez da inoiz gailutik ateratzen.</p>
+
+        <h3>🔔 Abisuak eguraldia aldatzen denean</h3>
+        <p>Ibilbide bat kalkulatzen duzunean, aplikazioak hura zaintzen jarraitzen du eta abisatu egiten dizu kanpoan zauden orduetarako okertzen bada: euria agertzen bada, haizea edo bolada indartsuak agertzen badira, edo zure irteerarekin bat egiten duen abisu ofizial bat ematen bada. Hasieratik aktibatuta dago; desaktibatu <strong>Ezarpenak → Abisuak → "Abisatu ibilbideko eguraldia aldatzen bada"</strong> atalean.</p>
+        <div class="warning">
+            <strong>Jakin ezazu:</strong> egiaztapena sistema eragileak egiten du, ez aplikazioak. <span class="ios-only">iPhonen <em>Atzeko planoko eguneratzea</em> behar du.</span><span class="android-only">Androiden bateria-kudeatzaileak ez du gelditu behar.</span> Sistemak egingo ez duenean, aplikazioak etengailuaren azpian esaten du.
+        </div>
+
+        <h3>🚴 Estaldurarik gabe</h3>
+        <ul>
+            <li>Aplikazioa irekitzean azken ibilbidea bere taularekin agertzen da berriro.</li>
+            <li>Iragarpen zaharra erakusten jarraitzen da, zenbat ordu dituen adierazita, hamabi ordura arte.</li>
+            <li>Maparen hondoak konexioa behar du eta hutsik ager daiteke; ibilbidea eta taula ikusten jarraitzen dira.</li>
+        </ul>
+        <p><strong>📴</strong> botoiak kargatutako ibilbidearen iragarpena gordetzen du eta ezabatze automatikotik babesten du. Sakatu ezazu etxean, irten aurretik.</p>
+
+        <h3>📍 Mapa eta ezarpenak</h3>
+        <ul>
+            <li>Ibilbiderik gabe, mapa zauden lekuan irekitzen da: sistemak kokapen-baimena eskatzen du MeteoRideren izenean.</li>
+            <li>Aplikazioa telefonoaren hizkuntzan abiarazten da, zuk eskuz bat aukeratu arte.</li>
+            <li>Ezarpenak, gakoa eta azken ibilbideak hor jarraitzen dute aplikazioa berriro irekitzean.</li>
+            <li>Telefonoa bertikalean geratzen da.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🛠️ Ezarpenak</h2></summary>
+
+        <h3>🔑 API gakoa</h3>
+        <p>OpenWeather-ek bakarrik behar du gakoa, eta haren One Call API 3.0rako gakoa izan behar du: <a href="https://openweathermap.org/api" target="_blank">openweathermap.org/api</a>. Eremuaren ondoko <strong>🔍 Egiaztatu</strong> botoiak baliozkoa den esaten dizu.</p>
+
+        <h3>📏 Unitateak, hizkuntza eta oharrak</h3>
+        <ul>
+            <li>Haizea km/h, m/s edo mph-tan; tenperatura °C edo °F-tan; distantzia km edo mi-tan; euria mm edo in-tan.</li>
+            <li>Interfazea eta mezuak gaztelaniaz, ingelesez, katalanez, galegoz, euskaraz, frantsesez, alemanez, italieraz eta portugesez.</li>
+            <li><strong>Erakutsi abisu ez-kritikoak:</strong> informazio-bandak ordezko hornitzaile bat erabiltzen denean. Desaktibatuta, errore kritikoak bakarrik ikusiko dituzu.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📊 Datuak interpretatzen</h2></summary>
+
+        <h3>🌤️ Taula</h3>
+        <p>Zutabe bakoitza ibilbideko puntu bat da: ordua eta metatutako distantzia, eguraldi-ikonoa, tenperatura, haizea boladak parentesi artean dituela, euria mm/h-tan probabilitatea ondoan duela, hezetasuna eta hodeiak/UV. Ikonoaren ondoko barra bertikala tarte horretan dagoen argia da.</p>
+        <p>Ikusten duzun euria ibiltzen ariko zaren orduko euria da, ez urratsaren minutu zehatzetik hurbilen dagoen neurketa. Datu-iturria aldatzen denean, zutabea <strong>OPM</strong> (Open-Meteo), <strong>ARM</strong> (AROME-HD) edo <strong>OPW</strong> (OpenWeather) markarekin agertzen da.</p>
+
+        <h3>🗺️ Mapa</h3>
+        <ul>
+            <li>Haizearen geziak: urdina haize ahula da, gorria indartsua (30-50 km/h), morea oso indartsua (&gt;50 km/h).</li>
+            <li>Tantak 💧: espero den prezipitazioa adierazten dute.</li>
+            <li>Markatzaile berdea eta gorria: ibilbidearen hasiera eta amaiera adierazten dituzte.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📱 Funtzio aurreratuak</h2></summary>
+
+        <h3>🔄 Taula mugitu egiten da</h3>
+        <p>Arrastatu taula<span class="web-only"> edo erabili saguaren gurpila</span> zutabe gehiago ikusteko; ⇆ ikonoak badaudela adierazten du. Zutabe bat sakatzean errenkada eta mapa nabarmentzen dira, eta mapa puntu horretan zentratzen da berriro.</p>
+
+        <h3>🌅 Eguzkia eta argia</h3>
+        <p>Eguzkiaren irteera eta sarrera, eta ilunabar zibila, "c" letrarekin markatuta, gehi tarte bakoitzerako kalkulatutako argitasuna.</p>
+
+        <h3>🎯 Ordezko hornitzailea</h3>
+        <p>Zure hornitzailea bere horizontetik haratago badoa, huts egiten badu edo daturik ez badu, urrats horiek —horiek bakarrik— Open-Meteori eskatzen zaizkio. Eskaera bakoitzak 15 segundo ditu zerbitzaria erantzuten hasteko, eta beste 15 deskargan daturik jaso gabe; deskarga motel baina etengabea ez da inoiz eteten. Erantzuteari uzten dion hornitzaileari ez zaio berriro galdetzen kalkulu horretan.</p>
+
+        <h3>🗺️ Azken ibilbideak eta cachea</h3>
+        <ul>
+            <li>📁 ondoan azken <strong>5</strong> ibilbideen goitibeherako zerrenda dago. Lehendik zegoen bat berriro kargatzean zerrendaren goialdera igotzen da.</li>
+            <li>Zure gailuan gordetzen dira eta ez dira inoiz partekatzen. GPX bakoitzak 750 KB inguru izan ditzake gehienez.</li>
+            <li>Hornitzaileen erantzunak 30 minutu inguru gordetzen dira cachean, eta beren kabuz iraungitzen dira.</li>
+        </ul>
+
+        <div class="web-only">
+            <h3>🔗 Parametrodun URLak</h3>
+            <ul>
+                <li><code>?gpx_url=https://example.com/route.gpx</code></li>
+                <li><code>?datetime=2024-03-15T10:00</code></li>
+                <li><code>?speed=25</code></li>
+            </ul>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>⚠️ Mugak eta aholkuak</h2></summary>
+
+        <div class="warning">
+            <h3>🚨 Mugak</h3>
+            <ul>
+                <li>Horizontea: Open-Meteo 14 egun, OpenWeather 4 egun, AROME-HD 36 ordu.</li>
+                <li>3.-4. egunetik aurrera iragarpena nabarmen ez hain fidagarria da.</li>
+                <li>OpenWeather-en gakoek OpenWeather-ek ezarritako erabilera-mugak dituzte; Open-Meteok ez du gakorik behar.</li>
+            </ul>
+        </div>
+
+        <div class="tip">
+            <h3>✅ Aholkuak</h3>
+            <ul>
+                <li>Ibilbideak gehienez 100-200 km-koak izan daitezela, eta planifikatu 1-2 egun lehenago.</li>
+                <li>Alderatu hainbat iturri erabakia garrantzitsua denean.</li>
+                <li>Izan B plan bat eta eraman euritako arropa, probabilitatea txikia izan arren.</li>
+            </ul>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🚨 Eguraldi-abisu ofizialak</h2></summary>
+        <p>MeteoRidek estatuko zerbitzu meteorologikoek emandako abisu ofizialak erakuts ditzake. OpenWeather-ek bakarrik argitaratzen ditu: jarri zure gakoa Ezarpenetan eta markatu <strong>Erakutsi eguraldi-abisu ofizialak</strong>. Gakorik gabe, kontrol-laukia desgaituta dago eta zergatik esaten du.</p>
+        <ul>
+            <li>Egiaztatu egiten dira OpenWeather zure hornitzaile nagusia ez denean ere.</li>
+            <li>Abisua txartel gisa agertzen da, berez ezkutatzen da, eta <strong>⚠️</strong> bat uzten du berriro irekitzeko.</li>
+            <li>Zati horretan egongo zaren orduarekin bat egiten dutenak bakarrik hartzen dira kontuan.</li>
+        </ul>
+        <div class="warning">
+            <h3>⚠️ Ohar garrantzitsua</h3>
+            <p>Informazio gehigarria dira, ez segurtasun-iturri bat. Egiaztatu beti zure herrialdeko zerbitzu meteorologiko ofiziala eragina izan dezakeen irteera baten aurretik: OpenWeather-ek akatsak edo atzerapenak izan ditzake, edo tokiko abisuak ez jaso. MeteoRidek ez ditu jakinarazpen ofizialak ordezten.</p>
+        </div>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🐛 Arazoen konponbidea</h2></summary>
+        <ul>
+            <li><strong>GPX/KML fitxategia ez da kargatzen:</strong> egiaztatu fitxategiak track baliozkoak dituela.</li>
+            <li><strong>Ez dago eguraldiaren daturik:</strong> egiaztatu gakoa 🔍 Egiaztatu botoiarekin, edo aldatu Open-Meteora, ez baitu gakorik behar.</li>
+            <li><strong>Data tartetik kanpo dago:</strong> hurbildu data; hornitzaile bakoitzak bere horizontea du.</li>
+            <li><strong>Taula hutsik dago:</strong> ibilbidea laburregia da urrats bakar baterako ere.</li>
+        </ul>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>🔒 Pribatutasuna eta datuak</h2></summary>
+
+        <div class="privacy">
+            <h3>🛡️ Zure datuak zurekin geratzen dira</h3>
+            <p>MeteoRide zure gailuan dabil: ezarpenak, ibilbideak eta cachea bertan bakarrik gordetzen dira, konturik eta erregistrorik gabe.<span class="web-only"> Salbuespena iOSeko Lasterbideekin erabilitako webgunea da: GPXa Cloudflarera igotzen dute, Lasterbideek POST bakarrik onartzen dutelako; fitxategi hori gehienez bi minutuko epean ezabatzen da.</span></p>
+        </div>
+
+        <h3>🌐 Zer bidaltzen zaie hornitzaileei</h3>
+        <ul>
+            <li>Zure ibilbidearen koordenatuak eta iragarpena eskatzen duzun orduak.</li>
+            <li>Zure OpenWeather gakoa, erabiltzen baduzu. Zifratu gabe gordetzen da; beraz, beste ezertarako erabiltzen ez den gako bat izatea komeni da — edo bat ere ez, Open-Meteo eta AROME-HDrekin.</li>
+        </ul>
+        <p>Hornitzaileek beren pribatutasun-politikak dituzte.<span class="web-only"> Zure gailuan zehazki zer gordetzen den <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">gidan</a> dago.</span></p>
+        <p>Xehetasun osoa —hornitzaile bakoitzak zer jasotzen duen, zenbat denboran gordetzen duen eta gailuan geratzen den guztia nola ezabatu— <a href="privacy-web-eu.html" id="privacyLink"><strong>pribatutasun-politikan</strong></a> dago.</p>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📄 Lizentzia eta kredituak</h2></summary>
+        <p>MeteoRide <a href="https://github.com/lockevod" target="_blank" rel="noopener noreferrer"><strong>Lockevod</strong></a>-ek garatzen du <strong>MIT lizentziapean</strong>: erabili, aldatu eta banatu dezakezu, erabilera pertsonal edo komertzialerako, egilea eta lizentzia aipatuz.</p>
+
+        <h3>🙏 Teknologiak</h3>
+        <p>OpenStreetMap-en mapak, <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> eta <a href="https://openweathermap.org/" target="_blank" rel="noopener noreferrer">OpenWeather</a>-en datuak, Weather Icons-en ikonoak (Erik Flowers), Leaflet.js, SunCalc eta GPX parser, aplikazio natiboa Capacitorrekin<span class="web-only"> eta webgunea Cloudflare Pagesen</span>.</p>
+
+        <h3>⚖️ Erantzukizunaren mugapena</h3>
+        <p><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>-ren eguraldi-datuak <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a> lizentziapean daude. MeteoRidek iragarpenaren laginak hartzen ditu ibilbidean zehar, unitateak bihurtzen ditu eta laburpenak eta alderaketak kalkulatzen ditu. MeteoRideren kalkuluak dira, ez datu-hornitzailearen babesa.</p>
+        <p>Open-Meteo, OpenWeather eta OpenStreetMap<span class="web-only">, bai eta webgune honek ireki ditzakeen ibilbide-guneak ere (Komoot, Bikemap, Hammerhead),</span> beren jabeen markak dira, beren baldintzekin, eta bete egin behar dituzu. MeteoRide dagoen-dagoenean eskaintzen da, bermerik eta erantzukizunik gabe, eta erabiltzean hori onartzen duzu. MeteoRide planifikaziorako tresna bat da: eguraldi-datuak estimazioak dira; beraz, egiaztatu baldintzak irten aurretik eta erabili zure irizpidea.</p>
+        <p class="web-only">Baldintza osoak eta informazio eguneratua <a href="https://github.com/lockevod/MeteoRide" target="_blank" rel="noopener noreferrer">GitHub</a>-en eta <a href="https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md" target="_blank" rel="noopener noreferrer">gidan</a> daude.</p>
+    </details>
+
+    <details class="section" open>
+        <summary><h2>📞 Laguntza eta ekarpenak</h2></summary>
+        <h3>🐛 Jakinarazi arazoak</h3>
+        <ul>
+            <li>Idatzi <a href="mailto:support@meteoride.cc">support@meteoride.cc</a> helbidera, edo ireki issue bat <a href="https://github.com/lockevod/MeteoRide/issues" target="_blank" rel="noopener noreferrer">GitHub biltegian</a></li>
+            <li class="web-only">Aktibatu debug botoia (🐞) <strong>Ezarpenak → Erakutsi debug botoia</strong> atalean: desaktibatuta dator</li>
+            <li>Adierazi zure gailua eta bertsioa, orri honen behealdean agertzen dena</li>
+        </ul>
+
+        <h3>🤝 Lagundu proiektuari</h3>
+        <p>Egin biltegiaren fork bat, jakinarazi akatsak, proposatu hobekuntzak, itzuli hizkuntza berrietara edo hobetu dokumentazioa.</p>
+
+        <div class="tip">
+            <strong>💡 Azken aholkua:</strong> Eguraldia azkar alda daiteke! Erabili MeteoRide gida gisa, baina izan malgua eta ibili seguru zure irteeretan.
+        </div>
+
+        <h3>💰 Babestu proiektua</h3>
+        <p>MeteoRide erabilgarria iruditzen bazaizu, pentsa ezazu proiektua dohaintza batekin babestea:</p>
+        <p><a href="https://www.buymeacoffee.com/enderthor" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a></p>
+    </details>
+
+    <p class="version-footer" id="cwVersion"></p>
+
+    <script src="/scripts/version.js"></script>
+</body>
+</html>

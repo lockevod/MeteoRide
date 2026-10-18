@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="eu">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Pribatutasuna — iOSerako MeteoRide</title>
+  <meta name="description" content="iOSerako MeteoRide aplikazioaren pribatutasun-politika: zer bidaltzen zaien eguraldi-hornitzaileei, zer gordetzen den zure gailuan eta nola ezabatu.">
+  <link rel="canonical" href="https://app.meteoride.cc/privacy-ios-eu.html">
+
+  <!-- Shared with the help pages: the back button when the app opens this page, the
+       version footer and, inside the app, the sections arriving closed. The title
+       swap there is help-only and keeps its hands off this page. -->
+  <script src="/scripts/help.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f0f4f8;
+      color: #243746;
+    }
+    .header {
+      background: #1e40af;
+      color: white;
+      padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 1rem calc(1rem + env(safe-area-inset-left));
+      border-radius: 10px;
+      margin-bottom: 2rem;
+      text-align: center;
+      position: relative;
+    }
+    .back-button {
+      position: absolute;
+      left: calc(1rem + env(safe-area-inset-left));
+      top: calc(50% + env(safe-area-inset-top) / 2);
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { color: #1e40af; border-bottom: 2px solid #e0ebff; padding-bottom: 0.5rem; }
+    h3 { color: #2563eb; margin-top: 1.5rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; border: 0; }
+    a { color: #1d4ed8; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #e0ebff; vertical-align: top; }
+    .lede { background: #f8fafc; border-left: 4px solid #2563eb; padding: 1rem; border-radius: 0 8px 8px 0; }
+    .other { font-size: 0.9rem; color: #475569; }
+    .version-footer { text-align: center; color: #64748b; font-size: 0.85rem; }
+    /* The title runs under the absolutely positioned back button on a phone; the
+       button only appears in the app. `display` is left alone: help.js sets it inline,
+       and that inline style is what keeps it hidden on the website. */
+    @media (max-width: 480px) {
+      .back-button { position: static; transform: none; margin-bottom: 0.75rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <a href="index.html" class="back-button" id="backBtn" style="display:none;">← Itzuli</a>
+    <h1>🔒 Pribatutasuna</h1>
+    <p>iOSerako MeteoRide</p>
+  </div>
+
+  <details class="section" open id="eu" lang="eu">
+    <summary><h2>Euskara</h2></summary>
+
+    <div class="lede">
+      <p><strong>MeteoRidek ez ditu zure datuak biltzen ezta ustiatzen ere.</strong> Ez dago konturik, ez erregistrorik, ez iragarkirik, ez analitikarik, ez telemetriarik, ez akats-txostenik, ez jarraipen-identifikatzailerik. MeteoRideren egileak ez ditu inoiz jasotzen zure ibilbideak, zure kokapena edo erabilera-estatistikarik.</p>
+      <p><strong>Baina MeteoRidek ez du eguraldia asmatzen.</strong> Iragarpena emateko eguraldi-hornitzaile bati galdetu behar dio, eta horrek esan nahi du zure ibilbidearen koordenatuak eta galdetzen dituzun orduak bidaltzea. Hornitzaile hori beste enpresa bat da, bere politika duena: eskaera erregistratu eta denbora batez gorde dezake. Gauza bera gertatzen da mapekin.</p>
+      <p><strong>Politika honek iOSerako aplikazioa bakarrik hartzen du.</strong></p>
+    </div>
+    <p>Azken eguneratzea: 2026ko irailaren 22a.</p>
+
+    <h3>Zer ateratzen den zure gailutik, eta nora doan</h3>
+    <table>
+      <tr><th>Helmuga</th><th>Zer jasotzen duen</th><th>Noiz</th></tr>
+      <tr>
+        <td><a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">Open-Meteo</a> (AROME-HD eredua barne)</td>
+        <td>Zure ibilbideko puntuen koordenatuak eta iragarpenaren datak eta orduak, gehi zure IP helbidea eta web-eskaera baten ohiko xehetasunak.</td>
+        <td>Iragarpen bat kalkulatzen edo berriro kalkulatzen den bakoitzean, atzeko planoko irteera-zaintzak bat kalkulatzen duenean barne.</td>
+      </tr>
+      <tr>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank" rel="noopener noreferrer">OpenWeather</a></td>
+        <td>Zure ibilbideko puntuen koordenatuak —ez zuk aukeratutako data eta ordua: haien APIak bere denbora-leihoa itzultzen du— eta zure API gakoa; gako horrek haien bezero gisa identifikatzen zaitu eta eskaera zure kontuarekin lotzeko aukera ematen die.</td>
+        <td>OpenWeather hornitzaile gisa aukeratzen baduzu, <strong>baita abisu ofizialak gako bat gordeta aktibatzen badituzu ere, hautatutako hornitzailea edozein dela ere</strong>. Gakorik gabe ez zaio inoiz deitzen.</td>
+      </tr>
+      <tr>
+        <td><a href="https://operations.osmfoundation.org/policies/tiles/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a></td>
+        <td>Zure IP helbidea eta maparen zein zati ikusten ari den, lauzak zerbitzatzeko behar dena.</td>
+        <td>Mapa erakusten denean. Lehenik sareari galdetzen zaio: gailuaren cacheak konexiorik ez dagoenean edo eskaera batek huts egiten duenean zerbitzatzen du, ez eskaera bat saihesteko.</td>
+      </tr>
+    </table>
+    <p><strong>Open-Meteok dioenez</strong>, bere erregistroek koordenatuak izan ditzakete eta 90 egunen buruan ezabatzen ditu. Hori ez da tratamendu iragankorra, eta horregatik politika honek ez du besterik gabe "ez da daturik biltzen" esaten: MeteoRidek ez du bat ere biltzen, baina hornitzaileek MeteoRidek zure izenean egiten dituen eskaerak jaso eta erregistratzen dituzte.</p>
+    <p><strong>Hiru horiek dira aplikazioa konektatzen den zerbitzu bakarrak.</strong> Ez du inondik koderik deskargatzen —liburutegi eta interfaze-baliabide guztiak instalatzen duzun paketearen barruan doaz, eta saretik eskuratzen diren gauza bakarrak goiko taulako iragarpen-datuak eta mapa-lauzak dira—, eta aplikazioaren eduki-segurtasuneko politikak zerrenda itxi bera dakar.</p>
+
+    <h3>Zure kokapena eta zure jakinarazpenak</h3>
+    <p><strong>Kokapena:</strong> zure baimenarekin, behin irakurtzen da aplikazioa irekitzean, mapa zauden lekuan zentratzeko soilik, oraindik ibilbiderik kargatuta ez dagoen bitartean. Posizio hori ez da gordetzen eta ez zaie eguraldi-zerbitzuei bidaltzen: iragarpena ibilbideko puntuetarako eskatzen da. Hala ere, mapa zentratzeak eremu horretako OpenStreetMap lauzak eskatzen ditu; beraz, zauden eremua haien zerbitzarietara iristen da, ikusten duzun beste edozein bezala. Baimena ukatzen baduzu, aplikazioak berdin funtzionatzen du.</p>
+    <p><strong>Jakinarazpenak:</strong> euri- eta haize-abisuak zure gailuan sortzen dira eta ez dira inoiz push zerbitzari batetik edo aplikazioaren egilearengandik igarotzen. Ez datoz ezerezetik, ordea: irteera-zaintza aktibatuta dagoenean, sistemak aplikazioa esnatzen du noizean behin —noiz, sistemak erabakitzen du, ez aplikazioak— eta, <strong>irteera egun bateko horizontearen barruan dagoenean</strong>, esnaldi bakoitzean <strong>iragarpen berri bat deskargatzen du</strong> Open-Meteotik zure ibilbiderako, gehi OpenWeather-en abisu ofizialak aktibatuta badituzu. Irteera urrunago dagoenean ez du ezer eskatzen. Beraz, aplikazioa atzeko planoan dagoela ere badaude hornitzaileentzako eskaerak.</p>
+
+    <h3>Zer gordetzen den zure gailuan</h3>
+    <p>Hurrengo guztia zure telefonoan dago, eta bertan dagoen bitartean beste inork ez du irakurtzen:</p>
+    <ul>
+      <li>Zure ezarpenak: hizkuntza, unitateak, hornitzailea, tarteak. UserDefaults-ra kopiatzen dira, sistemaren biltegira, iOSek aplikazioaren biltegi lokala hustu dezakeelako gailuak lekurik ez duenean.</li>
+      <li>Azken ibilbideak, estaldurarik gabe erabiltzeko prestatutako ibilbidea, eta iragarpenaren eta maparen cacheak.</li>
+      <li>Zure OpenWeather gakoa, sartzen baduzu. <strong>Zifratu gabe gordetzen da</strong>: erabili beste ezertarako erabiltzen ez duzun gako bat, edo jarraitu Open-Meteorekin, ez baitu gakorik behar.</li>
+      <li>Beste aplikazio batetik "Partekatu" eta "Ireki MeteoRiden" bidez iristen zaizkizun ibilbideak aplikazioaren direktorio pribatu batean (App Group edukiontzi batean) itxaroten dute kargatu arte. Ibilbide bat irekitzean, iOSek bere kopia ere uzten du aplikazioaren sarrera-karpetan; hori ibilbidea gorde bezain laster ezabatzen da. 24 ordu baino gehiagoan jaso gabe dagoen guztia aplikazioak begiratzen duen hurrengo aldian ezabatzen da.</li>
+    </ul>
+    <p><strong>Salbuespen bat dago, jakitea merezi duena: sistemaren babeskopiak.</strong> Ezarpenak UserDefaults-en daude, eta iOSek gailuaren babeskopian sartzen ditu; beraz, iCloud-en edo sinkronizatzen duzun ordenagailuan amai dezakete. Hori aplikazioaren kontroletik kanpo dago eta egileak ez du kudeatzen. Kezkatzen bazaitu —batez ere gakoagatik, zifratu gabe gordetzen baita—, desaktibatu gailuaren babeskopia, edo ez gorde gakorik. Aplikazioaren datuak garbitzeak edo hura desinstalatzeak <em>ez</em> du ezabatzen dagoeneko egindako babeskopia; hori iCloud-en ezarpenetatik egiten da, edo babeskopia gordetzen duen ordenagailutik.</p>
+
+    <h3>Nola ezabatu</h3>
+    <ul>
+      <li><strong>Dena ezabatu:</strong> desinstalatu MeteoRide. Sistemaren biltegian gordetako ezarpenak, ibilbideak, cacheak eta partekatutako sarrera-ontzia, dena desagertzen da. Ez da ezer geratzen gailuan.</li>
+      <li><strong>Gakoa bakarrik:</strong> hustu ezarpenetako eremua eta gorde.</li>
+    </ul>
+    <p>Ez dago egileari ezer ezabatzeko eskatu beharrik, aplikazioak ez baitu ezer gordetzen haren aldean. Hornitzaile baten erregistroetara iritsi dena hornitzaile horren politikak arautzen du, goian estekatuta dagoenak.</p>
+
+    <h3>Harremana eta aldaketak</h3>
+    <p>Pribatutasunari buruzko galderak, edo sarbide-, zuzenketa- eta ezabatze-eskubideak erabiltzeko: <a href="mailto:privacy@meteoride.cc">privacy@meteoride.cc</a>. Akatsak, galderak eta iradokizunak: <a href="https://app.meteoride.cc/support.html#eu" target="_blank" rel="noopener noreferrer">app.meteoride.cc/support.html</a>.</p>
+    <p>Politika hau aldatzen bada, goiko data ere aldatzen da, eta historia biltegian geratzen da.</p>
+  </details>
+
+  <p class="version-footer" id="cwVersion"></p>
+
+  <script src="/scripts/version.js"></script>
+</body>
+</html>

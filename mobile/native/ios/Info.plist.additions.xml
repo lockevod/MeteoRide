@@ -16,7 +16,7 @@
 <key>CFBundleName</key>
 <string>MeteoRide</string>
 
-<!-- The two languages the app speaks. Without this the bundle declares English alone, and
+<!-- The languages the app speaks (utils.js LANGS). Without this the bundle declares English alone, and
      WKWebView tends to hand the page the app's localisations rather than the phone's, so
      navigator.languages — which picks the language at first launch — could say English
      on a Spanish iPhone. NOT yet verified on a device; until it is, the App Review notes
@@ -25,6 +25,13 @@
 <array>
 	<string>en</string>
 	<string>es</string>
+	<string>ca</string>
+	<string>gl</string>
+	<string>eu</string>
+	<string>fr</string>
+	<string>de</string>
+	<string>it</string>
+	<string>pt</string>
 </array>
 
 <!-- Android uses this scheme; on iOS nothing opens it any more, now that the share
