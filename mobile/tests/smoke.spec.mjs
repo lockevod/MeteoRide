@@ -700,6 +700,30 @@ test('official warnings found along the route are shown with its forecast', asyn
   await expect(page.locator('#weather-alerts-container')).toContainText('Aviso amarillo por viento');
 });
 
+// Closing every card left the container "visible" and empty, so the first tap on the
+// indicator hid nothing and the warnings seemed gone for good.
+test('the indicator brings warnings back after they were closed', async ({ page }) => {
+  const now = Math.floor(Date.now() / 1000);
+  await stubProvider(page, { celsius: 20, offline: false });
+  await page.route((url) => url.hostname === 'api.openweathermap.org', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ alerts: [{ sender_name: 'AEMET', event: 'Aviso amarillo por viento',
+      start: now, end: now + 12 * 3600, description: 'Rachas fuertes' }] }),
+  }));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => { document.getElementById('apiKeyOW').value = 'a-valid-looking-key'; });
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  const card = page.locator('#weather-alerts-container .weather-alert');
+  await expect(card).toHaveCount(1);
+  await card.locator('button').click();
+  await expect(card).toHaveCount(0);
+  await page.locator('#weather-alert-indicator').click();
+  await expect(card).toHaveCount(1);
+  await expect(card).toBeVisible();
+});
+
 // revalidateWeatherAlerts looked warnings up again on its own whenever the speed, the
 // interval or the date changed, hid the ones on screen and showed what it found, outside
 // any computation. Warnings now change only when the computation that found them publishes.

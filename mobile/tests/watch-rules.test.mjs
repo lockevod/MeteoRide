@@ -224,6 +224,19 @@ test('an official warning alone does not move the baseline', () => {
   assert.match(out.notification.body, /^Viento moderado/m);
 });
 
+// An official warning is the most serious thing a check can find, so it leads: its own
+// title, in front of the forecast changes, instead of a last line under "the weather changed".
+test('an official warning heads the notification, title and first line', () => {
+  const base = reading({ rain: 0, wind: 10, gust: 15 });
+  const worse = reading({ rain: 2.9, wind: 10, gust: 15 });
+  const alerts = rules.readAlerts({ alerts: [{ sender_name: 'AEMET', event: 'Tormentas', start: t0, end: t0 + HOUR }] });
+  const out = rules.evaluate(watchWith(base), worse, alerts, now);
+  assert.equal(out.notification.title, '⚠️ Aviso oficial · Collserola');
+  assert.match(out.notification.body, /^Aviso oficial: Tormentas · AEMET\nLluvia/);
+  const plain = rules.evaluate(watchWith(base), worse, [], now);
+  assert.equal(plain.notification.title, 'Collserola · Cambia el tiempo en tu ruta');
+});
+
 test('easing at one point and rain at another does not re-announce the first point later', () => {
   const base = reading({ rain: 0, wind: 10, gust: 15 });
   base[0] = { rain: 1.0, wind: 10, gust: 15 };

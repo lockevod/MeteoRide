@@ -210,6 +210,7 @@ var cwWatchRules = (function () {
       wind: ['', 'Viento moderado', 'Viento fuerte'],
       at: 'a las {time} (km {km})',
       alert: 'Aviso oficial: {event}',
+      alertTitle: '⚠️ Aviso oficial',
       calm: 'no estaba previsto',
     },
     en: {
@@ -218,6 +219,7 @@ var cwWatchRules = (function () {
       wind: ['', 'Moderate wind', 'Strong wind'],
       at: 'at {time} (km {km})',
       alert: 'Official warning: {event}',
+      alertTitle: '⚠️ Official warning',
       calm: 'not forecast before',
     },
   };
@@ -234,11 +236,14 @@ var cwWatchRules = (function () {
     return String(s == null ? '' : s).replace(/%/g, '\uFF05');
   }
 
-  /** One notification for everything found in a check, worst change of each kind
-   *  first, official alerts last. */
+  /** One notification for everything found in a check: official alerts first, under
+   *  their own title, then the worst change of each kind. */
   function compose(changes, alerts, watch) {
     const L = TEXT[watch.lang] || TEXT.en;
     const lines = [];
+    for (const a of alerts) {
+      lines.push(fill(L.alert, { event: safeText(a.event) }) + (a.sender ? ' · ' + safeText(a.sender) : ''));
+    }
     for (const kind of ['rain', 'wind']) {
       const mine = changes.filter((c) => c.kind === kind);
       if (!mine.length) continue;
@@ -256,10 +261,9 @@ var cwWatchRules = (function () {
       if (first.from === 0) line += ', ' + L.calm;
       lines.push(line);
     }
-    for (const a of alerts) {
-      lines.push(fill(L.alert, { event: safeText(a.event) }) + (a.sender ? ' · ' + safeText(a.sender) : ''));
-    }
-    const title = watch.name ? safeText(watch.name) + ' · ' + L.title : L.title;
+    const title = alerts.length
+      ? L.alertTitle + (watch.name ? ' · ' + safeText(watch.name) : '')
+      : (watch.name ? safeText(watch.name) + ' · ' + L.title : L.title);
     return { title, body: lines.join('\n') };
   }
 

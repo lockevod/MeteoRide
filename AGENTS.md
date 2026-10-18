@@ -1103,6 +1103,10 @@ Things that were decided rather than discovered:
   `watch-rules.js:149-173`); wind only counts as missing when both the speed and the
   gust are non-finite, since either alone still yields a level (`windLevel`,
   `watch-rules.js:58-65`). Easing is never reported.
+- **An official warning leads the notification.** Its own title ("⚠️ Aviso oficial · <ruta>")
+  and the first lines of the body, ahead of the rain/wind changes; it used to be the last line
+  under "Cambia el tiempo en tu ruta". Still `active`, not Time Sensitive or Critical: Critical
+  needs an entitlement Apple grants case by case, and both would reopen review for little.
 - **Silent until the ride is 24 hours out** (`horizonMs`). Fewer requests, and the
   notification describes the forecast that will actually hold.
 - **Only what is still ahead.** `compare` skips steps whose time has passed (with

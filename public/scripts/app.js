@@ -3607,9 +3607,11 @@ function processWeatherAlerts(alerts, routePoint, routeTime) {
 
 // Display weather alerts in a non-invasive way
 function showWeatherAlerts() {
-  // Check if container already exists and is visible
+  // Check if container already exists and is showing cards. Closing every card (or the
+  // 15 s auto-hide) leaves it display:block but empty: that is hidden, not visible.
   const existingContainer = document.getElementById('weather-alerts-container');
-  if (existingContainer && existingContainer.style.display !== 'none') {
+  if (existingContainer && existingContainer.style.display !== 'none'
+      && existingContainer.querySelector('.weather-alert')) {
     // Container is visible, hide it
     existingContainer.style.display = 'none';
     return;
