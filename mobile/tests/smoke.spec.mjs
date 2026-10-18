@@ -8308,7 +8308,7 @@ test('the pages an iPhone reader can open never mention Android', async ({ page 
     expect(seen, `${name} tells an app reader there is a website behind it`)
       .not.toMatch(/browser|navegador|webapp|aplicación web|Bikemap|Hammerhead|OpenWeatherMaps|\bComp\.|🔄 Compar/i);
     // The guide covers the Android app and installing the website: no visible link to it.
-    const guideLinks = await page.locator('a[href*="GUIDE.md"], a[href*="GUIA.md"]').evaluateAll(
+    const guideLinks = await page.locator('a[href*="/docs/GUI"]').evaluateAll(
       (as) => as.filter((a) => a.checkVisibility()).map((a) => a.textContent));
     expect(guideLinks, `${name} links an app reader to the guide`).toEqual([]);
     if (name === 'help.html' || name === 'help_en.html') expect(seen).toMatch(/Background App Refresh|Actualización en segundo plano/);

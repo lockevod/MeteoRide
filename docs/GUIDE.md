@@ -7,6 +7,7 @@ recipe.
 
 Versión en español: [GUIA.md](GUIA.md) · In-app help:
 [help_en.html](https://app.meteoride.cc/help_en.html)
+Other languages: [Català](GUIDE_ca.md) · [Galego](GUIDE_gl.md) · [Euskara](GUIDE_eu.md) · [Français](GUIDE_fr.md) · [Deutsch](GUIDE_de.md) · [Italiano](GUIDE_it.md) · [Português](GUIDE_pt.md)
 
 ---
 
@@ -289,7 +290,8 @@ horizon limits, quota or API errors. Disabled, only critical errors are shown.
 
 ### 7.4 Languages
 
-The application supports Spanish and English. The chosen language changes the
+The application supports Spanish, English, Catalan, Galician, Basque, French,
+German, Italian and Portuguese. The chosen language changes the
 interface and the messages. In the native app, until you pick one by hand the
 phone's language is used.
 

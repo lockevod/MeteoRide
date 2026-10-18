@@ -81,7 +81,7 @@ for (const code of LANGS) {
     assert.deepEqual(sectionClasses(html), sectionClasses(en), 'sections differ from help_en.html');
     for (const [what, re] of STRUCTURE) assert.equal(count(html, re), count(en, re), `${what}: drifted from help_en.html`);
     for (const [tag, attrs] of html.matchAll(/<details class="section[^"]*"([^>]*)>/g)) assert.ok(attrs.includes('open'), `closed: ${tag}`);
-    assert.equal(html.split('https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE.md').length - 1, 5, 'the guide links');
+    assert.equal(html.split(`https://github.com/lockevod/MeteoRide/blob/main/docs/GUIDE_${code}.md`).length - 1, 5, 'the guide links, in its language');
     assert.match(html, new RegExp(`<a href="privacy-web-${code}\\.html" id="privacyLink"`), 'the switchable privacy link');
     for (const href of ['https://open-meteo.com/', 'https://creativecommons.org/licenses/by/4.0/', 'https://openweathermap.org/']) {
       assert.ok(html.includes(`href="${href}"`), `does not link ${href}`);
@@ -139,6 +139,36 @@ for (const code of LANGS) {
     for (const key of ['NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSLocationAlwaysUsageDescription']) {
       assert.match(strings, new RegExp(`^"${key}" = ".+";$`, 'm'), key);
     }
+  });
+}
+
+/** GitHub's heading anchor: lower case, punctuation dropped (letters of any script, digits,
+ *  spaces, hyphens and underscores kept), spaces to hyphens. */
+const slug = (h) => h.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+const mdShape = (md) => {
+  const body = md.replace(/```[\s\S]*?```/g, '```');
+  return {
+    headings: (body.match(/^#{1,6} /gm) || []).map((h) => h.trim()),
+    bullets: (body.match(/^\s*[-*] /gm) || []).length,
+    numbered: (body.match(/^\s*\d+\. /gm) || []).length,
+    fences: (md.match(/```/g) || []).length,
+    tables: (body.match(/^\|.*\|$/gm) || []).length,
+    external: [...body.matchAll(/\]\((https?:[^)]+)\)/g)].map((m) => m[1]).filter((u) => !/meteoride\.cc\/(help|privacy)/.test(u)).sort(),
+  };
+};
+
+for (const code of LANGS) {
+  test(`${code}: the user guide is the English guide translated, its anchors resolve and its links stay in ${code}`, async () => {
+    const en = await readFile(join(ROOT, 'docs/GUIDE.md'), 'utf8');
+    const md = await readFile(join(ROOT, `docs/GUIDE_${code}.md`), 'utf8');
+    const [a, b] = [mdShape(en), mdShape(md)];
+    for (const k of Object.keys(a)) assert.deepEqual(b[k], a[k], `${k} differ from GUIDE.md`);
+    const anchors = new Set([...md.matchAll(/^#{1,6} (.+)$/gm)].map((m) => slug(m[1])));
+    for (const [, target] of md.matchAll(/\]\(#([^)]+)\)/g)) assert.ok(anchors.has(target), `#${target} matches no heading`);
+    assert.equal([...md.matchAll(/\]\(#/g)].length, [...en.matchAll(/\]\(#/g)].length, 'in-page links lost or added');
+    assert.ok(md.includes(`https://app.meteoride.cc/help_${code}.html`), 'links the help in its language');
+    for (const p of ['web', 'ios', 'android']) assert.ok(md.includes(`https://app.meteoride.cc/privacy-${p}-${code}.html`), `links the ${p} policy in its language`);
+    assert.doesNotMatch(md, /help_en\.html|privacy-(web|ios|android)\.html/, 'still links the English help or the es/en policies');
   });
 }
 

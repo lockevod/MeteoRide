@@ -377,7 +377,8 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   registered there by hand like `es`). `mobile/tests/languages.test.mjs` holds every one of
   them to the shape of its English source; `CW_LANG=fr` limits it to one. The store listing
   texts are in `docs/STORE-LISTING.md`. The seven were machine-translated and want a native
-  read; the help's guide links still point at the English guide. The in-app donation strip
+  read. Each language also has its user guide, `docs/GUIDE_<code>.md`, held to the shape of
+  `GUIDE.md` (same headings, lists, tables, code and links; in-page anchors resolve). The in-app donation strip
   (`stripDonation` in the build) finds the heading by its 💰, not by its words.
 - **`t()` returns the key when it is missing**, so a forgotten entry reaches the
   user as `no_route_for_export` rather than a sentence, and the `|| 'fallback'`

@@ -7,6 +7,7 @@ las recetas de instalación.
 
 English version: [GUIDE.md](GUIDE.md) · Ayuda de la app:
 [help.html](https://app.meteoride.cc/help.html)
+Otros idiomas: [Català](GUIDE_ca.md) · [Galego](GUIDE_gl.md) · [Euskara](GUIDE_eu.md) · [Français](GUIDE_fr.md) · [Deutsch](GUIDE_de.md) · [Italiano](GUIDE_it.md) · [Português](GUIDE_pt.md)
 
 ---
 
@@ -295,7 +296,8 @@ muestran los errores críticos.
 
 ### 7.4 Idiomas
 
-La aplicación soporta español e inglés. El idioma elegido cambia la interfaz y
+La aplicación soporta español, inglés, catalán, gallego, euskera, francés,
+alemán, italiano y portugués. El idioma elegido cambia la interfaz y
 los mensajes. En la app nativa, mientras no elijas uno a mano se usa el del
 teléfono.
 
