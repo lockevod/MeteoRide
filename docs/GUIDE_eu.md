@@ -65,10 +65,10 @@ Aukeratu erabili nahi duzun hornitzailea edo hornitzaile-katea.
 egiten badu zer gertatzen den [§9.3](#93-ordezko-hornitzaile-adimendunak)
 atalean dago.
 
-### 2.6 Hornitzaileak alderatzeko modua (Alderatu)
+### 2.6 Hornitzaileak alderatzeko modua
 
-Aktibatu **Alderatu** kontrol-laukia hornitzaileen arteko desberdintasunak
-ebaluatzeko ibilbide berean eta ordu berean.
+Hautatu **Alderatu** hornitzaileen goitibeherako zerrendan hornitzaileen arteko
+desberdintasunak ebaluatzeko ibilbide berean eta ordu berean.
 
 - Open-Meteo eta AROME taula arruntak bezala irakurtzen ditu, lehen 5 orduetako
   ordu-laurdeneko datuak barne.
@@ -79,15 +79,13 @@ ebaluatzeko ibilbide berean eta ordu berean.
 
 Alderatu ibilbide beraren iragarpena bi data edo ordu desberdinetan.
 
-- Hautatu **Alderatu datak** hornitzaileen goitibeherako zerrendan modu honetan
-  sartzeko.
-- Ezarri A data eta B data agertzen diren data/ordu kontrolekin. Ikonoak
-  bakarrik dituzten botoiek bigarren data zabaltzen dute.
-- Sakatu **🔄 Alderatu** taula eguneratzeko.
+- Sakatu dataren ondoko **⇄** modu honetan sartzeko.
+- Ezarri A data eta B data; bigarren data lehenengoaren azpian agertzen da.
+- Sakatu **⟲** taula eguneratzeko.
 - Taulak 4 errenkada erakusten ditu: A dataren tarteak, A dataren laburpena, B
   dataren tarteak, B dataren laburpena.
 - **Ez da automatikoki berriro kalkulatzen.** Edozein parametro aldatzen baduzu,
-  Alderatu sakatu behar duzu berriro.
+  ⟲ sakatu behar duzu berriro.
 
 ---
 
@@ -171,7 +169,8 @@ Urrats berberak, eta MeteoRide izateko beste moduak,
 
 1. Ireki MeteoRide Safarin.
 2. Sakatu Partekatu botoia (karratua gezi batekin).
-3. Hautatu "Gehitu hasierako pantailan".
+3. Hautatu "Gehitu hasierako pantailan" (iPhonean, gaztelaniaz: "Añadir a
+   pantalla de inicio").
 4. Sakatu goiko eskuineko "Gehitu".
 
 **Chrome ordenagailuan**
@@ -189,8 +188,10 @@ Urrats berberak, eta MeteoRide izateko beste moduak,
 **Safari Mac-en**
 
 1. Ireki MeteoRide Safarin.
-2. Joan Fitxategia > Gehitu Dock-era aukerara.
-3. Edo egin klik Partekatu botoian eta hautatu "Gehitu Dock-era".
+2. Joan Fitxategia > Gehitu Dock-era aukerara (Mac-en, gaztelaniaz: Archivo >
+   Añadir al Dock).
+3. Edo egin klik Partekatu botoian eta hautatu "Gehitu Dock-era" ("Añadir al
+   Dock").
 
 ---
 
@@ -240,7 +241,8 @@ azpian aplikazioak zein ibilbide zaintzen ari den eta noiz arte esaten dizu.
 
 **Garrantzitsua:** egiaztapena sistema eragileak egiten du nahi duenean, ez
 aplikazioak. iPhonen *Atzeko planoko eguneratzea* aktibatuta egon behar da
-MeteoRiderako (Ezarpenak → Orokorra), eta bateria aurrezteko moduak eteten du.
+MeteoRiderako (Ezarpenak → Orokorra; iPhonean, gaztelaniaz: Ajustes → General →
+Actualización en segundo plano), eta bateria aurrezteko moduak eteten du.
 Androiden, fabrikatzaile batzuek atzeko planoko zereginak hiltzen dituzte beren
 bateria-kudeatzailearekin. Sistemak egingo ez badu, aplikazioak berak esaten
 dizu etengailuaren azpian, zaintzen ari zarela sinetsarazi beharrean.
@@ -530,7 +532,9 @@ webgunea baino itxiagoak dira. Atal hau laburpena da; zuzen egon behar duena
 politika da.
 
 **MeteoRide osorik zure gailuan dabil.** Ezarpen, hobespen eta datu guztiak
-zure nabigatzailean bakarrik gordetzen dira, localStorage eta IndexedDB bidez.
+zure gailuan bakarrik gordetzen dira: webgunean, nabigatzailean (localStorage
+eta IndexedDB), eta aplikazioan sistemaren biltegiratze propioan ere bai, iOSek
+ezarpenak ezabatu ezin ditzan.
 
 Salbuespen bakarra webgunea da: iOSeko lasterbideak erabiltzen badituzu GPX bat
 partekatzeko, fitxategi hori Cloudflarera bidaltzen da. Ezinbestekoa da, iOSeko
@@ -541,8 +545,10 @@ ezabatzen da gehienez bi minutuko epean.
 
 - **Erregistrorik gabe:** ez duzu konturik sortu behar ezta datu pertsonalik
   eman ere.
-- **Kontrol osoa:** datu guztiak ezaba ditzakezu zure nabigatzailearen
-  ezarpenetatik.
+- **Kontrol osoa:** webgunean, ezabatu gunearen datuak nabigatzailearen
+  ezarpenetatik; aplikazioan, desinstalatu (iPhone) edo ezabatu haren
+  biltegiratzea (Android). Zure plataformaren politikak azaltzen du zer
+  gertatzen den babeskopiekin.
 - **Kode irekia:** iturburu-kode osoa GitHub-en ikuska dezakezu.
 
 ### Eguraldi-hornitzaileekin partekatutako datuak

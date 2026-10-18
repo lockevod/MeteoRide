@@ -37,6 +37,11 @@ test('every size comes out as RGB with no alpha channel', () => {
     const back = decodePng(png);
     assert.equal(back.width, size);
     assert.ok(back.rgba.every((_, i) => i % 4 !== 3 || back.rgba[i] === 255), 'fully opaque');
+    // And every pixel survives the encoder: a wrong row offset or filter byte keeps the
+    // header and the first pixel intact and corrupts the rest.
+    const rgb = Buffer.alloc(size * size * 3);
+    for (let i = 0, j = 0; i < back.rgba.length; i += 4) { rgb[j++] = back.rgba[i]; rgb[j++] = back.rgba[i + 1]; rgb[j++] = back.rgba[i + 2]; }
+    assert.ok(rgb.equals(Buffer.from(render(source, size))), `the ${size} px PNG does not decode to what was rendered`);
   }
 });
 

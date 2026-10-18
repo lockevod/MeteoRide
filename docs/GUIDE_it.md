@@ -58,10 +58,10 @@ Scegli il fornitore o la catena di fornitori che vuoi usare. Sono descritti in
 [§4](#4-fornitori-meteo). Cosa succede quando quello che hai scelto fallisce è in
 [§9.3](#93-fonti-di-riserva-intelligenti).
 
-### 2.6 Modalità confronta fornitori (Confronta)
+### 2.6 Modalità confronta fornitori
 
-Scegli **Confronta** per valutare le differenze tra i fornitori sullo stesso
-percorso e alla stessa ora.
+Scegli **Confronta** nel menu dei fornitori per valutare le differenze tra i
+fornitori sullo stesso percorso e alla stessa ora.
 
 - Legge Open-Meteo e AROME esattamente come la tabella normale, compresi i dati
   ogni quarto d'ora entro le prime 5 ore.
@@ -72,14 +72,13 @@ percorso e alla stessa ora.
 
 Confronta le previsioni per lo stesso percorso in due date o orari diversi.
 
-- Scegli **Confronta date** nel menu dei fornitori per entrare in questa modalità.
-- Imposta la Data A e la Data B con i controlli di data e ora che compaiono. I
-  pulsanti con la sola icona espandono la seconda data.
-- Premi **🔄 Confronta** per aggiornare la tabella.
+- Premi **⇄** accanto alla data per entrare in questa modalità.
+- Imposta la Data A e la Data B; la seconda data compare sotto la prima.
+- Premi **⟲** per aggiornare la tabella.
 - La tabella mostra 4 righe: intervalli della Data A, riepilogo della Data A,
   intervalli della Data B, riepilogo della Data B.
 - **Non c'è ricalcolo automatico.** Se cambi un controllo qualsiasi devi premere
-  di nuovo Confronta.
+  di nuovo ⟲.
 
 ---
 
@@ -513,8 +512,9 @@ del sito. Questa sezione è il riassunto; quella che deve essere giusta è
 l'informativa.
 
 **MeteoRide funziona interamente sul tuo dispositivo.** Tutte le impostazioni, le
-preferenze e i dati sono salvati solo nel tuo browser, con localStorage e
-IndexedDB.
+preferenze e i dati sono salvati solo sul tuo dispositivo: nel browser
+(localStorage e IndexedDB) sul sito, e nell'app anche nella memoria propria del
+sistema, così che iOS non possa cancellare le impostazioni.
 
 L'unica eccezione è il sito: se usi i Comandi rapidi di iOS per condividere un
 GPX, quel file viene caricato su Cloudflare. È inevitabile perché i Comandi rapidi
@@ -524,8 +524,10 @@ affatto bisogno. In ogni caso il GPX caricato viene cancellato automaticamente
 entro due minuti al massimo.
 
 - **Nessun account:** non devi creare un account né fornire dati personali.
-- **Controllo totale:** puoi cancellare tutti i dati salvati dalle impostazioni
-  del browser.
+- **Controllo totale:** sul sito, cancella i dati del sito dalle impostazioni
+  del browser; nell'app, disinstallala (iPhone) o cancellane la memoria
+  (Android). L'informativa della tua piattaforma spiega cosa succede con i
+  backup.
 - **Codice aperto:** puoi esaminare tutto il codice sorgente su GitHub.
 
 ### Dati condivisi con i fornitori meteo

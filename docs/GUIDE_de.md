@@ -59,10 +59,10 @@ Wähle den Anbieter oder die Anbieterkette, die du nutzen willst. Beschrieben si
 sie in [§4](#4-wetteranbieter). Was passiert, wenn der gewählte ausfällt, steht
 in [§9.3](#93-intelligente-ersatzanbieter).
 
-### 2.6 Modus Anbieter vergleichen (Comp.)
+### 2.6 Modus Anbieter vergleichen
 
-Aktiviere **Comp.**, um die Unterschiede zwischen den Anbietern auf derselben
-Route und zur selben Zeit zu sehen.
+Wähle **Vergleichen** in der Anbieterliste, um die Unterschiede zwischen den
+Anbietern auf derselben Route und zur selben Zeit zu sehen.
 
 - Open-Meteo und AROME werden genau wie in der normalen Tabelle gelesen,
   einschließlich der Viertelstundenwerte in den ersten 5 Stunden.
@@ -74,15 +74,13 @@ Route und zur selben Zeit zu sehen.
 Vergleiche die Vorhersage für dieselbe Route an zwei verschiedenen Daten oder zu
 zwei verschiedenen Zeiten.
 
-- Wähle **Daten vergleichen** in der Anbieterliste, um in diesen Modus zu
-  wechseln.
-- Stelle Datum A und Datum B mit den Datums- und Zeitfeldern ein, die dann
-  erscheinen. Die Tasten mit nur einem Symbol klappen das zweite Datum auf.
-- Tippe auf **🔄 Vergleichen**, um die Tabelle zu aktualisieren.
+- Tippe neben dem Datum auf **⇄**, um in diesen Modus zu wechseln.
+- Stelle Datum A und Datum B ein; das zweite Datum erscheint unter dem ersten.
+- Tippe auf **⟲**, um die Tabelle zu aktualisieren.
 - Die Tabelle zeigt 4 Zeilen: Intervalle für Datum A, Übersicht für Datum A,
   Intervalle für Datum B, Übersicht für Datum B.
 - **Es gibt keine automatische Neuberechnung.** Wenn du etwas änderst, musst du
-  wieder auf Vergleichen tippen.
+  wieder auf ⟲ tippen.
 
 ---
 
@@ -522,8 +520,9 @@ geschlossener als die Website. Dieser Abschnitt ist die Zusammenfassung; maßgeb
 ist die Datenschutzerklärung.
 
 **MeteoRide läuft vollständig auf deinem Gerät.** Alle Einstellungen, Vorlieben
-und Daten werden nur in deinem Browser gespeichert, mit localStorage und
-IndexedDB.
+und Daten werden nur auf deinem Gerät gespeichert: auf der Website im Browser
+(localStorage und IndexedDB), in der App zusätzlich im eigenen Speicher des
+Systems, damit iOS die Einstellungen nicht löschen kann.
 
 Die einzige Ausnahme ist die Website: Wenn du die iOS-Kurzbefehle nutzt, um eine
 GPX-Datei zu teilen, wird diese Datei zu Cloudflare hochgeladen. Das lässt sich
@@ -533,8 +532,10 @@ und die native App braucht das überhaupt nicht. In jedem Fall wird die
 hochgeladene GPX-Datei spätestens nach zwei Minuten automatisch gelöscht.
 
 - **Kein Konto:** Du musst kein Konto anlegen und keine persönlichen Daten angeben.
-- **Volle Kontrolle:** Du kannst alle gespeicherten Daten in den Einstellungen
-  deines Browsers löschen.
+- **Volle Kontrolle:** Auf der Website löschst du die Websitedaten in den
+  Einstellungen deines Browsers; die App deinstallierst du (iPhone) oder löschst
+  ihren Speicher (Android). Die Datenschutzerklärung deiner Plattform erklärt,
+  wie sich Backups verhalten.
 - **Open Source:** Du kannst den gesamten Quellcode auf GitHub einsehen.
 
 ### An die Wetteranbieter übermittelte Daten

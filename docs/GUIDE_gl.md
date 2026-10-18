@@ -58,10 +58,10 @@ Escolle o provedor ou a cadea de provedores que queres usar. Están descritos en
 [§4](#4-provedores-meteorolóxicos). Que ocorre se falla o que escolliches está
 en [§9.3](#93-alternativas-intelixentes).
 
-### 2.6 Modo Comparar provedores (Comp.)
+### 2.6 Modo Comparar provedores
 
-Marca a caixa **Comp.** para avaliar as diferenzas entre provedores sobre a
-mesma ruta e a mesma hora.
+Escolle **Comparar** no despregable de provedores para avaliar as diferenzas
+entre provedores sobre a mesma ruta e a mesma hora.
 
 - Le Open-Meteo e AROME exactamente igual ca a táboa normal, incluídos os datos
   de cuarto de hora dentro das primeiras 5 horas.
@@ -72,15 +72,13 @@ mesma ruta e a mesma hora.
 
 Compara a previsión da mesma ruta en dúas datas ou horas distintas.
 
-- Escolle **Comparar datas** no despregable de provedores para entrar neste
-  modo.
-- Configura a Data A e a Data B cos controis de data/hora que aparecen. Os
-  botóns só con iconas despregan a segunda data.
-- Preme **🔄 Comparar** para actualizar a táboa.
+- Preme **⇄** xunto á data para entrar neste modo.
+- Configura a Data A e a Data B; a segunda data aparece debaixo da primeira.
+- Preme **⟲** para actualizar a táboa.
 - A táboa amosa 4 filas: intervalos da Data A, resumo da Data A, intervalos da
   Data B, resumo da Data B.
 - **Non hai recálculo automático.** Se cambias calquera control tes que premer
-  Comparar outra vez.
+  ⟲ outra vez.
 
 ---
 
@@ -160,7 +158,8 @@ Estes mesmos pasos, e as outras formas de ter MeteoRide, están tamén en
 
 1. Abre MeteoRide en Safari.
 2. Toca o botón Compartir (cadrado cunha frecha).
-3. Escolle «Engadir á pantalla de inicio».
+3. Escolle «Engadir á pantalla de inicio» (no iPhone, en castelán: «Añadir a
+   pantalla de inicio»).
 4. Toca «Engadir» na parte superior dereita.
 
 **Chrome no ordenador**
@@ -178,8 +177,10 @@ Estes mesmos pasos, e as outras formas de ter MeteoRide, están tamén en
 **Safari no Mac**
 
 1. Abre MeteoRide en Safari.
-2. Vai a Ficheiro > Engadir ao Dock.
-3. Ou fai clic no botón Compartir e escolle «Engadir ao Dock».
+2. Vai a Ficheiro > Engadir ao Dock (no Mac, en castelán: Archivo > Añadir al
+   Dock).
+3. Ou fai clic no botón Compartir e escolle «Engadir ao Dock» («Añadir al
+   Dock»).
 
 ---
 
@@ -226,7 +227,8 @@ vixiar e ata cando.
 
 **Convén sabelo:** a comprobación faina o sistema operativo cando lle parece,
 non a app. No iPhone cómpre ter activada a *Actualización en segundo plano*
-para MeteoRide (Axustes → Xeral), e o modo de baixo consumo suspéndea. En
+para MeteoRide (Axustes → Xeral; no iPhone, en castelán: Ajustes → General →
+Actualización en segundo plano), e o modo de baixo consumo suspéndea. En
 Android, algúns fabricantes matan as tarefas en segundo plano co seu propio
 xestor de batería. Cando o sistema non a vai executar, a app dio debaixo do
 interruptor en vez de deixarte crer que te está a vixiar.
@@ -501,8 +503,9 @@ que é a que se lle dá ao formulario de cada tenda, e as apps son máis pechada
 ca a web. Esta sección é o resumo; o que ten que estar ben é a política.
 
 **MeteoRide funciona completamente no teu dispositivo.** Todos os axustes, as
-preferencias e os datos gárdanse só no teu navegador, mediante localStorage e
-IndexedDB.
+preferencias e os datos gárdanse só no teu dispositivo: na web, no navegador
+(localStorage e IndexedDB), e na app tamén no almacenamento propio do sistema,
+para que iOS non poida borrar os axustes.
 
 A única excepción é a web: se usas os Atallos de iOS para compartir un GPX, ese
 ficheiro sóbese a Cloudflare. É imprescindible porque os Atallos de iOS só
@@ -512,8 +515,10 @@ En calquera caso, o GPX subido bórrase automaticamente nun prazo máximo de dou
 minutos.
 
 - **Sen rexistro:** non precisas crear unha conta nin dar datos persoais.
-- **Control total:** podes borrar todos os datos gardados desde os axustes do
-  teu navegador.
+- **Control total:** na web, borra os datos do sitio desde os axustes do teu
+  navegador; na app, desinstálaa (iPhone) ou borra o seu almacenamento
+  (Android). A política da túa plataforma explica que pasa coas copias de
+  seguridade.
 - **Código aberto:** podes revisar todo o código fonte en GitHub.
 
 ### Datos compartidos cos provedores meteorolóxicos

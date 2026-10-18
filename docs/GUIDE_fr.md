@@ -60,10 +60,10 @@ Choisissez le fournisseur ou la chaîne de fournisseurs à utiliser. Ils sont
 décrits en [§4](#4-fournisseurs-météo). Ce qui se passe quand celui que vous avez
 choisi échoue est expliqué en [§9.3](#93-sources-de-secours-intelligentes).
 
-### 2.6 Mode comparer les fournisseurs (Comp.)
+### 2.6 Mode comparer les fournisseurs
 
-Cochez **Comp.** pour évaluer les différences entre fournisseurs sur le même
-parcours et à la même heure.
+Choisissez **Comparer** dans la liste des fournisseurs pour évaluer les
+différences entre fournisseurs sur le même parcours et à la même heure.
 
 - Il lit Open-Meteo et AROME exactement comme le tableau normal, y compris les
   données au quart d’heure dans les 5 premières heures.
@@ -74,15 +74,13 @@ parcours et à la même heure.
 
 Comparez les prévisions pour le même parcours à deux dates ou heures différentes.
 
-- Choisissez **Comparer des dates** dans la liste des fournisseurs pour entrer
-  dans ce mode.
-- Réglez la date A et la date B avec les commandes de date et d’heure qui
-  apparaissent. Les boutons à icône seule déploient la seconde date.
-- Appuyez sur **🔄 Comparer** pour mettre à jour le tableau.
+- Appuyez sur **⇄** à côté de la date pour entrer dans ce mode.
+- Réglez la date A et la date B ; la seconde date apparaît sous la première.
+- Appuyez sur **⟲** pour mettre à jour le tableau.
 - Le tableau affiche 4 lignes : intervalles de la date A, résumé de la date A,
   intervalles de la date B, résumé de la date B.
 - **Il n’y a pas de recalcul automatique.** Si vous changez une commande, vous
-  devez appuyer de nouveau sur Comparer.
+  devez appuyer de nouveau sur ⟲.
 
 ---
 
@@ -533,8 +531,9 @@ sont plus fermées que le site. Cette section en est le résumé ; c’est la
 politique qui doit être exacte.
 
 **MeteoRide fonctionne entièrement sur votre appareil.** Tous les réglages,
-préférences et données sont stockés uniquement dans votre navigateur, avec
-localStorage et IndexedDB.
+préférences et données sont stockés uniquement sur votre appareil : dans le
+navigateur (localStorage et IndexedDB) sur le site, et dans l’app aussi dans le
+stockage propre du système, pour qu’iOS ne puisse pas effacer les réglages.
 
 La seule exception est le site : si vous utilisez les Raccourcis iOS pour
 partager un GPX, ce fichier est envoyé à Cloudflare. C’est inévitable, car les
@@ -545,8 +544,10 @@ automatiquement en deux minutes au plus.
 
 - **Aucun compte :** vous n’avez pas besoin de créer un compte ni de fournir de
   données personnelles.
-- **Contrôle total :** vous pouvez supprimer toutes les données stockées depuis
-  les réglages de votre navigateur.
+- **Contrôle total :** sur le site, effacez les données du site dans les
+  réglages de votre navigateur ; dans l’app, désinstallez-la (iPhone) ou effacez
+  son stockage (Android). La politique de votre plateforme explique ce qu’il
+  advient des sauvegardes.
 - **Code ouvert :** vous pouvez consulter tout le code source sur GitHub.
 
 ### Données partagées avec les fournisseurs météo

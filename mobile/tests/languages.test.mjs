@@ -142,9 +142,10 @@ for (const code of LANGS) {
   });
 }
 
-/** GitHub's heading anchor: lower case, punctuation dropped (letters of any script, digits,
- *  spaces, hyphens and underscores kept), spaces to hyphens. */
-const slug = (h) => h.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+/** GitHub's heading anchor (github-slugger): lower case, everything but letters, marks,
+ *  decimal digits, connector punctuation, ASCII spaces and hyphens dropped, ASCII spaces to
+ *  hyphens. A no-break space before a French colon is dropped, not turned into a hyphen. */
+const slug = (h) => h.trim().toLowerCase().replace(/[^\p{L}\p{M}\p{Nd}\p{Pc} -]/gu, '').replace(/ /g, '-');
 const mdShape = (md) => {
   const body = md.replace(/```[\s\S]*?```/g, '```');
   return {
@@ -154,6 +155,8 @@ const mdShape = (md) => {
     fences: (md.match(/```/g) || []).length,
     tables: (body.match(/^\|.*\|$/gm) || []).length,
     external: [...body.matchAll(/\]\((https?:[^)]+)\)/g)].map((m) => m[1]).filter((u) => !/meteoride\.cc\/(help|privacy)/.test(u)).sort(),
+    // Other docs in the repo (INSTALL.md, USERSCRIPTS.md…); the language links are not compared.
+    relative: [...body.matchAll(/\]\(([\w.-]+\.md)\)/g)].map((m) => m[1]).filter((u) => !/^GUI(DE|A)/.test(u)).sort(),
   };
 };
 
@@ -169,6 +172,7 @@ for (const code of LANGS) {
     assert.ok(md.includes(`https://app.meteoride.cc/help_${code}.html`), 'links the help in its language');
     for (const p of ['web', 'ios', 'android']) assert.ok(md.includes(`https://app.meteoride.cc/privacy-${p}-${code}.html`), `links the ${p} policy in its language`);
     assert.doesNotMatch(md, /help_en\.html|privacy-(web|ios|android)\.html/, 'still links the English help or the es/en policies');
+    assert.doesNotMatch(md, new RegExp(`help_(?!${code}\\b)\\w\\w\\.html|privacy-\\w+-(?!${code}\\b)\\w\\w\\.html`), 'links another language\'s help or policy');
   });
 }
 

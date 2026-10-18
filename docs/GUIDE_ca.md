@@ -58,10 +58,10 @@ Tria el proveïdor o la cadena de proveïdors que vols fer servir. Estan descrit
 a [§4](#4-proveïdors-meteorològics). Què passa si el que has triat falla és a
 [§9.3](#93-alternatives-intelligents).
 
-### 2.6 Mode Comparar proveïdors (Comp.)
+### 2.6 Mode Comparar proveïdors
 
-Marca **Comp.** per avaluar les diferències entre proveïdors sobre la mateixa
-ruta i la mateixa hora.
+Tria **Comparar** al desplegable de proveïdors per avaluar les diferències entre
+proveïdors sobre la mateixa ruta i la mateixa hora.
 
 - Llegeix Open-Meteo i AROME exactament igual que la taula normal, incloses les
   dades de quart d'hora dins de les primeres 5 hores.
@@ -72,15 +72,13 @@ ruta i la mateixa hora.
 
 Compara la previsió de la mateixa ruta en dues dates o hores diferents.
 
-- Selecciona **Comparar dates** al desplegable de proveïdors per entrar en
-  aquest mode.
-- Configura la data A i la data B amb els controls de data/hora que apareixen.
-  Els botons només amb icones despleguen la segona data.
-- Prem **🔄 Comparar** per actualitzar la taula.
+- Prem **⇄** al costat de la data per entrar en aquest mode.
+- Configura la data A i la data B; la segona data apareix sota la primera.
+- Prem **⟲** per actualitzar la taula.
 - La taula mostra 4 files: intervals de la data A, resum de la data A,
   intervals de la data B, resum de la data B.
 - **No es recalcula automàticament.** Si canvies qualsevol control, has de
-  tornar a prémer Comparar.
+  tornar a prémer ⟲.
 
 ---
 
@@ -507,8 +505,9 @@ esborrar tot el que queda al dispositiu — és
 secció és el resum; la que ha d'estar bé és la política.
 
 **MeteoRide funciona completament al teu dispositiu.** Tota la configuració, les
-preferències i les dades es desen només al teu navegador, amb localStorage i
-IndexedDB.
+preferències i les dades es desen només al teu dispositiu: al web, al navegador
+(localStorage i IndexedDB), i a l'app també a l'emmagatzematge propi del
+sistema, perquè iOS no pugui esborrar la configuració.
 
 L'única excepció és el web: si fas servir les Dreceres d'iOS per compartir un
 GPX, aquest fitxer es puja a Cloudflare. És inevitable perquè les Dreceres d'iOS
@@ -517,8 +516,10 @@ res, perquè es processa en local, i l'app nativa no ho necessita gens. En
 qualsevol cas, el GPX pujat s'esborra automàticament en dos minuts com a màxim.
 
 - **Sense compte:** no cal crear cap compte ni donar dades personals.
-- **Control total:** pots esborrar totes les dades desades des de la
-  configuració del navegador.
+- **Control total:** al web, esborra les dades del lloc des de la configuració
+  del navegador; a l'app, desinstal·la-la (iPhone) o esborra'n l'emmagatzematge
+  (Android). La política de la teva plataforma explica què passa amb les còpies
+  de seguretat.
 - **Codi obert:** pots inspeccionar tot el codi font a GitHub.
 
 ### Dades compartides amb els proveïdors meteorològics

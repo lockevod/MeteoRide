@@ -58,10 +58,10 @@ Choose the provider or the provider chain you want to use. They are described in
 [§4](#4-weather-providers). What happens when the one you picked fails is in
 [§9.3](#93-smart-fallbacks).
 
-### 2.6 Compare providers mode (Comp.)
+### 2.6 Compare providers mode
 
-Tick **Comp.** to evaluate the differences between providers over the same route
-and the same time.
+Choose **Compare** in the provider dropdown to evaluate the differences between
+providers over the same route and the same time.
 
 - It reads Open-Meteo and AROME exactly like the normal table, including
   quarter-hour data within the first 5 hours.
@@ -72,14 +72,13 @@ and the same time.
 
 Compare the forecast for the same route on two different dates or times.
 
-- Select **Compare Dates** in the provider dropdown to enter this mode.
-- Set Date A and Date B with the date/time controls that appear. The icon-only
-  buttons expand the second date.
-- Press **🔄 Compare** to update the table.
+- Press **⇄** next to the date to enter this mode.
+- Set Date A and Date B; the second date appears below the first.
+- Press **⟲** to update the table.
 - The table shows 4 rows: intervals for Date A, summary for Date A, intervals
   for Date B, summary for Date B.
 - **There is no automatic recalculation.** If you change any control you have to
-  press Compare again.
+  press ⟲ again.
 
 ---
 
@@ -498,7 +497,9 @@ what each store's form is given, and the apps are more closed than the website. 
 section is the summary; the policy is what has to be right.
 
 **MeteoRide runs completely on your device.** All settings, preferences and data
-are stored only in your browser, using localStorage and IndexedDB.
+are stored only on your device: in the browser (localStorage and IndexedDB) on
+the website, and in the app also in the system's own storage, so that iOS cannot
+wipe the settings.
 
 The only exception is the website: if you use the iOS Shortcuts to share a GPX,
 that file is uploaded to Cloudflare. It is unavoidable because iOS Shortcuts
@@ -508,7 +509,9 @@ at all. In any case the uploaded GPX is deleted automatically within a maximum
 of two minutes.
 
 - **No account:** you do not need to create an account or provide personal data.
-- **Full control:** you can delete all stored data from your browser settings.
+- **Full control:** on the website, clear the site's data in your browser
+  settings; in the app, uninstall it (iPhone) or clear its storage (Android). The
+  policy for your platform explains how backups behave.
 - **Open source:** you can inspect the full source code on GitHub.
 
 ### Data shared with weather providers

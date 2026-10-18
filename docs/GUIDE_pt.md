@@ -60,10 +60,10 @@ Escolhe o fornecedor ou a cadeia de fornecedores que queres usar. Estão
 descritos em [§4](#4-fornecedores-meteorológicos). O que acontece quando o que
 escolheste falha está em [§9.3](#93-alternativas-inteligentes).
 
-### 2.6 Modo comparar fornecedores (Comp.)
+### 2.6 Modo comparar fornecedores
 
-Marca **Comparar** para avaliar as diferenças entre fornecedores no mesmo
-percurso e à mesma hora.
+Escolhe **Comparar** na lista de fornecedores para avaliar as diferenças entre
+fornecedores no mesmo percurso e à mesma hora.
 
 - Lê o Open-Meteo e o AROME exatamente como a tabela normal, incluindo os dados
   de quarto em quarto de hora nas primeiras 5 horas.
@@ -74,14 +74,13 @@ percurso e à mesma hora.
 
 Compara a previsão para o mesmo percurso em duas datas ou horas diferentes.
 
-- Escolhe **Comparar datas** na lista de fornecedores para entrares neste modo.
-- Define a Data A e a Data B com os controlos de data/hora que aparecem. Os
-  botões só com ícone expandem a segunda data.
-- Carrega em **🔄 Comparar** para atualizar a tabela.
+- Carrega em **⇄** ao lado da data para entrares neste modo.
+- Define a Data A e a Data B; a segunda data aparece por baixo da primeira.
+- Carrega em **⟲** para atualizar a tabela.
 - A tabela mostra 4 linhas: intervalos da Data A, resumo da Data A, intervalos
   da Data B, resumo da Data B.
 - **Não há recálculo automático.** Se mudares algum controlo, tens de carregar
-  outra vez em Comparar.
+  outra vez em ⟲.
 
 ---
 
@@ -513,8 +512,9 @@ o que se entrega no formulário de cada loja, e as apps são mais fechadas do qu
 secção é o resumo; a política é o que tem de estar certo.
 
 **O MeteoRide funciona inteiramente no teu dispositivo.** Todas as definições,
-preferências e dados ficam guardados só no teu navegador, com o localStorage e o
-IndexedDB.
+preferências e dados ficam guardados só no teu dispositivo: no site, no
+navegador (localStorage e IndexedDB), e na app também no armazenamento próprio
+do sistema, para que o iOS não possa apagar as definições.
 
 A única exceção é o site: se usares os Atalhos do iOS para partilhar um GPX, esse
 ficheiro é carregado para a Cloudflare. É inevitável porque os Atalhos do iOS
@@ -524,8 +524,10 @@ Em qualquer caso o GPX carregado é apagado automaticamente no máximo em dois
 minutos.
 
 - **Sem conta:** não precisas de criar uma conta nem de dar dados pessoais.
-- **Controlo total:** podes apagar todos os dados guardados nas definições do
-  teu navegador.
+- **Controlo total:** no site, apaga os dados do site nas definições do teu
+  navegador; na app, desinstala-a (iPhone) ou apaga o armazenamento dela
+  (Android). A política da tua plataforma explica o que acontece às cópias de
+  segurança.
 - **Código aberto:** podes inspecionar o código-fonte completo no GitHub.
 
 ### Dados partilhados com os fornecedores meteorológicos

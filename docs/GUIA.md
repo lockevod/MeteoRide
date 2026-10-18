@@ -61,10 +61,10 @@ Elige el proveedor o la cadena de proveedores que quieres usar. Están descritos
 en [§4](#4-proveedores-meteorológicos). Qué ocurre si el que elegiste falla está
 en [§9.3](#93-fallbacks-inteligentes).
 
-### 2.6 Modo Comparar proveedores (Comp.)
+### 2.6 Modo Comparar proveedores
 
-Activa la casilla **Comp.** para evaluar las diferencias entre proveedores sobre
-la misma ruta y la misma hora.
+Elige **Comparar** en el desplegable de proveedores para evaluar las diferencias
+entre proveedores sobre la misma ruta y la misma hora.
 
 - Lee Open-Meteo y AROME exactamente igual que la tabla normal, incluidos los
   datos de cuarto de hora dentro de las primeras 5 horas.
@@ -75,15 +75,13 @@ la misma ruta y la misma hora.
 
 Compara el pronóstico de la misma ruta en dos fechas u horas distintas.
 
-- Selecciona **Comparar Fechas** en el desplegable de proveedores para entrar en
-  este modo.
-- Configura Fecha A y Fecha B con los controles de fecha/hora que aparecen. Los
-  botones de solo iconos despliegan la segunda fecha.
-- Pulsa **🔄 Comparar** para actualizar la tabla.
+- Pulsa **⇄** junto a la fecha para entrar en este modo.
+- Configura Fecha A y Fecha B; la segunda fecha aparece debajo de la primera.
+- Pulsa **⟲** para actualizar la tabla.
 - La tabla muestra 4 filas: intervalos de Fecha A, resumen de Fecha A,
   intervalos de Fecha B, resumen de Fecha B.
 - **No hay recálculo automático.** Si cambias cualquier parámetro tienes que
-  volver a pulsar Comparar.
+  volver a pulsar ⟲.
 
 ---
 
@@ -512,8 +510,9 @@ es lo que se da a cada tienda, y las apps son más cerradas que la web. Esta
 sección es el resumen; la que tiene que estar bien es la política.
 
 **MeteoRide funciona completamente en tu dispositivo.** Toda la configuración,
-las preferencias y los datos se almacenan únicamente en tu navegador, mediante
-localStorage e IndexedDB.
+las preferencias y los datos se almacenan únicamente en tu dispositivo: en la web,
+en el navegador (localStorage e IndexedDB), y en la app también en el
+almacenamiento propio del sistema, para que iOS no pueda borrar los ajustes.
 
 La única excepción es la web: si usas los atajos de iOS para compartir un GPX,
 ese fichero se envía a Cloudflare. Es imprescindible porque los atajos de iOS
@@ -523,8 +522,10 @@ cualquier caso el GPX subido se borra automáticamente en un plazo máximo de do
 minutos.
 
 - **Sin registro:** no necesitas crear cuenta ni proporcionar datos personales.
-- **Control total:** puedes borrar todos los datos desde la configuración de tu
-  navegador.
+- **Control total:** en la web, borra los datos del sitio desde la configuración
+  de tu navegador; en la app, desinstálala (iPhone) o borra su almacenamiento
+  (Android). La política de tu plataforma explica qué pasa con las copias de
+  seguridad.
 - **Código abierto:** puedes inspeccionar todo el código fuente en GitHub.
 
 ### Datos compartidos con los proveedores meteorológicos
