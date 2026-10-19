@@ -1882,27 +1882,49 @@
       exampleEl.addEventListener('click', () => {
         // A route arrived between the button being drawn and this tap: it stays.
         if (window.lastGPXFile || window.cw.hasRouteRequestPending()) { hideExample(); return; }
-        // Asked for on the tap, with the file read inside the request rather than before it:
-        // a route picked or shared while the file is still being read is then the newer
-        // request and wins, and a read that fails is the coordinator's to report, only if
-        // nothing has replaced it.
-        // The file's own <name> is English, and a route is titled from its file's <name>
-        // (a user's GPX keeps the name it carries). So the example's file is given the name
-        // in the language chosen: the title, the recent route, its restore and a share agree.
-        const name = window.t('example_route_name');
-        window.cwReceiveRoute({
-          source: 'example',
-          name,
-          fetchText: async () => {
-            const res = await fetch('assets/example-route.gpx');
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return (await res.text()).replace(/<name>[^<]*<\/name>/g, `<name>${escapeXml(name)}</name>`);
-          },
-          // Kept among the recent routes only once it has opened, like a link.
-          importOn: 'commit',
-        });
+        openExample();
       });
     }
+
+    function openExample() {
+      // Asked for on the tap, with the file read inside the request rather than before it:
+      // a route picked or shared while the file is still being read is then the newer
+      // request and wins, and a read that fails is the coordinator's to report, only if
+      // nothing has replaced it.
+      // The file's own <name> is English, and a route is titled from its file's <name>
+      // (a user's GPX keeps the name it carries). So the example's file is given the name
+      // in the language chosen: the title, the recent route, its restore and a share agree.
+      const name = window.t('example_route_name');
+      window.cwReceiveRoute({
+        source: 'example',
+        name,
+        fetchText: async () => {
+          const res = await fetch('assets/example-route.gpx');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return (await res.text()).replace(/<name>[^<]*<\/name>/g, `<name>${escapeXml(name)}</name>`);
+        },
+        // Kept among the recent routes only once it has opened, like a link.
+        importOn: 'commit',
+      });
+    }
+
+    /* ?example: the product site's "try it" link (meteoride.cc), the same request as a tap on
+     * the button. Called from app.js once loadSettings has set the language, so the title is
+     * the visitor's. The web only: the app's web view never opens with a query string. It
+     * leaves the address once read, so a reload restores nothing of it, and it gives way to a
+     * route the address or a share already asked for. */
+    window.cwOpenExampleFromAddress = () => {
+      if (window.CW_NATIVE) return;
+      let address;
+      try { address = new URL(window.location.href); } catch (_) { return; }
+      if (!address.searchParams.has('example')) return;
+      address.searchParams.delete('example');
+      try { window.history.replaceState(window.history.state, '', address.href); } catch (_) { /* still opens */ }
+      // A ?gpx_url=, ?shared_id= or a share asked for its route while app.js loaded and is still
+      // pending; ?shared asks only once the service worker's slot is read, so it is checked here.
+      if (address.searchParams.has('shared') || window.lastGPXFile || window.cw.hasRouteRequestPending()) return;
+      openExample();
+    };
 
     const gpxFileEl = document.getElementById("gpxFile");
     console.log('[MeteoRide] initUI: gpxFileEl found?', !!gpxFileEl);

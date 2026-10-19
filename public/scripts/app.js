@@ -3423,6 +3423,8 @@ document.addEventListener("DOMContentLoaded", () => {
   updateProviderOptions();
   window.updateWeatherAlertsAvailability?.();
   setupDateLimits();
+  // ?example opens the example route, titled in the language loadSettings has just set.
+  window.cwOpenExampleFromAddress?.();
 
   // The start field keeps what loadSettings left in it once the start rule has run
   // (cwApplyStartRule); setupDateLimits gives it its step and minimum.

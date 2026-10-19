@@ -1620,13 +1620,24 @@ The rule is that it never stands in for a route the user has or is about to have
   only if nothing replaced it.
 - `cw:forecast` is not the signal: a route can open and never publish (no coverage, a start
   date out of range), and hiding on the forecast left the button over that route.
+- **`?example`** (the "try it" link on meteoride.cc, `https://app.meteoride.cc/?example`) runs
+  the same `openExample()` as a tap. `window.cwOpenExampleFromAddress` is called from app.js's
+  `DOMContentLoaded` right after `loadSettings`: called earlier, `t()` reads the language
+  select before it is set and titles the route in English. It deletes `example` from the
+  address with `replaceState` before anything else, so a reload never asks again. It asks for
+  nothing in the app (`CW_NATIVE`; the web view never has a query string anyway), with a
+  route on screen or a request pending — a `?gpx_url=`, `?shared_id=` or `sessionStorage`
+  share has asked by then, during app.js's load — or with `?shared` in the address, whose
+  service-worker read asks only later. It also counts as "opens a link" for that read
+  (`initGpxShare`), so a route left in the slot is only kept, not shown over the example.
 
 Tests: `tests/example-route.spec.mjs` (loads and forecasts; the GPX is in the bundle; it
 follows roads and stays around Mont-roig; it is named in the chosen language;
 the button ships hidden) and four in `smoke.spec.mjs` (not offered while a stored route is being
 restored; steps aside for a route without a forecast and returns after a broken file; hides
-while any route is being read; an example still being read loses to a file picked meanwhile).
-Each was checked by mutation.
+while any route is being read; an example still being read loses to a file picked meanwhile),
+plus two for `?example` (titled in the language chosen and gone from the address; gives way to a
+`?gpx_url=` in the same address). Each was checked by mutation.
 
 ## Consumers of the snapshot
 

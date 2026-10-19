@@ -3253,6 +3253,31 @@ test('the example route is titled in the language chosen, and a picked file keep
   await expect(routeName(page)).toHaveText('Masnou - Montgat');
 });
 
+// meteoride.cc's "try it" link is app.meteoride.cc/?example: the same example, in the visitor's
+// language, and spent once read so a reload does not ask for it again.
+test('?example opens the example route in the language chosen and leaves the address', async ({ page }) => {
+  await stubProvider(page, { celsius: 20, offline: false });
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ language: 'es' })));
+  await page.goto('/index.html?example');
+  await mapReady(page);
+  await expect(routeName(page)).toHaveText('Ruta de ejemplo - Mont-roig a Castillo');
+  expect(new URL(page.url()).searchParams.has('example')).toBe(false);
+});
+
+// Asked for later, the example would replace the route the link names.
+test('?example gives way to a ?gpx_url= in the same address', async ({ page }) => {
+  const gpx = await readFile(FIXTURE, 'utf8');
+  let examples = 0;
+  await goOffline(page);
+  await page.route((url) => url.pathname === '/hosted-route.gpx',
+    (route) => route.fulfill({ status: 200, contentType: 'application/gpx+xml', body: gpx }));
+  await page.route((url) => url.pathname.endsWith('/example-route.gpx'), (route) => { examples++; return route.fallback(); });
+  await page.goto('/index.html?example&gpx_url=/hosted-route.gpx');
+  await mapReady(page);
+  await expect(routeName(page)).toContainText('Masnou');
+  expect(examples).toBe(0);
+});
+
 /* The example-route button is a way in for someone with no route. It must never be offered
  * while there is one to replace: a tap makes a newer request, which supersedes whatever is
  * on screen or still being read, and the example would then be the route kept for next time. */
