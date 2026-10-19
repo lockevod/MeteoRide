@@ -5,7 +5,8 @@ file, set the speed you expect to ride at, and get temperature, wind,
 precipitation, humidity, cloudiness, luminosity and UV index for every point of
 the route — at the hour you will actually be there.
 
-**Try it:** <https://app.meteoride.cc>. Nothing to install, no account. It also
+**Try it:** <https://app.meteoride.cc>; an overview, in nine languages, at
+<https://meteoride.cc>. Nothing to install, no account. It also
 runs as a native iPhone and Android app, as an installable PWA, or from your own
 copy of this repository.
 

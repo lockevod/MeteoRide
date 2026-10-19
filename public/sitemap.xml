@@ -7,20 +7,6 @@
     <priority>1.0</priority>
   </url>
 
-  <!-- Landing en inglés -->
-  <url>
-    <loc>https://app.meteoride.cc/en/route-weather</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- Landing en castellano -->
-  <url>
-    <loc>https://app.meteoride.cc/es/tiempo-en-tu-ruta</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
   <!-- Páginas de ayuda -->
   <url>
     <loc>https://app.meteoride.cc/help.html</loc>
@@ -56,12 +42,7 @@
     <priority>0.5</priority>
   </url>
 
-  <!-- Los otros siete idiomas: landing, ayuda y las tres políticas de privacidad -->
-  <url>
-    <loc>https://app.meteoride.cc/ca/temps-a-la-teva-ruta</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
+  <!-- Los otros siete idiomas: ayuda y las tres políticas de privacidad -->
   <url>
     <loc>https://app.meteoride.cc/help_ca.html</loc>
     <changefreq>monthly</changefreq>
@@ -81,11 +62,6 @@
     <loc>https://app.meteoride.cc/privacy-android-ca.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://app.meteoride.cc/gl/tempo-na-tua-ruta</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://app.meteoride.cc/help_gl.html</loc>
@@ -108,11 +84,6 @@
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://app.meteoride.cc/eu/eguraldia-zure-ibilbidean</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
     <loc>https://app.meteoride.cc/help_eu.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -131,11 +102,6 @@
     <loc>https://app.meteoride.cc/privacy-android-eu.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://app.meteoride.cc/fr/meteo-sur-votre-parcours</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://app.meteoride.cc/help_fr.html</loc>
@@ -158,11 +124,6 @@
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://app.meteoride.cc/de/wetter-auf-deiner-route</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
     <loc>https://app.meteoride.cc/help_de.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -183,11 +144,6 @@
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://app.meteoride.cc/it/meteo-sul-tuo-percorso</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
     <loc>https://app.meteoride.cc/help_it.html</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -206,11 +162,6 @@
     <loc>https://app.meteoride.cc/privacy-android-it.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://app.meteoride.cc/pt/tempo-no-seu-percurso</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://app.meteoride.cc/help_pt.html</loc>

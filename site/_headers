@@ -1,0 +1,17 @@
+# meteoride.cc (product site). Cloudflare Pages reads this from site/dist.
+# The site loads nothing from another origin and runs no inline code: one stylesheet, one
+# script, images, all its own. Links out (App Store, GitHub, the app) are navigation, which
+# the policy does not restrict.
+/*
+  Cache-Control: public, no-transform
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()
+
+/img/*
+  Cache-Control: public, max-age=86400
+
+/*.xml
+  Content-Type: application/xml; charset=utf-8

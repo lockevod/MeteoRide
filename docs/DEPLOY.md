@@ -67,6 +67,41 @@ If you use Cloudflare, this repository already contains the pieces:
 `public/_headers` is a Cloudflare file and is stripped from the native bundle,
 which carries its own CSP in a `<meta>` tag instead.
 
+`public/_redirects` sends the old landings (`/en/route-weather`, `/es/tiempo-en-tu-ruta` and
+the seven others, with and without the trailing slash) to their page on meteoride.cc, 301.
+
+---
+
+## meteoride.cc (product site)
+
+The overview at <https://meteoride.cc> is a second Cloudflare Pages project on this same
+repository, separate from the app's (app.meteoride.cc). Its source is `site/`; the build
+writes `site/dist/` (git-ignored): nine pages, the language chooser at `/`, `sitemap.xml`,
+`robots.txt` and `_headers`. The steps are done once, by hand, in the Cloudflare dashboard:
+
+1. **Workers & Pages → Create → Pages → Connect to Git**, this repository, branch `main`.
+   Name it e.g. `meteoride-site`.
+2. Build settings: framework preset *None*, build command `node site/build.mjs`, build
+   output directory `site/dist`, root directory empty (the repository root).
+   Environment variable `NODE_VERSION` = `22`. The build needs no `npm install`.
+3. **Move `meteoride.cc` off the app's project**: in the app's Pages project, Custom
+   domains, remove `meteoride.cc` (the app keeps `app.meteoride.cc`).
+4. In the new project, Custom domains: add `meteoride.cc` and `www.meteoride.cc`.
+5. **Rules → Redirect Rules** on the `meteoride.cc` zone: when hostname equals
+   `www.meteoride.cc`, redirect dynamically to
+   `concat("https://meteoride.cc", http.request.uri.path)`, status **301**, preserving the
+   query string (the same as `www.meteoride.cc/*` → `https://meteoride.cc/$1`).
+6. Check: `https://meteoride.cc/` picks a language; `https://www.meteoride.cc/fr/` lands on
+   `https://meteoride.cc/fr/`; `https://app.meteoride.cc/es/tiempo-en-tu-ruta` lands on
+   `https://meteoride.cc/es/`; the response headers carry the site's
+   `Content-Security-Policy` (`default-src 'self'`).
+
+The site loads nothing from another origin (no CDN, web font, analytics or cookie) and its
+`_headers` enforce that; links out are fine.
+
+Screenshots are not taken by the build: they are committed in `site/img/shots/`. To redo
+them after a change in the app: `cd mobile && npm run build && npm run site:shots`.
+
 ---
 
 ## Privacy of a deployment you run

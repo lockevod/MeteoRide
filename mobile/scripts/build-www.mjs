@@ -86,12 +86,10 @@ const VENDOR = [
   },
 ];
 
-/** Paths that only make sense on the public website. The two localised landing pages
- *  exist for search engines and are only reachable through the alternate link tags
- *  that patchIndexHtml strips, so nothing in the app can navigate to them. support.html
+/** Paths that only make sense on the public website. support.html
  *  is the App Store Support URL: the app links its absolute address, which opens in the
  *  system browser, so a bundled copy would never be read. */
-const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', 'en', 'es', 'ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt', 'support.html'];
+const WEB_ONLY = ['sitemap.xml', 'robots.txt', '_headers', '_redirects', 'support.html'];
 
 /* `cp` copies public/ wholesale, so anything a local tool leaves in there ends up inside
  * the shipped app. That is not hypothetical: two code-analysis databases

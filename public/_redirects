@@ -1,0 +1,19 @@
+# The landings that lived here moved to the product site, one page per language (site/).
+/en/route-weather https://meteoride.cc/en/ 301
+/en/route-weather/ https://meteoride.cc/en/ 301
+/es/tiempo-en-tu-ruta https://meteoride.cc/es/ 301
+/es/tiempo-en-tu-ruta/ https://meteoride.cc/es/ 301
+/ca/temps-a-la-teva-ruta https://meteoride.cc/ca/ 301
+/ca/temps-a-la-teva-ruta/ https://meteoride.cc/ca/ 301
+/gl/tempo-na-tua-ruta https://meteoride.cc/gl/ 301
+/gl/tempo-na-tua-ruta/ https://meteoride.cc/gl/ 301
+/eu/eguraldia-zure-ibilbidean https://meteoride.cc/eu/ 301
+/eu/eguraldia-zure-ibilbidean/ https://meteoride.cc/eu/ 301
+/fr/meteo-sur-votre-parcours https://meteoride.cc/fr/ 301
+/fr/meteo-sur-votre-parcours/ https://meteoride.cc/fr/ 301
+/de/wetter-auf-deiner-route https://meteoride.cc/de/ 301
+/de/wetter-auf-deiner-route/ https://meteoride.cc/de/ 301
+/it/meteo-sul-tuo-percorso https://meteoride.cc/it/ 301
+/it/meteo-sul-tuo-percorso/ https://meteoride.cc/it/ 301
+/pt/tempo-no-seu-percurso https://meteoride.cc/pt/ 301
+/pt/tempo-no-seu-percurso/ https://meteoride.cc/pt/ 301

@@ -31,7 +31,7 @@ export function links(code) {
     installSteps: `${REPO}/releases/latest`,
     webApp: `${APP}/`,
     guide: `${REPO}/blob/main/docs/${code === 'es' ? 'GUIA.md' : code === 'en' ? 'GUIDE.md' : `GUIDE_${code}.md`}`,
-    exampleRoute: `${APP}/?gpx_url=${APP}/assets/example-route.gpx`,
+    exampleRoute: `${APP}/?example`,
     support: `${APP}/support.html#${code}`,
     github: REPO,
   };
@@ -64,6 +64,17 @@ export function renderPage(template, strings, code) {
   const left = out.match(/\{\{(.*?)\}\}/);
   if (left) throw new Error(`unfilled placeholder: ${left[1]}`);
   return out;
+}
+
+// One <url> per page, each naming all of them as alternates (with x-default), as Google asks.
+function sitemap(codes) {
+  const alts = [...codes.map((l) => [l, l]), ['x-default', 'en']]
+    .map(([h, l]) => `    <xhtml:link rel="alternate" hreflang="${h}" href="${ORIGIN}/${l}/"/>`).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${codes.map((l) => `  <url>\n    <loc>${ORIGIN}/${l}/</loc>\n${alts}\n  </url>`).join('\n')}
+</urlset>
+`;
 }
 
 // Without site.js this is a plain list of the nine pages; with it, site.js picks one.
@@ -104,7 +115,8 @@ export async function build({ only, out = DIST } = {}) {
   }
   await writeFile(join(out, 'index.html'), chooser());
   written.push(join(out, 'index.html'));
-  for (const f of ['styles.css', 'site.js', 'img']) {
+  await writeFile(join(out, 'sitemap.xml'), sitemap(codes));
+  for (const f of ['styles.css', 'site.js', 'img', '_headers', 'robots.txt']) {
     if (existsSync(join(SITE_DIR, f))) await cp(join(SITE_DIR, f), join(out, f), { recursive: true });
   }
   return written;

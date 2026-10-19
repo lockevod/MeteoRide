@@ -66,7 +66,7 @@ test('links follow the page language', () => {
   assert.ok(links('pt').guide.endsWith('docs/GUIDE_pt.md'), links('pt').guide);
   assert.ok(links('es').guide.endsWith('docs/GUIA.md'), links('es').guide);
   assert.ok(links('en').guide.endsWith('docs/GUIDE.md'), links('en').guide);
-  assert.equal(links('it').exampleRoute, 'https://app.meteoride.cc/?gpx_url=https://app.meteoride.cc/assets/example-route.gpx');
+  assert.equal(links('it').exampleRoute, 'https://app.meteoride.cc/?example');
 });
 
 // Built once; the two tests below read the same output.
@@ -167,4 +167,46 @@ test("every page shows its own language's screenshots", async () => {
     const [es, de] = await Promise.all(['es', 'de'].map((c) => readFile(join(SITE, 'img/shots', `${c}-table-phone.jpg`))));
     assert.ok(!es.equals(de), 'es-table-phone.jpg and de-table-phone.jpg are the same picture');
   }
+});
+
+// The old landings lived in the app's project (app.meteoride.cc/<code>/<slug>); search engines
+// and links out there still carry them, so each one goes to its language's page here.
+test('the old landings redirect to the site', async () => {
+  const OLD = {
+    en: 'route-weather', es: 'tiempo-en-tu-ruta', ca: 'temps-a-la-teva-ruta', gl: 'tempo-na-tua-ruta',
+    eu: 'eguraldia-zure-ibilbidean', fr: 'meteo-sur-votre-parcours', de: 'wetter-auf-deiner-route',
+    it: 'meteo-sul-tuo-percorso', pt: 'tempo-no-seu-percurso',
+  };
+  assert.deepEqual(Object.keys(OLD).sort(), [...LANGS].sort());
+  const rules = (await readFile(join(ROOT, 'public/_redirects'), 'utf8'))
+    .split('\n').map((l) => l.trim().split(/\s+/)).filter((r) => r[0] && !r[0].startsWith('#'));
+  for (const [code, slug] of Object.entries(OLD)) {
+    for (const from of [`/${code}/${slug}`, `/${code}/${slug}/`]) {
+      const rule = rules.find((r) => r[0] === from);
+      assert.deepEqual(rule, [from, `https://meteoride.cc/${code}/`, '301'], `${from}`);
+    }
+    assert.ok(!existsSync(join(ROOT, 'public', code)), `public/${code}/ is still there`);
+  }
+});
+
+test('the site sends strict headers', async () => {
+  const headers = await readFile(join(SITE, '_headers'), 'utf8');
+  const csp = headers.match(/^\s*Content-Security-Policy:(.*)$/m);
+  assert.ok(csp, 'no Content-Security-Policy');
+  assert.match(csp[1], /(^|;)\s*default-src 'self'\s*(;|$)/);
+  assert.doesNotMatch(csp[1], /https?:|\/\/|\*|'unsafe-(inline|eval)'/, 'the policy lets in another origin or inline code');
+  await built;
+  for (const f of ['_headers', 'robots.txt']) await access(join(SITE, 'dist', f));
+});
+
+test('the sitemap lists the nine pages', async () => {
+  const codes = (await built).map(([code]) => code);
+  const xml = await readFile(join(SITE, 'dist/sitemap.xml'), 'utf8');
+  const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  assert.deepEqual(locs.sort(), codes.map((l) => `https://meteoride.cc/${l}/`).sort());
+  for (const l of codes) {
+    assert.equal(xml.split(`<xhtml:link rel="alternate" hreflang="${l}" href="https://meteoride.cc/${l}/"/>`).length - 1, codes.length, `alternate ${l}`);
+  }
+  assert.equal(xml.split('<xhtml:link rel="alternate" hreflang="x-default" href="https://meteoride.cc/en/"/>').length - 1, codes.length, 'x-default');
+  assert.ok((await readFile(join(SITE, 'dist/robots.txt'), 'utf8')).includes('Sitemap: https://meteoride.cc/sitemap.xml'));
 });

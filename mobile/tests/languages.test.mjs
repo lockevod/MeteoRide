@@ -19,17 +19,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const PUBLIC = join(ROOT, 'public');
 const read = (name) => readFile(join(PUBLIC, name), 'utf8');
 
-/** The landing page of each language, the way its readers would search for it. */
-export const LANDING = {
-  ca: 'ca/temps-a-la-teva-ruta',
-  gl: 'gl/tempo-na-tua-ruta',
-  eu: 'eu/eguraldia-zure-ibilbidean',
-  fr: 'fr/meteo-sur-votre-parcours',
-  de: 'de/wetter-auf-deiner-route',
-  it: 'it/meteo-sul-tuo-percorso',
-  pt: 'pt/tempo-no-seu-percurso',
-};
-const ALL = Object.keys(LANDING);
+const ALL = ['ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt'];
 const LANGS = process.env.CW_LANG ? [process.env.CW_LANG] : ALL;
 
 const count = (html, re) => (html.match(re) || []).length;
@@ -128,13 +118,8 @@ for (const code of LANGS) {
     });
   }
 
-  test(`${code}: the landing page, the iOS purpose strings`, async () => {
-    const html = await read(`${LANDING[code]}/index.html`);
-    assert.match(html, new RegExp(`<html lang="${code}"`));
-    assert.ok(html.includes(`<link rel="canonical" href="https://app.meteoride.cc/${LANDING[code]}">`), 'canonical');
-    for (const [c, slug] of [['en', 'en/route-weather'], ['es', 'es/tiempo-en-tu-ruta'], ...Object.entries(LANDING)]) {
-      assert.ok(html.includes(`hreflang="${c}" href="https://app.meteoride.cc/${slug}"`), `hreflang ${c}`);
-    }
+  // The landings moved to the product site (site/, meteoride.cc); site.test.mjs checks them.
+  test(`${code}: the iOS purpose strings`, async () => {
     const strings = await readFile(join(ROOT, `mobile/native/ios/${code}.lproj/InfoPlist.strings`), 'utf8');
     for (const key of ['NSLocationWhenInUseUsageDescription', 'NSLocationAlwaysAndWhenInUseUsageDescription', 'NSLocationAlwaysUsageDescription']) {
       assert.match(strings, new RegExp(`^"${key}" = ".+";$`, 'm'), key);

@@ -24,6 +24,7 @@ public/            the web app — the single source of truth for all platforms
     native.js      native shell bridge; inert in a browser
     service-worker.js  POST handoff for iOS Shortcuts (web only)
     version.js     generated, committed — window.CW_VERSION for the help pages
+site/              the product site, meteoride.cc (its own Pages project; see below)
 functions/         Cloudflare Pages functions for the /share endpoint
 tools/             local dev server, icon scripts, Tampermonkey userscripts
 mobile/            Capacitor project (see below)
@@ -371,7 +372,8 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   German, Italian and Portuguese (pt-PT) are one file each, `scripts/lang-<code>.js`, loaded
   before `utils.js` and merged into its dictionary. Each language also has `help_<code>.html`,
   `privacy-{ios,android,web}-<code>.html` (single-language; the es/en policies keep both
-  languages, so App Store Connect gets a privacy URL per localisation), a landing page, a
+  languages, so App Store Connect gets a privacy URL per localisation), a page on the product
+  site (`site/i18n/<code>.json`, see «The product site»), a
   `support.html` section, a `TEXT` entry in `watch-rules.js` for the notification and an
   `InfoPlist.strings` (`mobile/native/ios/<code>.lproj`, copied into the Xcode project and
   registered there by hand like `es`). `mobile/tests/languages.test.mjs` holds every one of
@@ -464,6 +466,42 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   repeats. Android: `android:screenOrientation="portrait"` on `.MainActivity` in the
   committed `AndroidManifest.xml`; there is only the one activity, and the share sheet
   and file-open intent filters are on it too, so nothing else needs the same line.
+
+## The product site (meteoride.cc)
+
+`site/` is the overview at <https://meteoride.cc>, separate from the app at
+app.meteoride.cc and deployed as its own Cloudflare Pages project (build
+`node site/build.mjs`, output `site/dist`, Node 22; the dashboard steps are in
+`docs/DEPLOY.md`). `build.mjs` fills `template.html` from `i18n/<code>.json` for the nine
+languages (every string HTML-escaped, a missing key stops the build), writes the chooser at
+`/` (`site.js` picks the language: a stored choice, then the browser's, else `en`), the
+sitemap with `xhtml:link` alternates, and copies `styles.css`, `site.js`, `img/`, `_headers`
+and `robots.txt`. `mobile/tests/site.test.mjs` and `describe('the product site')` in
+`smoke.spec.mjs` cover it, inside `npm test`.
+
+- **No third party, ever.** No CDN, web font, analytics or cookie, and nothing in
+  `src`/stylesheet/script/image from another origin; `site/_headers` sends
+  `default-src 'self'` with no host and no `unsafe-inline`, and the test fails on either.
+  Links out (App Store, GitHub, the app) are fine.
+- **The old landings** (`app.meteoride.cc/<code>/<slug>`) left `public/`; `public/_redirects`
+  301s each, with and without the trailing slash, to `https://meteoride.cc/<code>/`.
+- **The example-route call to action is `https://app.meteoride.cc/?example`**, not a
+  `?gpx_url=` to the bundled file: `?example` titles the route in the visitor's language
+  («The example route» below), a `?gpx_url=` keeps the file's English `<name>`.
+- **Screenshots come from the real app**, committed in `site/img/shots/<code>-<scene>-<device>.jpg`
+  (72: four scenes × phone/desktop × nine languages). To redo them:
+  `cd mobile && npm run build && npm run site:shots`. `site/shots.mjs` shoots `mobile/www`
+  (hence the build first, not `public/`) through `mobile/tests/server.mjs` on **port 4183**
+  (never 4173, the suite's: do not run it during `npm test`), launching **one browser per
+  language** with `--lang=<region>`, because the date inputs follow the browser's UI language,
+  not the context locale. Every request off the origin is aborted; the providers answer from
+  `site/fixtures/` (`weather.json`, `warning.json` with the warning worded per language) and the
+  map from **committed OpenStreetMap tiles** in `site/fixtures/tiles/{z}/{x}/{y}.png` (© OSM
+  contributors, credited in the site footer and in each shot's map attribution); a tile it
+  has not got prints `shots: no fixture tile …`, so fetch it once and commit it when the
+  layout moves the map. The clock is fixed (`page.clock.install`), so two runs are
+  byte-identical; `setFixedTime` freezes Leaflet's tile fade and leaves a grey map. Each shot
+  stays under 300 KB (the test checks size, JPEG frame and language).
 
 ## Gotchas found the hard way
 
@@ -1938,6 +1976,13 @@ again; it comes back green. That zero is what licenses the re-run — re-running
 suite and reporting only the second number is how a real regression gets buried.
 
 ## Open work
+
+- **Localised weather warnings are coloured as minor.** `getSeverityClass` (app.js) picks
+  the card's colour from English words in the event (`warning`/`severe` red,
+  `watch`/`advisory` orange, else blue), so a warning a provider words in the user's language
+  ("Aviso amarillo por rachas de viento") renders blue, like a minor one. Seen in the site's
+  warning screenshots. Not fixed: it wants the provider's own severity field, or a word list
+  per language.
 
 - Android release signing is wired (task 12): `app/build.gradle` reads
   `ANDROID_KEYSTORE_*` env vars, then `mobile/android/keystore.properties` (git-ignored;
