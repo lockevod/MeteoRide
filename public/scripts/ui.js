@@ -1886,13 +1886,17 @@
         // a route picked or shared while the file is still being read is then the newer
         // request and wins, and a read that fails is the coordinator's to report, only if
         // nothing has replaced it.
+        // The file's own <name> is English, and a route is titled from its file's <name>
+        // (a user's GPX keeps the name it carries). So the example's file is given the name
+        // in the language chosen: the title, the recent route, its restore and a share agree.
+        const name = window.t('example_route_name');
         window.cwReceiveRoute({
           source: 'example',
-          name: window.t('example_route_name'),
+          name,
           fetchText: async () => {
             const res = await fetch('assets/example-route.gpx');
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.text();
+            return (await res.text()).replace(/<name>[^<]*<\/name>/g, `<name>${escapeXml(name)}</name>`);
           },
           // Kept among the recent routes only once it has opened, like a link.
           importOn: 'commit',

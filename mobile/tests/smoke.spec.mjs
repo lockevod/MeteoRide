@@ -3240,6 +3240,19 @@ const holdRecentRead = (page) =>
     });
   });
 
+// A route is titled from its file's <name>, and the bundled example's is English: the title
+// on screen said "Example ride" in every language, while the route itself was named in Spanish.
+test('the example route is titled in the language chosen, and a picked file keeps its own name', async ({ page }) => {
+  await stubProvider(page, { celsius: 20, offline: false });
+  await page.addInitScript(() => localStorage.setItem('cwSettings', JSON.stringify({ language: 'es' })));
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.locator('#exampleRoute').click();
+  await expect(routeName(page)).toHaveText('Ruta de ejemplo - Mont-roig a Castillo');
+  await page.locator('#gpxFile').setInputFiles(FIXTURE);
+  await expect(routeName(page)).toHaveText('Masnou - Montgat');
+});
+
 /* The example-route button is a way in for someone with no route. It must never be offered
  * while there is one to replace: a tap makes a newer request, which supersedes whatever is
  * on screen or still being read, and the example would then be the route kept for next time. */
