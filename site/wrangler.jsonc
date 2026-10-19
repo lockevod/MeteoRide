@@ -1,0 +1,13 @@
+// meteoride.cc is served as a Worker with static assets only: no script, just the files
+// site/build.mjs writes to dist/. Cloudflare reads _headers from that directory, and
+// /es/ resolves to /es/index.html. Workers Builds: path `site`, build `node build.mjs`,
+// deploy `npx wrangler deploy` (docs/DEPLOY.md).
+{
+  "name": "meteoride-site",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  }
+}

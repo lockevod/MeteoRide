@@ -84,24 +84,25 @@ belongs to the site, they would redirect into the app's own 404s. So, in this or
 
 1. **Push up to `368db80`** (it already contains `site/`), not the landing deletion:
    `git push origin 368db80:main`. The app deploys as usual; nothing changes for visitors.
-2. **Create the site's Pages project** and check it on its own `<project>.pages.dev` address:
-   - **Workers & Pages → Create → Pages → Connect to Git**, this repository, branch `main`.
-     Name it e.g. `meteoride-site`.
-   - Build settings: framework preset *None*, **root directory `site`**, build command
-     `node build.mjs`, build output directory `dist`. Environment variable `NODE_VERSION` =
-     `22`. The build needs no `npm install`. The root directory matters: Pages deploys the
-     `functions/` folder it finds in the root directory, and at the repository root that is the
-     app's `/share` function, which would then run on meteoride.cc without its KV binding.
-     The build still reads `public/` (the app's dictionaries) from the full checkout.
+2. **Create the site's project** (Cloudflare now creates new projects as Workers with static
+   assets; the site has no script, so a Worker with assets is the same thing a Pages project
+   was) and check it on its own `*.workers.dev` address:
+   - **Workers & Pages → Create application → Import a repository**, this repository, branch
+     `main`. Project name `meteoride-site` (must match `name` in `site/wrangler.jsonc`).
+   - **Path** (root directory): `site`. **Build command**: `node build.mjs`. **Deploy
+     command**: `npx wrangler deploy`. Build variable `NODE_VERSION` = `22`. The path matters:
+     from the repository root Cloudflare would pick up the app's `functions/` (`/share`), which
+     needs a KV binding this project does not have. `site/wrangler.jsonc` serves `dist/` as
+     static assets; `_headers` there applies, `/es/` resolves to `/es/index.html`.
    - **Leave Cloudflare Web Analytics off** for this project (Settings → Web Analytics). It
      injects a beacon script from `static.cloudflareinsights.com`, which the site's CSP blocks
      and which contradicts "no analytics".
-   - On `https://<project>.pages.dev/` the chooser picks a language and `/es/` … `/pt/` load.
+   - On `https://meteoride-site.<account>.workers.dev/` the chooser picks a language and `/es/` … `/pt/` load.
      (At `368db80` the build has no `_headers`, `sitemap.xml` or `robots.txt` yet: those come
      with step 4.)
 3. **Move the apex, back to back**: in the app's project, Custom domains, remove
-   `meteoride.cc` (the app keeps `app.meteoride.cc`); straight away, in the site's project,
-   add `meteoride.cc` and `www.meteoride.cc`. Then **Rules → Redirect Rules** on the zone:
+   `meteoride.cc` (the app keeps `app.meteoride.cc`); straight away, in the site's Worker, Settings → Domains & Routes → Add → Custom domain,
+   add `meteoride.cc` and `www.meteoride.cc` (delete a leftover `www` DNS record first). Then **Rules → Redirect Rules** on the zone:
    when hostname equals `www.meteoride.cc`, redirect dynamically to
    `concat("https://meteoride.cc", http.request.uri.path)`, status **301**, preserving the
    query string. Adding a Pages custom domain only touches the `meteoride.cc` / `www` CNAME
