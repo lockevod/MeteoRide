@@ -88,24 +88,24 @@ function chooser() {
 `;
 }
 
-export async function build({ only } = {}) {
+export async function build({ only, out = DIST } = {}) {
   const present = (await readdir(join(SITE_DIR, 'i18n'))).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
   const codes = only || present;
   const template = await readFile(join(SITE_DIR, 'template.html'), 'utf8');
-  await rm(DIST, { recursive: true, force: true });
+  await rm(out, { recursive: true, force: true });
   const written = [];
   for (const code of codes) {
     if (!LANGS.includes(code)) throw new Error(`unknown language: ${code}`);
     const strings = JSON.parse(await readFile(join(SITE_DIR, 'i18n', `${code}.json`), 'utf8'));
-    const file = join(DIST, code, 'index.html');
+    const file = join(out, code, 'index.html');
     await mkdir(dirname(file), { recursive: true });
     await writeFile(file, renderPage(template, strings, code));
     written.push(file);
   }
-  await writeFile(join(DIST, 'index.html'), chooser());
-  written.push(join(DIST, 'index.html'));
+  await writeFile(join(out, 'index.html'), chooser());
+  written.push(join(out, 'index.html'));
   for (const f of ['styles.css', 'site.js', 'img']) {
-    if (existsSync(join(SITE_DIR, f))) await cp(join(SITE_DIR, f), join(DIST, f), { recursive: true });
+    if (existsSync(join(SITE_DIR, f))) await cp(join(SITE_DIR, f), join(out, f), { recursive: true });
   }
   return written;
 }

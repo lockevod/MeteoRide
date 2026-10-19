@@ -8835,3 +8835,154 @@ test('the alerts toggle starts enabled when a usable OpenWeather key was already
   await expect(page.locator('#showWeatherAlerts')).toBeEnabled();
   await expect(page.locator('#weatherAlertsKeyHint')).toBeHidden();
 });
+
+test.describe('the product site', () => {
+  // Each worker builds into its own directory: build() wipes its output, and two workers
+  // sharing site/dist would delete each other's pages mid-test.
+  let dist;
+  test.beforeAll(async () => {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { build } = await import('../../site/build.mjs');
+    dist = await mkdtemp(join(tmpdir(), 'meteoride-site-'));
+    await build({ out: dist });
+  });
+
+  // The chooser only computes the path, so a page Task 3 has not written yet (fr, de)
+  // answers 404 and the test asserts where the browser was sent.
+  test.beforeEach(async ({ page }) => {
+    await page.route('https://site.test/**', async (route) => {
+      let path = decodeURIComponent(new URL(route.request().url()).pathname);
+      if (path.endsWith('/')) path += 'index.html';
+      try {
+        const body = await readFile(join(dist, path));
+        const type = { html: 'text/html', css: 'text/css', js: 'text/javascript', svg: 'image/svg+xml' }[path.split('.').pop()];
+        await route.fulfill({ body, contentType: type || 'application/octet-stream' });
+      } catch {
+        await route.fulfill({ status: 404, body: 'not found' });
+      }
+    });
+  });
+
+  const crashes = (page) => {
+    const list = [];
+    page.on('pageerror', (e) => list.push(e.message));
+    return list;
+  };
+
+  test.describe('in French', () => {
+    test.use({ locale: 'fr-FR' });
+
+    test('/ sends a French browser to /fr/', async ({ page }) => {
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://site.test/fr/');
+    });
+
+    test('a stored choice wins, and an unknown stored value is ignored', async ({ page }) => {
+      await page.goto('https://site.test/es/');
+      await page.evaluate(() => localStorage.setItem('meteoride-site-lang', 'de'));
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://site.test/de/');
+
+      await page.evaluate(() => localStorage.setItem('meteoride-site-lang', 'xx'));
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://site.test/fr/');
+    });
+
+    test('the selector remembers the choice for the next visit to /', async ({ page }) => {
+      const errors = crashes(page);
+      await page.goto('https://site.test/es/');
+      await page.locator('.lang-menu summary').click();
+      await page.locator('.lang-menu a[hreflang="en"]').click();
+      await expect(page).toHaveURL('https://site.test/en/');
+      await page.goto('https://site.test/');
+      await expect(page, 'the stored English beats the French browser').toHaveURL('https://site.test/en/');
+      expect(errors).toEqual([]);
+    });
+
+    test('blocked storage does not break the redirect or the selector', async ({ page }) => {
+      await page.addInitScript(() => {
+        Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } });
+      });
+      const errors = crashes(page);
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://site.test/fr/');
+
+      await page.goto('https://site.test/es/');
+      await page.locator('.lang-menu summary').click();
+      await page.locator('.lang-menu a[hreflang="en"]').click();
+      await expect(page).toHaveURL('https://site.test/en/');
+      expect(errors).toEqual([]);
+    });
+  });
+
+  test('/ falls through an unsupported first language to a supported one', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'fr-FR'] });
+    });
+    await page.goto('https://site.test/');
+    await expect(page).toHaveURL('https://site.test/fr/');
+  });
+
+  test.describe('in Japanese', () => {
+    test.use({ locale: 'ja-JP' });
+    test('/ sends a Japanese-only browser to /en/', async ({ page }) => {
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://site.test/en/');
+    });
+  });
+
+  test.describe('in British English', () => {
+    test.use({ locale: 'en-GB' });
+    test('the App Store link takes the browser\'s region', async ({ page }) => {
+      await page.goto('https://site.test/en/');
+      const links = page.locator('a[data-store]');
+      await expect(links).toHaveCount(2);
+      for (const href of await links.evaluateAll((as) => as.map((a) => a.href))) {
+        expect(href).toBe('https://apps.apple.com/gb/app/meteoride/id6813109920');
+      }
+    });
+  });
+
+  test.describe('in English without a region', () => {
+    test.use({ locale: 'en' });
+    test('the App Store link keeps the page\'s default country', async ({ page }) => {
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'languages', { get: () => ['en'] });
+      });
+      await page.goto('https://site.test/en/');
+      for (const href of await page.locator('a[data-store]').evaluateAll((as) => as.map((a) => a.href))) {
+        expect(href).toBe('https://apps.apple.com/us/app/meteoride/id6813109920');
+      }
+    });
+  });
+
+  test.describe('on a 360 px phone', () => {
+    test.use({ viewport: { width: 360, height: 740 } });
+
+    test('no horizontal scroll at 360 px', async ({ page }) => {
+      await page.goto('https://site.test/es/');
+      await expect(page.locator('link[rel="stylesheet"]')).toHaveCount(1);
+      expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'styles.css loaded').not.toBe('rgba(0, 0, 0, 0)');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+      // A two-column grid squeezed to 360 px does not overflow, it just gets unreadable.
+      for (const sel of ['.hero-text', '.block-text']) {
+        const width = await page.locator(sel).first().evaluate((el) => el.getBoundingClientRect().width);
+        expect(width, `${sel} spans the column`).toBeGreaterThan(300);
+      }
+    });
+
+    test('the menu button opens and closes the nav links', async ({ page }) => {
+      await page.goto('https://site.test/es/');
+      const button = page.locator('.menu-toggle');
+      const link = page.locator('.nav-links a[href="#install"]');
+      await expect(link).toBeHidden();
+      await button.click();
+      await expect(button).toHaveAttribute('aria-expanded', 'true');
+      await expect(link).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(button).toHaveAttribute('aria-expanded', 'false');
+      await expect(link).toBeHidden();
+    });
+  });
+});
