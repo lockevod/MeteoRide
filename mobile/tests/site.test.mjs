@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir, access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LANGS, links, renderPage, build } from '../../site/build.mjs';
 
@@ -14,6 +15,7 @@ const SITE = join(ROOT, 'site');
 // CW_SITE_LANG=<code> limits the run to that language plus en, so a translator can work on
 // one file while the others do not exist yet.
 const ONLY = process.env.CW_SITE_LANG;
+if (ONLY && !existsSync(join(SITE, 'i18n', `${ONLY}.json`))) throw new Error(`CW_SITE_LANG=${ONLY}: no site/i18n/${ONLY}.json`);
 async function strings() {
   const files = (await readdir(join(SITE, 'i18n'))).filter((f) => f.endsWith('.json'))
     .filter((f) => !ONLY || f === 'en.json' || f === `${ONLY}.json`);
@@ -101,11 +103,13 @@ test('every link target exists', async () => {
   }
 });
 
+// Honest out-of-signal copy says the map "needs a connection" and keeps words like
+// "offline"/"sin conexión" out of the 60-character window of a map word.
 // The app has no offline map, no coordinates-only mode and no price to quote: the pages
 // must not promise any of them, in any of the nine languages.
 test('no page claims what the app does not do', async () => {
   const mapWord = 'map|mapa|carte|Karte|mappa';
-  const offline = 'hors ligne|offline|ohne Netz|sin conexión|senza connessione|sem rede|sense connexió|sen conexión|konexiorik gabe';
+  const offline = 'hors ligne|hors-ligne|off-?line|sans connexion|sans réseau|ohne (Netz|Internet|Verbindung|Empfang)|senza (rete|internet|connessione)|sem (ligação|internet|conexão|rede|cobertura)|sense (xarxa|internet|connexió|cobertura)|sen (internet|conexión|cobertura)|sin (internet|red|conexión|cobertura)|lineaz kanpo|internetik gabe|konexiorik gabe';
   const forbidden = [
     /teselas[^<]*sin conexión|tiles[^<]*offline|y teselas siguen|and tiles are still|mapa[^<.]*(funciona|sirve)[^<.]*sin conexión|map[^<.]*works[^<.]*offline/i,
     new RegExp(`(${mapWord})[^.]{0,60}(${offline})|(${offline})[^.]{0,60}(${mapWord})`, 'i'),
@@ -113,7 +117,9 @@ test('no page claims what the app does not do', async () => {
     /what it costs|lo que cuesta|pricing|precio|subscri|suscrip|\bpreus?\b|\bprezos?\b|prezio|kostu|harpidetz|\bprix\b|tarif|abonnement|\bpreis|kosten|\babo\b|prezzo|abbonament|\bpreço|assinatura/i,
   ];
   for (const [code, html] of await built) {
-    const text = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/g, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    const bare = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/g, ' ');
+    // Visible text, then the markup too: meta descriptions, alt and aria-label values.
+    const text = bare.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ') + ' ' + bare;
     assert.ok(text.length > 500, `${code}: no visible text`);
     for (const re of forbidden) assert.doesNotMatch(text, re, `${code}: claims what the app does not do`);
   }
