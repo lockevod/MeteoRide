@@ -25,6 +25,7 @@ async function strings() {
 
 test('the strings files have identical keys and no empty value', async () => {
   const all = await strings();
+  if (!ONLY) assert.deepEqual(Object.keys(all).sort(), [...LANGS].sort(), 'every language in LANGS needs a site/i18n file');
   const keys = Object.keys(all.en).sort();
   assert.ok(keys.length > 50, 'en.json looks truncated');
   for (const [code, s] of Object.entries(all)) {
