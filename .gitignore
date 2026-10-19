@@ -64,3 +64,6 @@ mobile/android/local.properties
 *.jks
 *.keystore
 mobile/android/keystore.properties
+
+# Brainstorming mockups (visual companion)
+.superpowers/brainstorm/
