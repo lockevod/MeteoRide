@@ -2001,37 +2001,11 @@ suite and reporting only the second number is how a real regression gets buried.
 
 ## Open work
 
-- **Localised weather warnings are coloured as minor.** `getSeverityClass` (app.js) picks
-  the card's colour from English words in the event (`warning`/`severe` red,
-  `watch`/`advisory` orange, else blue), so a warning a provider words in the user's language
-  ("Aviso amarillo por rachas de viento") renders blue, like a minor one. Seen in the site's
-  warning screenshots. Not fixed: it wants the provider's own severity field, or a word list
-  per language.
-
-- Android release signing is wired (task 12): `app/build.gradle` reads
-  `ANDROID_KEYSTORE_*` env vars, then `mobile/android/keystore.properties` (git-ignored;
-  see `keystore.properties.example`), and signs `assembleRelease`/`bundleRelease` when
-  either is complete. Neither present is not an error — the build still produces an
-  unsigned APK with a console warning. The author still has to point one of those two
-  at their own keystore; nothing here has it.
-- The smoke suite stubs provider responses, so providers, the weather table, comparison modes and the
-  unit/language settings are covered in Chromium; nothing checks a real provider's live answer.
-- `npm test` runs the suite on both Chromium and WebKit (`mobile-webkit`, see
-  «Verifying a change» above; `npm run test:webkit` runs that engine alone).
-  WebKit used to fail 55 of 260; the IndexedDB `Blob`-write cause behind 54 of
-  those is fixed (task 11, §10 of `docs/HANDOFF.md`) and the suite is 261/261
-  there, so it was folded into the default gate.
-- The iOS native code has now been compiled and run in the simulator on the author's
-  Mac — the app launches, the app-local plugin registers, the App Group resolves and a
-  GPX loads from Files. Nothing here compiles it: everything written in this
-  environment was checked by reading the Capacitor sources in
-  `node_modules/@capacitor/ios`, which is how the plugin registration bug above was
-  found, but reading is not building, so a change to the Swift still has to go through
-  Xcode before anyone can call it working. The Android code compiles (against
-  hand-written stubs of the dozen SDK and Capacitor classes it touches; there is no
-  Android SDK here), and `cap sync android` runs here, so the generated
-  `capacitor.settings.gradle` / `capacitor.build.gradle` are committed in step with the
-  installed plugins. Android itself has never been built or run.
+- **A warning's colour follows its Meteoalarm level, in any language.** `getSeverityClass`
+  (app.js) reads the colour the service names (yellow → moderate; orange, red → severe, in the
+  nine languages) and DWD's level words (Unwetter, markant → severe; plain Warnung → moderate);
+  only without them do the English words decide. It used to match English only, so every
+  AEMET or Météo-France warning was drawn blue. OpenWeather sends no severity field.
 - **No ride alert has ever fired on a physical device.** iOS background tasks never
   execute in the simulator, so the delivery path has never run for real: the rules and
   the runner are covered by tests, the delivery is not. (Sharing a route in HAS been

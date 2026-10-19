@@ -3272,10 +3272,26 @@ window.cwParseRoute = async function ({ text, name }) {
   if (!cwForecastRules.routeLine(geojson)) return null;
   return {
     layer, geojson, text, gpxText, name: fileName,
-    displayName: (layer.get_name && layer.get_name()) || fileName.replace(/\.[^/.]+$/, ""),
+    displayName: titleOf(gpxText) || (layer.get_name && layer.get_name()) || fileName.replace(/\.[^/.]+$/, ""),
     fingerprint: cwForecastRules.fingerprint(text),
   };
 };
+
+
+// The route's title, read the way leaflet-gpx reads it (the first <name>) but from the text
+// as it arrived. The copy leaflet-gpx parses has its names escaped by cwSanitizeGPXText for
+// its HTML popups, so its name read "A &amp; B"; the title is drawn with textContent, which
+// needs the plain text and is safe with it.
+function titleOf(gpxText) {
+  try {
+    const doc = new DOMParser().parseFromString(String(gpxText || ""), "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) return "";
+    const name = doc.getElementsByTagName("name")[0];
+    return name ? name.textContent.trim() : "";
+  } catch (_) {
+    return "";
+  }
+}
 
 // Puts a parsed route on screen with no wait anywhere: it becomes the confirmed route, takes
 // the name on screen and the file sharing sends, what belonged to the route before goes, and
@@ -3745,12 +3761,20 @@ function createAlertElement(alert) {
 }
 
 // Determine severity class based on alert event
+// National services name the Meteoalarm level in their own language: orange and red call for
+// action (severe), yellow for attention (moderate). DWD names its levels instead: "Unwetter" and
+// "markantes Wetter" are severe, a plain "Warnung" is level 1. Only without any of these do the
+// English words decide; matching those alone painted every non-English warning as the mildest kind.
+const SEVERE_LEVEL = /\b(red|rojo|roja|roig|vermell|vermello|vermelha|vermelho|gorria|rouge|rot|rosso|rossa|orange|naranja|taronja|laranxa|laranja|arancione)\b|unwetter|markant/i;
+const MODERATE_LEVEL = /\b(yellow|amarillo|amarilla|groc|groga|amarelo|amarela|horia|jaune|gelb|gelbe|giallo|gialla)\b/i;
 function getSeverityClass(event) {
-  const eventLower = event.toLowerCase();
-  
+  const text = String(event || '');
+  if (SEVERE_LEVEL.test(text)) return 'severe';
+  if (MODERATE_LEVEL.test(text)) return 'moderate';
+  const eventLower = text.toLowerCase();
   if (eventLower.includes('warning') || eventLower.includes('severe')) {
     return 'severe';
-  } else if (eventLower.includes('watch') || eventLower.includes('advisory')) {
+  } else if (eventLower.includes('watch') || eventLower.includes('advisory') || eventLower.includes('warnung')) {
     return 'moderate';
   } else {
     return 'minor';

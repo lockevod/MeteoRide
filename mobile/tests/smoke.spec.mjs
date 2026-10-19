@@ -651,6 +651,50 @@ test('a booby-trapped route cannot run script', async ({ page }) => {
   }
 });
 
+// The card's colour came from English words only ("warning", "severe"), so an AEMET or
+// Météo-France warning written in its own language was drawn blue, as the mildest kind.
+// The colour now follows the Meteoalarm level in any of the nine languages; the English
+// words stay as the fallback for providers that send no colour.
+test('a warning is coloured by its level in any language', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const levels = await page.evaluate(() => [
+    'Aviso amarillo por rachas de viento', 'Aviso naranja por lluvias', 'Aviso rojo por tormentas',
+    'Avís groc per vent', 'Aviso laranxa por choiva', 'Abisu gorria', 'Vigilance jaune vent violent',
+    'Vigilance orange orages', 'Amtliche Warnung vor Windböen', 'Unwetterwarnung (rot)', 'Allerta gialla vento',
+    'Aviso vermelho de precipitação', 'Yellow wind warning', 'Severe thunderstorm warning', 'Flood watch',
+    'Heat advisory', 'Air quality statement',
+  ].map((e) => getSeverityClass(e)));
+  expect(levels).toEqual([
+    'moderate', 'severe', 'severe',
+    'moderate', 'severe', 'severe', 'moderate',
+    'severe', 'moderate', 'severe', 'moderate',
+    'severe', 'moderate', 'severe', 'moderate',
+    'moderate', 'minor',
+  ]);
+});
+
+// cwSanitizeGPXText escapes the route's text nodes for leaflet-gpx, which builds popups as
+// HTML; the title, drawn with textContent, showed that escaped text: "A &amp; B".
+test('a route named with & or < is titled as written, and still as text', async ({ page }) => {
+  await goOffline(page);
+  await page.goto('/index.html');
+  await mapReady(page);
+  const gpx = (name) => `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="t" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>${name}</name><trkseg>
+    <trkpt lat="41.4790" lon="2.3160"/><trkpt lat="41.4770" lon="2.3050"/>
+  </trkseg></trk>
+</gpx>`;
+  await pickText(page, 'amp.gpx', gpx('Montseny &amp; Tagamanent'));
+  await expect(routeName(page)).toHaveText('Montseny & Tagamanent');
+  await pickText(page, 'lt.gpx', gpx('&lt;b&gt;Collserola&lt;/b&gt; 3 &lt; 5'));
+  await expect(routeName(page)).toHaveText('<b>Collserola</b> 3 < 5');
+  expect(await routeName(page).locator('b').count(), 'the name became markup').toBe(0);
+});
+
+
 // Official weather alerts arrive through a provider's API as free text written by
 // national met services. That text used to be dropped into innerHTML.
 test('a hostile weather alert is shown as text', async ({ page }) => {
