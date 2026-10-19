@@ -3762,11 +3762,20 @@ function createAlertElement(alert) {
 
 // Determine severity class based on alert event
 // National services name the Meteoalarm level in their own language: orange and red call for
-// action (severe), yellow for attention (moderate). DWD names its levels instead: "Unwetter" and
-// "markantes Wetter" are severe, a plain "Warnung" is level 1. Only without any of these do the
-// English words decide; matching those alone painted every non-English warning as the mildest kind.
-const SEVERE_LEVEL = /\b(red|rojo|roja|roig|vermell|vermello|vermelha|vermelho|gorria|rouge|rot|rosso|rossa|orange|naranja|taronja|laranxa|laranja|arancione)\b|unwetter|markant/i;
-const MODERATE_LEVEL = /\b(yellow|amarillo|amarilla|groc|groga|amarelo|amarela|horia|jaune|gelb|gelbe|giallo|gialla)\b/i;
+// action (severe), yellow for attention (moderate) — every gender, plural and German case form
+// of the colour, since "Alerta vermella", "Avisos rojos" and "Rote Warnung" are all red. DWD's
+// own names do not always carry a colour: "Unwetterwarnung" is its level 3–4 and is severe; a
+// plain "Warnung" (levels 1–2, the event names the phenomenon) falls to moderate below. Only
+// without any of these do the English words decide.
+const SEVERE_LEVEL = new RegExp('\\b(' + [
+  'red', 'roj[oa]s?', 'roig', 'roja', 'vermell(a|s|es)?', 'vermell[oa]s?', 'vermelh[oa]s?', 'gorri(a|ak)?',
+  'rouges?', 'rot(e|er|es|en|em)?', 'ross[oaie]',
+  'orange[ns]?', 'orangene[nrs]?', 'naranjas?', 'taronj(a|es)', 'laranx(a|as)', 'laranjas?', 'arancion[ei]',
+].join('|') + ')\\b|unwetter', 'i');
+const MODERATE_LEVEL = new RegExp('\\b(' + [
+  'yellow', 'amarill[oa]s?', 'groc(s)?', 'grog(a|ues)', 'amarel[oa]s?', 'horia(k)?',
+  'jaunes?', 'gelb(e|er|es|en|em)?', 'giall[oaie]',
+].join('|') + ')\\b', 'i');
 function getSeverityClass(event) {
   const text = String(event || '');
   if (SEVERE_LEVEL.test(text)) return 'severe';

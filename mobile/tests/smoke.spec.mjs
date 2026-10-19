@@ -665,6 +665,12 @@ test('a warning is coloured by its level in any language', async ({ page }) => {
     'Vigilance orange orages', 'Amtliche Warnung vor Windböen', 'Unwetterwarnung (rot)', 'Allerta gialla vento',
     'Aviso vermelho de precipitação', 'Yellow wind warning', 'Severe thunderstorm warning', 'Flood watch',
     'Heat advisory', 'Air quality statement',
+    // Gender, plural and German inflections of the colours (reviews found these falling through).
+    'Alerta vermella per vent', 'Alerta vermella por choiva', 'Rote Warnung Sturm', 'Orangene Warnung',
+    'Avisos rojos', 'Allerte rosse', 'Vigilances rouges', 'Avisos amarillos', 'Allerta gialla', 'Gelbe Warnung',
+    'Abisu horia', 'Aviso amarelo', 'Alertas vermelhas',
+    // Must not fire on words that merely contain a colour, or Basque "hori" (that).
+    'Rotorua flood statement', 'Hori ez da abisu bat', 'Unwetterwarnung', null,
   ].map((e) => getSeverityClass(e)));
   expect(levels).toEqual([
     'moderate', 'severe', 'severe',
@@ -672,6 +678,10 @@ test('a warning is coloured by its level in any language', async ({ page }) => {
     'severe', 'moderate', 'severe', 'moderate',
     'severe', 'moderate', 'severe', 'moderate',
     'moderate', 'minor',
+    'severe', 'severe', 'severe', 'severe',
+    'severe', 'severe', 'severe', 'moderate', 'moderate', 'moderate',
+    'moderate', 'moderate', 'severe',
+    'minor', 'minor', 'severe', 'minor',
   ]);
 });
 
@@ -691,7 +701,10 @@ test('a route named with & or < is titled as written, and still as text', async 
   await expect(routeName(page)).toHaveText('Montseny & Tagamanent');
   await pickText(page, 'lt.gpx', gpx('&lt;b&gt;Collserola&lt;/b&gt; 3 &lt; 5'));
   await expect(routeName(page)).toHaveText('<b>Collserola</b> 3 < 5');
-  expect(await routeName(page).locator('b').count(), 'the name became markup').toBe(0);
+  expect(await routeName(page).locator('b').count(), 'the name became markup').toBe(0);  // A file opening with a BOM and a blank line: titleOf cannot parse it, but neither can
+  // cwSanitizeGPXText, so nothing was escaped and leaflet-gpx's own name is already right.
+  await pickText(page, 'bom.gpx', '\uFEFF\n' + gpx('Garraf &amp; Ordal'));
+  await expect(routeName(page)).toHaveText('Garraf & Ordal');
 });
 
 
