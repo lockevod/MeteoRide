@@ -86,7 +86,7 @@
       <p><strong>MeteoRide ne collecte pas vos données et ne les exploite pas.</strong> Pas de compte, pas d’inscription, pas de publicité, pas d’analyse d’audience, pas de télémétrie, pas de rapports de plantage, pas d’identifiants de suivi.</p>
       <p><strong>Cette politique couvre uniquement le site web</strong>, <a href="https://app.meteoride.cc" target="_blank" rel="noopener noreferrer">app.meteoride.cc</a> ouvert dans un navigateur. Les apps à installer ont la leur et sont plus fermées que cela : <a href="privacy-ios-fr.html">iOS</a> et <a href="privacy-android-fr.html">Android</a>. Rien de ce qui est décrit ici comme propre au site ne se produit dans les apps.</p>
     </div>
-    <p>Dernière mise à jour : 19 septembre 2026.</p>
+    <p>Dernière mise à jour : 19 octobre 2026.</p>
 
     <h3>Pour vous donner les prévisions</h3>
     <table>
@@ -115,7 +115,7 @@
       <li>Le site charge ses bibliothèques depuis trois réseaux de diffusion de contenu : <a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener noreferrer">jsDelivr</a>, <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">cdnjs (Cloudflare)</a> et <a href="https://www.npmjs.com/policies/privacy" target="_blank" rel="noopener noreferrer">unpkg</a>. Chacun reçoit votre IP et la page d’où vous venez. Les apps embarquent ces bibliothèques.</li>
       <li>Les pages d’aide affichent un bouton Buy Me a Coffee, qui reçoit lui aussi votre IP. Les apps ne l’ont pas.</li>
       <li>Ouvrir un parcours avec <code>?gpx_url=</code> le télécharge depuis le serveur que vous indiquez, quel qu’il soit. Les apps n’ont pas ce point d’entrée.</li>
-      <li>Le raccourci iOS qui envoie un parcours à MeteoRide ne sait faire que du POST, donc ce GPX <strong>est envoyé vers un stockage Cloudflare géré par l’auteur</strong>, reçoit un identifiant aléatoire impossible à deviner et se supprime de lui-même au bout de deux minutes (la valeur par défaut, et celle utilisée). C’est la seule chose qui arrive un jour entre les mains de l’auteur, et elle n’y reste que ce temps-là. Les apps n’utilisent pas ce chemin.</li>
+      <li>Si vous utilisez le userscript facultatif qui envoie un parcours vers Hammerhead, le site envoie ce GPX <strong>vers un stockage Cloudflare géré par l’auteur</strong> pour que Hammerhead l’importe depuis là ; il reçoit un identifiant aléatoire impossible à deviner et se supprime de lui-même au bout de deux minutes (la valeur par défaut, et celle utilisée). C’est la seule chose qui arrive un jour entre les mains de l’auteur, et elle n’y reste que ce temps-là. Sans ce userscript, le site n’envoie aucun parcours, et les apps ne le font jamais.</li>
     </ul>
     <p>L’hébergement est Cloudflare Pages, qui enregistre les requêtes vers tout site qu’il sert, comme n’importe quel hébergeur.</p>
 

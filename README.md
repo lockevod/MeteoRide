@@ -21,7 +21,7 @@ runs as a native iPhone and Android app, or from your own copy of this repositor
 |---|---|
 | **[User guide](docs/GUIDE.md)** · **[Guía de usuario](docs/GUIA.md)** | How to use MeteoRide, in full: providers, settings, the native app, privacy, limits. **Start here.** |
 | [Installing and running](docs/INSTALL.md) | Using it in the browser, the native apps, running your own copy. |
-| [Deploying, and sharing routes into it](docs/DEPLOY.md) | Cloudflare Pages + Worker, the POST handoff, iOS Shortcuts. |
+| [Deploying, and sharing routes into it](docs/DEPLOY.md) | Cloudflare Pages + Worker, the POST handoff for the Hammerhead exporter. |
 | [Tampermonkey userscripts](docs/USERSCRIPTS.md) | One-click import from Komoot, Bikemap and Hammerhead. |
 | [iOS build](docs/IOS.md) · [Android build](docs/ANDROID.md) | Per-platform native build instructions. |
 
@@ -63,9 +63,10 @@ Every one of these is explained in the [user guide](docs/GUIDE.md).
 ## Privacy, in one paragraph
 
 MeteoRide runs entirely on your device: settings, routes and cache never leave
-it, and there is no account. The one exception is the website's iOS Shortcuts
-handoff, which uploads the GPX to Cloudflare because Shortcuts only accept POST;
-that file is deleted within two minutes. The native apps do not need it. Weather
+it, and there is no account. The one exception is the website's optional
+Hammerhead exporter userscript, which uploads the GPX to Cloudflare so Hammerhead
+can import it from a link; that file is deleted within two minutes. The native
+apps never do this. Weather
 providers receive only the coordinates of your route, the times you ask about,
 and your API key if you configured one. The detail is in
 [the guide](docs/GUIDE.md#13-privacy-and-data).

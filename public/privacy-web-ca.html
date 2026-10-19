@@ -86,7 +86,7 @@
       <p><strong>MeteoRide no recull les teves dades ni les explota.</strong> No hi ha compte, ni registre, ni publicitat, ni analítica, ni telemetria, ni informes d'errors, ni identificadors de seguiment.</p>
       <p><strong>Aquesta política cobreix únicament el web</strong>, <a href="https://app.meteoride.cc" target="_blank" rel="noopener noreferrer">app.meteoride.cc</a> obert en un navegador. Les apps instal·lables tenen les seves, i són més tancades que això: <a href="privacy-ios-ca.html">iOS</a> i <a href="privacy-android-ca.html">Android</a>. Res del que aquí es descriu com a propi del web no passa en elles.</p>
     </div>
-    <p>Última actualització: 19 de setembre de 2026.</p>
+    <p>Última actualització: 19 d'octubre de 2026.</p>
 
     <h3>Per donar-te la previsió</h3>
     <table>
@@ -115,7 +115,7 @@
       <li>El web carrega les seves biblioteques des de tres xarxes de distribució de continguts: <a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener noreferrer">jsDelivr</a>, <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">cdnjs (Cloudflare)</a> i <a href="https://www.npmjs.com/policies/privacy" target="_blank" rel="noopener noreferrer">unpkg</a>. Cadascuna rep la teva IP i la pàgina des de la qual arribes. Les apps porten aquestes biblioteques a dins.</li>
       <li>Les pàgines d'ajuda mostren un botó de Buy Me a Coffee, que també rep la teva IP. Les apps no el porten.</li>
       <li>Obrir una ruta amb <code>?gpx_url=</code> la descarrega del servidor que tu indiquis, sigui quin sigui. Les apps no tenen aquesta entrada.</li>
-      <li>La drecera d'iOS que envia una ruta a MeteoRide només sap fer POST, així que aquest GPX <strong>es puja a un magatzem de Cloudflare que gestiona l'autor</strong>, rep un identificador aleatori impossible d'endevinar i s'esborra sol al cap de dos minuts (és el valor per defecte i el que s'utilitza). És l'única cosa que arriba en algun moment a mans de l'autor, i dura això. Les apps no fan servir aquest camí.</li>
+      <li>Si fas servir l'userscript opcional que envia una ruta a Hammerhead, el web puja aquest GPX <strong>a un magatzem de Cloudflare que gestiona l'autor</strong> perquè Hammerhead l'importi des d'allà; rep un identificador aleatori impossible d'endevinar i s'esborra sol al cap de dos minuts (és el valor per defecte i el que s'utilitza). És l'única cosa que arriba en algun moment a mans de l'autor, i dura això. Sense aquest userscript el web no puja cap ruta, i les apps no ho fan mai.</li>
     </ul>
     <p>L'allotjament és Cloudflare Pages, que registra les peticions a qualsevol lloc que serveix, com qualsevol allotjament.</p>
 

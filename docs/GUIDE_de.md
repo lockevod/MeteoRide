@@ -157,8 +157,7 @@ Das gibt es nur in der nativen App: Es sind Dinge, die ein Browser nicht kann.
 Ist eine Route geladen, öffnet die Taste **📤** in der oberen Leiste das
 Teilen-Menü des Systems mit der GPX-Datei im Anhang. Von dort geht sie an deinen
 Radcomputer (Hammerhead, Wahoo), an Dateien, an Mail oder wohin du willst. Die
-Datei verlässt nie das Gerät: Es gibt keinen Server dazwischen, anders als beim
-iOS-Kurzbefehl, den die Website braucht.
+Datei verlässt nie das Gerät: Es gibt keinen Server dazwischen.
 
 ### 6.2 Eine Route aus einer anderen App empfangen
 
@@ -488,11 +487,12 @@ und Daten werden nur auf deinem Gerät gespeichert: auf der Website im Browser
 (localStorage und IndexedDB), in der App zusätzlich im eigenen Speicher des
 Systems, damit iOS die Einstellungen nicht löschen kann.
 
-Die einzige Ausnahme ist die Website: Wenn du die iOS-Kurzbefehle nutzt, um eine
-GPX-Datei zu teilen, wird diese Datei zu Cloudflare hochgeladen. Das lässt sich
-nicht vermeiden, weil iOS-Kurzbefehle nur POST akzeptieren. Öffnest du die Datei
-direkt in MeteoRide, wird nichts hochgeladen, weil sie lokal verarbeitet wird,
-und die native App braucht das überhaupt nicht. In jedem Fall wird die
+Die einzige Ausnahme ist die Website: Wenn du das optionale Userscript
+MeteoRide → Hammerhead (Abschnitt 3) nutzt, um eine Route an Hammerhead zu
+senden, wird diese GPX-Datei zu Cloudflare hochgeladen, dem Share-Server, den es
+standardmäßig verwendet, damit Hammerhead sie über einen Link importieren kann.
+Öffnest du die Datei direkt in MeteoRide, wird nichts hochgeladen, weil sie
+lokal verarbeitet wird, und die nativen Apps tun das nie. In jedem Fall wird die
 hochgeladene GPX-Datei spätestens nach zwei Minuten automatisch gelöscht.
 
 - **Kein Konto:** Du musst kein Konto anlegen und keine persönlichen Daten angeben.

@@ -159,8 +159,7 @@ fazer.
 Com um percurso carregado, o botão **📤** na barra superior abre a folha de
 partilha do sistema com o GPX anexado. Daí segue para o teu ciclocomputador
 (Hammerhead, Wahoo), para Ficheiros, para o e-mail, para onde quiseres. O
-ficheiro nunca sai do dispositivo: não há nenhum servidor intermédio, ao
-contrário do Atalho do iOS de que o site precisa.
+ficheiro nunca sai do dispositivo: não há nenhum servidor intermédio.
 
 ### 6.2 Receber um percurso de outra app
 
@@ -480,12 +479,13 @@ preferências e dados ficam guardados só no teu dispositivo: no site, no
 navegador (localStorage e IndexedDB), e na app também no armazenamento próprio
 do sistema, para que o iOS não possa apagar as definições.
 
-A única exceção é o site: se usares os Atalhos do iOS para partilhar um GPX, esse
-ficheiro é carregado para a Cloudflare. É inevitável porque os Atalhos do iOS
-só aceitam POST. Se abrires o ficheiro diretamente no MeteoRide não se carrega
-nada, porque é processado localmente, e a app nativa não precisa de nada disto.
-Em qualquer caso o GPX carregado é apagado automaticamente no máximo em dois
-minutos.
+A única exceção é o site: se usares o userscript opcional MeteoRide → Hammerhead
+(secção 3) para enviar um percurso para o Hammerhead, esse GPX é carregado para
+a Cloudflare, o share-server que usa por omissão, para que o Hammerhead o
+importe a partir de uma ligação. Se abrires o ficheiro diretamente no MeteoRide
+não se carrega nada, porque é processado localmente, e as apps nativas nunca o
+fazem. Em qualquer caso o GPX carregado é apagado automaticamente no máximo em
+dois minutos.
 
 - **Sem conta:** não precisas de criar uma conta nem de dar dados pessoais.
 - **Controlo total:** no site, apaga os dados do site nas definições do teu

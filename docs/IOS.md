@@ -8,7 +8,7 @@ What the app adds over the PWA:
 
 | | PWA on iOS | Native app |
 |---|---|---|
-| Share a GPX from another app | iOS Shortcut + upload to a temporary server | native share sheet, file never leaves the device |
+| Share a GPX from another app | not possible | native share sheet, file never leaves the device |
 | Open a .gpx from Files/Mail | not possible | "Open in MeteoRide" |
 | Works with no connectivity | libraries come from CDNs | everything is in the bundle |
 | Distribution | Add to Home Screen | App Store / TestFlight |

@@ -169,7 +169,7 @@ Ibilbide bat kargatuta dagoenean, goiko barrako **📤** botoiak sistemaren
 partekatzeko orria irekitzen du GPXa erantsita. Handik zure GPS gailura
 (Hammerhead, Wahoo), Fitxategiak aplikaziora, posta elektronikora edo nahi
 duzun lekura doa. Fitxategia ez da inoiz gailutik ateratzen: ez dago
-tarteko zerbitzaririk, webguneak behar duen iOSeko lasterbidean ez bezala.
+tarteko zerbitzaririk.
 
 ### 6.2 Jaso ibilbide bat beste aplikazio batetik
 
@@ -499,12 +499,13 @@ zure gailuan bakarrik gordetzen dira: webgunean, nabigatzailean (localStorage
 eta IndexedDB), eta aplikazioan sistemaren biltegiratze propioan ere bai, iOSek
 ezarpenak ezabatu ezin ditzan.
 
-Salbuespen bakarra webgunea da: iOSeko lasterbideak erabiltzen badituzu GPX bat
-partekatzeko, fitxategi hori Cloudflarera bidaltzen da. Ezinbestekoa da, iOSeko
-lasterbideek POST bakarrik onartzen dutelako. Fitxategia MeteoRidetik zuzenean
+Salbuespen bakarra webgunea da: MeteoRide → Hammerhead aukerazko userscripta
+erabiltzen baduzu (3. atala) ibilbide bat Hammerheadera bidaltzeko, GPX hori
+Cloudflarera igotzen da, scriptak berez erabiltzen duen share-serverrera,
+Hammerheadek esteka batetik inporta dezan. Fitxategia MeteoRidetik zuzenean
 irekitzen baduzu ez da ezer bidaltzen, lokalki prozesatzen delako, eta
-aplikazio natiboak ez du batere behar. Nolanahi ere, igotako GPXa automatikoki
-ezabatzen da gehienez bi minutuko epean.
+aplikazio natiboek ez dute inoiz hori egiten. Nolanahi ere, igotako GPXa
+automatikoki ezabatzen da gehienez bi minutuko epean.
 
 - **Erregistrorik gabe:** ez duzu konturik sortu behar ezta datu pertsonalik
   eman ere.

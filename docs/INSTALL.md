@@ -27,8 +27,8 @@ What the native build adds:
 
 - **Native share sheet, both ways**: share a GPX to MeteoRide from Files, Mail,
   Komoot, Strava or any other app, and send the loaded route back out to a head
-  unit app such as Hammerhead. No iOS Shortcut and no upload to a temporary
-  server — the file never leaves the device.
+  unit app such as Hammerhead. No upload to a temporary server — the file
+  never leaves the device.
 - **`.gpx` / `.kml` file handler**: "Open in MeteoRide" from anywhere on the
   system.
 - **Fully offline assets**: Leaflet, SunCalc and the weather icons are bundled
@@ -75,6 +75,6 @@ cd MeteoRide
 open public/index.html      # or serve the directory
 ```
 
-Everything works this way except the POST handoff used by the iOS Shortcuts,
-which needs a server that accepts POST on the same origin. That is a deployment
+Everything works this way except the POST handoff (`/share`) used by the
+Hammerhead exporter userscript, which needs a server that accepts POST. That is a deployment
 question, not an installation one: see [DEPLOY.md](DEPLOY.md).

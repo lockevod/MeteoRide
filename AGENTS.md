@@ -22,10 +22,10 @@ public/            the web app — the single source of truth for all platforms
     compare.js     provider and date comparison modes
     ui_weather.js  weather table rendering helpers
     native.js      native shell bridge; inert in a browser
-    service-worker.js  POST handoff for iOS Shortcuts (web only)
+    service-worker.js  POST handoff into IndexedDB, opt-in by header (web only)
     version.js     generated, committed — window.CW_VERSION for the help pages
 site/              the product site, meteoride.cc (its own Pages project; see below)
-functions/         Cloudflare Pages functions for the /share endpoint
+functions/         Cloudflare Pages functions for the /share endpoint (Hammerhead exporter)
 tools/             local dev server, icon scripts, Tampermonkey userscripts
 mobile/            Capacitor project (see below)
 docs/IOS.md        iOS build and Xcode setup
@@ -183,7 +183,7 @@ Rules that follow from that, all enforced somewhere:
 - **`/shared/{id}` is served as an attachment, `nosniff`, with a sandboxing CSP.**
   A browser handed XML renders it, and runs script it finds in an XHTML or SVG
   namespace inside — so stored content must never come back as a viewable document.
-  Every legitimate consumer (the app's `fetch`, the Shortcut, Hammerhead's servers)
+  Every legitimate consumer (the app's `fetch`, Hammerhead's servers)
   reads bytes and is unaffected. IDs are `crypto.randomUUID()`; the id is the only
   guard on `GET` and `DELETE`, so it must not be guessable.
 - **`POST /share` counts bytes while it reads, not after.** `Content-Length` is
@@ -850,6 +850,9 @@ so they work with any app rather than a hardcoded list.
   re-rendering of it, falling back to `cw.exportRouteToGpx` when the route was built
   rather than opened. The button is created by `native.js`, so the website never grows
   a control that depends on plugins it does not have.
+- **iOS Shortcuts are no longer offered** (guides, help, privacy, docs; `tools/SHORTCUT_EXPORT.md`
+  is gone) now that the iPhone app takes a GPX from the share sheet; `/share`, `/shared/{id}` and
+  `?shared_id=` stay because the Hammerhead exporter userscript posts there by default.
 
 ## Riding without coverage
 

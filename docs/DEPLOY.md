@@ -5,8 +5,8 @@ publishes `public/`.** So a push is a deploy, and it publishes every commit not 
 once. Run `cd mobile && npm test` on that HEAD first.
 
 MeteoRide is a static site. Any web server will do — until you want the POST
-handoff that iOS Shortcuts need, which is the only part with a server-side
-requirement.
+handoff (`/share`) that the optional Hammerhead exporter userscript uses, which is
+the only part with a server-side requirement.
 
 ---
 
@@ -14,25 +14,22 @@ requirement.
 
 Pick the one that fits your workflow; only the first needs anything deployed.
 
-### POST handoff (recommended for iOS / Shortcuts)
+### POST handoff (`/share`, for the Hammerhead exporter)
 
-Send raw GPX to the app's share endpoint; the service worker accepts a POST and
-stores the file temporarily. This method is required for many iOS share flows
-because the browser and service-worker APIs cannot always receive the raw file
-directly from the share sheet.
+The MeteoRide → Hammerhead userscript
+(`tools/userscripts/tamper_meteoride_export_hammerhead.user.js`, see
+[USERSCRIPTS.md](USERSCRIPTS.md)) POSTs the current GPX to `/share` on its
+`SHARE_SERVER_BASE` (by default `https://app.meteoride.cc`). The function keeps it
+in KV under a random id and serves it at `/shared/<id>`, which is the URL
+Hammerhead's servers import; `?shared_id=<id>` also opens it in MeteoRide.
 
-For technical reasons this involves uploading the GPX to a temporary server for
-the handoff. The file is used only for that and is deleted automatically, within
-a maximum of two minutes. By using the POST handoff you acknowledge the GPX will
-be uploaded to a temporary server for the handoff only.
+This involves uploading the GPX to a temporary server for the handoff. The file is
+used only for that and is deleted automatically, within a maximum of two minutes.
 
-The repository includes an example iOS recipe in `tools/SHORTCUT_EXPORT.md`, which you
-can follow to build your own Shortcut. There is also a ready-made one:
-
-[GPX to MeteoRide Shortcut](https://www.icloud.com/shortcuts/a57e06eaadca423eafaeaee05753b79b)
-
-**The native iPhone and Android apps do not need any of this.** They use the
-system share sheet, and the file never leaves the device.
+iOS Shortcuts used to post to the same endpoint; they are no longer offered, since
+the native iPhone app receives a GPX from the share sheet. **The native iPhone and
+Android apps do not need any of this.** They use the system share sheet, and the
+file never leaves the device.
 
 ### Hosted URL (`?gpx_url=`)
 
@@ -50,9 +47,8 @@ nothing.
 
 ## Production setup for the POST handoff (Cloudflare Pages + Worker)
 
-For the POST handoff to work reliably, the app's service worker and the POST
-endpoint must be served **from the same origin**. GitHub Pages cannot host a
-dynamic POST endpoint, so it is not enough on its own.
+The POST handoff needs a host that runs code next to the static files. GitHub Pages
+cannot host a dynamic POST endpoint, so it is not enough on its own.
 
 The quickest production-ready option is **Cloudflare Pages + KV**: it hosts the
 static site and runs a small Worker at the same origin. Vercel or any web server

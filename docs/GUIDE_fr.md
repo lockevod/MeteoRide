@@ -161,8 +161,7 @@ navigateur ne sait pas faire.
 Avec un parcours chargé, le bouton **📤** de la barre du haut ouvre la feuille de
 partage du système avec le GPX en pièce jointe. De là, il part vers votre
 compteur GPS (Hammerhead, Wahoo), vers Fichiers, par e-mail, où vous voulez. Le
-fichier ne quitte jamais l’appareil : il n’y a aucun serveur intermédiaire,
-contrairement au Raccourci iOS dont le site a besoin.
+fichier ne quitte jamais l’appareil : il n’y a aucun serveur intermédiaire.
 
 ### 6.2 Recevoir un parcours depuis une autre app
 
@@ -499,11 +498,12 @@ préférences et données sont stockés uniquement sur votre appareil : dans le
 navigateur (localStorage et IndexedDB) sur le site, et dans l’app aussi dans le
 stockage propre du système, pour qu’iOS ne puisse pas effacer les réglages.
 
-La seule exception est le site : si vous utilisez les Raccourcis iOS pour
-partager un GPX, ce fichier est envoyé à Cloudflare. C’est inévitable, car les
-Raccourcis iOS n’acceptent que le POST. Si vous ouvrez le fichier directement
-depuis MeteoRide, rien n’est envoyé, car il est traité en local, et l’app native
-n’en a pas du tout besoin. Dans tous les cas, le GPX envoyé est supprimé
+La seule exception est le site : si vous utilisez le userscript facultatif
+MeteoRide → Hammerhead (section 3) pour envoyer un parcours vers Hammerhead, ce
+GPX est envoyé à Cloudflare, le share-server qu’il utilise par défaut, pour que
+Hammerhead l’importe depuis un lien. Si vous ouvrez le fichier directement
+depuis MeteoRide, rien n’est envoyé, car il est traité en local, et les apps
+natives ne le font jamais. Dans tous les cas, le GPX envoyé est supprimé
 automatiquement en deux minutes au plus.
 
 - **Aucun compte :** vous n’avez pas besoin de créer un compte ni de fournir de

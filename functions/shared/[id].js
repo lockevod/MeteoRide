@@ -50,8 +50,8 @@ export async function onRequest(context) {
 
     // Whatever was uploaded comes back on this origin, so it must never be rendered
     // as a document: a browser given XML will run script it finds in an XHTML or SVG
-    // namespace inside it. The app reads this with fetch(), the Shortcut with "Get
-    // contents of URL", and Hammerhead from its own servers; none of them render it.
+    // namespace inside it. The app reads this with fetch() and Hammerhead from its own
+    // servers (the exporter userscript's import); neither renders it.
     return new Response(data, {
       status: 200,
       headers: {

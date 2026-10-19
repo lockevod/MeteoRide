@@ -154,7 +154,7 @@ These only exist inside the native app: they are things a browser cannot do.
 With a route loaded, the **📤** button in the top bar opens the system share
 sheet with the GPX attached. From there it goes to your head unit (Hammerhead,
 Wahoo), to Files, to mail, wherever you like. The file never leaves the device:
-there is no intermediate server, unlike the iOS Shortcut the website needs.
+there is no intermediate server.
 
 ### 6.2 Receive a route from another app
 
@@ -465,12 +465,13 @@ are stored only on your device: in the browser (localStorage and IndexedDB) on
 the website, and in the app also in the system's own storage, so that iOS cannot
 wipe the settings.
 
-The only exception is the website: if you use the iOS Shortcuts to share a GPX,
-that file is uploaded to Cloudflare. It is unavoidable because iOS Shortcuts
-only accept POST. If you open the file directly from MeteoRide nothing is
-uploaded, because it is processed locally, and the native app does not need this
-at all. In any case the uploaded GPX is deleted automatically within a maximum
-of two minutes.
+The only exception is the website: if you use the optional MeteoRide →
+Hammerhead userscript (section 3) to send a route to Hammerhead, it uploads that
+GPX to Cloudflare, the share-server it uses by default, so that Hammerhead can
+import it from a link. If you open the file directly from MeteoRide nothing is
+uploaded, because it is processed locally, and the native apps never do this. In
+any case the uploaded GPX is deleted automatically within a maximum of two
+minutes.
 
 - **No account:** you do not need to create an account or provide personal data.
 - **Full control:** on the website, clear the site's data in your browser

@@ -157,8 +157,7 @@ Això només existeix dins de l'app nativa: són coses que un navegador no pot f
 Amb una ruta carregada, el botó **📤** de la barra superior obre el full de
 compartir del sistema amb el GPX adjunt. Des d'allà va al teu ciclocomputador
 (Hammerhead, Wahoo), a Fitxers, al correu o on vulguis. El fitxer no surt mai
-del dispositiu: no hi ha cap servidor intermedi, a diferència de la drecera
-d'iOS que necessita el web.
+del dispositiu: no hi ha cap servidor intermedi.
 
 ### 6.2 Rebre una ruta des d'una altra app
 
@@ -473,10 +472,11 @@ preferències i les dades es desen només al teu dispositiu: al web, al navegado
 (localStorage i IndexedDB), i a l'app també a l'emmagatzematge propi del
 sistema, perquè iOS no pugui esborrar la configuració.
 
-L'única excepció és el web: si fas servir les Dreceres d'iOS per compartir un
-GPX, aquest fitxer es puja a Cloudflare. És inevitable perquè les Dreceres d'iOS
-només accepten POST. Si obres el fitxer directament des de MeteoRide no es puja
-res, perquè es processa en local, i l'app nativa no ho necessita gens. En
+L'única excepció és el web: si fas servir l'userscript opcional MeteoRide →
+Hammerhead (secció 3) per enviar una ruta a Hammerhead, aquest GPX es puja a
+Cloudflare, el share-server que fa servir per defecte, perquè Hammerhead
+l'importi des d'un enllaç. Si obres el fitxer directament des de MeteoRide no es
+puja res, perquè es processa en local, i les apps natives no ho fan mai. En
 qualsevol cas, el GPX pujat s'esborra automàticament en dos minuts com a màxim.
 
 - **Sense compte:** no cal crear cap compte ni donar dades personals.

@@ -160,8 +160,7 @@ hacer.
 Con una ruta cargada, el botón **📤** de la barra superior abre la hoja de
 compartir del sistema con el GPX adjunto. Desde ahí va a tu ciclocomputador
 (Hammerhead, Wahoo), a Archivos, al correo o a donde quieras. El fichero no sale
-del dispositivo en ningún momento: no hay servidor intermedio, a diferencia del
-atajo de iOS que necesita la web.
+del dispositivo en ningún momento: no hay servidor intermedio.
 
 ### 6.2 Recibir una ruta desde otra app
 
@@ -478,10 +477,11 @@ las preferencias y los datos se almacenan únicamente en tu dispositivo: en la w
 en el navegador (localStorage e IndexedDB), y en la app también en el
 almacenamiento propio del sistema, para que iOS no pueda borrar los ajustes.
 
-La única excepción es la web: si usas los atajos de iOS para compartir un GPX,
-ese fichero se envía a Cloudflare. Es imprescindible porque los atajos de iOS
-solo aceptan POST. Si abres el fichero directamente desde MeteoRide no se envía
-nada, porque se procesa en local, y la app nativa no lo necesita en absoluto. En
+La única excepción es la web: si usas el userscript opcional MeteoRide →
+Hammerhead (sección 3) para enviar una ruta a Hammerhead, ese GPX se sube a
+Cloudflare, el share-server que usa por defecto, para que Hammerhead lo importe
+desde un enlace. Si abres el fichero directamente desde MeteoRide no se envía
+nada, porque se procesa en local, y las apps nativas no lo hacen nunca. En
 cualquier caso el GPX subido se borra automáticamente en un plazo máximo de dos
 minutos.
 

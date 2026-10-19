@@ -85,7 +85,7 @@
       <p><strong>MeteoRide no recopila tus datos ni los explota.</strong> No hay cuenta, ni registro, ni publicidad, ni analítica, ni telemetría, ni informes de fallos, ni identificadores de seguimiento.</p>
       <p><strong>Esta política cubre únicamente la web</strong>, <a href="https://app.meteoride.cc" target="_blank" rel="noopener noreferrer">app.meteoride.cc</a> abierta en un navegador. Las apps instalables tienen las suyas y son más cerradas que esto: <a href="privacy-ios.html">iOS</a> y <a href="privacy-android.html">Android</a>. Nada de lo que se describe aquí como propio de la web ocurre en ellas.</p>
     </div>
-    <p>Última actualización: 19 de septiembre de 2026.</p>
+    <p>Última actualización: 19 de octubre de 2026.</p>
   </details>
 
   <details class="section" open>
@@ -117,7 +117,7 @@
       <li>La web carga sus bibliotecas desde tres redes de distribución: <a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener noreferrer">jsDelivr</a>, <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">cdnjs (Cloudflare)</a> y <a href="https://www.npmjs.com/policies/privacy" target="_blank" rel="noopener noreferrer">unpkg</a>. Cada una recibe tu IP y la página desde la que llegas. Las apps llevan esas bibliotecas dentro.</li>
       <li>Las páginas de ayuda muestran un botón de Buy Me a Coffee, que también recibe tu IP. Las apps no lo llevan.</li>
       <li>Abrir una ruta con <code>?gpx_url=</code> la descarga del servidor que tú indiques, sea cual sea. Las apps no tienen esa entrada.</li>
-      <li>El atajo de iOS que manda una ruta a MeteoRide solo sabe hacer POST, así que ese GPX <strong>se sube a un almacén de Cloudflare que gestiona el autor</strong>, recibe un identificador aleatorio imposible de adivinar y se borra solo a los dos minutos (es el valor por defecto y el que está en uso). Es lo único que llega en algún momento a manos del autor, y dura eso. Las apps no usan ese camino.</li>
+      <li>Si usas el userscript opcional que envía una ruta a Hammerhead, la web sube ese GPX <strong>a un almacén de Cloudflare que gestiona el autor</strong> para que Hammerhead lo importe desde allí; recibe un identificador aleatorio imposible de adivinar y se borra solo a los dos minutos (es el valor por defecto y el que está en uso). Es lo único que llega en algún momento a manos del autor, y dura eso. Sin ese userscript la web no sube ninguna ruta, y las apps no lo hacen nunca.</li>
     </ul>
     <p>El alojamiento es Cloudflare Pages, que registra las peticiones a cualquier sitio que sirve, como cualquier alojamiento.</p>
   </details>
@@ -141,7 +141,7 @@
       <p><strong>MeteoRide does not collect your data or exploit it.</strong> No account, no sign-up, no ads, no analytics, no telemetry, no crash reporting, no tracking identifiers.</p>
       <p><strong>This policy covers the website only</strong>, <a href="https://app.meteoride.cc" target="_blank" rel="noopener noreferrer">app.meteoride.cc</a> opened in a browser. The installable apps have their own and are more closed than this: <a href="privacy-ios.html">iOS</a> and <a href="privacy-android.html">Android</a>. Nothing described here as website-only happens in them.</p>
     </div>
-    <p>Last updated: 19 September 2026.</p>
+    <p>Last updated: 19 October 2026.</p>
 
     <h3>To give you the forecast</h3>
     <table>
@@ -170,7 +170,7 @@
       <li>The website loads its libraries from three content delivery networks: <a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener noreferrer">jsDelivr</a>, <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">cdnjs (Cloudflare)</a> and <a href="https://www.npmjs.com/policies/privacy" target="_blank" rel="noopener noreferrer">unpkg</a>. Each receives your IP and the page you came from. The apps carry those libraries inside.</li>
       <li>The help pages show a Buy Me a Coffee button, which also receives your IP. The apps do not carry it.</li>
       <li>Opening a route with <code>?gpx_url=</code> fetches it from whichever server you name. The apps have no such entry point.</li>
-      <li>The iOS Shortcut that sends a route to MeteoRide can only POST, so that GPX <strong>is uploaded to a Cloudflare store the author operates</strong>, is given an unguessable random identifier and deletes itself after two minutes (the default, and what is in use). It is the only thing that ever reaches the author's hands, and it lasts that long. The apps do not use that path.</li>
+      <li>If you use the optional userscript that sends a route to Hammerhead, the website uploads that GPX <strong>to a Cloudflare store the author operates</strong> so that Hammerhead can import it from there; it is given an unguessable random identifier and deletes itself after two minutes (the default, and what is in use). It is the only thing that ever reaches the author's hands, and it lasts that long. Without that userscript the website uploads no route, and the apps never do this.</li>
     </ul>
     <p>Hosting is Cloudflare Pages, which logs requests to any site it serves, as any host does.</p>
 

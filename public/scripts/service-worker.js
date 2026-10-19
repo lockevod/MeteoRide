@@ -1,6 +1,7 @@
-/* Minimal service worker to accept POSTed GPX bodies from Shortcuts and persist them in IndexedDB.
-   Usage from Shortcuts: Make a POST to https://your-site/share (body = raw GPX, content-type text/xml/application/gpx+xml).
-   The SW will store it and redirect the client to /index.html so the app can read it from IndexedDB.
+/* Minimal service worker that keeps a POSTed GPX body in IndexedDB, only when the request
+   asks for it with X-SW-Store: 1 (a POST to /share from a page this worker controls).
+   The SW stores it and redirects the client to /index.html so the app can read it from IndexedDB.
+   Every other POST to /share, such as the Hammerhead exporter's, reaches the Cloudflare function.
 */
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (ev) => { ev.waitUntil(self.clients.claim()); });

@@ -484,11 +484,11 @@
   }
 
   /* `uploadGPXToShareServer` lived here: ~135 lines POSTing a GPX to a share server for
-   * the iOS Shortcuts hand-off, exported on window.cw and called from nowhere. It carried
+   * a hand-off to Hammerhead, exported on window.cw and called from nowhere. It carried
    * user-facing notices in Spanish tagged [MODHH] inside an otherwise translated app, and
    * its /share endpoint is not served under capacitor://localhost at all. Removed before
-   * an App Store submission; the history has it, and docs/DEPLOY.md still describes the
-   * hand-off that the service worker actually implements. */
+   * an App Store submission; the history has it. The Hammerhead exporter userscript does
+   * that upload itself, and docs/DEPLOY.md describes the /share function it posts to. */
 
   // Export geojsonToGpx helper so other scripts/userscripts can reuse it
   // Attach to window.cw namespace (created later in the file); create temporary holder now

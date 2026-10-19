@@ -157,8 +157,7 @@ fare.
 Con un percorso caricato, il pulsante **📤** nella barra in alto apre il menu di
 condivisione del sistema con il GPX allegato. Da lì va al tuo ciclocomputer
 (Hammerhead, Wahoo), a File, alla posta, dove preferisci. Il file non lascia mai
-il dispositivo: non c'è nessun server intermedio, a differenza del Comando rapido
-di iOS di cui ha bisogno il sito.
+il dispositivo: non c'è nessun server intermedio.
 
 ### 6.2 Ricevi un percorso da un'altra app
 
@@ -480,12 +479,13 @@ preferenze e i dati sono salvati solo sul tuo dispositivo: nel browser
 (localStorage e IndexedDB) sul sito, e nell'app anche nella memoria propria del
 sistema, così che iOS non possa cancellare le impostazioni.
 
-L'unica eccezione è il sito: se usi i Comandi rapidi di iOS per condividere un
-GPX, quel file viene caricato su Cloudflare. È inevitabile perché i Comandi rapidi
-di iOS accettano solo POST. Se apri il file direttamente da MeteoRide non viene
-caricato nulla, perché viene elaborato in locale, e l'app nativa non ne ha
-affatto bisogno. In ogni caso il GPX caricato viene cancellato automaticamente
-entro due minuti al massimo.
+L'unica eccezione è il sito: se usi lo userscript facoltativo MeteoRide →
+Hammerhead (sezione 3) per inviare un percorso a Hammerhead, quel GPX viene
+caricato su Cloudflare, lo share-server che usa di default, perché Hammerhead lo
+importi da un link. Se apri il file direttamente da MeteoRide non viene caricato
+nulla, perché viene elaborato in locale, e le app native non lo fanno mai. In
+ogni caso il GPX caricato viene cancellato automaticamente entro due minuti al
+massimo.
 
 - **Nessun account:** non devi creare un account né fornire dati personali.
 - **Controllo totale:** sul sito, cancella i dati del sito dalle impostazioni
