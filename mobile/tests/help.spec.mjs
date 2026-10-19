@@ -1,7 +1,7 @@
 /* The help pages, as they are read in the two places they are read from.
  *
- * Inside the app the same page must not be the website's help: the recipes for
- * installing the PWA are noise when you are already in the app, and the whole thing
+ * Inside the app the same page must not be the website's help: "get the app"
+ * (App Store, APK, or stay in the browser) is noise when you are already in the app, and the whole thing
  * is too long to scroll on a phone, so the sections arrive collapsed. On the website
  * nothing changes: every section open, nothing hidden, no disclosure to click.
  */
@@ -17,7 +17,7 @@ const asApp = (page) =>
   });
 
 for (const path of PAGES) {
-  test(`${path}: the bundled page, opened without the app, has every section open and the install recipes there`, async ({ page }) => {
+  test(`${path}: the bundled page, opened without the app, has every section open and "get the app" there`, async ({ page }) => {
     await page.goto(path);
 
     await expect(page.locator('html')).not.toHaveClass(/cw-native/);
@@ -25,13 +25,13 @@ for (const path of PAGES) {
     await expect(page.locator('details.section:not([open])')).toHaveCount(0);
     await expect(page.locator('details.section')).not.toHaveCount(0);
 
-    // How to install the PWA: the website is where that belongs.
+    // Where to get the app: the website is where that belongs.
     await expect(page.locator('details.web-only')).toBeVisible();
     // And the app-only section is the one thing the website does not show.
     await expect(page.locator('.app-only')).toBeHidden();
   });
 
-  test(`${path}: inside the app the install recipes are gone and the sections start collapsed`, async ({ page }) => {
+  test(`${path}: inside the app "get the app" is gone and the sections start collapsed`, async ({ page }) => {
     await asApp(page);
     await page.goto(path);
 
@@ -40,12 +40,12 @@ for (const path of PAGES) {
     await expect(page.locator('details.section[open]')).toHaveCount(0);
     await expect(page.locator('details.section')).not.toHaveCount(0);
 
-    // Installing the PWA from inside the app is meaningless.
+    // Pointing at the stores from inside the app is meaningless.
     await expect(page.locator('details.web-only')).toBeHidden();
     await expect(page.locator('.app-only')).toBeVisible();
     // innerText, not textContent: what the reader can actually see. The section is
     // still in the page, hidden by CSS, which is the whole mechanism under test.
-    await expect(page.locator('body')).not.toContainText(/Add to Home|pantalla de inicio/i, {
+    await expect(page.locator('body')).not.toContainText(/Get the app|Consigue la app|App Store|APK/, {
       useInnerText: true,
     });
   });

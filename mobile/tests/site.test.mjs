@@ -151,6 +151,8 @@ test('no page claims what the app does not do', async () => {
     /teselas[^<]*sin conexión|tiles[^<]*offline|y teselas siguen|and tiles are still|mapa[^<.]*(funciona|sirve)[^<.]*sin conexión|map[^<.]*works[^<.]*offline/i,
     new RegExp(`(${mapWord})[^.]{0,60}(${offline})|(${offline})[^.]{0,60}(${mapWord})`, 'i'),
     /only (the )?coordinates|solo las coordenadas|seules les coordonnées|nur die Koordinaten|solo le coordinate|só as coordenadas/i,
+    // The website is no longer offered as an installable app (PWA): the stores have the app.
+    /home ?screen|pantalla d\S{1,6}inici|pantalla de inicio|écran d\S{1,6}accueil|Home-Bildschirm|schermata Home|ecrã principal|hasierako pantail|\bPWA\b/i,
     /what it costs|lo que cuesta|pricing|precio|subscri|suscrip|\bpreus?\b|\bprezos?\b|prezio|kostu|harpidetz|\bprix\b|tarif|abonnement|\bpreis|kosten|\babo\b|prezzo|abbonament|\bpreço|assinatura/i,
   ];
   for (const [code, html] of await built) {

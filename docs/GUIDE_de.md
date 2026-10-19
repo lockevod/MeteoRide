@@ -138,49 +138,13 @@ Genauigkeit (AROME-HD) oder langfristige Planung (Open-Meteo).
 
 ---
 
-## 5. Als Web-App installieren (PWA)
+## 5. Im Browser nutzen
 
-Die Website von MeteoRide lässt sich als Progressive Web App (PWA) installieren,
-für ein Erlebnis nahe an einer nativen App. Dafür muss die Website auf einem
-Server laufen, oder du nutzt <https://app.meteoride.cc>.
+Die Web-App läuft in jedem aktuellen Browser, am Computer wie am Handy, unter
+<https://app.meteoride.cc>. Es gibt nichts zu installieren.
 
-Wenn du die native App für iPhone oder Android willst, brauchst du nichts davon:
-Installiere sie aus dem Store.
-
-Diese Schritte und die anderen Wege zu MeteoRide stehen auch in
-[`docs/INSTALL.md`](INSTALL.md).
-
-**Android**
-
-1. Öffne MeteoRide in Chrome.
-2. Tippe oben rechts auf das Menü (drei Punkte).
-3. Wähle „Zum Startbildschirm hinzufügen“.
-4. Bestätige mit „Hinzufügen“.
-
-**iOS (iPhone/iPad)**
-
-1. Öffne MeteoRide in Safari.
-2. Tippe auf die Teilen-Taste (Quadrat mit Pfeil).
-3. Wähle „Zum Home-Bildschirm“.
-4. Tippe oben rechts auf „Hinzufügen“.
-
-**Chrome am Computer**
-
-1. Öffne MeteoRide in Chrome.
-2. Klicke auf das Installationssymbol in der Adressleiste oder im Menü.
-3. Klicke auf „Installieren“.
-
-**Edge am Computer**
-
-1. Öffne MeteoRide in Edge.
-2. Klicke auf das Installationssymbol in der Adressleiste.
-3. Klicke auf „Installieren“.
-
-**Safari auf dem Mac**
-
-1. Öffne MeteoRide in Safari.
-2. Gehe zu Ablage > Zum Dock hinzufügen.
-3. Oder klicke auf die Teilen-Taste und wähle „Zum Dock hinzufügen“.
+Die App für iPhone oder Android installierst du aus dem App Store oder mit der
+APK von GitHub; die Schritte stehen in [`docs/INSTALL.md`](INSTALL.md).
 
 ---
 

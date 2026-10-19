@@ -52,7 +52,7 @@ test('the website gets every section open; closing them is the app\'s doing', as
   }
 });
 
-test('each page hides the install recipes in the app and the app notes on the web', async () => {
+test('each page hides "get the app" in the app and the app notes on the web', async () => {
   for (const html of await pages()) {
     assert.equal(count(html, /class="section web-only"/g), 1);
     assert.equal(count(html, /class="section app-only"/g), 1);

@@ -1,56 +1,13 @@
 # Installing and running MeteoRide
 
-Four different things are called "installing MeteoRide". This is which one you
+Three different things are called "installing MeteoRide". This is which one you
 want.
 
 | You want | Read |
 |---|---|
 | To use it, nothing else | Open <https://app.meteoride.cc>. There is nothing to install. |
-| An icon on your phone or desktop | [As a PWA](#as-a-progressive-web-app-pwa) |
 | The App Store / Play Store app | [Native apps](#native-apps-ios--android) |
 | To run your own copy | [Your own copy](#running-your-own-copy) |
-
----
-
-## As a Progressive Web App (PWA)
-
-The website can be installed so it gets its own icon and window. You need the
-site deployed on a server, or just use <https://app.meteoride.cc>.
-
-**Android**
-
-1. Open MeteoRide in Chrome.
-2. Tap the menu (three dots) in the top right.
-3. Select "Add to Home screen".
-4. Confirm by tapping "Add".
-
-**iOS (iPhone/iPad)**
-
-1. Open MeteoRide in Safari.
-2. Tap the Share button (square with arrow).
-3. Select "Add to Home Screen".
-4. Tap "Add" in the top right.
-
-**Chrome on desktop**
-
-1. Open MeteoRide in Chrome.
-2. Click the install icon in the address bar or in the menu.
-3. Click "Install".
-
-**Edge on desktop**
-
-1. Open MeteoRide in Edge.
-2. Click the install icon in the address bar.
-3. Click "Install".
-
-**Safari on Mac**
-
-1. Open MeteoRide in Safari.
-2. Go to File > Add to Dock.
-3. Or click the Share button and select "Add to Dock".
-
-The PWA cannot do what the native app does: no system share sheet, no background
-weather-change alerts, no forecast kept for use out of signal. See [GUIDE.md §6](GUIDE.md#6-in-the-iphone-and-android-app).
 
 ---
 
@@ -62,7 +19,7 @@ Android from the APK attached to each [GitHub release](https://github.com/lockev
 with the same certificate so the next one installs over it). The rest of this section is
 about building them.
 
-Besides the PWA, MeteoRide is built as a real App Store / Play Store app with
+MeteoRide is built as a real App Store / Play Store app with
 [Capacitor](https://capacitorjs.com). It runs the very same code from `public/`
 inside a native shell, so there is no second codebase to maintain.
 

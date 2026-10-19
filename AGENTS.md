@@ -314,9 +314,12 @@ plugin ever genuinely needs external storage, add the narrowest path it needs, n
   which belongs on a help page), but Capacitor injects its bridge into every page in
   the web view, so the same check works. Anything added to the shell that a reader
   cannot work out from a button belongs in both languages there.
-- **There is a `.web-only` counterpart, and the sections collapse.** The recipes for
-  installing the PWA are noise to a reader already inside the app, so
-  `html.cw-native .web-only` hides that section. Every section is a `<details>`
+- **There is a `.web-only` counterpart, and the sections collapse.** "Get the app"
+  (App Store, APK, or stay in the browser) is noise to a reader already inside the app, so
+  `html.cw-native .web-only` hides that section. Since the native apps (19/10) neither the
+  help, the guides, `INSTALL.md` nor the site promote installing the website as a PWA
+  (`site.test.mjs` forbids home-screen wording); `public/manifest.json` and the service
+  worker stay as they are, so existing installs keep working. Every section is a `<details>`
   written `open`: that is what the website shows and what a reader without JavaScript
   gets, and only `help.js` closes them, only under `cw-native`, so the phone gets an
   index to tap instead of 600 lines to scroll. The website takes no clicks on a

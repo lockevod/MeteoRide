@@ -146,52 +146,15 @@ tokiko zehaztasuna (AROME-HD) edo epe luzeko planifikazioa (Open-Meteo).
 
 ---
 
-## 5. Web aplikazio gisa instalatu (PWA)
+## 5. Nabigatzailean erabili
 
-MeteoRideren webgunea Web Aplikazio Progresibo (PWA) gisa instala daiteke,
-aplikazio natibo baten antzeko esperientzia izateko. Webgunea zerbitzari batean
-hedatuta behar duzu, edo <https://app.meteoride.cc> erabili.
+Web-aplikazioak edozein nabigatzaile berritan funtzionatzen du, ordenagailuan
+zein mugikorrean, <https://app.meteoride.cc> helbidean. Ez dago ezer instalatu
+beharrik.
 
-iPhone edo Androiderako aplikazio natiboa nahi baduzu, ez duzu honetatik ezer
-behar: instalatu dendatik.
-
-Urrats berberak, eta MeteoRide izateko beste moduak,
-[`docs/INSTALL.md`](INSTALL.md) fitxategian ere badaude (ingelesez).
-
-**Android**
-
-1. Ireki MeteoRide Chromen.
-2. Sakatu goiko eskuineko menua (hiru puntu).
-3. Hautatu "Gehitu hasierako pantailan".
-4. Berretsi "Gehitu" sakatuz.
-
-**iOS (iPhone/iPad)**
-
-1. Ireki MeteoRide Safarin.
-2. Sakatu Partekatu botoia (karratua gezi batekin).
-3. Hautatu "Gehitu hasierako pantailan" (iPhonean, gaztelaniaz: "Añadir a
-   pantalla de inicio").
-4. Sakatu goiko eskuineko "Gehitu".
-
-**Chrome ordenagailuan**
-
-1. Ireki MeteoRide Chromen.
-2. Egin klik helbide-barrako edo menuko instalatzeko ikonoan.
-3. Egin klik "Instalatu" aukeran.
-
-**Edge ordenagailuan**
-
-1. Ireki MeteoRide Edgen.
-2. Egin klik helbide-barrako instalatzeko ikonoan.
-3. Egin klik "Instalatu" aukeran.
-
-**Safari Mac-en**
-
-1. Ireki MeteoRide Safarin.
-2. Joan Fitxategia > Gehitu Dock-era aukerara (Mac-en, gaztelaniaz: Archivo >
-   Añadir al Dock).
-3. Edo egin klik Partekatu botoian eta hautatu "Gehitu Dock-era" ("Añadir al
-   Dock").
+iPhone edo Androiderako aplikaziorako, instalatu App Storetik edo GitHubeko
+APKarekin; urratsak [`docs/INSTALL.md`](INSTALL.md) fitxategian daude
+(ingelesez).
 
 ---
 

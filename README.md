@@ -7,8 +7,7 @@ the route — at the hour you will actually be there.
 
 **Try it:** <https://app.meteoride.cc>; an overview, in nine languages, at
 <https://meteoride.cc>. Nothing to install, no account. It also
-runs as a native iPhone and Android app, as an installable PWA, or from your own
-copy of this repository.
+runs as a native iPhone and Android app, or from your own copy of this repository.
 
 <a href="https://apps.apple.com/es/app/meteoride/id6813109920"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" height="40"></a>
 
@@ -21,7 +20,7 @@ copy of this repository.
 | Document | What is in it |
 |---|---|
 | **[User guide](docs/GUIDE.md)** · **[Guía de usuario](docs/GUIA.md)** | How to use MeteoRide, in full: providers, settings, the native app, privacy, limits. **Start here.** |
-| [Installing and running](docs/INSTALL.md) | PWA install recipes, the native apps, running your own copy. |
+| [Installing and running](docs/INSTALL.md) | Using it in the browser, the native apps, running your own copy. |
 | [Deploying, and sharing routes into it](docs/DEPLOY.md) | Cloudflare Pages + Worker, the POST handoff, iOS Shortcuts. |
 | [Tampermonkey userscripts](docs/USERSCRIPTS.md) | One-click import from Komoot, Bikemap and Hammerhead. |
 | [iOS build](docs/IOS.md) · [Android build](docs/ANDROID.md) | Per-platform native build instructions. |

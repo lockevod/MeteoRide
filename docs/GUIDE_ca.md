@@ -138,49 +138,13 @@ local (AROME-HD) o planificació a llarg termini (Open-Meteo).
 
 ---
 
-## 5. Instal·lar com a app web (PWA)
+## 5. Fer-la servir al navegador
 
-El web de MeteoRide es pot instal·lar com a aplicació web progressiva (PWA) per
-tenir una experiència semblant a la d'una app nativa. Necessites el web
-desplegat en un servidor, o fer servir <https://app.meteoride.cc>.
+L'app web funciona en qualsevol navegador actual, a l'ordinador o al mòbil, a
+<https://app.meteoride.cc>. No cal instal·lar res.
 
-Si el que vols és l'app nativa d'iPhone o Android, no necessites res d'això:
-instal·la-la des de la botiga.
-
-Aquests mateixos passos, i les altres maneres de tenir MeteoRide, també són a
-[`docs/INSTALL.md`](INSTALL.md) (en anglès).
-
-**Android**
-
-1. Obre MeteoRide a Chrome.
-2. Toca el menú (tres punts) a la part superior dreta.
-3. Selecciona «Afegir a la pantalla d'inici».
-4. Confirma tocant «Afegir».
-
-**iOS (iPhone/iPad)**
-
-1. Obre MeteoRide a Safari.
-2. Toca el botó Compartir (quadrat amb fletxa).
-3. Selecciona «Afegir a la pantalla d'inici».
-4. Toca «Afegir» a la part superior dreta.
-
-**Chrome a l'ordinador**
-
-1. Obre MeteoRide a Chrome.
-2. Fes clic a la icona d'instal·lar de la barra d'adreces o al menú.
-3. Fes clic a «Instal·lar».
-
-**Edge a l'ordinador**
-
-1. Obre MeteoRide a Edge.
-2. Fes clic a la icona d'instal·lar de la barra d'adreces.
-3. Fes clic a «Instal·lar».
-
-**Safari al Mac**
-
-1. Obre MeteoRide a Safari.
-2. Ves a Fitxer > Afegir al Dock.
-3. O fes clic al botó Compartir i selecciona «Afegir al Dock».
+Per a l'app d'iPhone o Android, instal·la-la des de l'App Store o amb l'APK de
+GitHub; els passos són a [`docs/INSTALL.md`](INSTALL.md) (en anglès).
 
 ---
 

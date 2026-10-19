@@ -8397,12 +8397,12 @@ test('the English help page says the same', async ({ page }) => {
 // tip, a link to the Android policy. The same www/ ships to Android, so the text stays and
 // help.js hides it by platform; innerText is what a reader on an iPhone actually sees.
 // The website-only words each language would use for the same three things: a browser,
-// the home screen, iOS Shortcuts. They sit in web-only spans; seen in the app, they leak.
+// the "get the app" section, iOS Shortcuts. They sit in web-only spans; seen in the app, they leak.
 const WEBSITE_WORDS = {
-  ca: /navegador|pantalla d'inici|Dreceres/i, gl: /navegador|pantalla de inicio|Atallos/i,
-  eu: /nabigatzaile|hasierako pantaila|Lasterbide/i, fr: /navigateur|écran d'accueil|Raccourcis/i,
-  de: /Browser|Home-Bildschirm|Kurzbefehle/i, it: /browser|schermata Home|Comandi rapidi/i,
-  pt: /navegador|ecrã principal|Atalhos/i,
+  ca: /navegador|Aconsegueix l'app|Dreceres/i, gl: /navegador|Consegue a app|Atallos/i,
+  eu: /nabigatzaile|Lortu aplikazioa|Lasterbide/i, fr: /navigateur|Obtenir l’app|Raccourcis/i,
+  de: /Browser|Die App holen|Kurzbefehle/i, it: /browser|Scarica l'app|Comandi rapidi/i,
+  pt: /navegador|Obtém a app|Atalhos/i,
 };
 test('the pages an iPhone reader can open never mention Android', async ({ page }) => {
   await installNativeBridge(page);
@@ -8417,7 +8417,7 @@ test('the pages an iPhone reader can open never mention Android', async ({ page 
     // not have as inaccurate metadata (2.3.1), and the Cloudflare upload sat awkwardly next
     // to "no server of ours in between".
     expect(seen, `${name} describes the website to an app reader`)
-      .not.toMatch(/gpx_url|mouse wheel|rueda del ratón|Cloudflare|Shortcuts|atajos de iOS|pantalla de inicio|Home Screen/i);
+      .not.toMatch(/gpx_url|mouse wheel|rueda del ratón|Cloudflare|Shortcuts|atajos de iOS|App Store|\bAPK\b|Consigue la app|Get the app/i);
     // Nor that a website sits behind it (4.2), nor brands only the website deals with, nor
     // controls that no longer exist (the Comp. checkbox, a 🔄 Compare button).
     expect(seen, `${name} tells an app reader there is a website behind it`)
