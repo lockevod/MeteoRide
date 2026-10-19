@@ -18,6 +18,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const fixture = (f) => readFileSync(join(SITE_DIR, 'fixtures', f));
 const WEATHER = JSON.parse(fixture('weather.json'));
 const WARNING = JSON.parse(fixture('warning.json'));
+for (const code of LANGS) if (!WARNING.text[code]) throw new Error(`site/fixtures/warning.json: no warning text for ${code}`);
 const TILE = fixture('tile.png');
 // OpenStreetMap tiles of the example route's area at the zooms the shots use, fetched once
 // and committed (© OpenStreetMap contributors, ODbL; credited on the page). Any other tile is
@@ -96,7 +97,7 @@ function openMeteo(url) {
 
 // WMO code → OpenWeather condition id and icon.
 const OW_CODE = { 0: [800, '01'], 1: [801, '02'], 2: [802, '03'], 3: [804, '04'], 61: [500, '10'], 63: [501, '10'], 80: [520, '09'] };
-function openWeather(url, warning) {
+function openWeather(url, code) {
   const sec = Math.floor(T0 / 1000);
   const hourly = Array.from({ length: 48 }, (_, i) => {
     const dt = sec - 3600 + i * 3600;
@@ -106,11 +107,13 @@ function openWeather(url, warning) {
       pop: w.prob / 100, uvi: w.uv, clouds: w.cloud, weather: [{ id, icon: `${icon}${w.isDay ? 'd' : 'n'}` }],
       ...(w.rain ? { rain: { '1h': w.rain } } : {}) };
   });
-  const alerts = warning ? [{ ...WARNING, _: undefined, start: sec + WARNING.start * 3600, end: sec + WARNING.end * 3600 }] : [];
+  const alerts = code ? [{ sender_name: WARNING.sender_name, ...WARNING.text[code],
+    start: sec + WARNING.start * 3600, end: sec + WARNING.end * 3600 }] : [];
   return { lat: Number(url.searchParams.get('lat')), lon: Number(url.searchParams.get('lon')), timezone: TZ,
     timezone_offset: OFFSET, current: { dt: sec, uvi: 2 }, hourly, daily: [], alerts };
 }
 
+// `warning`: the language to send the official warning in, or nothing for no warning.
 async function stub(page, warning) {
   // Anything else from outside would make a shot depend on the network. Registered first:
   // the last matching route wins.
@@ -125,11 +128,14 @@ async function shootOne(browser, code, scene, device, out) {
   const context = await browser.newContext({ ...DEVICES[device], timezoneId: TZ, locale: REGION[code], reducedMotion: 'reduce' });
   const page = await context.newPage();
   try {
+    // Installed, not frozen: Leaflet fades tiles in by comparing Date.now() across frames,
+    // so with a fixed time (setFixedTime) no tile ever became visible. Starting at the same
+    // instant each time is what keeps the shots identical run to run (checked by md5).
     await page.clock.install({ time: T0 - 60000 });
     await page.addInitScript((s) => { if (!localStorage.getItem('cwSettings')) localStorage.setItem('cwSettings', s); },
       JSON.stringify({ language: code, apiKeyOW: 'a-valid-looking-key', showWeatherAlerts: scene === 'warning',
         apiSource: 'openmeteo', windUnits: 'kmh', cyclingSpeed: 20, intervalSelect: '15' }));
-    await stub(page, scene === 'warning');
+    await stub(page, scene === 'warning' ? code : null);
     await page.goto(`${BASE}/index.html`);
     await page.waitForFunction(() => !!window.map, null, { timeout: 15000 });
     await page.locator('#exampleRoute').click();
@@ -145,33 +151,60 @@ async function shootOne(browser, code, scene, device, out) {
     if (scene === 'warning') await page.locator('#weather-alerts-container .weather-alert').first().waitFor();
     // The app scrolls the forecast into view by itself, retrying for a while; let it finish.
     await page.waitForTimeout(1500);
-    // A tap on a column is how the app ties a stretch of the table to its point on the map:
-    // the map shot shows the rainy stretch picked, the phone's table scrolls to the rain.
+    // A tap on a column is how the app ties a stretch of the table to its point on the map
+    // (it pans there): the map shots show the rainy 09:30 stretch picked, the phone's table
+    // shot is scrolled to the rain.
     const col = scene === 'map' ? 6 : scene === 'table' && device === 'phone' ? 4 : null;
     if (col != null) {
       await page.locator(`#weatherTable [data-col="${col}"]`).first().click();
       await page.waitForTimeout(800);
-      await page.mouse.move(0, 0);
     }
-    // On a desktop the app nudges the page down to bring the table up, which cuts the header;
-    // the whole table does not fit either way, so the shot keeps the header.
-    if (device === 'desktop') await page.evaluate(() => { document.body.scrollTop = 0; });
+    if (scene === 'map') {
+      // The page barely scrolls on either device (a phone gives the map at most 40vh under
+      // the table), so the map shot is told apart from the table shot the way a rider would
+      // look closer: one step of zoom on the picked stretch, the map at its full height.
+      // Without animation: Leaflet's zoom animation never finished under the fake clock, and
+      // its pan to the picked point had not either; centred on that point's marker instead.
+      await page.evaluate(() => {
+        const picked = Object.values(window.map._layers)
+          .find((l) => l.getElement && l.getElement()?.classList.contains('is-selected'));
+        window.map.setView(picked.getLatLng(), window.map.getZoom() + 1, { animate: false });
+      });
+      await page.waitForTimeout(2000);
+      await page.evaluate((phone) => (phone
+        ? document.getElementById('map').scrollIntoView({ block: 'end' })
+        : (document.body.scrollTop = 0)), device === 'phone');
+    } else if (device === 'desktop') {
+      // The table shot shows the whole table under the map; the others keep the header
+      // (the app's own nudge cut it by 24 px).
+      await page.evaluate((table) => (table
+        ? document.getElementById('weatherTable').scrollIntoView({ block: 'end' })
+        : (document.body.scrollTop = 0)), scene === 'table');
+    }
+    await page.mouse.move(0, 0);
     await page.screenshot({ path: join(out, `${code}-${scene}-${device}.jpg`), type: 'jpeg', quality: 82 });
   } finally {
     await context.close();
   }
 }
 
+// Resolves when our own server says it is listening (server.mjs prints "serving … on"). A
+// fetch alone could be answered by whatever else holds the port; an exit first is that case.
+function serverUp(server) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`shots: no server on ${BASE} after 10 s`)), 10000);
+    server.stdout.on('data', (d) => { if (/serving .* on /.test(d)) { clearTimeout(timer); resolve(); } });
+    server.once('exit', (c) => { clearTimeout(timer); reject(new Error(`shots: the server exited (code ${c}); is port ${PORT} taken?`)); });
+  });
+}
+
 export async function shoot({ langs = LANGS, out = join(SITE_DIR, 'img/shots') } = {}) {
   // Playwright lives in mobile/node_modules, out of this folder's reach for a bare import.
   const { chromium } = createRequire(join(MOBILE, 'package.json'))('@playwright/test');
   await mkdir(out, { recursive: true });
-  const server = spawn(process.execPath, [join(MOBILE, 'tests/server.mjs')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
+  const server = spawn(process.execPath, [join(MOBILE, 'tests/server.mjs')], { env: { ...process.env, PORT: String(PORT) }, stdio: ['ignore', 'pipe', 'inherit'] });
   try {
-    for (let i = 0; i < 50; i++) {
-      if (await fetch(`${BASE}/index.html`).then((r) => r.ok, () => false)) break;
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    await serverUp(server);
     for (const code of langs) {
       const browser = await chromium.launch({ args: [`--lang=${REGION[code]}`], executablePath: process.env.CHROMIUM_PATH || undefined });
       try {

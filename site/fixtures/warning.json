@@ -1,8 +1,17 @@
 {
-  "_": "The official warning OpenWeather passes on for the ride, as its One Call answer sends it. start/end are hours from the ride's start; shots.mjs turns them into unix times.",
+  "_": "The official warning OpenWeather passes on for the ride, as its One Call answer sends it, written per language the way a met service words it. start/end are hours from the ride's start; shots.mjs turns them into unix times. The gusts match the table's (52 km/h at most from Open-Meteo).",
   "sender_name": "AEMET",
-  "event": "Yellow wind warning",
   "start": -2,
   "end": 10,
-  "description": "Gusts of 60 km/h."
+  "text": {
+    "es": { "event": "Aviso amarillo por rachas de viento", "description": "Rachas máximas de unos 50 km/h en el litoral y prelitoral de Tarragona." },
+    "en": { "event": "Yellow warning for wind gusts", "description": "Maximum gusts of around 50 km/h on the coast and inland of Tarragona." },
+    "ca": { "event": "Avís groc per ratxes de vent", "description": "Ratxes màximes d'uns 50 km/h al litoral i prelitoral de Tarragona." },
+    "gl": { "event": "Aviso amarelo por refachos de vento", "description": "Refachos máximos duns 50 km/h no litoral e prelitoral de Tarragona." },
+    "eu": { "event": "Haize-boladengatiko abisu horia", "description": "50 km/h inguruko haize-bolada maximoak Tarragonako kostaldean eta barnealdean." },
+    "fr": { "event": "Vigilance jaune vent violent", "description": "Rafales maximales d’environ 50 km/h sur le littoral et l’arrière-pays de Tarragone." },
+    "de": { "event": "Amtliche Warnung vor Windböen", "description": "Windböen um 50 km/h an der Küste und im Hinterland von Tarragona." },
+    "it": { "event": "Allerta gialla per raffiche di vento", "description": "Raffiche massime di circa 50 km/h sulla costa e nell'entroterra di Tarragona." },
+    "pt": { "event": "Aviso amarelo de rajadas de vento", "description": "Rajadas máximas de cerca de 50 km/h no litoral e no interior de Tarragona." }
+  }
 }

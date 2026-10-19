@@ -3,7 +3,7 @@
 // same keys everywhere, links in the page's language, and pages that ask no other origin.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir, access, stat } from 'node:fs/promises';
+import { readFile, readdir, access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -133,6 +133,16 @@ test('no page claims what the app does not do', async () => {
   }
 });
 
+// Width and height from a JPEG's start-of-frame segment; throws if it is not a JPEG.
+function jpegSize(b) {
+  assert.ok(b[0] === 0xff && b[1] === 0xd8, 'not a JPEG');
+  for (let i = 2; i + 9 < b.length; i += 2 + b.readUInt16BE(i + 2)) {
+    assert.equal(b[i], 0xff, 'broken JPEG segment');
+    if (b[i + 1] >= 0xc0 && b[i + 1] <= 0xc3) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+  }
+  throw new Error('no JPEG frame');
+}
+
 // site/shots.mjs writes <code>-<scene>-<device>.jpg from the real app in each language; a page
 // showing another language's app (or a placeholder) would contradict the copy around it.
 test("every page shows its own language's screenshots", async () => {
@@ -143,11 +153,18 @@ test("every page shows its own language's screenshots", async () => {
     for (const scene of ['table', 'map', 'compare', 'warning']) {
       for (const device of ['phone', 'desktop']) {
         assert.ok(names.has(`${scene}-${device}`), `${code}: no ${scene}-${device} shot`);
-        const { size } = await stat(join(SITE, 'img/shots', `${code}-${scene}-${device}.jpg`));
-        assert.ok(size <= 300 * 1024, `${code}-${scene}-${device}.jpg is ${size} bytes, over 300 KB`);
+        const name = `${code}-${scene}-${device}.jpg`;
+        const jpg = await readFile(join(SITE, 'img/shots', name));
+        assert.ok(jpg.length <= 300 * 1024, `${name} is ${jpg.length} bytes, over 300 KB`);
+        assert.deepEqual(jpegSize(jpg), device === 'phone' ? [780, 1688] : [1440, 900], `${name}: size`);
       }
     }
     assert.ok(html.includes(`<meta property="og:image" content="https://meteoride.cc/img/shots/${code}-table-desktop.jpg">`), `${code}: og:image`);
     assert.ok(!html.includes('placeholder.svg'), `${code}: a placeholder is still shown`);
+  }
+  // The same shot in two languages must be two pictures: the app really was in each language.
+  if (!ONLY) {
+    const [es, de] = await Promise.all(['es', 'de'].map((c) => readFile(join(SITE, 'img/shots', `${c}-table-phone.jpg`))));
+    assert.ok(!es.equals(de), 'es-table-phone.jpg and de-table-phone.jpg are the same picture');
   }
 });
