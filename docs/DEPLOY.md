@@ -77,24 +77,61 @@ the seven others, with and without the trailing slash) to their page on meteorid
 The overview at <https://meteoride.cc> is a second Cloudflare Pages project on this same
 repository, separate from the app's (app.meteoride.cc). Its source is `site/`; the build
 writes `site/dist/` (git-ignored): nine pages, the language chooser at `/`, `sitemap.xml`,
-`robots.txt` and `_headers`. The steps are done once, by hand, in the Cloudflare dashboard:
+`robots.txt`, `favicon.ico` and `_headers`.
 
-1. **Workers & Pages → Create → Pages → Connect to Git**, this repository, branch `main`.
-   Name it e.g. `meteoride-site`.
-2. Build settings: framework preset *None*, build command `node site/build.mjs`, build
-   output directory `site/dist`, root directory empty (the repository root).
-   Environment variable `NODE_VERSION` = `22`. The build needs no `npm install`.
-3. **Move `meteoride.cc` off the app's project**: in the app's Pages project, Custom
-   domains, remove `meteoride.cc` (the app keeps `app.meteoride.cc`).
-4. In the new project, Custom domains: add `meteoride.cc` and `www.meteoride.cc`.
-5. **Rules → Redirect Rules** on the `meteoride.cc` zone: when hostname equals
-   `www.meteoride.cc`, redirect dynamically to
+### Order of the move (once, by hand)
+
+meteoride.cc is today a custom domain of the **app's** project, and the old landings live at
+`app.meteoride.cc/<code>/<slug>`. The commit `063ef16` deletes those landings and adds
+`public/_redirects` sending them to `https://meteoride.cc/<code>/`: pushed before the apex
+belongs to the site, they would redirect into the app's own 404s. So, in this order:
+
+1. **Push up to `368db80`** (it already contains `site/`), not the landing deletion:
+   `git push origin 368db80:main`. The app deploys as usual; nothing changes for visitors.
+2. **Create the site's Pages project** and check it on its own `<project>.pages.dev` address:
+   - **Workers & Pages → Create → Pages → Connect to Git**, this repository, branch `main`.
+     Name it e.g. `meteoride-site`.
+   - Build settings: framework preset *None*, build command `node site/build.mjs`, build
+     output directory `site/dist`, root directory empty (the repository root). Environment
+     variable `NODE_VERSION` = `22`. The build needs no `npm install`.
+   - **Leave Cloudflare Web Analytics off** for this project (Settings → Web Analytics). It
+     injects a beacon script from `static.cloudflareinsights.com`, which the site's CSP blocks
+     and which contradicts "no analytics".
+   - On `https://<project>.pages.dev/` the chooser picks a language and `/es/` … `/pt/` load.
+     (At `368db80` the build has no `_headers`, `sitemap.xml` or `robots.txt` yet: those come
+     with step 4.)
+3. **Move the apex, back to back**: in the app's project, Custom domains, remove
+   `meteoride.cc` (the app keeps `app.meteoride.cc`); straight away, in the site's project,
+   add `meteoride.cc` and `www.meteoride.cc`. Then **Rules → Redirect Rules** on the zone:
+   when hostname equals `www.meteoride.cc`, redirect dynamically to
    `concat("https://meteoride.cc", http.request.uri.path)`, status **301**, preserving the
-   query string (the same as `www.meteoride.cc/*` → `https://meteoride.cc/$1`).
-6. Check: `https://meteoride.cc/` picks a language; `https://www.meteoride.cc/fr/` lands on
-   `https://meteoride.cc/fr/`; `https://app.meteoride.cc/es/tiempo-en-tu-ruta` lands on
-   `https://meteoride.cc/es/`; the response headers carry the site's
-   `Content-Security-Policy` (`default-src 'self'`).
+   query string. Adding a Pages custom domain only touches the `meteoride.cc` / `www` CNAME
+   (or flattened apex) records: **check in DNS that the MX and TXT (SPF/DKIM) records of Email
+   Routing are still there**, so `privacy@meteoride.cc` and `support@meteoride.cc` keep
+   arriving, and send one test mail to each.
+4. **Push the rest**: `git push origin main` (the landing deletion, `public/_redirects`, the
+   site's `_headers`, sitemap and robots, and everything after). Both projects deploy. Between
+   steps 3 and 4 the apex serves the `368db80` build of the site, without the hand-off of
+   old app links described below, so keep that gap to minutes.
+5. **Verify**:
+   - `curl -sI https://meteoride.cc/es/` carries the site's `Content-Security-Policy`
+     (`default-src 'self'`, no host), and the page loads with no CSP error in the console.
+   - `https://www.meteoride.cc/fr/` lands on `https://meteoride.cc/fr/`.
+   - `curl -sI https://app.meteoride.cc/es/tiempo-en-tu-ruta` answers 301 to
+     `https://meteoride.cc/es/` (and the same with a trailing slash).
+   - `https://meteoride.cc/?gpx_url=https://example.com/r.gpx` lands on
+     `https://app.meteoride.cc/?gpx_url=…`.
+
+### What the move costs the apex's old users
+
+Until now meteoride.cc **was** the app. The site's chooser at `/` hands that traffic on: `/`
+with any query (`?gpx_url=`, a share link) or opened as an installed app (the PWA's
+`start_url` is `/`; `display-mode: standalone`, or `navigator.standalone` on iOS) goes to
+`https://app.meteoride.cc/` with the same query and fragment. But **what the app stored on the
+meteoride.cc origin (settings, the API key, recent routes) cannot follow**: browsers keep
+storage per origin, and app.meteoride.cc cannot read it. Anyone who used the app on the apex
+starts clean on app.meteoride.cc and re-enters their key. That is accepted; there is no
+migration.
 
 The site loads nothing from another origin (no CDN, web font, analytics or cookie) and its
 `_headers` enforce that; links out are fine.
