@@ -87,9 +87,12 @@ belongs to the site, they would redirect into the app's own 404s. So, in this or
 2. **Create the site's Pages project** and check it on its own `<project>.pages.dev` address:
    - **Workers & Pages → Create → Pages → Connect to Git**, this repository, branch `main`.
      Name it e.g. `meteoride-site`.
-   - Build settings: framework preset *None*, build command `node site/build.mjs`, build
-     output directory `site/dist`, root directory empty (the repository root). Environment
-     variable `NODE_VERSION` = `22`. The build needs no `npm install`.
+   - Build settings: framework preset *None*, **root directory `site`**, build command
+     `node build.mjs`, build output directory `dist`. Environment variable `NODE_VERSION` =
+     `22`. The build needs no `npm install`. The root directory matters: Pages deploys the
+     `functions/` folder it finds in the root directory, and at the repository root that is the
+     app's `/share` function, which would then run on meteoride.cc without its KV binding.
+     The build still reads `public/` (the app's dictionaries) from the full checkout.
    - **Leave Cloudflare Web Analytics off** for this project (Settings → Web Analytics). It
      injects a beacon script from `static.cloudflareinsights.com`, which the site's CSP blocks
      and which contradicts "no analytics".
