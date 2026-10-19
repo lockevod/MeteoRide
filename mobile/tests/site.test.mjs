@@ -40,6 +40,13 @@ test('the strings files have identical keys and no empty value', async () => {
   assert.deepEqual([...used].sort(), keys, 'the template and en.json disagree on the keys');
 });
 
+test('titles and descriptions fit search results', async () => {
+  for (const [code, s] of Object.entries(await strings())) {
+    assert.ok([...s.meta_title].length <= 60, `${code}.meta_title is ${[...s.meta_title].length} code points, over 60`);
+    assert.ok([...s.meta_description].length <= 160, `${code}.meta_description is ${[...s.meta_description].length} code points, over 160`);
+  }
+});
+
 test('renderPage escapes text and refuses a missing key', () => {
   const out = renderPage('<p title="{{a}}">{{a}}</p>', { a: 'A & "B" <c>' }, 'en');
   assert.equal(out.split('A &amp; &quot;B&quot; &lt;c&gt;').length - 1, 2, out);

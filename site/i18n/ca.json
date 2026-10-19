@@ -1,6 +1,6 @@
 {
   "meta_title": "MeteoRide — el temps a la teva ruta, tram a tram",
-  "meta_description": "Carrega una ruta GPX o KML i mira la pluja, el vent i la temperatura de cada tram a l'hora en què hi passaràs. Gratis, sense compte i sense anuncis. iPhone, Android i web.",
+  "meta_description": "Carrega una ruta GPX o KML i mira pluja, vent i temperatura de cada tram a l'hora en què hi passes. Gratis, sense compte ni anuncis. iPhone, Android i web.",
   "skip_link": "Salta al contingut",
   "nav_label": "Principal",
   "nav_features": "Funcions",
@@ -69,7 +69,7 @@
   "step2_text": "Quan surts i la teva velocitat mitjana: MeteoRide calcula quan arribes a cada punt.",
   "step3_title": "Mira el temps",
   "step3_text": "Una taula i un mapa amb la previsió al llarg de la ruta, cada 15 o 30 minuts.",
-  "gallery_title": "Mira-ho funcionant",
+  "gallery_title": "Mira com funciona",
   "gallery_prev": "Anterior",
   "gallery_next": "Següent",
   "alt_g1": "La taula del temps en un mòbil",
