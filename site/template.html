@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{meta_title}}</title>
+  <meta name="description" content="{{meta_description}}">
+  <link rel="canonical" href="{{canonical}}">
+  {{hreflang}}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MeteoRide">
+  <meta property="og:title" content="{{meta_title}}">
+  <meta property="og:description" content="{{meta_description}}">
+  <meta property="og:url" content="{{canonical}}">
+  <meta property="og:image" content="https://meteoride.cc/img/shots/{{lang}}-table-desktop.jpg">
+  <meta property="og:image:alt" content="{{alt_table}}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#070f1c">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">{{skip_link}}</a>
+
+  <!-- 1. Nav -->
+  <header class="nav">
+    <a class="logo" href="/{{lang}}/">MeteoRide</a>
+    <nav aria-label="{{nav_label}}">
+      <ul class="nav-links">
+        <li><a href="#features">{{nav_features}}</a></li>
+        <li><a href="#install">{{nav_install}}</a></li>
+        <li><a href="#faq">{{nav_faq}}</a></li>
+      </ul>
+    </nav>
+    <details class="lang-menu">
+      <summary>{{nav_language}}</summary>
+      <ul class="lang-list">{{languages}}</ul>
+    </details>
+    <a class="btn btn-small" href="{{link.webApp}}">{{nav_open}}</a>
+  </header>
+
+  <main id="main">
+    <!-- 2. Hero -->
+    <section class="hero">
+      <div class="hero-text">
+        <h1>{{hero_title}}</h1>
+        <p class="pitch">{{hero_pitch}}</p>
+        <div class="buttons">
+          <a class="btn btn-primary" href="{{link.webApp}}">{{btn_web}}</a>
+          <a class="btn store" data-store href="{{link.appStore}}">{{btn_appstore}}</a>
+          <a class="btn" href="{{link.apk}}">{{btn_android}}</a>
+        </div>
+      </div>
+      <div class="hero-devices">
+        <figure class="device laptop"><img src="/img/placeholder.svg" alt="{{alt_hero_desktop}}" width="1440" height="900"></figure>
+        <figure class="device phone"><img src="/img/placeholder.svg" alt="{{alt_hero_phone}}" width="390" height="844"></figure>
+      </div>
+    </section>
+
+    <!-- 3. Figures -->
+    <section class="figures">
+      <ul>
+        <li><strong>3</strong> <span>{{fig_providers}}</span></li>
+        <li><strong>9</strong> <span>{{fig_languages}}</span></li>
+        <li><strong>0</strong> <span>{{fig_accounts}}</span></li>
+        <li><strong>100%</strong> <span>{{fig_open}}</span></li>
+      </ul>
+    </section>
+
+    <!-- 4. Who it is for -->
+    <section class="who">
+      <h2>{{who_title}}</h2>
+      <ul class="chips">
+        <li>{{chip_mtb}}</li>
+        <li>{{chip_road}}</li>
+        <li>{{chip_gravel}}</li>
+        <li>{{chip_hiking}}</li>
+        <li>{{chip_trail}}</li>
+      </ul>
+    </section>
+
+    <!-- 5. Feature grid -->
+    <section id="features" class="features">
+      <h2>{{features_title}}</h2>
+      <ul class="cards">
+        <li class="card"><h3>{{card1_title}}</h3><p>{{card1_text}}</p></li>
+        <li class="card"><h3>{{card2_title}}</h3><p>{{card2_text}}</p></li>
+        <li class="card"><h3>{{card3_title}}</h3><p>{{card3_text}}</p></li>
+        <li class="card"><h3>{{card4_title}} <span class="tag">{{tag_app}}</span></h3><p>{{card4_text}}</p></li>
+        <li class="card"><h3>{{card5_title}} <span class="tag">{{tag_app}}</span></h3><p>{{card5_text}}</p></li>
+        <li class="card"><h3>{{card6_title}}</h3><p>{{card6_text}}</p></li>
+        <li class="card"><h3>{{card7_title}} <span class="tag">{{tag_app}}</span></h3><p>{{card7_text}}</p></li>
+        <li class="card"><h3>{{card8_title}} <span class="tag">{{tag_web}}</span></h3><p>{{card8_text}}</p></li>
+      </ul>
+    </section>
+
+    <!-- 6. Four alternating blocks -->
+    <section class="block">
+      <div class="block-text"><h2>{{block_a_title}}</h2><p>{{block_a_text}}</p></div>
+      <figure class="device laptop"><img src="/img/placeholder.svg" alt="{{alt_table}}" width="1440" height="900" loading="lazy"></figure>
+    </section>
+    <section class="block reverse">
+      <div class="block-text"><h2>{{block_b_title}}</h2><p>{{block_b_text}}</p></div>
+      <figure class="device phone"><img src="/img/placeholder.svg" alt="{{alt_map}}" width="390" height="844" loading="lazy"></figure>
+    </section>
+    <section class="block">
+      <div class="block-text"><h2>{{block_c_title}}</h2><p>{{block_c_text}}</p></div>
+      <figure class="device laptop"><img src="/img/placeholder.svg" alt="{{alt_compare}}" width="1440" height="900" loading="lazy"></figure>
+    </section>
+    <section class="block reverse">
+      <div class="block-text"><h2>{{block_d_title}}</h2><p>{{block_d_text}}</p></div>
+      <div class="block-media">
+        <figure class="device phone"><img src="/img/placeholder.svg" alt="{{alt_warning}}" width="390" height="844" loading="lazy"></figure>
+        <figure class="notif" aria-label="{{notif_label}}">
+          <p class="notif-app">MeteoRide · {{notif_now}}</p>
+          <p class="notif-title">{{notif.title}}</p>
+          <p class="notif-body">{{notif.body}}</p>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 7. How it works -->
+    <section class="how">
+      <h2>{{how_title}}</h2>
+      <ol class="steps">
+        <li><h3>{{step1_title}}</h3><p>{{step1_text}}</p></li>
+        <li><h3>{{step2_title}}</h3><p>{{step2_text}}</p></li>
+        <li><h3>{{step3_title}}</h3><p>{{step3_text}}</p></li>
+      </ol>
+    </section>
+
+    <!-- 8. Gallery -->
+    <section class="gallery">
+      <h2>{{gallery_title}}</h2>
+      <div class="gallery-track" tabindex="0" aria-label="{{gallery_title}}">
+        <figure class="device phone"><img src="/img/placeholder.svg" alt="{{alt_g1}}" width="390" height="844" loading="lazy"></figure>
+        <figure class="device laptop"><img src="/img/placeholder.svg" alt="{{alt_g2}}" width="1440" height="900" loading="lazy"></figure>
+        <figure class="device phone"><img src="/img/placeholder.svg" alt="{{alt_g3}}" width="390" height="844" loading="lazy"></figure>
+        <figure class="device laptop"><img src="/img/placeholder.svg" alt="{{alt_g4}}" width="1440" height="900" loading="lazy"></figure>
+      </div>
+      <div class="gallery-buttons">
+        <button type="button" data-gallery="-1" aria-label="{{gallery_prev}}">‹</button>
+        <button type="button" data-gallery="1" aria-label="{{gallery_next}}">›</button>
+      </div>
+    </section>
+
+    <!-- 9. Install -->
+    <section id="install" class="install">
+      <h2>{{install_title}}</h2>
+      <ul class="cards">
+        <li class="card">
+          <h3>{{ios_title}}</h3><p>{{ios_text}}</p>
+          <a class="btn store" data-store href="{{link.appStore}}">{{btn_appstore}}</a>
+        </li>
+        <li class="card">
+          <h3>{{android_title}}</h3><p>{{android_text}}</p>
+          <a class="btn" href="{{link.apk}}">{{android_btn}}</a>
+          <a class="more" href="{{link.installSteps}}">{{android_steps}}</a>
+        </li>
+        <li class="card">
+          <h3>{{web_title}}</h3><p>{{web_text}}</p>
+          <a class="btn btn-primary" href="{{link.webApp}}">{{btn_web}}</a>
+        </li>
+      </ul>
+    </section>
+
+    <!-- 10. Privacy -->
+    <section class="privacy">
+      <h2>{{privacy_title}}</h2>
+      <ul>
+        <li>{{privacy_1}}</li>
+        <li>{{privacy_2}}</li>
+        <li>{{privacy_3}}</li>
+      </ul>
+      <a class="more" href="{{link.privacy}}">{{privacy_link}}</a>
+    </section>
+
+    <!-- 11. FAQ -->
+    <section id="faq" class="faq">
+      <h2>{{faq_title}}</h2>
+      <details><summary>{{faq1_q}}</summary><p>{{faq1_a}}</p></details>
+      <details><summary>{{faq2_q}}</summary><p>{{faq2_a}}</p></details>
+      <details><summary>{{faq3_q}}</summary><p>{{faq3_a}}</p></details>
+      <details><summary>{{faq4_q}}</summary><p>{{faq4_a}}</p></details>
+      <details><summary>{{faq5_q}}</summary><p>{{faq5_a}}</p></details>
+      <details><summary>{{faq6_q}}</summary><p>{{faq6_a}}</p></details>
+    </section>
+
+    <!-- 12. Final call -->
+    <section class="cta">
+      <h2>{{cta_title}}</h2>
+      <p>{{cta_text}}</p>
+      <a class="btn btn-primary" href="{{link.exampleRoute}}">{{cta_btn}}</a>
+    </section>
+  </main>
+
+  <!-- 13. Footer -->
+  <footer class="footer">
+    <ul class="footer-links">
+      <li><a href="{{link.help}}">{{footer_help}}</a></li>
+      <li><a href="{{link.guide}}">{{footer_guide}}</a></li>
+      <li><a href="{{link.privacy}}">{{footer_privacy}}</a></li>
+      <li><a href="{{link.support}}">{{footer_support}}</a></li>
+      <li><a href="{{link.github}}">GitHub</a></li>
+    </ul>
+    <p class="credits">{{footer_credits}}: <a href="https://open-meteo.com/">Open-Meteo</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a></p>
+    <nav aria-label="{{footer_languages}}"><ul class="lang-list">{{languages}}</ul></nav>
+  </footer>
+</body>
+</html>
