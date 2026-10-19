@@ -11,6 +11,10 @@ copy of this repository.
 
 <a href="https://apps.apple.com/es/app/meteoride/id6813109920"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" height="40"></a>
 
+**Android:** [download the APK](https://github.com/lockevod/MeteoRide/releases/latest/download/MeteoRide-android.apk)
+(Android 7.0+, not on Google Play yet). How to install it, step by step, and what is new:
+[latest release](https://github.com/lockevod/MeteoRide/releases/latest).
+
 ## Documentation
 
 | Document | What is in it |

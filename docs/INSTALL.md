@@ -56,6 +56,12 @@ weather-change alerts, no forecast kept for use out of signal. See [GUIDE.md §6
 
 ## Native apps (iOS / Android)
 
+**Installing them:** iPhone from the [App Store](https://apps.apple.com/es/app/meteoride/id6813109920).
+Android from the APK attached to each [GitHub release](https://github.com/lockevod/MeteoRide/releases/latest)
+(Android 7.0+; the release notes walk through allowing the install, and every APK is signed
+with the same certificate so the next one installs over it). The rest of this section is
+about building them.
+
 Besides the PWA, MeteoRide is built as a real App Store / Play Store app with
 [Capacitor](https://capacitorjs.com). It runs the very same code from `public/`
 inside a native shell, so there is no second codebase to maintain.
