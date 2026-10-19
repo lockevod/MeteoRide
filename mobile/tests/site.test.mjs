@@ -3,7 +3,7 @@
 // same keys everywhere, links in the page's language, and pages that ask no other origin.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir, access } from 'node:fs/promises';
+import { readFile, readdir, access, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -130,5 +130,24 @@ test('no page claims what the app does not do', async () => {
     const text = bare.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ') + ' ' + bare;
     assert.ok(text.length > 500, `${code}: no visible text`);
     for (const re of forbidden) assert.doesNotMatch(text, re, `${code}: claims what the app does not do`);
+  }
+});
+
+// site/shots.mjs writes <code>-<scene>-<device>.jpg from the real app in each language; a page
+// showing another language's app (or a placeholder) would contradict the copy around it.
+test("every page shows its own language's screenshots", async () => {
+  for (const [code, html] of await built) {
+    const shown = [...html.matchAll(/img\/shots\/([a-z]+)-([a-z]+)-([a-z]+)\.jpg/g)];
+    for (const [ref, lang] of shown) assert.equal(lang, code, `${code}: shows ${ref}`);
+    const names = new Set(shown.map((m) => `${m[2]}-${m[3]}`));
+    for (const scene of ['table', 'map', 'compare', 'warning']) {
+      for (const device of ['phone', 'desktop']) {
+        assert.ok(names.has(`${scene}-${device}`), `${code}: no ${scene}-${device} shot`);
+        const { size } = await stat(join(SITE, 'img/shots', `${code}-${scene}-${device}.jpg`));
+        assert.ok(size <= 300 * 1024, `${code}-${scene}-${device}.jpg is ${size} bytes, over 300 KB`);
+      }
+    }
+    assert.ok(html.includes(`<meta property="og:image" content="https://meteoride.cc/img/shots/${code}-table-desktop.jpg">`), `${code}: og:image`);
+    assert.ok(!html.includes('placeholder.svg'), `${code}: a placeholder is still shown`);
   }
 });

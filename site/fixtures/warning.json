@@ -1,0 +1,8 @@
+{
+  "_": "The official warning OpenWeather passes on for the ride, as its One Call answer sends it. start/end are hours from the ride's start; shots.mjs turns them into unix times.",
+  "sender_name": "AEMET",
+  "event": "Yellow wind warning",
+  "start": -2,
+  "end": 10,
+  "description": "Gusts of 60 km/h."
+}

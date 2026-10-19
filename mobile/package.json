@@ -16,7 +16,8 @@
     "android": "npm run sync && cap open android",
     "add:ios": "npm run build && cap add ios",
     "icons": "node scripts/install-icons.mjs",
-    "doctor": "cap doctor"
+    "doctor": "cap doctor",
+    "site:shots": "node ../site/shots.mjs"
   },
   "dependencies": {
     "@capacitor/app": "8.1.1",

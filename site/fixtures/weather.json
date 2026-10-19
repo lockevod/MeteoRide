@@ -1,0 +1,14 @@
+{
+  "_": "One day of hourly weather on the example route, local time 00:00-23:00, in Open-Meteo's variables and units (°C, mm, %, km/h, degrees, WMO codes). shots.mjs repeats it over the days asked for and nudges it per provider. A ride from 08:00 meets rain and gusts between 09:00 and 10:00 (rain is read from the entry that closes the hour ridden).",
+  "temperature_2m":            [12, 12, 11, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18, 19, 20, 20, 20, 19, 18, 17, 16, 15, 14, 13],
+  "precipitation":             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2.4, 0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "precipitation_probability": [5, 5, 5, 5, 5, 5, 5, 10, 15, 85, 60, 30, 15, 10, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+  "relative_humidity_2m":      [78, 80, 82, 82, 83, 82, 80, 76, 70, 92, 88, 72, 66, 62, 60, 58, 58, 60, 64, 68, 72, 74, 76, 78],
+  "wind_speed_10m":            [6, 6, 5, 5, 5, 6, 8, 10, 12, 26, 22, 14, 12, 12, 12, 11, 10, 9, 8, 7, 7, 6, 6, 6],
+  "wind_gusts_10m":            [12, 12, 10, 10, 10, 12, 15, 18, 22, 52, 44, 26, 22, 22, 20, 19, 18, 16, 14, 13, 12, 12, 12, 12],
+  "winddirection_10m":         [320, 320, 315, 310, 310, 300, 280, 250, 230, 220, 230, 250, 270, 280, 290, 300, 300, 310, 310, 320, 320, 320, 320, 320],
+  "weathercode":               [0, 0, 0, 0, 0, 1, 1, 1, 2, 63, 61, 2, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+  "uv_index":                  [0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 1, 2, 4, 5, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0],
+  "is_day":                    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+  "cloud_cover":               [5, 5, 5, 5, 5, 10, 15, 20, 40, 100, 90, 45, 25, 20, 15, 15, 10, 10, 5, 5, 5, 5, 5, 5]
+}
