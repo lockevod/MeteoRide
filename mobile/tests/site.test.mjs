@@ -35,7 +35,7 @@ test('the strings files have identical keys and no empty value', async () => {
   // A key the template never uses is copy nobody sees, translated nine times for nothing.
   const template = await readFile(join(SITE, 'template.html'), 'utf8');
   const used = new Set([...template.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]));
-  for (const k of ['lang', 'canonical', 'hreflang', 'languages']) used.delete(k);
+  for (const k of ['lang', 'canonical', 'hreflang', 'languages', 'jsonld']) used.delete(k);
   used.add('notif_event'); // read by build.mjs for the notification card
   assert.deepEqual([...used].sort(), keys, 'the template and en.json disagree on the keys');
 });
@@ -240,4 +240,24 @@ test('the sitemap lists the nine pages', async () => {
   }
   assert.equal(xml.split('<xhtml:link rel="alternate" hreflang="x-default" href="https://meteoride.cc/en/"/>').length - 1, codes.length, 'x-default');
   assert.ok((await readFile(join(SITE, 'dist/robots.txt'), 'utf8')).includes('Sitemap: https://meteoride.cc/sitemap.xml'));
+});
+
+// Search engines: each page tells Google it is a mobile app, in its own language, and the
+// language chooser at / is followed but not shown in results (it is nine links and a redirect).
+test('each page carries app structured data, and the chooser is not indexed', async () => {
+  for (const [code, html] of await built) {
+    const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+    assert.equal(blocks.length, 1, `${code}: one JSON-LD block`);
+    const data = JSON.parse(blocks[0][1]);
+    assert.equal(data['@type'], 'MobileApplication', code);
+    assert.equal(data.inLanguage, code);
+    assert.equal(data.url, `https://meteoride.cc/${code}/`);
+    assert.match(data.operatingSystem, /iOS/);
+    assert.match(data.operatingSystem, /Android/);
+    assert.ok(data.description && data.name === 'MeteoRide', code);
+    assert.doesNotMatch(blocks[0][1], /<\//, `${code}: the block could close its own script tag`);
+  }
+  const root = await readFile(join(dirname(fileURLToPath(import.meta.url)), '../../site/dist/index.html'), 'utf8');
+  assert.match(root, /<meta name="robots" content="noindex, follow">/);
+  assert.match(root, /<meta name="description" content="[^"]{40,}">/);
 });

@@ -5,6 +5,9 @@
 {
   "name": "meteoride-site",
   "compatibility_date": "2026-10-01",
+  // Only meteoride.cc serves the site: no second copy on workers.dev for search engines to find.
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "html_handling": "auto-trailing-slash",

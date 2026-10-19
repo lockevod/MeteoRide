@@ -56,9 +56,31 @@ const hreflang = () => [...LANGS.map((l) => [l, l]), ['x-default', 'en']]
 const languages = (code) => LANGS
   .map((l) => `<li><a href="/${l}/" hreflang="${l}" lang="${l}"${l === code ? ' aria-current="page"' : ''}>${NAMES[l]}</a></li>`).join('');
 
+// Tells search engines the page is about a mobile app, in the page's language. JSON is
+// written into a <script type="application/ld+json">, so "<" is escaped: a "</script>" in a
+// translation would otherwise end the block early. It is data, never run, and the CSP allows it.
+function jsonld(strings, code) {
+  const l = links(code);
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'MobileApplication',
+    name: 'MeteoRide',
+    url: `${ORIGIN}/${code}/`,
+    inLanguage: code,
+    description: strings.meta_description,
+    operatingSystem: 'iOS, Android',
+    applicationCategory: 'SportsApplication',
+    image: `${ORIGIN}/img/shots/${code}-table-desktop.jpg`,
+    installUrl: l.appStore,
+    downloadUrl: l.apk,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+  };
+  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+}
+
 export function renderPage(template, strings, code) {
   const notif = () => RULES.compose([], [{ event: strings.notif_event }], { lang: code, name: exampleRoute(code), points: [] });
-  const raw = { hreflang, languages: () => languages(code) };
+  const raw = { hreflang, languages: () => languages(code), jsonld: () => jsonld(strings, code) };
   const text = {
     lang: () => code,
     canonical: () => `${ORIGIN}/${code}/`,
@@ -99,6 +121,8 @@ function chooser() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MeteoRide</title>
+  <meta name="description" content="MeteoRide shows the weather along your bike or hiking route, stretch by stretch, at the hour you pass. Choose your language.">
+  <meta name="robots" content="noindex, follow">
   <link rel="icon" href="/favicon.ico">
   ${hreflang()}
   <link rel="stylesheet" href="/styles.css">
