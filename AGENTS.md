@@ -1666,8 +1666,12 @@ The rule is that it never stands in for a route the user has or is about to have
   nothing in the app (`CW_NATIVE`; the web view never has a query string anyway), with a
   route on screen or a request pending — a `?gpx_url=`, `?shared_id=` or `sessionStorage`
   share has asked by then, during app.js's load — or with `?shared` in the address, whose
-  service-worker read asks only later. It also counts as "opens a link" for that read
-  (`initGpxShare`), so a route left in the slot is only kept, not shown over the example.
+  service-worker read asks only later. Without `?shared` it also counts as "opens a link"
+  for that read (`initGpxShare`), so a route left in the slot is only kept, not shown over
+  the example; with `?shared` it must not, or the shared route is only kept, the example
+  gives way to it, and nothing opens (Codex review, 19/10; `?shared=1&example` test).
+  The example's file gets its name through `.replace(re, () => …)`: a replacement string
+  would expand `$&`, `$1` or `` $` `` in a translation.
 
 Tests: `tests/example-route.spec.mjs` (loads and forecasts; the GPX is in the bundle; it
 follows roads and stays around Mont-roig; it is named in the chosen language;

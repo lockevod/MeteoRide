@@ -3253,6 +3253,20 @@ test('the example route is titled in the language chosen, and a picked file keep
   await expect(routeName(page)).toHaveText('Masnou - Montgat');
 });
 
+// The name goes into the file through String.replace, where "$`", "$1" or "$$" in a replacement
+// string would be expanded. ("$&" too, but an "&" is shown escaped in the title, a separate matter.)
+test('the example route takes its translated name literally, "$`" and "$$" included', async ({ page }) => {
+  await stubProvider(page, { celsius: 20, offline: false });
+  await page.goto('/index.html');
+  await mapReady(page);
+  await page.evaluate(() => {
+    const t = window.t;
+    window.t = (k, ...rest) => (k === 'example_route_name' ? 'Ruta $` $1 $$' : t(k, ...rest));
+  });
+  await page.locator('#exampleRoute').click();
+  await expect(routeName(page)).toHaveText('Ruta $` $1 $$');
+});
+
 // meteoride.cc's "try it" link is app.meteoride.cc/?example: the same example, in the visitor's
 // language, and spent once read so a reload does not ask for it again.
 test('?example opens the example route in the language chosen and leaves the address', async ({ page }) => {
@@ -3853,6 +3867,25 @@ for (const [what, address] of [['?gpx_url=', '/index.html?gpx_url=/hosted.gpx&na
     expect(await slotName(page)).toBe(null);
   });
 }
+
+// ?shared=1 is the share's own address; ?example there gives way to it. Read as a link, the
+// example made the slot's route kept-only, and then gave way to it: nothing opened.
+test('?shared=1&example opens the shared route from the service worker slot, never the example', async ({ page }) => {
+  let examples = 0;
+  await goOffline(page);
+  await page.route((url) => url.pathname.endsWith('/example-route.gpx'), (route) => { examples++; return route.fallback(); });
+  await page.goto('/help.html');
+  await writeSlot(page, routeAt('Compartida', 41.48), 'shared.gpx');
+  await page.goto('/index.html?shared=1&example');
+  await mapReady(page);
+
+  await expect(routeName(page)).toHaveText('Compartida');
+  await expect.poll(() => storedNames(page)).toEqual(['shared.gpx']);
+  await page.waitForTimeout(500);
+  await expect(routeName(page)).toHaveText('Compartida');
+  expect(examples).toBe(0);
+  expect(await slotName(page)).toBe(null);
+});
 
 // ?shared_id= with nothing after the "=" asks the server for no route: loadSharedIdIfPresent
 // bails out on an empty value. The start-up slot read must agree, or a route left in the slot

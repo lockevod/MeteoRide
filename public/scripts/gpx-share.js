@@ -335,10 +335,11 @@
     // prefer UI module's header localize if available
     try { if (typeof window.localizeHeader === 'function') window.localizeHeader(); } catch(_) {}
     // Whatever the service worker stored while no page was reading, only kept when the address
-    // opens a link, which is the route the user asked for (?example, ui.js, is one too). The app
-    // has no service worker, and reading would only create its database there.
+    // opens a link, which is the route the user asked for (?example, ui.js, is one too, unless
+    // ?shared is there: the example then gives way, and the slot's route is the one to open). The
+    // app has no service worker, and reading would only create its database there.
     const q = new URLSearchParams(window.location.search);
-    const opensLink = !!getParams().gpxUrl || !!q.get('shared_id') || q.has('example');
+    const opensLink = !!getParams().gpxUrl || !!q.get('shared_id') || (q.has('example') && !q.has('shared'));
     if (!window.CW_NATIVE) takeSharedFromServiceWorker(opensLink);
 
     // ?gpx_url= / ?url= — the documented way to open a hosted route.

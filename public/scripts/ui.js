@@ -1901,7 +1901,7 @@
         fetchText: async () => {
           const res = await fetch('assets/example-route.gpx');
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return (await res.text()).replace(/<name>[^<]*<\/name>/g, `<name>${escapeXml(name)}</name>`);
+          return (await res.text()).replace(/<name>[^<]*<\/name>/g, () => `<name>${escapeXml(name)}</name>`);
         },
         // Kept among the recent routes only once it has opened, like a link.
         importOn: 'commit',
