@@ -16,11 +16,22 @@ const REPO = 'https://github.com/lockevod/MeteoRide';
 
 export const LANGS = ['es', 'en', 'ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt'];
 const NAMES = { es: 'Español', en: 'English', ca: 'Català', gl: 'Galego', eu: 'Euskara', fr: 'Français', de: 'Deutsch', it: 'Italiano', pt: 'Português' };
-// The App Store has no country-less URL (it 404s); site.js swaps in the browser's region.
-const STORE_CC = { es: 'es', en: 'us', ca: 'es', gl: 'es', eu: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt' };
+// The App Store has no country-less URL (it 404s), and the app is not in every storefront
+// (us is not: checked 2026-10-19); site.js swaps in the browser's region where it is.
+const STORE_CC = { es: 'es', en: 'gb', ca: 'es', gl: 'es', eu: 'es', fr: 'fr', de: 'de', it: 'it', pt: 'pt' };
 // The notification card shows the app's own wording, composed by the app's own code.
 const RULES = vm.runInNewContext(`${readFileSync(join(SITE_DIR, '../public/scripts/watch-rules.js'), 'utf8')}; cwWatchRules`, {});
-const EXAMPLE_ROUTE = 'Mont-roig – Castillo';
+// …and the example route's own name in each language, as the app titles it (utils.js holds
+// es and en; lang-<code>.js the others). Only the dictionary literal: the rest needs a page.
+const UTILS = readFileSync(join(SITE_DIR, '../public/scripts/utils.js'), 'utf8');
+const UTILS_DICT = UTILS.slice(UTILS.indexOf('const i18n = {') + 'const i18n = '.length, UTILS.indexOf('\n  };', UTILS.indexOf('const i18n = {')) + 4);
+function exampleRoute(code) {
+  const dict = code === 'es' || code === 'en'
+    ? vm.runInNewContext(`(${UTILS_DICT})`, {})[code]
+    : vm.runInNewContext(`${readFileSync(join(SITE_DIR, `../public/scripts/lang-${code}.js`), 'utf8')}; window.cwLang.${code}`, { window: {} });
+  if (!dict || !dict.example_route_name) throw new Error(`no example_route_name for ${code}`);
+  return dict.example_route_name;
+}
 
 export function links(code) {
   return {
@@ -46,13 +57,16 @@ const languages = (code) => LANGS
   .map((l) => `<li><a href="/${l}/" hreflang="${l}" lang="${l}"${l === code ? ' aria-current="page"' : ''}>${NAMES[l]}</a></li>`).join('');
 
 export function renderPage(template, strings, code) {
-  const notif = () => RULES.compose([], [{ event: strings.notif_event }], { lang: code, name: EXAMPLE_ROUTE, points: [] });
+  const notif = () => RULES.compose([], [{ event: strings.notif_event }], { lang: code, name: exampleRoute(code), points: [] });
   const raw = { hreflang, languages: () => languages(code) };
   const text = {
     lang: () => code,
     canonical: () => `${ORIGIN}/${code}/`,
     'notif.title': () => notif().title,
     'notif.body': () => notif().body,
+    // The badge's accessible name holds its visible text ("Download on the" + "App Store");
+    // a small line ending in an apostrophe (l') runs on into the big one.
+    'badge.label': () => `${strings.store_badge_small}${/['’]$/.test(strings.store_badge_small) ? '' : ' '}${strings.store_badge_big}`,
   };
   const out = template.replace(/\{\{([\w.]+)\}\}/g, (_, k) => {
     if (raw[k]) return raw[k]();
@@ -85,6 +99,7 @@ function chooser() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MeteoRide</title>
+  <link rel="icon" href="/favicon.ico">
   ${hreflang()}
   <link rel="stylesheet" href="/styles.css">
   <script src="/site.js" defer></script>
@@ -116,7 +131,7 @@ export async function build({ only, out = DIST } = {}) {
   await writeFile(join(out, 'index.html'), chooser());
   written.push(join(out, 'index.html'));
   await writeFile(join(out, 'sitemap.xml'), sitemap(codes));
-  for (const f of ['styles.css', 'site.js', 'img', '_headers', 'robots.txt']) {
+  for (const f of ['styles.css', 'site.js', 'favicon.ico', 'img', '_headers', 'robots.txt']) {
     if (existsSync(join(SITE_DIR, f))) await cp(join(SITE_DIR, f), join(out, f), { recursive: true });
   }
   return written;

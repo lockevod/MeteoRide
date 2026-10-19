@@ -3,6 +3,9 @@
 (function () {
   var LANGS = ['es', 'en', 'ca', 'gl', 'eu', 'fr', 'de', 'it', 'pt'];
   var KEY = 'meteoride-site-lang';
+  // Storefronts that list the app (iTunes lookup for id6813109920, 2026-10-19). us, ca, au,
+  // nz, in, be, lu, dk and ad do not: their URL is a 404, so those keep the page's default.
+  var STOREFRONTS = ['gb', 'ie', 'es', 'mx', 'ar', 'co', 'cl', 'pe', 'fr', 'ch', 'de', 'at', 'it', 'pt', 'br', 'nl', 'se', 'no', 'fi', 'pl', 'cz', 'sk', 'hu', 'ro', 'gr'];
   var langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
 
   // Storage can be blocked (private mode, site data off): then it is simply not used.
@@ -19,6 +22,12 @@
   }
 
   if (document.body.classList.contains('chooser')) {
+    // meteoride.cc was the app until the site took it: a link with a query (?gpx_url=, a
+    // share) or an installed copy of the app opening it goes on to the app, not the site.
+    if (location.search || matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+      location.replace('https://app.meteoride.cc/' + location.search + location.hash);
+      return;
+    }
     location.replace('/' + chooseLanguage(stored(), langs) + '/');
     return;
   }
@@ -28,11 +37,13 @@
     if (a && LANGS.indexOf(a.getAttribute('hreflang')) >= 0) remember(a.getAttribute('hreflang'));
   });
 
-  // en-GB → gb, es-MX → mx; es-419 or a bare "en" keep the page's default country.
+  // en-GB → gb, es-MX → mx; es-419, a bare "en" or a storefront without the app (en-US) keep
+  // the page's default country.
   var region = /-([a-z]{2})(?:-|$)/i.exec(langs[0] || '');
-  if (region) {
+  var cc = region && region[1].toLowerCase();
+  if (cc && STOREFRONTS.indexOf(cc) >= 0) {
     document.querySelectorAll('a[data-store]').forEach(function (a) {
-      a.href = a.href.replace(/(apps\.apple\.com\/)[a-z]{2}\//, '$1' + region[1].toLowerCase() + '/');
+      a.href = a.href.replace(/(apps\.apple\.com\/)[a-z]{2}\//, '$1' + cc + '/');
     });
   }
 

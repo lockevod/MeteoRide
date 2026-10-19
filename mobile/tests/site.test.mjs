@@ -61,7 +61,8 @@ test('links follow the page language', () => {
   assert.equal(links('en').privacy, 'https://app.meteoride.cc/privacy-web.html');
   assert.equal(links('es').privacy, 'https://app.meteoride.cc/privacy-web.html');
   assert.equal(links('de').privacy, 'https://app.meteoride.cc/privacy-web-de.html');
-  assert.equal(links('en').appStore, 'https://apps.apple.com/us/app/meteoride/id6813109920');
+  // us is not a storefront the app is in (checked 2026-10-19): its URL is a 404.
+  assert.equal(links('en').appStore, 'https://apps.apple.com/gb/app/meteoride/id6813109920');
   assert.ok(links('gl').appStore.includes('/es/app/'), links('gl').appStore);
   assert.ok(links('pt').guide.endsWith('docs/GUIDE_pt.md'), links('pt').guide);
   assert.ok(links('es').guide.endsWith('docs/GUIA.md'), links('es').guide);
@@ -97,6 +98,34 @@ test('each built page is indexable and self-contained', async () => {
       await access(join(SITE, src[1]));
     }
   }
+});
+
+// The badge's name is what it shows, so a voice user can say what they see; the notification
+// card names the example route as the app does in that language; the hero image is the one
+// the page waits for; the tab gets the app's own icon.
+test('badge name, notification card, hero image and icon', async () => {
+  const utils = await readFile(join(ROOT, 'public/scripts/utils.js'), 'utf8');
+  for (const [code, html] of await built) {
+    const s = JSON.parse(await readFile(join(SITE, 'i18n', `${code}.json`), 'utf8'));
+    const unesc = (x) => x.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const labels = [...html.matchAll(/<a class="store"[^>]*aria-label="([^"]*)"/g)].map((m) => unesc(m[1]));
+    assert.equal(labels.length, 2, `${code}: two badges`);
+    for (const l of labels) {
+      assert.ok(l.startsWith(s.store_badge_small.trim()), `${code}: "${l}" does not start with "${s.store_badge_small}"`);
+      assert.ok(l.endsWith(s.store_badge_big), `${code}: "${l}" does not end with "${s.store_badge_big}"`);
+      assert.doesNotMatch(l, /\s{2}|' /, `${code}: "${l}"`);
+    }
+    const src = code === 'es' || code === 'en' ? utils : await readFile(join(ROOT, `public/scripts/lang-${code}.js`), 'utf8');
+    const names = [...src.matchAll(/example_route_name: "([^"]+)"/g)].map((m) => m[1]);
+    const name = code === 'en' ? names[1] : names[0];
+    assert.ok(name, `${code}: no example_route_name`);
+    const title = html.match(/<p class="notif-title">([^<]*)<\/p>/);
+    assert.ok(title && unesc(title[1]).endsWith(name), `${code}: the card's title ${title && title[1]} does not name "${name}"`);
+    assert.match(html, /<img src="\/img\/shots\/[a-z]+-table-desktop\.jpg"[^>]*fetchpriority="high"/, `${code}: hero image priority`);
+    assert.ok(html.includes('<link rel="icon" href="/favicon.ico">'), `${code}: icon`);
+  }
+  assert.ok((await readFile(join(SITE, 'dist/index.html'), 'utf8')).includes('<link rel="icon" href="/favicon.ico">'), 'chooser: icon');
+  await access(join(SITE, 'dist/favicon.ico'));
 });
 
 test('every link target exists', async () => {

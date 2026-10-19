@@ -175,11 +175,10 @@ async function shootOne(browser, code, scene, device, out) {
         ? document.getElementById('map').scrollIntoView({ block: 'end' })
         : (document.body.scrollTop = 0)), device === 'phone');
     } else if (device === 'desktop') {
-      // The table shot shows the whole table under the map; the others keep the header
-      // (the app's own nudge cut it by 24 px).
-      await page.evaluate((table) => (table
-        ? document.getElementById('weatherTable').scrollIntoView({ block: 'end' })
-        : (document.body.scrollTop = 0)), scene === 'table');
+      // Every desktop shot starts at the top, header whole: the app's own nudge cut it by
+      // 24 px, and scrolling the table into view cut it by 12 (the table runs on past the
+      // bottom of 900 px either way).
+      await page.evaluate(() => { document.body.scrollTop = 0; document.documentElement.scrollTop = 0; });
     }
     await page.mouse.move(0, 0);
     await page.screenshot({ path: join(out, `${code}-${scene}-${device}.jpg`), type: 'jpeg', quality: 82 });

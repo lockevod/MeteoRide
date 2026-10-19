@@ -475,7 +475,7 @@ app.meteoride.cc and deployed as its own Cloudflare Pages project (build
 `docs/DEPLOY.md`). `build.mjs` fills `template.html` from `i18n/<code>.json` for the nine
 languages (every string HTML-escaped, a missing key stops the build), writes the chooser at
 `/` (`site.js` picks the language: a stored choice, then the browser's, else `en`), the
-sitemap with `xhtml:link` alternates, and copies `styles.css`, `site.js`, `img/`, `_headers`
+sitemap with `xhtml:link` alternates, and copies `styles.css`, `site.js`, `favicon.ico` (the app's), `img/`, `_headers`
 and `robots.txt`. `mobile/tests/site.test.mjs` and `describe('the product site')` in
 `smoke.spec.mjs` cover it, inside `npm test`.
 
@@ -483,6 +483,23 @@ and `robots.txt`. `mobile/tests/site.test.mjs` and `describe('the product site')
   `src`/stylesheet/script/image from another origin; `site/_headers` sends
   `default-src 'self'` with no host and no `unsafe-inline`, and the test fails on either.
   Links out (App Store, GitHub, the app) are fine.
+- **App Store links name a storefront the app is in.** The country-less URL is a 404, and so
+  is one for a storefront without the app: us, ca, au, nz, in, be, lu, dk and ad (iTunes
+  lookup for id6813109920, 19/10). The default for `en` is therefore `gb`, not `us`;
+  `site.js` swaps in the browser's region only when it is in its `STOREFRONTS` list
+  (dated); re-check that list with `https://itunes.apple.com/lookup?id=6813109920&country=<cc>`
+  when the app's availability changes.
+- **The chooser at `/` hands the old apex traffic to the app.** meteoride.cc used to be the
+  app, so `/` with any query (`?gpx_url=`, a share) or opened as an installed app
+  (`display-mode: standalone`, iOS `navigator.standalone`; the PWA's `start_url` is `/`)
+  `location.replace`s to `https://app.meteoride.cc/` + query + hash instead of picking a
+  language. What the app stored on the apex origin (settings, API key, recent routes)
+  stays there: another origin cannot read it, accepted (`docs/DEPLOY.md`).
+- **The badge's accessible name is its visible text**, `store_badge_small` + `store_badge_big`
+  joined by `build.mjs` (no space after an apostrophe: «l'App Store»); there is no separate
+  label string to translate. The notification card names the example route with the app's own
+  `example_route_name` (utils.js for es/en, `lang-<code>.js` for the rest), read like
+  `watch-rules.js`.
 - **The old landings** (`app.meteoride.cc/<code>/<slug>`) left `public/`; `public/_redirects`
   301s each, with and without the trailing slash, to `https://meteoride.cc/<code>/`.
 - **The example-route call to action is `https://app.meteoride.cc/?example`**, not a
@@ -502,6 +519,9 @@ and `robots.txt`. `mobile/tests/site.test.mjs` and `describe('the product site')
   layout moves the map. The clock is fixed (`page.clock.install`), so two runs are
   byte-identical; `setFixedTime` freezes Leaflet's tile fade and leaves a grey map. Each shot
   stays under 300 KB (the test checks size, JPEG frame and language).
+  Every desktop shot except the map's is taken scrolled to the top: scrolling the table into
+  view cut the header by 12 px (19/10). A re-shoot can drift a few bytes on a shot that did
+  not change (gl-warning-desktop did, 33 bytes, same picture): keep the committed one.
 
 ## Gotchas found the hard way
 

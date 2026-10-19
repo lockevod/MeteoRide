@@ -9007,15 +9007,55 @@ test.describe('the product site', () => {
     });
   });
 
-  test.describe('in British English', () => {
-    test.use({ locale: 'en-GB' });
-    test('the App Store link takes the browser\'s region', async ({ page }) => {
-      await page.goto('https://site.test/en/');
-      const links = page.locator('a[data-store]');
-      await expect(links).toHaveCount(2);
-      for (const href of await links.evaluateAll((as) => as.map((a) => a.href))) {
-        expect(href).toBe('https://apps.apple.com/gb/app/meteoride/id6813109920');
-      }
+  // The app is not in every storefront: one without it (us, ca…) is a 404, so the page keeps
+  // its default there (en → gb).
+  for (const [locale, path, cc] of [['en-GB', 'en', 'gb'], ['en-US', 'en', 'gb'], ['en-CA', 'en', 'gb'], ['en-IE', 'en', 'ie'],
+    ['es-MX', 'es', 'mx'], ['de-CH', 'de', 'ch'], ['fr-BE', 'fr', 'fr'], ['pt-BR', 'pt', 'br']]) {
+    test.describe(`in ${locale}`, () => {
+      test.use({ locale });
+      test(`the App Store link on /${path}/ goes to the ${cc} storefront`, async ({ page }) => {
+        // Set as well: WebKit's harness maps some locales to others (de-CH reads de-DE).
+        await page.addInitScript((l) => Object.defineProperty(navigator, 'languages', { get: () => [l] }), locale);
+        await page.goto(`https://site.test/${path}/`);
+        const links = page.locator('a[data-store]');
+        await expect(links).toHaveCount(2);
+        for (const href of await links.evaluateAll((as) => as.map((a) => a.href))) {
+          expect(href).toBe(`https://apps.apple.com/${cc}/app/meteoride/id6813109920`);
+        }
+      });
+    });
+  }
+
+  // meteoride.cc was the app: its links (?gpx_url=, a share) and its installed copies still
+  // open the apex, and go on to the app rather than to a language page.
+  test.describe('where the app used to be', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.route('https://app.meteoride.cc/**', (route) => route.fulfill({ contentType: 'text/html', body: '<p>app</p>' }));
+    });
+
+    test('/ with a query goes on to the app, query and fragment kept', async ({ page }) => {
+      await page.goto('https://site.test/?gpx_url=https%3A%2F%2Fx.test%2Fr.gpx&name=r#top');
+      await expect(page).toHaveURL('https://app.meteoride.cc/?gpx_url=https%3A%2F%2Fx.test%2Fr.gpx&name=r#top');
+    });
+
+    test('/ opened as an installed app goes on to the app', async ({ page }) => {
+      await page.addInitScript(() => {
+        const real = window.matchMedia.bind(window);
+        window.matchMedia = (q) => (q === '(display-mode: standalone)' ? { matches: true, media: q } : real(q));
+      });
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://app.meteoride.cc/');
+    });
+
+    test('/ opened as a home-screen app on iOS goes on to the app', async ({ page }) => {
+      await page.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
+      await page.goto('https://site.test/');
+      await expect(page).toHaveURL('https://app.meteoride.cc/');
+    });
+
+    test('a language page with a query stays the site', async ({ page }) => {
+      await page.goto('https://site.test/fr/?utm=x');
+      await expect(page).toHaveURL('https://site.test/fr/?utm=x');
     });
   });
 
@@ -9027,7 +9067,7 @@ test.describe('the product site', () => {
       });
       await page.goto('https://site.test/en/');
       for (const href of await page.locator('a[data-store]').evaluateAll((as) => as.map((a) => a.href))) {
-        expect(href).toBe('https://apps.apple.com/us/app/meteoride/id6813109920');
+        expect(href).toBe('https://apps.apple.com/gb/app/meteoride/id6813109920');
       }
     });
   });
