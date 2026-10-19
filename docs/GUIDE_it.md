@@ -2,8 +2,8 @@
 
 L'aiuto che trovi dentro l'app risponde a "che cosa devo fare". Questa guida
 risponde a "perché" e a "cosa succede se". Qui ci sono tutti i dettagli: i limiti
-di ogni fornitore, cosa salva l'app e dove, come si comporta senza segnale e tutte
-le istruzioni di installazione.
+di ogni fornitore, cosa salva l'app e dove, come si comporta senza segnale e come
+ottenere le app o gestire una copia tua.
 
 Versión en español: [GUIA.md](GUIA.md) · English version: [GUIDE.md](GUIDE.md) · Aiuto nell'app:
 [help_it.html](https://app.meteoride.cc/help_it.html)

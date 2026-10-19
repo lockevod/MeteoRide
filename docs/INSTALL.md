@@ -1,7 +1,7 @@
 # Installing and running MeteoRide
 
-Three different things are called "installing MeteoRide". This is which one you
-want.
+There are three ways to get going with MeteoRide, and only two of them involve
+installing anything. This is which one you want.
 
 | You want | Read |
 |---|---|

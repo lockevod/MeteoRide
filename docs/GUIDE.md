@@ -2,8 +2,8 @@
 
 The help you carry inside the app answers "what do I do". This guide answers
 "why" and "what happens if". The full detail lives here: each provider's limits,
-what the app stores and where, how it behaves out of signal, and every install
-recipe.
+what the app stores and where, how it behaves out of signal, and how to get the apps or run your
+own copy.
 
 Versión en español: [GUIA.md](GUIA.md) · In-app help:
 [help_en.html](https://app.meteoride.cc/help_en.html)

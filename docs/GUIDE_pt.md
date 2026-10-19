@@ -3,7 +3,7 @@
 A ajuda que levas dentro da app responde a "o que é que eu faço". Este guia
 responde a "porquê" e "o que acontece se". O pormenor completo está aqui: os
 limites de cada fornecedor, o que a app guarda e onde, como se comporta sem rede
-e todas as receitas de instalação.
+e como obter as apps ou executar a tua própria cópia.
 
 Versión en español: [GUIA.md](GUIA.md) · English version: [GUIDE.md](GUIDE.md) ·
 Ajuda da app: [help_pt.html](https://app.meteoride.cc/help_pt.html)

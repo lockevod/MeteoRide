@@ -3,7 +3,7 @@
 Die Hilfe in der App beantwortet die Frage „Was muss ich tun?“. Dieses Handbuch
 beantwortet „Warum?“ und „Was passiert, wenn …?“. Hier stehen alle Details: die
 Grenzen jedes Anbieters, was die App wo speichert, wie sie sich ohne Netz verhält
-und jede Installationsanleitung.
+und wie man die Apps bekommt oder eine eigene Kopie betreibt.
 
 Versión en español: [GUIA.md](GUIA.md) · English version: [GUIDE.md](GUIDE.md) ·
 Hilfe in der App: [help_de.html](https://app.meteoride.cc/help_de.html)

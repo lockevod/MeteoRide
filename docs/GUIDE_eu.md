@@ -3,8 +3,8 @@
 Aplikazioaren barruan daramazun laguntzak "zer egin behar dut" galderari
 erantzuten dio. Gida honek, berriz, "zergatik" eta "zer gertatzen da baldin eta"
 galderei. Hemen dago xehetasun osoa: hornitzaile bakoitzaren mugak, aplikazioak
-zer gordetzen duen eta non, nola jokatzen duen estaldurarik gabe eta instalatzeko
-errezeta guztiak.
+zer gordetzen duen eta non, nola jokatzen duen estaldurarik gabe eta
+nola lortu aplikazioak edo zeure kopia propioa martxan jarri.
 
 Versión en español: [GUIA.md](GUIA.md) · English version: [GUIDE.md](GUIDE.md) ·
 Aplikazioko laguntza: [help_eu.html](https://app.meteoride.cc/help_eu.html)

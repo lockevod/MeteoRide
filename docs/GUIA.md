@@ -2,8 +2,8 @@
 
 La ayuda que llevas dentro de la app responde a «qué hago». Esta guía responde a
 «por qué» y «qué pasa si». Aquí está el detalle completo: los límites de cada
-proveedor, lo que la app guarda y dónde, cómo se comporta sin cobertura y todas
-las recetas de instalación.
+proveedor, lo que la app guarda y dónde, cómo se comporta sin cobertura y cómo
+conseguir las apps o montar tu propia copia.
 
 English version: [GUIDE.md](GUIDE.md) · Ayuda de la app:
 [help.html](https://app.meteoride.cc/help.html)

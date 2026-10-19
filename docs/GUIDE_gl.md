@@ -2,8 +2,8 @@
 
 A axuda que levas dentro da app responde a «que fago». Esta guía responde a
 «por que» e «que pasa se». Aquí está o detalle completo: os límites de cada
-provedor, o que garda a app e onde, como se comporta sen cobertura e todas as
-receitas de instalación.
+provedor, o que garda a app e onde, como se comporta sen cobertura e como
+conseguir as apps ou montar a túa propia copia.
 
 Versión en castelán: [GUIA.md](GUIA.md) · English version: [GUIDE.md](GUIDE.md) · Axuda da app:
 [help_gl.html](https://app.meteoride.cc/help_gl.html)

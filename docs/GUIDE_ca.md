@@ -2,8 +2,8 @@
 
 L'ajuda que portes dins de l'app respon al «què faig». Aquesta guia respon al
 «per què» i al «què passa si». Aquí hi ha el detall complet: els límits de cada
-proveïdor, què desa l'app i on, com es comporta sense cobertura i totes les
-receptes d'instal·lació.
+proveïdor, què desa l'app i on, com es comporta sense cobertura i com
+obtenir les apps o muntar la teva pròpia còpia.
 
 Versión en español: [GUIA.md](GUIA.md) · English version: [GUIDE.md](GUIDE.md) · Ajuda de l'app:
 [help_ca.html](https://app.meteoride.cc/help_ca.html)
