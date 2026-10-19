@@ -11,8 +11,12 @@ import { LANGS, links, renderPage, build } from '../../site/build.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const SITE = join(ROOT, 'site');
 
+// CW_SITE_LANG=<code> limits the run to that language plus en, so a translator can work on
+// one file while the others do not exist yet.
+const ONLY = process.env.CW_SITE_LANG;
 async function strings() {
-  const files = (await readdir(join(SITE, 'i18n'))).filter((f) => f.endsWith('.json'));
+  const files = (await readdir(join(SITE, 'i18n'))).filter((f) => f.endsWith('.json'))
+    .filter((f) => !ONLY || f === 'en.json' || f === `${ONLY}.json`);
   return Object.fromEntries(await Promise.all(files.map(async (f) =>
     [f.slice(0, -5), JSON.parse(await readFile(join(SITE, 'i18n', f), 'utf8'))])));
 }
@@ -94,5 +98,23 @@ test('every link target exists', async () => {
     await access(join(ROOT, 'public', new URL(l.help).pathname));
     await access(join(ROOT, 'public', new URL(l.privacy).pathname));
     await access(join(ROOT, 'docs', l.guide.split('/docs/')[1]));
+  }
+});
+
+// The app has no offline map, no coordinates-only mode and no price to quote: the pages
+// must not promise any of them, in any of the nine languages.
+test('no page claims what the app does not do', async () => {
+  const mapWord = 'map|mapa|carte|Karte|mappa';
+  const offline = 'hors ligne|offline|ohne Netz|sin conexión|senza connessione|sem rede|sense connexió|sen conexión|konexiorik gabe';
+  const forbidden = [
+    /teselas[^<]*sin conexión|tiles[^<]*offline|y teselas siguen|and tiles are still|mapa[^<.]*(funciona|sirve)[^<.]*sin conexión|map[^<.]*works[^<.]*offline/i,
+    new RegExp(`(${mapWord})[^.]{0,60}(${offline})|(${offline})[^.]{0,60}(${mapWord})`, 'i'),
+    /only (the )?coordinates|solo las coordenadas|seules les coordonnées|nur die Koordinaten|solo le coordinate|só as coordenadas/i,
+    /what it costs|lo que cuesta|pricing|precio|subscri|suscrip|\bpreus?\b|\bprezos?\b|prezio|kostu|harpidetz|\bprix\b|tarif|abonnement|\bpreis|kosten|\babo\b|prezzo|abbonament|\bpreço|assinatura/i,
+  ];
+  for (const [code, html] of await built) {
+    const text = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/g, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    assert.ok(text.length > 500, `${code}: no visible text`);
+    for (const re of forbidden) assert.doesNotMatch(text, re, `${code}: claims what the app does not do`);
   }
 });

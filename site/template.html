@@ -48,7 +48,7 @@
         <p class="pitch">{{hero_pitch}}</p>
         <div class="buttons">
           <a class="btn btn-primary" href="{{link.webApp}}">{{btn_web}}</a>
-          <a class="store" data-store href="{{link.appStore}}"><img src="/img/app-store-badge.svg" alt="{{btn_appstore}}" width="120" height="40"></a>
+          <a class="store" data-store href="{{link.appStore}}" aria-label="{{store_badge_label}}"><svg viewBox="0 0 120 40" width="120" height="40" aria-hidden="true" focusable="false"><rect x=".5" y=".5" width="119" height="39" rx="6.5" fill="#000" stroke="#a6a6a6"/><path transform="translate(8 7.6) scale(1.05)" fill="#fff" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/><g fill="#fff" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif"><text x="36" y="16" font-size="7.6">{{store_badge_small}}</text><text x="35.5" y="30.5" font-size="15.2" font-weight="600" letter-spacing="-.3">{{store_badge_big}}</text></g></svg></a>
           <a class="btn" href="{{link.apk}}">{{btn_android}}</a>
         </div>
       </div>
@@ -133,7 +133,7 @@
     <!-- 8. Gallery -->
     <section class="gallery">
       <h2>{{gallery_title}}</h2>
-      <div class="gallery-track" tabindex="0" aria-label="{{gallery_title}}">
+      <div class="gallery-track" role="region" tabindex="0" aria-label="{{gallery_title}}">
         <figure class="device-phone"><img src="/img/placeholder.svg" alt="{{alt_g1}}" width="390" height="844" loading="lazy"></figure>
         <figure class="device-laptop"><img src="/img/placeholder.svg" alt="{{alt_g2}}" width="1440" height="900" loading="lazy"></figure>
         <figure class="device-phone"><img src="/img/placeholder.svg" alt="{{alt_g3}}" width="390" height="844" loading="lazy"></figure>
@@ -151,7 +151,7 @@
       <ul class="cards">
         <li class="card">
           <h3>{{ios_title}}</h3><p>{{ios_text}}</p>
-          <a class="store" data-store href="{{link.appStore}}"><img src="/img/app-store-badge.svg" alt="{{btn_appstore}}" width="120" height="40"></a>
+          <a class="store" data-store href="{{link.appStore}}" aria-label="{{store_badge_label}}"><svg viewBox="0 0 120 40" width="120" height="40" aria-hidden="true" focusable="false"><rect x=".5" y=".5" width="119" height="39" rx="6.5" fill="#000" stroke="#a6a6a6"/><path transform="translate(8 7.6) scale(1.05)" fill="#fff" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/><g fill="#fff" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif"><text x="36" y="16" font-size="7.6">{{store_badge_small}}</text><text x="35.5" y="30.5" font-size="15.2" font-weight="600" letter-spacing="-.3">{{store_badge_big}}</text></g></svg></a>
         </li>
         <li class="card">
           <h3>{{android_title}}</h3><p>{{android_text}}</p>

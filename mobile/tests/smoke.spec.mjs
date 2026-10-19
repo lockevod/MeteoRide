@@ -8847,6 +8847,10 @@ test.describe('the product site', () => {
     dist = await mkdtemp(join(tmpdir(), 'meteoride-site-'));
     await build({ out: dist });
   });
+  test.afterAll(async () => {
+    const { rm } = await import('node:fs/promises');
+    await rm(dist, { recursive: true, force: true });
+  });
 
   // The chooser only computes the path, so a page Task 3 has not written yet (fr, de)
   // answers 404 and the test asserts where the browser was sent.

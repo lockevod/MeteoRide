@@ -33,7 +33,7 @@ p { margin: 0 0 1em; }
 ul, ol { padding: 0; margin: 0; list-style: none; }
 figure { margin: 0; }
 
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
 .skip { position: absolute; left: 1rem; top: -4rem; z-index: 10; background: var(--accent); color: var(--on-accent); padding: .5rem 1rem; border-radius: 999px; }
 .skip:focus { top: 1rem; }
@@ -52,7 +52,7 @@ main > section, .footer { max-width: 1120px; margin: 0 auto; padding: 4rem 1.25r
 .btn-small { padding: .45rem 1rem; font-size: .9rem; }
 .buttons { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
 .store { display: inline-block; border-radius: 8px; }
-.store img { height: 44px; width: auto; }
+.store svg { display: block; height: 44px; width: auto; }
 .more { display: inline-block; margin-top: .75rem; }
 
 /* Nav */
