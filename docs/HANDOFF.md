@@ -384,6 +384,42 @@ sin reconstruirlo de los ledgers (que no están en git). La infraestructura y la
 en `AGENTS.md → Open work`. Última actualización: revisión externa de publicación del 17/09/2026
 (Codex), de la que se han cerrado cuatro hallazgos y queda abierto lo que se lista abajo.
 
+### Pendiente al 23/10/2026 — versión 1.1 (lo que falta por hacer a mano)
+
+Todo el código está en `main` y publicado (web nueva en meteoride.cc, app en app.meteoride.cc,
+último commit `8d4c25c`). Falta solo lo que requiere a Sergi:
+
+- **Subir el build 15 de iOS a App Store Connect** y elegirlo en la versión 1.1. Los tres
+  archives del build 15 (`~/Library/Developer/Xcode/Archives/2026-10-19/`: `MeteoRide-1.1.0-15`,
+  `App 19-10-2026, 15.00`, `App 19-10-2026, 15.07`) son idénticos por dentro; vale cualquiera.
+  Desde la línea de comandos falló por la sesión de Xcode (`App Store Connect access for
+  "6ML89TP3KQ" is required`): o se sube desde el Organizer, o se renueva Xcode → Settings →
+  Accounts, o se crea una clave de la API de App Store Connect (.p8, Key ID, Issuer ID).
+- **Fichas de la App Store por idioma**: pegar `docs/STORE-LISTING.md` en App Store Connect
+  (catalán, francés, alemán, italiano, portugués; comprobar si hay gallego y euskera) y las URL
+  de privacidad por idioma (`privacy-ios-<código>.html`).
+- **Disponibilidad por países en App Store Connect**: la app NO está en las tiendas de EE. UU.,
+  Canadá, Australia, Nueva Zelanda, India, Bélgica, Luxemburgo, Dinamarca ni Andorra
+  (comprobado el 19/10). Revisarlo si no es intencionado; la web solo enlaza tiendas donde está
+  (lista en `site/site.js`).
+- **Google Search Console**: añadir la propiedad de dominio `meteoride.cc` (registro TXT en
+  Cloudflare, sin tocar los de Proton) y enviar `https://meteoride.cc/sitemap.xml`.
+- **Dispositivo `k24` (USB, 22/10)**: una orden antigua en segundo plano de la sesión de Claude
+  se ejecutó contra él al conectarlo: intentó desinstalar MeteoRide e instalar el APK, y la
+  instalación no se completó. MeteoRide no está instalado ahí ahora. Si lo estaba antes, se
+  borró con sus datos. Decidir si se instala el APK firmado (versionCode 15).
+- **Lectura por nativos** de las traducciones nuevas (web, ayudas, guías, notificaciones),
+  sobre todo euskera y gallego. Cada traductor dejó términos dudosos.
+- **Atajos de iOS retirados**: si alguien tiene un atajo que envía rutas a `meteoride.cc/share`,
+  ya no funciona; `/share` sigue en `app.meteoride.cc` solo para el exportador de Hammerhead.
+- **Quien usaba la app en meteoride.cc** pierde sus datos guardados en ese dominio (ajustes,
+  clave, rutas recientes): aceptado, ver `docs/DEPLOY.md`.
+
+Pequeños, sin urgencia: el service worker conserva una ruta POST que ya nadie usa (solo la
+usaban los atajos); `docs/HANDOFF.md` menciona los atajos como historia; el test
+"an expired forecast is still shown when there is no connection" falló una vez en WebKit con
+la máquina cargada (10/10 al repetirlo).
+
 ### Pendiente por fase del rediseño
 
 - **Fase 7 — retirada y documentación.**
